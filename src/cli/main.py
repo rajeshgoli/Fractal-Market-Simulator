@@ -253,7 +253,7 @@ class ValidationHarness:
                     self.core_harness.playback_controller.pause_playback(
                         f"Auto-paused: {major_events[0].event_type.value} event"
                     )
-                    print(f"\\nAuto-paused at bar {bar_idx} for expert review")
+                    print(f"\nAuto-paused at bar {bar_idx} for expert review")
                     self._prompt_for_issue_logging(bar_idx, major_events)
         
         self.core_harness._on_playback_step = validation_callback
@@ -266,7 +266,7 @@ class ValidationHarness:
         try:
             while True:
                 try:
-                    command = input("\\nvalidation> ").strip().lower()
+                    command = input("\nvalidation> ").strip().lower()
                     
                     if self._handle_validation_command(command):
                         continue
@@ -274,7 +274,7 @@ class ValidationHarness:
                         break
                         
                 except KeyboardInterrupt:
-                    print("\\nUse 'quit' to exit properly")
+                    print("\nUse 'quit' to exit properly")
                 except EOFError:
                     break
                     

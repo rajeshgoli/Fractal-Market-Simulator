@@ -125,7 +125,10 @@ class VisualizationHarness:
             self._initialize_visualization_components()
             self._initialize_playback_components()
             self._initialize_logging_components()
-            
+
+            # Render initial display with the bars used for initialization
+            self._render_initial_display()
+
             self.logger.info("All components initialized successfully")
             return True
             
@@ -147,10 +150,10 @@ class VisualizationHarness:
         self.event_detector = self.swing_state_manager.event_detector
         
         # Initialize with first portion of data for swing detection
-        init_bars = min(200, len(self.bars))
-        self.swing_state_manager.initialize_with_bars(self.bars[:init_bars])
-        
-        self.logger.info(f"Analysis components initialized with {init_bars} bars")
+        self.init_bars = min(200, len(self.bars))
+        self.swing_state_manager.initialize_with_bars(self.bars[:self.init_bars])
+
+        self.logger.info(f"Analysis components initialized with {self.init_bars} bars")
     
     def _initialize_visualization_components(self):
         """Initialize visualization components."""
@@ -182,33 +185,59 @@ class VisualizationHarness:
         """Initialize playback control components."""
         # Create playback config
         playback_config = PlaybackConfig()
-        
+
         # Apply any overrides
         if 'playback' in self.config_overrides:
             for key, value in self.config_overrides['playback'].items():
                 setattr(playback_config, key, value)
-        
+
         # Create controller
         self.playback_controller = PlaybackController(
             total_bars=len(self.bars),
             config=playback_config
         )
-        
+
         # Set step callback
         self.playback_controller.set_event_callback(self._on_playback_step)
-        
-        self.logger.info("Playback components initialized")
+
+        # Start playback from where initialization ended to avoid timestamp errors
+        # The swing state manager was initialized with bars[0:init_bars], so playback
+        # should continue from init_bars onwards
+        self.playback_controller.current_bar_idx = self.init_bars - 1
+        self.current_bar_idx = self.init_bars - 1
+
+        self.logger.info(f"Playback components initialized, starting at bar {self.init_bars - 1}")
     
     def _initialize_logging_components(self):
         """Initialize event logging components."""
         # Create event logger
         self.event_logger = EventLogger(session_id=self.session_id)
-        
+
         # Create display
         self.event_display = EventLogDisplay(self.event_logger)
-        
+
         self.logger.info("Logging components initialized")
-    
+
+    def _render_initial_display(self):
+        """Render initial visualization with the bars from initialization."""
+        try:
+            # Get active swings detected during initialization
+            active_swings = self.swing_state_manager.get_active_swings()
+
+            # Update visualization with initial state
+            # Use init_bars - 1 as current position (last initialized bar)
+            self.visualization_renderer.update_display(
+                current_bar_idx=self.init_bars - 1,
+                active_swings=active_swings,
+                recent_events=[],
+                highlighted_events=[]
+            )
+
+            self.logger.info(f"Initial display rendered with {len(active_swings)} active swings")
+
+        except Exception as e:
+            self.logger.error(f"Failed to render initial display: {e}")
+
     def _on_playback_step(self, bar_idx: int, recent_events: list):
         """Handle playback step updates."""
         try:
