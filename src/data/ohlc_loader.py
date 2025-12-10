@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import Tuple, List, Optional
 import os
+import logging
 from datetime import datetime
 
 def detect_format(filepath: str) -> str:
@@ -144,6 +145,14 @@ def load_ohlc(filepath: str) -> Tuple[pd.DataFrame, List[Tuple[pd.Timestamp, pd.
     df.set_index('timestamp', inplace=True)
     df.sort_index(inplace=True)
     
+    # Remove duplicate timestamps - keep last occurrence for more recent data
+    duplicate_timestamps = df.index.duplicated(keep='last')
+    if duplicate_timestamps.any():
+        duplicate_count = duplicate_timestamps.sum()
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Removed {duplicate_count} duplicate timestamp(s) from {filepath}")
+        df = df[~duplicate_timestamps]
+    
     # Validation
     # low <= open <= high and low <= close <= high
     # volume >= 0
@@ -163,8 +172,9 @@ def load_ohlc(filepath: str) -> Tuple[pd.DataFrame, List[Tuple[pd.Timestamp, pd.
         if invalid_count / total_count > 0.01:
             raise ValueError(f"Too many invalid rows: {invalid_count}/{total_count} ({invalid_count/total_count:.2%})")
             
-        # Log warning (print for now as we don't have a logger setup)
-        # print(f"Warning: Dropping {invalid_count} invalid rows.")
+        # Log warning about dropping invalid rows
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Dropping {invalid_count} invalid OHLC row(s) from {filepath}")
         
         # Drop invalid
         df = df[valid_mask]
