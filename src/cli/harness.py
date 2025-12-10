@@ -46,22 +46,32 @@ from src.legacy.bull_reference_detector import Bar
 
 class VisualizationHarness:
     """Integrated visualization harness combining all components."""
-    
-    def __init__(self, 
+
+    def __init__(self,
                  data_file: str,
                  session_id: Optional[str] = None,
-                 config_overrides: Optional[dict] = None):
+                 config_overrides: Optional[dict] = None,
+                 playback_start_idx: Optional[int] = None,
+                 step_timeframe: Optional[int] = None):
         """
         Initialize the visualization harness.
-        
+
         Args:
             data_file: Path to OHLC CSV data file
             session_id: Optional session identifier
             config_overrides: Optional configuration overrides
+            playback_start_idx: Bar index to start playback from. If specified, all bars
+                               before this index are used for swing calibration (reference period).
+                               If None, uses default behavior (first 200 bars for calibration).
+            step_timeframe: Timeframe for stepping in minutes (1, 5, 15, 30, 60, 240).
+                           Each "step" advances by this many minutes of market time.
+                           If None, defaults to smallest displayed timeframe.
         """
         self.data_file = data_file
         self.session_id = session_id or f"session_{int(time.time())}"
         self.config_overrides = config_overrides or {}
+        self.playback_start_idx = playback_start_idx
+        self.step_timeframe = step_timeframe
         
         # Core components
         self.bars = None
@@ -145,7 +155,7 @@ class VisualizationHarness:
         """Initialize analysis pipeline components."""
         # Bar aggregator
         self.bar_aggregator = BarAggregator(self.bars)
-        
+
         # Swing state manager (creates its own EventDetector internally)
         self.swing_state_manager = SwingStateManager(
             scale_config=self.scale_config
@@ -153,9 +163,16 @@ class VisualizationHarness:
 
         # Reference the event detector from swing state manager
         self.event_detector = self.swing_state_manager.event_detector
-        
-        # Initialize with first portion of data for swing detection
-        self.init_bars = min(200, len(self.bars))
+
+        # Determine initialization window (reference period for swing calibration)
+        # If playback_start_idx is specified, use all bars up to that point for calibration
+        # Otherwise, use default behavior (first 200 bars)
+        if self.playback_start_idx is not None:
+            self.init_bars = min(self.playback_start_idx, len(self.bars))
+            self.logger.info(f"Using reference period: bars 0-{self.init_bars} for calibration")
+        else:
+            self.init_bars = min(200, len(self.bars))
+
         self.swing_state_manager.initialize_with_bars(self.bars[:self.init_bars])
 
         self.logger.info(f"Analysis components initialized with {self.init_bars} bars")
@@ -196,10 +213,21 @@ class VisualizationHarness:
             for key, value in self.config_overrides['playback'].items():
                 setattr(playback_config, key, value)
 
-        # Create controller
+        # Determine step timeframe (how many source bars per "step")
+        # If not specified, use smallest displayed timeframe from scale config
+        if self.step_timeframe is not None:
+            self._step_bars = self.step_timeframe  # Step by this many minutes
+        else:
+            # Default: smallest displayed timeframe (S scale aggregation)
+            self._step_bars = self.scale_config.aggregations.get('S', 1)
+
+        self.logger.info(f"Playback step size: {self._step_bars} minute(s) per step")
+
+        # Create controller with step_size for auto-play
         self.playback_controller = PlaybackController(
             total_bars=len(self.bars),
-            config=playback_config
+            config=playback_config,
+            step_size=self._step_bars
         )
 
         # Set step callback
@@ -398,9 +426,23 @@ class VisualizationHarness:
             print("Playback paused")
         
         elif cmd in ['step', 'next']:
-            success = self.playback_controller.step_forward()
-            if success:
-                print(f"Stepped to bar {self.current_bar_idx}")
+            # Step by configured number of bars (default: _step_bars based on timeframe)
+            num_steps = self._step_bars if hasattr(self, '_step_bars') else 1
+            if len(parts) > 1:
+                try:
+                    num_steps = int(parts[1])
+                except ValueError:
+                    pass
+
+            steps_taken = 0
+            for _ in range(num_steps):
+                if self.playback_controller.step_forward():
+                    steps_taken += 1
+                else:
+                    break
+
+            if steps_taken > 0:
+                print(f"Stepped {steps_taken} bar(s) to bar {self.current_bar_idx}")
             else:
                 print("At end of data")
         
@@ -547,12 +589,13 @@ class VisualizationHarness:
     
     def _print_help(self):
         """Print available commands."""
+        step_bars = getattr(self, '_step_bars', 1)
         print("\nAvailable Commands:")
         print("  help                    - Show this help message")
         print("  status                  - Show harness status")
         print("  play [fast]             - Start auto playback (optionally in fast mode)")
         print("  pause                   - Pause playback")
-        print("  step                    - Step forward one bar")
+        print(f"  step [N]                - Step forward N bars (default: {step_bars} based on step-timeframe)")
         print("  jump <bar_idx>          - Jump to specific bar")
         print("  speed <multiplier>      - Set playback speed (e.g., 2.0 for 2x)")
         print("  reset                   - Reset to beginning")

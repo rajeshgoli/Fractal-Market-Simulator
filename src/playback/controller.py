@@ -32,20 +32,24 @@ from src.playback.config import PlaybackMode, PlaybackState, PlaybackConfig, Pla
 
 class PlaybackController:
     """Controls time-based navigation through market data with auto-pause intelligence."""
-    
-    def __init__(self, 
+
+    def __init__(self,
                  total_bars: int,
-                 config: Optional[PlaybackConfig] = None):
+                 config: Optional[PlaybackConfig] = None,
+                 step_size: int = 1):
         """
         Initialize playback controller.
-        
+
         Args:
             total_bars: Total number of bars in the dataset
             config: Playback configuration (uses defaults if None)
+            step_size: Number of source bars to advance per step (default: 1).
+                      Higher values make playback advance faster through the data.
         """
         self.total_bars = total_bars
         self.config = config or PlaybackConfig()
         self.current_bar_idx = 0
+        self.step_size = max(1, step_size)  # Ensure at least 1
         
         # State management
         self.mode = PlaybackMode.MANUAL
@@ -329,29 +333,36 @@ class PlaybackController:
                 if not self._stop_event.is_set():
                     self.state = PlaybackState.PLAYING
                 continue
-            
-            # Execute step
+
+            # Execute step(s) based on step_size
             start_time = time.time()
-            
-            if not self.step_forward():
-                # Reached end
-                self.state = PlaybackState.FINISHED
+
+            # Step through step_size bars at once for faster visual progress
+            steps_taken = 0
+            for _ in range(self.step_size):
+                if not self.step_forward():
+                    # Reached end
+                    self.state = PlaybackState.FINISHED
+                    break
+                steps_taken += 1
+
+            if steps_taken == 0:
                 break
-            
+
             # Track timing
             step_duration = time.time() - start_time
             self._step_times.append(step_duration)
-            
+
             # Calculate sleep time based on mode
             if self.mode == PlaybackMode.FAST:
                 sleep_time = max(0, (self.config.fast_speed_ms / 1000.0) - step_duration)
             else:
                 sleep_time = max(0, (self.config.auto_speed_ms / 1000.0) - step_duration)
-            
+
             # Sleep if necessary
             if sleep_time > 0:
                 time.sleep(sleep_time)
-        
+
         if self.current_bar_idx >= self.total_bars:
             self.state = PlaybackState.FINISHED
             logging.info("Auto-play completed - reached end of data")

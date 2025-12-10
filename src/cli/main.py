@@ -126,6 +126,35 @@ def run_validation_command(args):
         else:
             print(f"Loaded {len(bars)} bars")
         
+        # Parse playback start date if provided
+        playback_start_date = None
+        playback_start_idx = None
+        if args.playback_start:
+            playback_start_date = datetime.strptime(args.playback_start, '%Y-%m-%d')
+            playback_start_date = playback_start_date.replace(tzinfo=timezone.utc)
+
+            if playback_start_date <= start_date:
+                print(f"Error: --playback-start ({args.playback_start}) must be after --start ({args.start})")
+                return False
+            if playback_start_date > end_date:
+                print(f"Error: --playback-start ({args.playback_start}) must be before or equal to --end ({args.end})")
+                return False
+
+            # Find the bar index corresponding to playback start
+            playback_start_ts = playback_start_date.timestamp()
+            for i, bar in enumerate(bars):
+                if bar.timestamp >= playback_start_ts:
+                    playback_start_idx = i
+                    break
+
+            if playback_start_idx is None:
+                print(f"Error: No data found at or after --playback-start ({args.playback_start})")
+                return False
+
+            if args.verbose:
+                print(f"Reference period: {args.start} to {args.playback_start} ({playback_start_idx} bars)")
+                print(f"Playback starts from bar {playback_start_idx}")
+
         # Initialize validation session
         session = ValidationSession(
             symbol=args.symbol,
@@ -133,12 +162,14 @@ def run_validation_command(args):
             start_date=start_date,
             end_date=end_date
         )
-        
+
         # Create validation harness with historical data
         validation_harness = ValidationHarness(
             bars=bars,
             session=session,
-            auto_pause=args.auto_pause
+            auto_pause=args.auto_pause,
+            playback_start_idx=playback_start_idx,
+            step_timeframe=args.step_timeframe
         )
         
         # Run validation
@@ -164,21 +195,27 @@ def run_validation_command(args):
 
 class ValidationHarness:
     """Specialized harness for systematic validation."""
-    
-    def __init__(self, bars, session, auto_pause=True):
+
+    def __init__(self, bars, session, auto_pause=True, playback_start_idx=None, step_timeframe=None):
         """
         Initialize validation harness.
-        
+
         Args:
             bars: List of Bar objects to validate
             session: ValidationSession instance
             auto_pause: Enable auto-pause on major events
+            playback_start_idx: Bar index to start playback from (default: after init window)
+                               If specified, all bars before this are used for calibration only.
+            step_timeframe: Timeframe for stepping in minutes (default: smallest displayed timeframe).
+                           Each "step" advances by this many minutes of market time.
         """
         self.bars = bars
         self.session = session
         self.auto_pause = auto_pause
+        self.playback_start_idx = playback_start_idx
+        self.step_timeframe = step_timeframe
         self.logger = logging.getLogger(__name__)
-        
+
         # Initialize core harness with minimal config
         self.core_harness = None
         
@@ -198,11 +235,13 @@ class ValidationHarness:
             # Create temporary data file for harness
             temp_file = self._create_temp_data_file()
             
-            # Initialize core harness
+            # Initialize core harness with reference period and step timeframe settings
             self.core_harness = VisualizationHarness(
                 data_file=temp_file,
                 session_id=f"validation_{self.session.session_id}",
-                config_overrides={'playback': {'auto_speed_ms': 100}}
+                config_overrides={'playback': {'auto_speed_ms': 100}},
+                playback_start_idx=self.playback_start_idx,
+                step_timeframe=self.step_timeframe
             )
             
             if not self.core_harness.initialize():
@@ -406,7 +445,20 @@ class ValidationHarness:
         print("What just happened:")
         print("  - Historical data loaded and processed")
         print("  - Scale calibration complete (S, M, L, XL boundaries computed)")
-        print("  - Swing state manager initialized")
+
+        # Show reference period info if applicable
+        if self.playback_start_idx is not None:
+            print(f"  - Reference period: bars 0-{self.playback_start_idx} used for swing calibration")
+            print(f"  - Playback starts from bar {self.playback_start_idx} (mature swing state)")
+        else:
+            init_bars = getattr(self.core_harness, 'init_bars', 200)
+            print(f"  - First {init_bars} bars used for swing calibration")
+
+        # Show step timeframe info
+        step_bars = getattr(self.core_harness, '_step_bars', 1)
+        if step_bars > 1:
+            print(f"  - Step size: {step_bars} minute(s) per step command")
+
         print("  - 4-panel visualization window launched (check for matplotlib window)")
         print()
         print("What you should see:")
@@ -415,18 +467,19 @@ class ValidationHarness:
         print("  - The visualization updates as you step through the data")
         print()
         print("Core workflow:")
-        print("  1. Use 'step' to advance one bar at a time and watch swings update")
+        print(f"  1. Use 'step' to advance {step_bars} bar(s) and watch swings update")
         print("  2. Use 'play' for auto-advance (pauses on major events)")
         print("  3. Use 'log <type>' to record any detection issues you observe")
         print("  4. Use 'quit' when done to export your findings")
         print()
-        print("Quick start: Type 'step' to see the first bar, or 'play' to auto-advance.")
+        print("Quick start: Type 'step' to see bars advance, or 'play' to auto-advance.")
         print("Type 'help' at any time for full command reference.")
         print("=" * 70)
         print()
 
     def _print_validation_help(self):
         """Print validation-specific help."""
+        step_bars = getattr(self.core_harness, '_step_bars', 1) if self.core_harness else 1
         print("\n" + "=" * 70)
         print("VALIDATION HARNESS HELP")
         print("=" * 70)
@@ -435,7 +488,7 @@ class ValidationHarness:
         print("  play              Start auto-playback (pauses on major events)")
         print("  play fast         Start fast playback mode")
         print("  pause             Pause playback")
-        print("  step [N]          Step forward N bars (default: 1)")
+        print(f"  step [N]          Step forward N bars (default: {step_bars} based on --step-timeframe)")
         print("  jump <bar_idx>    Jump to specific bar index")
         print("  speed <mult>      Set playback speed multiplier (e.g., 2.0)")
         print("  status            Show current position and harness state")
@@ -537,9 +590,21 @@ def create_parser():
         help='Start date (YYYY-MM-DD format)'
     )
     validate_parser.add_argument(
-        '--end', 
+        '--end',
         required=True,
         help='End date (YYYY-MM-DD format)'
+    )
+    validate_parser.add_argument(
+        '--playback-start',
+        help='Start playback from this date (YYYY-MM-DD). Data from --start to --playback-start '
+             'is used as reference/calibration window. If not specified, playback starts from --start.'
+    )
+    validate_parser.add_argument(
+        '--step-timeframe',
+        type=int,
+        choices=[1, 5, 15, 30, 60, 240],
+        help='Timeframe for playback stepping in minutes. Each step advances by this many minutes '
+             'of market time. Default: smallest displayed timeframe (typically 1m for S scale).'
     )
     validate_parser.add_argument(
         '--auto-pause',
