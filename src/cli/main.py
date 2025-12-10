@@ -151,9 +151,18 @@ def run_validation_command(args):
                 print(f"Error: No data found at or after --playback-start ({args.playback_start})")
                 return False
 
+            # Check that there's actually data left to play
+            remaining_bars = len(bars) - playback_start_idx
+            if remaining_bars < 10:
+                print(f"Warning: Only {remaining_bars} bars available after --playback-start.")
+                print(f"Consider using an earlier --playback-start date or later --end date.")
+                if remaining_bars == 0:
+                    print(f"Error: No bars to play back. --playback-start is at or after end of data.")
+                    return False
+
             if args.verbose:
                 print(f"Reference period: {args.start} to {args.playback_start} ({playback_start_idx} bars)")
-                print(f"Playback starts from bar {playback_start_idx}")
+                print(f"Playback period: {remaining_bars} bars available from bar {playback_start_idx}")
 
         # Initialize validation session
         session = ValidationSession(
@@ -459,7 +468,7 @@ class ValidationHarness:
         if step_bars > 1:
             print(f"  - Step size: {step_bars} minute(s) per step command")
 
-        print("  - 4-panel visualization window launched (check for matplotlib window)")
+        print("  - 4-panel visualization window launched")
         print()
         print("What you should see:")
         print("  - A matplotlib window with 4 panels showing different scales")

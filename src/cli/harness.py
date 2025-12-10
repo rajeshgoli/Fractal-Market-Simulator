@@ -37,7 +37,7 @@ from src.analysis.swing_state_manager import SwingStateManager
 from src.visualization.renderer import VisualizationRenderer
 from src.visualization.config import RenderConfig
 from src.playback.controller import PlaybackController
-from src.playback.config import PlaybackConfig, PlaybackMode
+from src.playback.config import PlaybackConfig, PlaybackMode, PlaybackState
 from src.logging.event_logger import EventLogger
 from src.logging.display import EventLogDisplay
 from src.logging.filters import FilterBuilder
@@ -324,6 +324,7 @@ class VisualizationHarness:
         to safely update the matplotlib visualization.
         """
         updates_processed = 0
+        last_bar_idx = None
         while not self._update_queue.empty():
             try:
                 update = self._update_queue.get_nowait()
@@ -333,11 +334,18 @@ class VisualizationHarness:
                     recent_events=update['events'],
                     highlighted_events=update['highlighted_events']
                 )
+                last_bar_idx = update['bar_idx']
                 updates_processed += 1
             except queue.Empty:
                 break
             except Exception as e:
                 self.logger.error(f"Error processing GUI update: {e}")
+
+        # Show progress indicator during playback
+        if updates_processed > 0 and self.playback_controller.state == PlaybackState.PLAYING:
+            # Print progress dot to show activity
+            print(".", end="", flush=True)
+
         return updates_processed
     
     def run_interactive(self):
@@ -418,8 +426,15 @@ class VisualizationHarness:
             mode = PlaybackMode.AUTO
             if len(parts) > 1 and parts[1] == 'fast':
                 mode = PlaybackMode.FAST
+
+            # Check if there's data left to play
+            remaining = self.playback_controller.total_bars - self.playback_controller.current_bar_idx - 1
+            if remaining <= 0:
+                print(f"Cannot start playback - already at end of data (bar {self.playback_controller.current_bar_idx}/{self.playback_controller.total_bars})")
+                return
+
             self.playback_controller.start_playback(mode)
-            print(f"Started {mode.value} playback")
+            print(f"Started {mode.value} playback from bar {self.playback_controller.current_bar_idx} ({remaining} bars remaining)")
         
         elif cmd in ['pause', 'stop']:
             self.playback_controller.pause_playback("User requested")
@@ -568,8 +583,12 @@ class VisualizationHarness:
         print(f"Session: {self.session_id}")
         print(f"Data File: {self.data_file}")
         print(f"Total Bars: {len(self.bars)}")
-        print(f"Current Bar: {status.current_bar_idx} ({status.progress_percent:.1f}%)")
+        print(f"Init Bars: {self.init_bars} (calibration window)")
+        remaining = status.total_bars - status.current_bar_idx - 1
+        print(f"Current Bar: {status.current_bar_idx} ({status.progress_percent:.1f}%) - {remaining} bars remaining")
         print(f"Playback State: {status.state.value} ({status.mode.value} mode)")
+        step_bars = getattr(self, '_step_bars', 1)
+        print(f"Step Size: {step_bars} bar(s) per step")
         
         if status.bars_per_second > 0:
             print(f"Processing Rate: {status.bars_per_second:.1f} bars/sec")
