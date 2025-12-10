@@ -18,10 +18,8 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 import argparse
-import queue
 import sys
 import logging
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -268,72 +266,63 @@ class ValidationHarness:
         """
         Run interactive validation with expert input.
 
-        Uses a non-blocking input approach to allow GUI updates to be processed
-        on the main thread, preventing matplotlib threading errors.
+        Uses select-based non-blocking input on the main thread to allow
+        GUI updates to be processed without Tcl_WaitForEvent crashes.
         """
-        # Use a separate thread for input to avoid blocking GUI updates
-        input_queue = queue.Queue()
+        import select
+        import sys
+
         is_running = True
-
-        def input_thread():
-            """Background thread to collect user input without blocking main thread."""
-            nonlocal is_running
-            while is_running:
-                try:
-                    line = input()
-                    input_queue.put(line.strip().lower())
-                except EOFError:
-                    input_queue.put(None)
-                    break
-                except Exception:
-                    break
-
-        # Start input collection thread
-        input_collector = threading.Thread(target=input_thread, daemon=True)
-        input_collector.start()
+        input_buffer = ""
 
         print("\nvalidation> ", end="", flush=True)
 
         try:
             while is_running:
                 # Process any pending GUI updates from the core harness
-                # This is critical for matplotlib to work correctly from background threads
+                # This is critical for matplotlib to work correctly
                 if hasattr(self.core_harness, '_process_pending_gui_updates'):
                     self.core_harness._process_pending_gui_updates()
 
-                # Also process matplotlib events to keep window responsive
+                # Process matplotlib events to keep window responsive
                 try:
-                    fig = self.core_harness.visualization_renderer.fig
-                    if fig:
-                        fig.canvas.flush_events()
+                    if self.core_harness.visualization_renderer and self.core_harness.visualization_renderer.fig:
+                        self.core_harness.visualization_renderer.fig.canvas.flush_events()
                 except Exception:
                     pass
 
-                # Check for user input (non-blocking)
+                # Check for user input using select (non-blocking, main thread)
+                # This avoids the Tcl_WaitForEvent crash caused by input() in background threads
                 try:
-                    command = input_queue.get_nowait()
-                    if command is None:
-                        break  # EOF received
-                    if not self._handle_validation_command(command):
-                        is_running = False
-                        break
-                    print("\nvalidation> ", end="", flush=True)
-                except queue.Empty:
-                    pass
-
-                # Small sleep to prevent CPU spinning
-                time.sleep(0.05)
+                    readable, _, _ = select.select([sys.stdin], [], [], 0.05)
+                    if readable:
+                        char = sys.stdin.read(1)
+                        if char == '\n':
+                            # Process complete command
+                            command = input_buffer.strip().lower()
+                            input_buffer = ""
+                            if command:
+                                if not self._handle_validation_command(command):
+                                    is_running = False
+                                    break
+                            print("\nvalidation> ", end="", flush=True)
+                        elif char:
+                            input_buffer += char
+                            print(char, end="", flush=True)
+                except (select.error, OSError, IOError):
+                    # select not available or error - fall back to short sleep
+                    time.sleep(0.05)
 
             return True
 
         except KeyboardInterrupt:
             print("\nUse 'quit' to exit properly")
             return True
+        except EOFError:
+            return True
         except Exception as e:
             self.logger.error(f"Interactive validation error: {e}")
             return False
-        finally:
-            is_running = False
     
     def _handle_validation_command(self, command: str) -> bool:
         """

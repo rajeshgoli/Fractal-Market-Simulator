@@ -324,25 +324,8 @@ class VisualizationHarness:
         self._print_status()
         self._print_help()
 
-        # Use a separate thread for input to avoid blocking GUI updates
-        input_queue = queue.Queue()
-
-        def input_thread():
-            """Background thread to collect user input without blocking main thread."""
-            while self.is_running:
-                try:
-                    # Use a simple blocking input in the background thread
-                    line = input()
-                    input_queue.put(line.strip().lower())
-                except EOFError:
-                    input_queue.put(None)  # Signal end of input
-                    break
-                except Exception:
-                    break
-
-        # Start input collection thread
-        input_collector = threading.Thread(target=input_thread, daemon=True)
-        input_collector.start()
+        # Input buffer for accumulating characters
+        input_buffer = ""
 
         print("\nharness> ", end="", flush=True)
 
@@ -352,29 +335,38 @@ class VisualizationHarness:
                 # This is critical for matplotlib to work correctly
                 self._process_pending_gui_updates()
 
-                # Also process matplotlib events to keep window responsive
+                # Process matplotlib events to keep window responsive
                 try:
-                    self.fig = self.visualization_renderer.fig
-                    if self.fig:
-                        self.fig.canvas.flush_events()
+                    if self.visualization_renderer and self.visualization_renderer.fig:
+                        self.visualization_renderer.fig.canvas.flush_events()
                 except Exception:
                     pass
 
-                # Check for user input (non-blocking)
+                # Check for user input using select (non-blocking, main thread)
+                # This avoids the Tcl_WaitForEvent crash caused by input() in background threads
                 try:
-                    command = input_queue.get_nowait()
-                    if command is None:
-                        break  # EOF received
-                    self._handle_command(command)
-                    print("\nharness> ", end="", flush=True)
-                except queue.Empty:
-                    pass
-
-                # Small sleep to prevent CPU spinning
-                time.sleep(0.05)
+                    readable, _, _ = select.select([sys.stdin], [], [], 0.05)
+                    if readable:
+                        char = sys.stdin.read(1)
+                        if char == '\n':
+                            # Process complete command
+                            command = input_buffer.strip().lower()
+                            input_buffer = ""
+                            if command:
+                                self._handle_command(command)
+                            print("\nharness> ", end="", flush=True)
+                        elif char:
+                            input_buffer += char
+                            # Echo character (since we're in raw-ish mode)
+                            print(char, end="", flush=True)
+                except (select.error, OSError, IOError):
+                    # select not available or error - fall back to short sleep
+                    time.sleep(0.05)
 
         except KeyboardInterrupt:
             print("\nUse 'quit' to exit properly")
+        except EOFError:
+            pass
         except Exception as e:
             self.logger.error(f"Error in interactive mode: {e}")
         finally:
