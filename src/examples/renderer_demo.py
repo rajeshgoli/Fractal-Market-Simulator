@@ -23,7 +23,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-from bull_reference_detector import Bar
+from src.legacy.bull_reference_detector import Bar
 from src.analysis.scale_calibrator import ScaleConfig
 from src.analysis.bar_aggregator import BarAggregator
 from src.analysis.swing_state_manager import ActiveSwing

@@ -17,7 +17,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from bull_reference_detector import Bar
+from src.legacy.bull_reference_detector import Bar
 from src.cli.harness import VisualizationHarness, create_argument_parser
 
 

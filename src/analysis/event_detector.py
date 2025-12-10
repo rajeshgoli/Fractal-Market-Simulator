@@ -22,7 +22,7 @@ import os
 
 # Import existing Bar type
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from bull_reference_detector import Bar
+from src.legacy.bull_reference_detector import Bar
 
 
 class EventType(Enum):

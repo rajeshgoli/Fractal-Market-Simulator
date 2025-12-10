@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src', 'analysis'))
 
 from src.analysis.scale_calibrator import ScaleCalibrator, ScaleConfig
-from bull_reference_detector import Bar
+from src.legacy.bull_reference_detector import Bar
 
 
 class TestScaleCalibrator(unittest.TestCase):

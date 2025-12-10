@@ -1,6 +1,6 @@
 import pytest
 from decimal import Decimal
-from level_calculator import calculate_levels, Level
+from src.legacy.level_calculator import calculate_levels, Level
 
 def test_case_one_bullish_reference():
     """

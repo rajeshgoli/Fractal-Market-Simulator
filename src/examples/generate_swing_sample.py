@@ -1,6 +1,6 @@
 import pandas as pd
 import json
-from swing_detector import detect_swings
+from src.legacy.swing_detector import detect_swings
 
 def generate_sample():
     # Construct a sample DataFrame with valid bull and bear references

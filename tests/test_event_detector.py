@@ -16,8 +16,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.analysis.event_detector import (
     EventDetector, EventType, EventSeverity, StructuralEvent, ActiveSwing
 )
-from bull_reference_detector import Bar
-from level_calculator import calculate_levels
+from src.legacy.bull_reference_detector import Bar
+from src.legacy.level_calculator import calculate_levels
 
 
 # Global fixtures available to all test classes

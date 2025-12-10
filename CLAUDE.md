@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Overview
+
+This is a **Market Simulator** project that implements technical analysis algorithms for detecting market structure and generating realistic OHLC price data. The project consists of two major phases:
+
+1. **✅ COMPLETED: Swing Visualization Harness** - A comprehensive validation tool for real-time swing detection across multiple timeframes
+2. **🎯 NEXT: Market Data Generator** - Core simulator for generating realistic OHLC data
+
 ## Development Commands
 
 ### Virtual Environment
@@ -10,119 +17,245 @@ This project uses a Python virtual environment located in `venv/`. Always activa
 source venv/bin/activate
 ```
 
+### Main Application
+Run the visualization harness with sample data:
+```bash
+python main.py --data test.csv
+```
+
+Show help and available options:
+```bash
+python main.py --help
+```
+
+Interactive session with auto-start:
+```bash
+python main.py --data market_data.csv --auto-start --speed 2.0
+```
+
 ### Testing
 Run tests using pytest:
 ```bash
 source venv/bin/activate && python -m pytest
 ```
 
-Run specific test files:
+Run specific test modules:
 ```bash
-source venv/bin/activate && python -m pytest test_level_calculator.py
-source venv/bin/activate && python -m pytest test_swing_detector.py
-source venv/bin/activate && python -m pytest tests/test_ohlc_loader.py
+python -m pytest tests/test_scale_calibrator.py
+python -m pytest tests/test_visualization_renderer.py
+python -m pytest tests/test_playback_controller.py
 ```
 
-### Running Core Components
-- Level calculator example: `python generate_example.py`
-- Swing detector example: `python generate_swing_sample.py`
-- Test swing detection on data: `python run_swings_on_test.py`
-- Data format verification: `python verify_loader.py`
+Run tests with verbose output:
+```bash
+python -m pytest tests/ -v
+```
+
+### Utility Scripts
+- **Scale calibration example**: `python src/examples/renderer_demo.py`
+- **Event logging demo**: `python src/examples/event_logger_demo.py` 
+- **Legacy swing detection**: `python src/utils/run_swings_on_test.py`
+- **Data format verification**: `python src/utils/verify_loader.py`
 
 ## Architecture Overview
 
-This is a **Market Simulator** project that implements technical analysis algorithms for detecting market structure and generating realistic OHLC price data. The codebase follows a top-down recursive approach where larger timeframes drive smaller ones.
+### Current System (Completed Harness)
+
+The visualization harness provides a complete analytical pipeline for real-time market structure analysis:
+
+```
+Data Input → Scale Calibration → Bar Aggregation → Swing State Management
+     ↓              ↓                  ↓                    ↓
+Event Detection → Visualization → Playback Control → Event Logging
+```
 
 ### Core Components
 
-#### 1. Level Calculator (`level_calculator.py`)
-- **Purpose**: Computes structural price levels from reference swings using Fibonacci ratios
-- **Key Function**: `calculate_levels(high, low, direction, quantization)` 
-- **Returns**: List of `Level` objects with multipliers (-0.1 to 2.0) and level types:
-  - STOP (-0.1)
-  - SWING_EXTREME (0)
-  - SUPPORT_RESISTANCE (0.1, 0.382, 0.5, 0.618, 0.9, 1, 1.1)
-  - DECISION_ZONE (1.382, 1.5, 1.618)
-  - EXHAUSTION (2)
+#### 1. Analysis Pipeline (`src/analysis/`)
 
-#### 2. Swing Detector (`swing_detector.py`)
-- **Purpose**: Identifies swing highs and lows from OHLC data using lookback windows
-- **Key Function**: `detect_swings(df, lookback)`
-- **Architecture**: Uses sliding window analysis to find local extrema that meet significance criteria
+**Scale Calibrator** (`scale_calibrator.py`)
+- **Purpose**: Automatically determines size boundaries for 4 structural scales (S, M, L, XL)
+- **Method**: Quartile-based boundaries from detected swing sizes
+- **Performance**: <50ms for 6,794 bars
+- **Key Function**: `ScaleCalibrator.calibrate(bars, instrument)`
 
-#### 3. Bull Reference Detector (`bull_reference_detector.py`)
-- **Purpose**: Detects valid bull reference swings (completed bear legs being countered)
-- **Algorithm**:
-  1. Finds swing lows using configurable lookback
-  2. Scans backward for bear legs feeding into each low
-  3. Filters by retracement validity (current price between 0.382x and 2x)
-  4. Applies subsumption to remove redundant swings
-- **Key Classes**: `SwingType`, `Bar`, `BullReferenceSwing`
+**Bar Aggregator** (`bar_aggregator.py`) 
+- **Purpose**: Pre-computes aggregated OHLC bars for all timeframes
+- **Performance**: O(1) retrieval, 50ms pre-computation for 10K bars
+- **Key Feature**: Natural boundary alignment for proper technical analysis
 
-#### 4. Data Loading (`src/data/ohlc_loader.py`)
-- **Purpose**: Loads OHLC data from multiple CSV formats
-- **Supports**:
-  - Format A: Semicolon-separated with DD/MM/YYYY HH:MM:SS timestamps
-  - Format B: TradingView comma-separated with Unix timestamps
-- **Key Function**: `load_ohlc(filepath)` with automatic format detection
+**Swing State Manager** (`swing_state_manager.py`)
+- **Purpose**: Tracks active swings across all scales with event-driven state transitions
+- **Performance**: 27.6ms average per bar (18x better than target)
+- **Architecture**: Multi-scale independence with intelligent swing replacement
+
+**Event Detector** (`event_detector.py`)
+- **Purpose**: Detects structural events (level crossings, completions, invalidations)
+- **Performance**: <1ms per bar
+- **Events**: Level crossings, swing completions, swing invalidations
+
+#### 2. Visualization System (`src/visualization/`)
+
+**Visualization Renderer** (`renderer.py`)
+- **Purpose**: 4-panel synchronized matplotlib display with Fibonacci levels
+- **Features**: OHLC candlesticks, level overlays, event markers
+- **Performance**: <100ms UI updates with sliding window optimization
+- **Layout**: 2x2 grid showing S/M/L/XL scales simultaneously
+
+**Render Config** (`config.py`)
+- **Purpose**: Comprehensive styling and layout configuration
+- **Features**: Dark/light themes, scale-specific colors, level styling
+
+#### 3. Playback System (`src/playback/`)
+
+**Playback Controller** (`controller.py`)
+- **Purpose**: Interactive time-based navigation with auto-pause intelligence
+- **Modes**: Manual, Auto, Fast playback with configurable speeds
+- **Features**: Step navigation, jump-to-event, thread-safe operation
+
+#### 4. Event Logging (`src/logging/`)
+
+**Event Logger** (`event_logger.py`)
+- **Purpose**: Comprehensive event capture with rich market context
+- **Features**: Full-text search, auto-tagging, filtering, export (CSV/JSON)
+- **Performance**: O(1) lookups with multiple indices
+
+**Event Display** (`display.py`)
+- **Purpose**: Real-time event formatting for console and UI
+- **Features**: Color coding, dashboard summaries, live feeds
+
+#### 5. CLI Integration (`src/cli/`)
+
+**Visualization Harness** (`harness.py`)
+- **Purpose**: Unified command-line interface integrating all components
+- **Features**: Interactive commands, session management, configuration override
+- **Commands**: help, status, play/pause, step, jump, speed, events, filter, export
+
+#### 6. Data Management (`src/data/`)
+
+**OHLC Loader** (`ohlc_loader.py`)
+- **Purpose**: Multi-format OHLC data loading with automatic detection
+- **Formats**: TradingView CSV, custom semicolon format
+- **Features**: Gap detection, data validation, Bar object conversion
+
+### Legacy Components (`src/legacy/`)
+
+These are the original analytical components preserved for reference:
+
+- **Level Calculator** (`level_calculator.py`) - Fibonacci level computation
+- **Bull Reference Detector** (`bull_reference_detector.py`) - Original swing detection
+- **Swing Detector** (`swing_detector.py`) - Legacy swing identification
 
 ### Key Design Principles
 
-#### Fibonacci-Based Structural Levels
-All price targets use Fibonacci ratios applied to reference swings. Levels are **always derived from swings, never stored as absolute prices**.
+#### Multi-Scale Architecture
+The system operates on four simultaneous scales (S, M, L, XL) with independent processing but coordinated visualization.
 
-#### Top-Down Recursion
-Larger timeframes constrain smaller ones. Monthly swings drive daily swings, which drive hourly swings. Information never flows upward.
+#### Fibonacci-Based Levels
+All structural levels use Fibonacci ratios (0.382, 0.5, 0.618, 1.0, 1.382, 1.5, 1.618, 2.0) applied to reference swings.
 
-#### Reference Swing Selection
-Multiple valid reference swings can coexist. Selection criteria prioritize:
-- Large swings (by range)
-- Explosive swings (high speed)
-- Swing high terminations
-- Recent swings for immediate context
+#### Event-Driven State Management
+Components communicate through structured events rather than direct coupling, enabling clean separation and testability.
 
-#### Price Quantization
-All price calculations respect market-specific quantization rules (e.g., 0.25 for indices).
+#### Performance Optimization
+- Sliding window displays for large datasets
+- Pre-computed aggregations for fast retrieval
+- Thread-safe real-time updates
+- Efficient matplotlib artist management
+
+#### Data Precision
+Uses Python `Decimal` for price calculations and respects market-specific quantization (e.g., 0.25 for ES futures).
 
 ## File Structure
 
-### Core Modules
-- `level_calculator.py` - Fibonacci level computation
-- `swing_detector.py` - Swing high/low detection with filtering
-- `bull_reference_detector.py` - Bull reference swing identification
-- `src/data/ohlc_loader.py` - Multi-format OHLC data loading
+### Main Application
+- `main.py` - Single entry point for the application
 
-### Test Utilities  
-- `generate_example.py` - Level calculator examples
-- `generate_swing_sample.py` - Swing detection examples
-- `run_swings_on_test.py` - Test swing detection on real data
-- `verify_loader.py` - Data loader verification
+### Source Code (`src/`)
+```
+src/
+├── analysis/           # Core analytical pipeline
+├── cli/               # Command-line interface  
+├── data/              # Data loading utilities
+├── examples/          # Demo scripts and examples
+├── legacy/            # Historical components (preserved)
+├── logging/           # Event logging system
+├── playback/          # Playback control system
+├── utils/             # Utility scripts and tools
+└── visualization/     # Visualization components
+```
 
-### Test Files
-- `test_level_calculator.py` - Level calculation tests with spec examples
-- `test_swing_detector.py` - Swing detection algorithm tests
-- `tests/test_ohlc_loader.py` - Data loading tests with fixtures
-- `tests/fixtures/` - Test data files
+### Test Suite (`tests/`)
+- Comprehensive test coverage with 158+ tests
+- Performance benchmarks and integration tests
+- Fixtures for test data and mocked components
 
-### Data Files
-- `test.csv` - Sample OHLC data (264KB)
-- `sample_output.json` - Example algorithm output
-- `valid_swings.txt` - Validated swing detection results
+### Documentation (`Docs/`)
+- `Spec.txt` - Market behavior specification
+- Engineering reports and architectural notes
 
-### Documentation
-- `Docs/Spec.txt` - Market behavior specification and rules
-- `Docs/TechSpec.txt` - Technical implementation guidelines and failure modes
-
-## Development Notes
+## Development Guidelines
 
 ### Dependencies
-The project uses minimal dependencies:
-- pandas (OHLC data manipulation)
-- pytest (testing)
-- Standard library (decimal, dataclasses, typing, datetime)
+Core dependencies:
+- **matplotlib** - Visualization and charting
+- **numpy** - Numerical computations
+- **pandas** - Data manipulation (legacy components)
+- **pytest** - Testing framework
 
-### Data Precision
-Uses Python `Decimal` for all price calculations to avoid floating-point precision issues in financial calculations.
+### Performance Targets
+- **Analysis**: <500ms per bar (achieved: ~30ms)
+- **Visualization**: <100ms UI updates (achieved)
+- **Memory**: Stable usage during long sessions
+- **Threading**: Responsive user controls with background processing
 
-### Testing Approach
-Tests follow specification examples with known inputs/outputs. The test files contain extensive comments explaining the mathematical expectations and edge cases.
+### Testing Strategy
+- **Unit tests**: Component isolation with mocked dependencies
+- **Integration tests**: Cross-component data flow validation  
+- **Performance tests**: Latency and memory benchmarks
+- **Real-world data**: Validation against historical market data
+
+### Code Quality Standards
+- Type hints throughout the codebase
+- Comprehensive error handling with graceful degradation
+- Detailed docstrings with usage examples
+- Configuration-driven behavior for flexibility
+
+## Usage Patterns
+
+### Quick Start
+```bash
+# Basic visualization
+python main.py --data test.csv
+
+# Auto-start with custom speed
+python main.py --data data.csv --auto-start --speed 2.0
+
+# Export analysis results
+python main.py --data data.csv --export-only results.json
+```
+
+### Interactive Commands (in running application)
+- `help` - Show available commands
+- `play` / `pause` - Control playback
+- `step` - Manual step-by-step navigation
+- `events 10` - Show recent events
+- `filter major` - Filter events by severity
+- `export csv events.csv` - Export event log
+- `quit` - Exit application
+
+### Development Workflows
+1. **Testing changes**: Run relevant test suite before commits
+2. **Adding features**: Update both implementation and tests
+3. **Performance validation**: Use built-in profiling for optimization
+4. **Data validation**: Always test with diverse market data
+
+## Next Development Phase
+
+The project is ready for **Market Data Generator** implementation. The completed harness provides:
+- Validated swing detection algorithms
+- Proven data structures and interfaces
+- Performance benchmarks and quality standards
+- Comprehensive test framework for validation
+
+The generator phase will reverse the analytical process - generating realistic price data by simulating swing formation according to the validated market structure rules.

@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import List, Dict, Any
 import pandas as pd
-from level_calculator import calculate_levels, Level
+from .level_calculator import calculate_levels, Level
 
 def get_level_band(price: float, levels: List[Level]) -> Decimal:
     """

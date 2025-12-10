@@ -29,7 +29,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from bull_reference_detector import Bar
+from src.legacy.bull_reference_detector import Bar
 from src.analysis.swing_state_manager import ActiveSwing
 from src.analysis.event_detector import StructuralEvent, EventType, EventSeverity
 from src.analysis.bar_aggregator import BarAggregator

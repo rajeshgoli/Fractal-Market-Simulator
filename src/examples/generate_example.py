@@ -1,5 +1,5 @@
 from decimal import Decimal
-from level_calculator import calculate_levels
+from src.legacy.level_calculator import calculate_levels
 
 def generate_example():
     high = Decimal("674")
