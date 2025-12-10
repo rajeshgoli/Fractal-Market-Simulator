@@ -131,19 +131,26 @@ class VisualizationHarness:
             calibrator = ScaleCalibrator()
             self.scale_config = calibrator.calibrate(self.bars)
 
-            # For validation purposes, ensure S-scale always shows source resolution (1m)
-            # This guarantees at least one panel updates visibly with each bar step
-            if self.scale_config.aggregations.get('S', 1) > 1:
-                self.logger.info(f"Overriding S-scale aggregation from {self.scale_config.aggregations['S']}m to 1m for validation")
-                self.scale_config.aggregations['S'] = 1
-
             self.logger.info("Scale boundaries:")
             for scale, (min_pts, max_pts) in self.scale_config.boundaries.items():
                 self.logger.info(f"  {scale}: {min_pts:.1f} - {max_pts} pts")
 
-            self.logger.info("Panel timeframes:")
+            self.logger.info("Analysis timeframes (for swing detection):")
             for scale in ['S', 'M', 'L', 'XL']:
                 tf = self.scale_config.aggregations.get(scale, 1)
+                self.logger.info(f"  {scale}: {tf}m")
+
+            # Create separate display aggregations for visualization
+            # S-panel shows source resolution (1m) to ensure visible updates with each step
+            # Other scales use calibrated timeframes for proper multi-scale view
+            self.display_aggregations = dict(self.scale_config.aggregations)
+            if self.display_aggregations.get('S', 1) > 1:
+                self.logger.info(f"Display S-panel: overriding from {self.display_aggregations['S']}m to 1m for per-bar visibility")
+                self.display_aggregations['S'] = 1
+
+            self.logger.info("Display timeframes (for visualization):")
+            for scale in ['S', 'M', 'L', 'XL']:
+                tf = self.display_aggregations.get(scale, 1)
                 self.logger.info(f"  {scale}: {tf}m")
             
             # Initialize components
@@ -192,15 +199,21 @@ class VisualizationHarness:
         """Initialize visualization components."""
         # Create render config
         render_config = RenderConfig()
-        
+
         # Apply any overrides
         if 'visualization' in self.config_overrides:
             for key, value in self.config_overrides['visualization'].items():
                 setattr(render_config, key, value)
-        
-        # Create renderer
+
+        # Create a display-specific scale config with S-scale at 1m for visibility
+        # This is separate from the analysis scale_config used by SwingStateManager
+        from copy import deepcopy
+        display_scale_config = deepcopy(self.scale_config)
+        display_scale_config.aggregations = self.display_aggregations
+
+        # Create renderer with display-specific config
         self.visualization_renderer = VisualizationRenderer(
-            scale_config=self.scale_config,
+            scale_config=display_scale_config,
             bar_aggregator=self.bar_aggregator,
             render_config=render_config
         )
