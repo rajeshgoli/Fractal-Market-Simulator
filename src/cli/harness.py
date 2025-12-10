@@ -41,7 +41,9 @@ from src.playback.config import PlaybackConfig, PlaybackMode, PlaybackState
 from src.logging.event_logger import EventLogger
 from src.logging.display import EventLogDisplay
 from src.logging.filters import FilterBuilder
+from src.logging.progress_logger import ProgressLogger
 from src.legacy.bull_reference_detector import Bar
+from src.visualization.keyboard_handler import KeyboardHandler
 
 
 class VisualizationHarness:
@@ -52,7 +54,8 @@ class VisualizationHarness:
                  session_id: Optional[str] = None,
                  config_overrides: Optional[dict] = None,
                  playback_start_idx: Optional[int] = None,
-                 step_timeframe: Optional[int] = None):
+                 step_timeframe: Optional[int] = None,
+                 verbose: bool = False):
         """
         Initialize the visualization harness.
 
@@ -66,12 +69,14 @@ class VisualizationHarness:
             step_timeframe: Timeframe for stepping in minutes (1, 5, 15, 30, 60, 240).
                            Each "step" advances by this many minutes of market time.
                            If None, defaults to smallest displayed timeframe.
+            verbose: Enable verbose progress logging (default: False)
         """
         self.data_file = data_file
         self.session_id = session_id or f"session_{int(time.time())}"
         self.config_overrides = config_overrides or {}
         self.playback_start_idx = playback_start_idx
         self.step_timeframe = step_timeframe
+        self._verbose = verbose
         
         # Core components
         self.bars = None
@@ -83,7 +88,9 @@ class VisualizationHarness:
         self.playback_controller = None
         self.event_logger = None
         self.event_display = None
-        
+        self.keyboard_handler = None
+        self.progress_logger = None
+
         # State management
         self.is_running = False
         self.current_bar_idx = 0
@@ -159,6 +166,9 @@ class VisualizationHarness:
             self._initialize_playback_components()
             self._initialize_logging_components()
 
+            # Initialize keyboard handler (must be after playback and visualization)
+            self._initialize_keyboard_handler()
+
             # Render initial display with the bars used for initialization
             self._render_initial_display()
 
@@ -226,6 +236,43 @@ class VisualizationHarness:
         self.visualization_renderer.show_display()
 
         self.logger.info("Visualization components initialized")
+
+    def _initialize_keyboard_handler(self):
+        """Initialize keyboard handler for UI-based playback control."""
+        self.keyboard_handler = KeyboardHandler(
+            playback_controller=self.playback_controller,
+            on_action_callback=self._on_keyboard_action
+        )
+
+        # Connect to the visualization figure
+        fig = self.visualization_renderer.get_figure()
+        if fig:
+            self.keyboard_handler.connect(fig)
+            self.logger.info("Keyboard handler connected to visualization")
+        else:
+            self.logger.warning("Could not connect keyboard handler - no figure available")
+
+    def _on_keyboard_action(self, action: str, details: dict):
+        """
+        Handle keyboard action notifications for status display.
+
+        Args:
+            action: Name of action performed
+            details: Dictionary with action details
+        """
+        message = details.get('message', action)
+
+        # Update status overlay in visualization
+        if self.visualization_renderer:
+            status = self.playback_controller.get_status()
+            speed_label = self.keyboard_handler.get_current_speed_label() if self.keyboard_handler else "1x"
+            state_label = status.state.value.upper()
+            overlay_text = f"[{state_label} {speed_label}] Bar {status.current_bar_idx}/{status.total_bars}"
+            self.visualization_renderer.update_status_overlay(overlay_text)
+
+        # Print to CLI
+        print(f"\n[{action.upper()}] {message}")
+        print("harness> ", end="", flush=True)
     
     def _initialize_playback_components(self):
         """Initialize playback control components."""
@@ -273,6 +320,17 @@ class VisualizationHarness:
 
         # Create display
         self.event_display = EventLogDisplay(self.event_logger)
+
+        # Create progress logger if verbose mode is enabled
+        if self._verbose:
+            self.progress_logger = ProgressLogger(
+                event_logger=self.event_logger,
+                interval_bars=100,
+                log_major_events=True
+            )
+            self.logger.info("Verbose progress logging enabled (reports every 100 bars)")
+        else:
+            self.progress_logger = None
 
         self.logger.info("Logging components initialized")
 
@@ -337,6 +395,18 @@ class VisualizationHarness:
                 'highlighted_events': [e for e in update_result.events
                                        if e.severity.value == 'major']
             })
+
+            # Progress logging (verbose mode)
+            if self.progress_logger:
+                # Notify progress logger of events directly (in case callback not connected)
+                for event in update_result.events:
+                    self.progress_logger.on_event(event)
+                # Check for periodic progress report
+                self.progress_logger.check_progress(
+                    bar_idx,
+                    len(self.bars),
+                    current_bar.timestamp
+                )
 
         except Exception as e:
             self.logger.error(f"Error during playback step {bar_idx}: {e}")
@@ -634,7 +704,14 @@ class VisualizationHarness:
     def _print_help(self):
         """Print available commands."""
         step_bars = getattr(self, '_step_bars', 1)
-        print("\nAvailable Commands:")
+        print("\nKeyboard Shortcuts (in matplotlib window):")
+        print("  SPACE        - Pause/Resume playback")
+        print("  RIGHT ARROW  - Step forward one bar")
+        print("  UP ARROW     - Increase playback speed")
+        print("  DOWN ARROW   - Decrease playback speed")
+        print("  R            - Reset to beginning")
+        print("  H            - Show keyboard help")
+        print("\nCLI Commands:")
         print("  help                    - Show this help message")
         print("  status                  - Show harness status")
         print("  play [fast]             - Start auto playback (optionally in fast mode)")
@@ -654,13 +731,16 @@ class VisualizationHarness:
     def _cleanup(self):
         """Clean up resources."""
         self.logger.info("Cleaning up harness...")
-        
+
+        if self.keyboard_handler:
+            self.keyboard_handler.disconnect()
+
         if self.playback_controller:
             self.playback_controller.stop_playback()
-        
+
         if self.visualization_renderer:
             self.visualization_renderer.set_interactive_mode(False)
-        
+
         plt.close('all')
 
 
@@ -762,7 +842,8 @@ def main():
         harness = VisualizationHarness(
             data_file=args.data,
             session_id=args.session,
-            config_overrides=config_overrides
+            config_overrides=config_overrides,
+            verbose=args.verbose
         )
         
         # Setup signal handlers

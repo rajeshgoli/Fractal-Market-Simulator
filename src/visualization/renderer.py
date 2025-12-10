@@ -68,9 +68,12 @@ class VisualizationRenderer:
         self.current_bar_idx = 0
         self.view_windows = {}  # scale -> ViewWindow
         self.last_events = []
-        
+
         # Performance tracking
         self.update_count = 0
+
+        # Status overlay text artist
+        self._status_text = None
         
         logging.info(f"VisualizationRenderer initialized with {len(self.scale_config.boundaries)} scales")
     
@@ -727,3 +730,48 @@ class VisualizationRenderer:
                 color=self.config.text_color,
                 fontsize=8
             )
+
+    def get_figure(self) -> Optional['Figure']:
+        """
+        Return the matplotlib Figure for external event binding.
+
+        Returns:
+            The matplotlib Figure object, or None if not initialized
+        """
+        return self.fig
+
+    def update_status_overlay(self, status_text: str) -> None:
+        """
+        Update the status text overlay in the figure corner.
+
+        Displays playback state, current bar, and speed information.
+
+        Args:
+            status_text: Text to display (e.g., "[PLAYING 2x] Bar 1234/5000")
+        """
+        if self.fig is None:
+            return
+
+        if self._status_text is None:
+            # Create status text in top-left corner
+            self._status_text = self.fig.text(
+                0.02, 0.98, status_text,
+                transform=self.fig.transFigure,
+                fontsize=10,
+                verticalalignment='top',
+                horizontalalignment='left',
+                color='#FFD700',  # Gold color for visibility
+                fontweight='bold',
+                bbox=dict(
+                    boxstyle='round,pad=0.3',
+                    facecolor='#1E1E1E',
+                    edgecolor='#FFD700',
+                    alpha=0.9
+                )
+            )
+        else:
+            # Update existing text
+            self._status_text.set_text(status_text)
+
+        # Redraw the status area
+        self.fig.canvas.draw_idle()

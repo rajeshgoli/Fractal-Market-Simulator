@@ -9,7 +9,19 @@ Author: Generated for Market Simulator Project
 
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Tuple
+
+
+# Speed presets for keyboard-controlled speed adjustment
+# Format: (multiplier, label)
+SPEED_PRESETS: List[Tuple[float, str]] = [
+    (0.25, "0.25x"),
+    (0.5, "0.5x"),
+    (1.0, "1x"),
+    (2.0, "2x"),
+    (5.0, "5x"),
+    (10.0, "10x"),
+]
 
 
 class PlaybackMode(Enum):
