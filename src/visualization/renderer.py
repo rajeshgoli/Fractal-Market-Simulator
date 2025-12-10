@@ -108,12 +108,14 @@ class VisualizationRenderer:
             ax.grid(True, color=self.config.grid_color, alpha=0.3)
             ax.tick_params(colors=self.config.text_color)
             
-            # Set title
+            # Set title with scale, resolution, and boundaries
             scale_range = self.scale_config.boundaries.get(scale, (0, "inf"))
+            aggregation = self.scale_config.aggregations.get(scale, 1)
+            resolution_label = self._format_resolution(aggregation)
             ax.set_title(
-                f"{scale} Scale ({scale_range[0]:.1f} - {scale_range[1]} pts)",
+                f"{scale} Scale | {resolution_label} | {scale_range[0]:.1f}-{scale_range[1]} pts",
                 color=self.config.text_color,
-                fontsize=12,
+                fontsize=11,
                 fontweight='bold'
             )
             
@@ -192,7 +194,7 @@ class VisualizationRenderer:
                     scale_events: List[StructuralEvent]) -> None:
         """
         Render a single scale panel with OHLC bars and structural overlays.
-        
+
         Args:
             panel_idx: Subplot index (0-3)
             scale: Scale identifier (S, M, L, XL)
@@ -201,10 +203,10 @@ class VisualizationRenderer:
             scale_events: Recent events for this scale
         """
         ax = self.axes[panel_idx]
-        
+
         # Clear previous artists
         self._clear_panel_artists(panel_idx)
-        
+
         # Get aggregated bars for this scale
         timeframe = self.scale_config.aggregations.get(scale, 1)
         try:
@@ -212,26 +214,29 @@ class VisualizationRenderer:
         except Exception as e:
             logging.warning(f"Could not get bars for {scale} scale timeframe {timeframe}: {e}")
             return
-        
+
         # Filter bars to view window
         visible_bars = self._get_visible_bars(aggregated_bars, view_window)
         if not visible_bars:
             return
-        
+
         # Draw OHLC bars
         self.draw_price_bars(panel_idx, visible_bars, self.current_bar_idx)
-        
+
         # Draw Fibonacci levels for each swing
         for swing in scale_swings:
             self.draw_fibonacci_levels(panel_idx, swing, view_window)
-        
+
         # Draw event markers
         if scale_events:
             self.draw_event_markers(panel_idx, scale_events, view_window)
-        
+
         # Set axis limits
         ax.set_xlim(view_window.start_idx, view_window.end_idx)
         ax.set_ylim(view_window.price_min, view_window.price_max)
+
+        # Configure time-based X-axis labels
+        self._configure_time_axis(ax, visible_bars, view_window, timeframe)
     
     def draw_price_bars(self,
                        panel_idx: int,
@@ -487,20 +492,24 @@ class VisualizationRenderer:
                                 latest_event: Optional[StructuralEvent]) -> None:
         """Update panel title and status annotations."""
         ax = self.axes[panel_idx]
-        
-        # Build status text
-        status_parts = [f"{swing_count} swings"]
-        
+
+        # Get resolution info
+        aggregation = self.scale_config.aggregations.get(scale, 1)
+        resolution_label = self._format_resolution(aggregation)
+
+        # Build status line
+        swing_status = f"{swing_count} swing{'s' if swing_count != 1 else ''}" if swing_count > 0 else "No active swings"
+
+        status_parts = [swing_status]
         if latest_event:
-            event_desc = f"Last: {latest_event.event_type.value}"
-            status_parts.append(event_desc)
-        
+            status_parts.append(f"Last: {latest_event.event_type.value}")
+
         status_text = " | ".join(status_parts)
-        
-        # Update title to include status
+
+        # Update title with scale, resolution, boundaries, and status
         scale_range = self.scale_config.boundaries.get(scale, (0, "inf"))
-        title = f"{scale} Scale ({scale_range[0]:.1f} - {scale_range[1]} pts)\n{status_text}"
-        
+        title = f"{scale} Scale | {resolution_label} | {scale_range[0]:.1f}-{scale_range[1]} pts\n{status_text}"
+
         ax.set_title(
             title,
             color=self.config.text_color,
@@ -605,3 +614,77 @@ class VisualizationRenderer:
     def get_scale_colors(self, scale: str) -> Dict[str, str]:
         """Get color scheme for a specific scale (darker colors for larger scales)."""
         return get_scale_colors(self.config, scale)
+
+    def _format_resolution(self, minutes: int) -> str:
+        """Format aggregation minutes into human-readable resolution label."""
+        if minutes < 60:
+            return f"{minutes}m"
+        elif minutes < 1440:
+            hours = minutes // 60
+            return f"{hours}h"
+        else:
+            days = minutes // 1440
+            return f"{days}d"
+
+    def _configure_time_axis(self, ax, visible_bars: List[Bar], view_window: ViewWindow, timeframe: int) -> None:
+        """
+        Configure X-axis to show time-based labels instead of bar indices.
+
+        Args:
+            ax: Matplotlib axis
+            visible_bars: List of visible Bar objects with timestamps
+            view_window: Current view window
+            timeframe: Aggregation timeframe in minutes
+        """
+        if not visible_bars:
+            return
+
+        # Get timestamps from visible bars
+        num_bars = len(visible_bars)
+
+        # Select appropriate tick positions (aim for 4-6 ticks)
+        if num_bars <= 6:
+            tick_step = 1
+        elif num_bars <= 20:
+            tick_step = max(1, num_bars // 5)
+        else:
+            tick_step = max(1, num_bars // 5)
+
+        tick_positions = list(range(0, num_bars, tick_step))
+        # Ensure last bar is included
+        if tick_positions[-1] != num_bars - 1:
+            tick_positions.append(num_bars - 1)
+
+        # Build tick labels from timestamps
+        tick_labels = []
+        for pos in tick_positions:
+            if pos < len(visible_bars):
+                bar = visible_bars[pos]
+                ts = datetime.fromtimestamp(bar.timestamp)
+                # Format based on timeframe
+                if timeframe < 60:
+                    # For minute data: show HH:MM
+                    label = ts.strftime("%H:%M")
+                elif timeframe < 1440:
+                    # For hourly data: show MM-DD HH:MM
+                    label = ts.strftime("%m-%d %H:%M")
+                else:
+                    # For daily data: show YYYY-MM-DD
+                    label = ts.strftime("%Y-%m-%d")
+                tick_labels.append(label)
+            else:
+                tick_labels.append("")
+
+        # Set the ticks and labels
+        ax.set_xticks(tick_positions)
+        ax.set_xticklabels(tick_labels, rotation=45, ha='right', fontsize=8)
+
+        # Add time range info to the axis
+        if visible_bars:
+            first_ts = datetime.fromtimestamp(visible_bars[0].timestamp)
+            last_ts = datetime.fromtimestamp(visible_bars[-1].timestamp)
+            ax.set_xlabel(
+                f"{first_ts.strftime('%Y-%m-%d %H:%M')} to {last_ts.strftime('%Y-%m-%d %H:%M')}",
+                color=self.config.text_color,
+                fontsize=8
+            )
