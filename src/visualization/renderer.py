@@ -77,12 +77,14 @@ class VisualizationRenderer:
     def initialize_display(self) -> None:
         """Setup matplotlib figure and subplots for 4-panel display."""
         # Create figure with dark background
-        self.fig = plt.figure(figsize=self.config.figure_size)
+        # Use layout='constrained' instead of tight_layout() to avoid warnings
+        # about incompatible axes configurations
+        self.fig = plt.figure(figsize=self.config.figure_size, layout='constrained')
         self.fig.patch.set_facecolor(self.config.background_color)
-        
+
         # Create 2x2 subplot grid
         gs = self.fig.add_gridspec(
-            self.config.panel_rows, 
+            self.config.panel_rows,
             self.config.panel_cols,
             hspace=0.3,
             wspace=0.2
@@ -120,7 +122,6 @@ class VisualizationRenderer:
                 'current_bar': None
             }
             
-        plt.tight_layout()
         logging.info("Display initialized with 4 panels")
     
     def update_display(self,

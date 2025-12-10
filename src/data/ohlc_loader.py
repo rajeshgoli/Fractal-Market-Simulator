@@ -146,11 +146,20 @@ def load_ohlc(filepath: str) -> Tuple[pd.DataFrame, List[Tuple[pd.Timestamp, pd.
     df.sort_index(inplace=True)
     
     # Remove duplicate timestamps - keep last occurrence for more recent data
+    # Note: Duplicates are common when loading from multiple overlapping data files
+    # or when source data has been concatenated. The "last" occurrence is kept as it
+    # typically represents the most recent/corrected data point.
     duplicate_timestamps = df.index.duplicated(keep='last')
     if duplicate_timestamps.any():
         duplicate_count = duplicate_timestamps.sum()
+        total_count = len(df)
         logger = logging.getLogger(__name__)
-        logger.warning(f"Removed {duplicate_count} duplicate timestamp(s) from {filepath}")
+        # Only log at DEBUG level to avoid spam; aggregated summary shown elsewhere
+        logger.debug(
+            f"Duplicate timestamps in {os.path.basename(filepath)}: "
+            f"{duplicate_count} removed (kept last occurrence), "
+            f"{total_count - duplicate_count} unique bars remaining"
+        )
         df = df[~duplicate_timestamps]
     
     # Validation

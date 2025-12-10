@@ -15,6 +15,7 @@ Author: Generated for Market Simulator Project
 
 import os
 import glob
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -22,6 +23,8 @@ from typing import List, Optional, Tuple
 # Import existing components
 from .ohlc_loader import load_ohlc
 from ..legacy.bull_reference_detector import Bar
+
+logger = logging.getLogger(__name__)
 
 
 def load_historical_data(
@@ -65,18 +68,25 @@ def load_historical_data(
     
     # Load and filter data
     all_bars = []
-    
+    loading_stats = {
+        'files_loaded': 0,
+        'files_skipped': 0,
+        'total_bars_before_dedup': 0,
+        'bars_from_files': []  # List of (filename, bar_count) tuples
+    }
+
     for file_path in data_files:
         try:
             df, gaps = load_ohlc(file_path)
-            
+
             # Filter by date range
             mask = (df.index >= start_date) & (df.index <= end_date)
             filtered_df = df[mask]
-            
+
             if len(filtered_df) == 0:
+                loading_stats['files_skipped'] += 1
                 continue
-                
+
             # Convert to Bar objects
             file_bars = []
             for bar_index, (idx, row) in enumerate(filtered_df.iterrows()):
@@ -89,26 +99,63 @@ def load_historical_data(
                     close=float(row['close'])
                 )
                 file_bars.append(bar)
-            
+
             all_bars.extend(file_bars)
-            
+            loading_stats['files_loaded'] += 1
+            loading_stats['bars_from_files'].append((os.path.basename(file_path), len(file_bars)))
+
         except Exception as e:
             # Log warning and continue with other files
-            print(f"Warning: Failed to load {file_path}: {e}")
+            logger.warning(f"Failed to load {os.path.basename(file_path)}: {e}")
+            loading_stats['files_skipped'] += 1
             continue
-    
+
     if not all_bars:
         raise RuntimeError(
             f"No data loaded for {symbol} {resolution} between {start_date} and {end_date}"
         )
-    
-    # Sort by timestamp and re-index
+
+    loading_stats['total_bars_before_dedup'] = len(all_bars)
+
+    # Sort by timestamp and remove duplicates across files
     all_bars.sort(key=lambda bar: bar.timestamp)
-    
-    # Re-index bars after sorting
+
+    # Remove duplicate timestamps (common when files have overlapping date ranges)
+    seen_timestamps = set()
+    unique_bars = []
+    duplicates_removed = 0
+
+    for bar in all_bars:
+        if bar.timestamp not in seen_timestamps:
+            seen_timestamps.add(bar.timestamp)
+            unique_bars.append(bar)
+        else:
+            duplicates_removed += 1
+
+    all_bars = unique_bars
+
+    # Re-index bars after sorting and deduplication
     for i, bar in enumerate(all_bars):
         bar.index = i
-    
+
+    # Log aggregated summary of duplicate handling
+    if duplicates_removed > 0:
+        logger.info(
+            f"Data loading summary for {symbol} {resolution}:\n"
+            f"  Files loaded: {loading_stats['files_loaded']} "
+            f"(skipped {loading_stats['files_skipped']} files outside date range)\n"
+            f"  Total bars from files: {loading_stats['total_bars_before_dedup']:,}\n"
+            f"  Duplicate timestamps removed: {duplicates_removed:,}\n"
+            f"  Final unique bars: {len(all_bars):,}\n"
+            f"  Note: Duplicates occur when multiple data files cover overlapping date ranges.\n"
+            f"        This is expected behavior - first occurrence is kept for each timestamp."
+        )
+    else:
+        logger.debug(
+            f"Data loading summary: {loading_stats['files_loaded']} files, "
+            f"{len(all_bars):,} bars (no duplicates)"
+        )
+
     return all_bars
 
 

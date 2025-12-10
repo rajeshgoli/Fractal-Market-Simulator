@@ -232,9 +232,7 @@ class ValidationHarness:
     
     def _run_validation_process(self) -> bool:
         """Run the validation process with expert interaction."""
-        print("\\nStarting systematic validation...")
-        print("Commands: play, pause, step, jump <N>, log <issue>, quit")
-        print("Issue types: accuracy, level, event, consistency, performance")
+        self._print_startup_message()
         
         # Override harness event callback to capture issues
         original_callback = self.core_harness._on_playback_step
@@ -307,7 +305,7 @@ class ValidationHarness:
         elif cmd in ['quit', 'exit', 'q']:
             return False
         
-        elif cmd == 'help':
+        elif cmd in ['help', 'h', '?']:
             self._print_validation_help()
             return True
         
@@ -354,18 +352,75 @@ class ValidationHarness:
             self.session.log_issue(timestamp, 'accuracy', response)
             print(f"Logged issue at bar {bar_idx}")
     
+    def _print_startup_message(self):
+        """Print clear startup message explaining what happened and what to do."""
+        print("\n" + "=" * 70)
+        print("VALIDATION SESSION STARTED")
+        print("=" * 70)
+        print()
+        print("What just happened:")
+        print("  - Historical data loaded and processed")
+        print("  - Scale calibration complete (S, M, L, XL boundaries computed)")
+        print("  - Swing state manager initialized")
+        print("  - 4-panel visualization window launched (check for matplotlib window)")
+        print()
+        print("What you should see:")
+        print("  - A matplotlib window with 4 panels showing different scales")
+        print("  - Each panel displays OHLC candlesticks with Fibonacci level overlays")
+        print("  - The visualization updates as you step through the data")
+        print()
+        print("Core workflow:")
+        print("  1. Use 'step' to advance one bar at a time and watch swings update")
+        print("  2. Use 'play' for auto-advance (pauses on major events)")
+        print("  3. Use 'log <type>' to record any detection issues you observe")
+        print("  4. Use 'quit' when done to export your findings")
+        print()
+        print("Quick start: Type 'step' to see the first bar, or 'play' to auto-advance.")
+        print("Type 'help' at any time for full command reference.")
+        print("=" * 70)
+        print()
+
     def _print_validation_help(self):
         """Print validation-specific help."""
-        print("\\nValidation Commands:")
-        print("  Standard playback commands (play, pause, step, jump, etc.)")
-        print("  log <type> [description] - Log validation issue")
-        print("  quit                     - Complete validation and exit")
-        print("\\nIssue Types:")
-        print("  accuracy    - Swing identification errors")
-        print("  level       - Fibonacci level computation problems")
-        print("  event       - Completion/invalidation trigger issues")
-        print("  consistency - Multi-scale relationship problems") 
-        print("  performance - Response time or memory issues")
+        print("\n" + "=" * 70)
+        print("VALIDATION HARNESS HELP")
+        print("=" * 70)
+        print()
+        print("PLAYBACK COMMANDS:")
+        print("  play              Start auto-playback (pauses on major events)")
+        print("  play fast         Start fast playback mode")
+        print("  pause             Pause playback")
+        print("  step [N]          Step forward N bars (default: 1)")
+        print("  jump <bar_idx>    Jump to specific bar index")
+        print("  speed <mult>      Set playback speed multiplier (e.g., 2.0)")
+        print("  status            Show current position and harness state")
+        print()
+        print("VALIDATION COMMANDS:")
+        print("  log <type> [desc] Log a validation issue at current bar")
+        print("  help, h, ?        Show this help message")
+        print("  quit, exit, q     End validation and save session")
+        print()
+        print("ISSUE TYPES for 'log' command:")
+        print("  accuracy          Swing identification errors (wrong high/low)")
+        print("  level             Fibonacci level computation problems")
+        print("  event             Completion/invalidation trigger issues")
+        print("  consistency       Multi-scale relationship problems")
+        print("  performance       Response time or memory issues")
+        print()
+        print("EXAMPLE WORKFLOWS:")
+        print()
+        print("  Manual review:")
+        print("    validation> step 50        # Advance 50 bars")
+        print("    validation> step           # Advance 1 bar")
+        print("    validation> log accuracy   # Log issue if swing looks wrong")
+        print()
+        print("  Auto-play review:")
+        print("    validation> play           # Start auto-advance")
+        print("    [system auto-pauses on major events]")
+        print("    validation> log level Issue with 1.618 calculation")
+        print("    validation> play           # Resume")
+        print()
+        print("=" * 70)
     
     def _cleanup(self):
         """Clean up validation resources."""
