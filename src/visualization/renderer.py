@@ -16,7 +16,8 @@ Author: Generated for Market Simulator Project
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+import time
+from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -35,9 +36,12 @@ from src.analysis.event_detector import StructuralEvent, EventType, EventSeverit
 from src.analysis.bar_aggregator import BarAggregator
 from src.analysis.scale_calibrator import ScaleConfig
 from src.visualization.config import (
-    RenderConfig, ViewWindow, PANEL_SCALE_MAPPING, LEVEL_LINE_STYLES, 
+    RenderConfig, ViewWindow, PANEL_SCALE_MAPPING, LEVEL_LINE_STYLES,
     EVENT_MARKERS, get_scale_colors
 )
+from src.visualization.layout_manager import LayoutManager, LayoutMode, PanelGeometry
+from src.visualization.pip_inset import PiPInsetManager, PiPConfig
+from src.visualization.swing_visibility import SwingVisibilityController, VisibilityMode
 
 
 class VisualizationRenderer:
@@ -71,10 +75,26 @@ class VisualizationRenderer:
 
         # Performance tracking
         self.update_count = 0
+        self._updates_requested = 0  # Total update requests (including skipped)
+        self._frames_skipped = 0     # Count of skipped frames
+
+        # Frame skipping state
+        self._last_render_time = 0.0
+        self._pending_update: Optional[Tuple[int, List[Any], List[Any], Optional[List[Any]]]] = None
 
         # Status overlay text artist
         self._status_text = None
-        
+
+        # Layout manager for dynamic panel layouts (Issue #12)
+        self.layout_manager: Optional[LayoutManager] = None
+        self._panel_geometries: Dict[int, PanelGeometry] = {}
+
+        # PiP inset manager for off-screen reference swings (Issue #12)
+        self.pip_manager: PiPInsetManager = PiPInsetManager()
+
+        # Swing visibility controller for overlapping swings (Issue #12)
+        self.swing_visibility: SwingVisibilityController = SwingVisibilityController()
+
         logging.info(f"VisualizationRenderer initialized with {len(self.scale_config.boundaries)} scales")
     
     def initialize_display(self) -> None:
@@ -88,29 +108,88 @@ class VisualizationRenderer:
         # Store figure number for later reference
         self._fig_num = self.fig.number
 
-        # Create 2x2 subplot grid
-        gs = self.fig.add_gridspec(
-            self.config.panel_rows,
-            self.config.panel_cols,
-            hspace=0.3,
-            wspace=0.2
-        )
-        
-        # Initialize each panel
+        # Initialize layout manager
+        self.layout_manager = LayoutManager(self.fig)
+
+        # Apply initial QUAD layout
+        self._apply_layout(LayoutMode.QUAD)
+
+        logging.info("Display initialized with 4 panels")
+
+    def _apply_layout(self, mode: LayoutMode, expanded_panel: Optional[int] = None) -> None:
+        """
+        Apply a new layout, recreating axes as needed.
+
+        Args:
+            mode: QUAD or EXPANDED
+            expanded_panel: Panel to expand (for EXPANDED mode)
+        """
+        # Clear existing axes if any
+        for panel_idx in list(self.axes.keys()):
+            self.axes[panel_idx].remove()
+        self.axes.clear()
+        self.artists.clear()
+
+        # Get new geometries from layout manager
+        geometries = self.layout_manager.transition_to(mode, expanded_panel)
+        gs = self.layout_manager.create_gridspec(mode)
+
+        # Create new axes based on geometries
         for panel_idx in range(4):
-            row = panel_idx // 2
-            col = panel_idx % 2
+            geom = geometries[panel_idx]
             scale = PANEL_SCALE_MAPPING[panel_idx]
-            
-            # Create subplot
-            ax = self.fig.add_subplot(gs[row, col])
+
+            if mode == LayoutMode.QUAD:
+                # Standard 2x2 layout
+                row = panel_idx // 2
+                col = panel_idx % 2
+                ax = self.fig.add_subplot(gs[row, col])
+            else:
+                # EXPANDED mode: use geometry slices
+                ax = self.fig.add_subplot(
+                    gs[geom.row_start:geom.row_start + geom.row_span,
+                       geom.col_start:geom.col_start + geom.col_span]
+                )
+
             self.axes[panel_idx] = ax
-            
-            # Configure appearance
-            ax.set_facecolor(self.config.background_color)
+            self._panel_geometries[panel_idx] = geom
+
+            # Configure appearance based on whether it's a mini panel
+            self._configure_panel_appearance(ax, panel_idx, geom.is_mini)
+
+            # Initialize artist collections
+            self.artists[panel_idx] = {
+                'candlesticks': [],
+                'levels': [],
+                'events': [],
+                'current_bar': None
+            }
+
+        # Force redraw
+        self.fig.canvas.draw_idle()
+
+    def _configure_panel_appearance(self, ax, panel_idx: int, is_mini: bool) -> None:
+        """
+        Configure axis appearance based on whether it's a mini panel.
+
+        Args:
+            ax: Matplotlib axis
+            panel_idx: Panel index (0-3)
+            is_mini: True if this is a mini summary panel
+        """
+        scale = PANEL_SCALE_MAPPING[panel_idx]
+        ax.set_facecolor(self.config.background_color)
+
+        if is_mini:
+            # Simplified view for mini panels
+            ax.set_title(f"{scale}", color=self.config.text_color, fontsize=8)
+            ax.tick_params(labelsize=6, colors=self.config.text_color)
+            ax.grid(False)  # No grid on mini panels for cleaner look
+        else:
+            # Full view
             ax.grid(True, color=self.config.grid_color, alpha=0.3)
             ax.tick_params(colors=self.config.text_color)
-            
+
             # Set title with scale, resolution, and boundaries
             scale_range = self.scale_config.boundaries.get(scale, (0, "inf"))
             aggregation = self.scale_config.aggregations.get(scale, 1)
@@ -121,16 +200,45 @@ class VisualizationRenderer:
                 fontsize=11,
                 fontweight='bold'
             )
-            
-            # Initialize artist collections
-            self.artists[panel_idx] = {
-                'candlesticks': [],
-                'levels': [],
-                'events': [],
-                'current_bar': None
-            }
-            
-        logging.info("Display initialized with 4 panels")
+
+    def expand_panel(self, panel_idx: int) -> None:
+        """
+        Expand specified panel to ~90% view.
+
+        Args:
+            panel_idx: Panel index (0-3) to expand
+        """
+        if self.layout_manager is None:
+            return
+        self._apply_layout(LayoutMode.EXPANDED, panel_idx)
+        logging.info(f"Expanded panel {panel_idx} ({PANEL_SCALE_MAPPING[panel_idx]} scale)")
+
+    def restore_quad_layout(self) -> None:
+        """Return to standard 2x2 layout."""
+        if self.layout_manager is None:
+            return
+        self._apply_layout(LayoutMode.QUAD)
+        logging.info("Restored QUAD layout")
+
+    def toggle_panel_expand(self, panel_idx: int) -> None:
+        """
+        Toggle expansion of a panel.
+
+        If already expanded, returns to QUAD. Otherwise expands the panel.
+
+        Args:
+            panel_idx: Panel index (0-3) to toggle
+        """
+        if self.layout_manager is None:
+            return
+
+        current_mode = self.layout_manager.get_current_mode()
+        expanded = self.layout_manager.get_expanded_panel()
+
+        if current_mode == LayoutMode.EXPANDED and expanded == panel_idx:
+            self.restore_quad_layout()
+        else:
+            self.expand_panel(panel_idx)
     
     def update_display(self,
                       current_bar_idx: int,
@@ -139,7 +247,11 @@ class VisualizationRenderer:
                       highlighted_events: Optional[List[StructuralEvent]] = None) -> None:
         """
         Update all panels with current market state.
-        
+
+        Implements frame skipping for high-speed playback: if updates are requested
+        faster than min_render_interval_ms, intermediate frames are skipped and only
+        the latest state is rendered when the interval allows.
+
         Args:
             current_bar_idx: Current position in source bar timeline
             active_swings: All active swings across scales from SwingStateManager
@@ -148,10 +260,28 @@ class VisualizationRenderer:
         """
         if self.fig is None:
             self.initialize_display()
-        
+
+        self._updates_requested += 1
+        current_time = time.time()
+
+        # Frame skipping logic
+        if self.config.enable_frame_skipping:
+            time_since_last_ms = (current_time - self._last_render_time) * 1000
+            if time_since_last_ms < self.config.min_render_interval_ms:
+                # Too soon to render - store pending update for later
+                self._pending_update = (current_bar_idx, active_swings, recent_events, highlighted_events)
+                self._frames_skipped += 1
+                return
+
+        # Use pending update if available (ensures we render latest state after skip)
+        if self._pending_update is not None:
+            current_bar_idx, active_swings, recent_events, highlighted_events = self._pending_update
+            self._pending_update = None
+
+        self._last_render_time = current_time
         self.current_bar_idx = current_bar_idx
         self.last_events = recent_events
-        
+
         # Group swings by scale
         swings_by_scale = self._group_swings_by_scale(active_swings)
         events_by_scale = self._group_events_by_scale(recent_events)
@@ -226,10 +356,31 @@ class VisualizationRenderer:
         # Draw OHLC bars (drawn at local indices 0 to N-1)
         self.draw_price_bars(panel_idx, visible_bars, self.current_bar_idx)
 
-        # Draw Fibonacci levels for each swing
+        # Apply swing visibility filtering (Issue #12)
+        visible_swings = self.swing_visibility.get_visible_swings(panel_idx, scale_swings)
+
+        # Draw Fibonacci levels for each visible swing with opacity
         # Pass num_visible for label positioning in local coordinates
-        for swing in scale_swings:
-            self.draw_fibonacci_levels(panel_idx, swing, view_window, num_visible=len(visible_bars))
+        for swing in visible_swings:
+            opacity = self.swing_visibility.get_swing_opacity(swing, panel_idx)
+            if opacity > 0:
+                self.draw_fibonacci_levels(
+                    panel_idx, swing, view_window,
+                    num_visible=len(visible_bars),
+                    opacity=opacity
+                )
+
+        # Update PiP inset if primary swing is out of view (Issue #12)
+        primary_swing = self._get_primary_swing(scale_swings)
+        if primary_swing:
+            self.pip_manager.update_pip(
+                parent_ax=ax,
+                panel_idx=panel_idx,
+                swing=primary_swing,
+                view_window=view_window,
+                aggregated_bars=aggregated_bars,
+                timeframe=timeframe
+            )
 
         # Draw event markers - pass timeframe for source-to-aggregated translation
         if scale_events:
@@ -305,7 +456,8 @@ class VisualizationRenderer:
                              panel_idx: int,
                              swing: ActiveSwing,
                              view_window: ViewWindow,
-                             num_visible: int = 100) -> None:
+                             num_visible: int = 100,
+                             opacity: float = 1.0) -> None:
         """
         Draw horizontal lines for all Fibonacci levels of a swing.
 
@@ -320,6 +472,7 @@ class VisualizationRenderer:
             swing: Active swing with Fibonacci levels
             view_window: View window for price range filtering
             num_visible: Number of visible bars (for local X coordinate positioning)
+            opacity: Opacity multiplier for visibility control (0.0 to 1.0)
         """
         if not swing.levels:
             return
@@ -329,6 +482,9 @@ class VisualizationRenderer:
         colors = get_scale_colors(self.config, scale)
 
         level_lines = []
+
+        # Calculate effective alpha (base alpha * opacity)
+        effective_alpha = self.config.level_alpha * opacity
 
         for level_name, level_price in swing.levels.items():
             # Skip levels outside view window
@@ -350,7 +506,7 @@ class VisualizationRenderer:
                 color=color,
                 linestyle=line_style,
                 linewidth=line_width,
-                alpha=self.config.level_alpha,
+                alpha=effective_alpha,
                 label=f"{swing.swing_id[:8]}-{level_name}"
             )
             level_lines.append(line)
@@ -365,9 +521,9 @@ class VisualizationRenderer:
                 fontsize=8,
                 ha='right',
                 va='center',
-                alpha=self.config.level_alpha
+                alpha=effective_alpha
             )
-        
+
         self.artists[panel_idx]['levels'].extend(level_lines)
     
     def draw_event_markers(self,
@@ -740,6 +896,28 @@ class VisualizationRenderer:
         """
         return self.fig
 
+    def get_render_stats(self) -> Dict[str, Any]:
+        """
+        Return rendering performance statistics.
+
+        Returns:
+            Dictionary with:
+            - updates_requested: Total update_display() calls
+            - updates_rendered: Actual renders performed
+            - frames_skipped: Frames skipped due to throttling
+            - skip_rate: Percentage of frames skipped (0-100)
+        """
+        skip_rate = 0.0
+        if self._updates_requested > 0:
+            skip_rate = (self._frames_skipped / self._updates_requested) * 100
+
+        return {
+            'updates_requested': self._updates_requested,
+            'updates_rendered': self.update_count,
+            'frames_skipped': self._frames_skipped,
+            'skip_rate': skip_rate,
+        }
+
     def update_status_overlay(self, status_text: str) -> None:
         """
         Update the status text overlay in the figure corner.
@@ -775,3 +953,85 @@ class VisualizationRenderer:
 
         # Redraw the status area
         self.fig.canvas.draw_idle()
+
+    def _get_primary_swing(self, swings: List[ActiveSwing]) -> Optional[ActiveSwing]:
+        """
+        Get the primary (most recent) swing for PiP display.
+
+        The primary swing is typically the one with the most recent timestamp,
+        which represents the currently active reference swing.
+
+        Args:
+            swings: List of ActiveSwing objects for a scale
+
+        Returns:
+            The primary swing, or None if no swings exist
+        """
+        if not swings:
+            return None
+
+        # Return swing with most recent high or low timestamp
+        def get_max_timestamp(swing: ActiveSwing) -> int:
+            return max(swing.high_timestamp, swing.low_timestamp)
+
+        return max(swings, key=get_max_timestamp)
+
+    # Swing visibility control methods (Issue #12)
+
+    def cycle_visibility_mode(self) -> VisibilityMode:
+        """
+        Cycle visibility mode for all scales.
+
+        Returns:
+            New visibility mode
+        """
+        return self.swing_visibility.cycle_mode_all_scales()
+
+    def cycle_next_swing(self, panel_idx: int, swings: List[ActiveSwing]) -> Optional[str]:
+        """
+        Select the next swing in SINGLE mode for a panel.
+
+        Args:
+            panel_idx: Panel index (0-3)
+            swings: List of swings for this panel
+
+        Returns:
+            ID of newly selected swing
+        """
+        return self.swing_visibility.cycle_next(panel_idx, swings)
+
+    def cycle_previous_swing(self, panel_idx: int, swings: List[ActiveSwing]) -> Optional[str]:
+        """
+        Select the previous swing in SINGLE mode for a panel.
+
+        Args:
+            panel_idx: Panel index (0-3)
+            swings: List of swings for this panel
+
+        Returns:
+            ID of newly selected swing
+        """
+        return self.swing_visibility.cycle_previous(panel_idx, swings)
+
+    def get_visibility_status(self, panel_idx: int, swings: List[ActiveSwing]) -> str:
+        """
+        Get visibility status summary for a panel.
+
+        Args:
+            panel_idx: Panel index (0-3)
+            swings: List of swings for this panel
+
+        Returns:
+            Status string describing current visibility mode and selection
+        """
+        return self.swing_visibility.get_status_summary(panel_idx, swings)
+
+    def record_swing_event(self, event: Any, scale: int) -> None:
+        """
+        Record an event for visibility highlighting.
+
+        Args:
+            event: Structural event
+            scale: Scale index (0-3)
+        """
+        self.swing_visibility.record_event(event, scale)

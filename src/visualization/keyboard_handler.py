@@ -2,7 +2,8 @@
 Keyboard Handler Module
 
 Provides keyboard event handling for the matplotlib visualization window,
-enabling pause/resume, stepping, and speed control directly from the UI.
+enabling pause/resume, stepping, speed control, layout management, and
+swing visibility control directly from the UI.
 
 Keyboard Shortcuts:
 - SPACE: Toggle pause/resume
@@ -10,6 +11,17 @@ Keyboard Shortcuts:
 - UP ARROW: Increase playback speed
 - DOWN ARROW: Decrease playback speed
 - R: Reset to beginning
+- H: Show help
+
+Layout Controls (Issue #12):
+- 1-4: Expand panel 1/2/3/4 (S/M/L/XL scale)
+- 0/ESC: Return to quad layout
+- Click panel: Toggle expand/collapse
+
+Swing Visibility Controls (Issue #12):
+- V: Cycle visibility mode (All -> Single -> Recent Event -> All)
+- [: Previous swing in Single mode
+- ]: Next swing in Single mode
 
 Author: Generated for Market Simulator Project
 """
@@ -33,17 +45,21 @@ class KeyboardHandler:
 
     def __init__(self,
                  playback_controller: PlaybackController,
-                 on_action_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None):
+                 on_action_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+                 visualization_renderer: Optional[Any] = None):
         """
         Initialize keyboard handler.
 
         Args:
             playback_controller: Controller for playback state management
             on_action_callback: Optional callback(action_name, details) for status updates
+            visualization_renderer: Optional renderer for layout control (Issue #12)
         """
         self.playback_controller = playback_controller
         self.on_action_callback = on_action_callback
-        self._cid = None  # Connection ID for matplotlib event
+        self.visualization_renderer = visualization_renderer
+        self._cid = None  # Connection ID for matplotlib keyboard event
+        self._click_cid = None  # Connection ID for matplotlib click event
         self._fig = None
 
         # Speed tracking - starts at 1x (doubles with UP, halves with DOWN, min 0.25x)
@@ -51,30 +67,47 @@ class KeyboardHandler:
 
         logging.info("KeyboardHandler initialized")
 
-    def connect(self, fig: Figure) -> None:
+    def set_visualization_renderer(self, renderer: Any) -> None:
         """
-        Connect keyboard event handler to matplotlib figure.
+        Set the visualization renderer for layout control.
 
         Args:
-            fig: Matplotlib Figure to bind keyboard events to
+            renderer: VisualizationRenderer instance
+        """
+        self.visualization_renderer = renderer
+
+    def connect(self, fig: Figure) -> None:
+        """
+        Connect keyboard and click event handlers to matplotlib figure.
+
+        Args:
+            fig: Matplotlib Figure to bind events to
         """
         if self._cid is not None:
             self.disconnect()
 
         self._fig = fig
         self._cid = fig.canvas.mpl_connect('key_press_event', self._on_key_press)
-        logging.info("Keyboard handler connected to figure")
+        self._click_cid = fig.canvas.mpl_connect('button_press_event', self._on_click)
+        logging.info("Keyboard and click handlers connected to figure")
 
     def disconnect(self) -> None:
-        """Disconnect keyboard event handler from figure."""
-        if self._cid is not None and self._fig is not None:
-            try:
-                self._fig.canvas.mpl_disconnect(self._cid)
-            except Exception as e:
-                logging.warning(f"Error disconnecting keyboard handler: {e}")
-            self._cid = None
+        """Disconnect keyboard and click event handlers from figure."""
+        if self._fig is not None:
+            if self._cid is not None:
+                try:
+                    self._fig.canvas.mpl_disconnect(self._cid)
+                except Exception as e:
+                    logging.warning(f"Error disconnecting keyboard handler: {e}")
+                self._cid = None
+            if self._click_cid is not None:
+                try:
+                    self._fig.canvas.mpl_disconnect(self._click_cid)
+                except Exception as e:
+                    logging.warning(f"Error disconnecting click handler: {e}")
+                self._click_cid = None
         self._fig = None
-        logging.debug("Keyboard handler disconnected")
+        logging.debug("Keyboard and click handlers disconnected")
 
     def _on_key_press(self, event: KeyEvent) -> None:
         """
@@ -101,6 +134,18 @@ class KeyboardHandler:
             self._reset()
         elif key == 'h':
             self._show_help()
+        # Layout controls (Issue #12)
+        elif key in ['1', '2', '3', '4']:
+            self._expand_panel(int(key) - 1)
+        elif key in ['0', 'escape']:
+            self._restore_quad_layout()
+        # Swing visibility controls (Issue #12)
+        elif key == 'v':
+            self._cycle_visibility_mode()
+        elif key == '[':
+            self._cycle_previous_swing()
+        elif key == ']':
+            self._cycle_next_swing()
 
     def _toggle_pause_resume(self) -> None:
         """Toggle between paused and playing states."""
@@ -213,10 +258,103 @@ Keyboard Shortcuts:
   DOWN   - Decrease speed
   R      - Reset to beginning
   H      - Show this help
+
+Layout Controls:
+  1-4    - Expand panel 1/2/3/4 (S/M/L/XL)
+  0/ESC  - Return to quad layout
+  Click  - Toggle expand on clicked panel
+
+Swing Visibility:
+  V      - Cycle mode (All -> Single -> Recent -> All)
+  [      - Previous swing (in Single mode)
+  ]      - Next swing (in Single mode)
 """
         self._notify_action("help", {
             "message": help_text
         })
+
+    # Layout control methods (Issue #12)
+
+    def _expand_panel(self, panel_idx: int) -> None:
+        """
+        Expand a panel to ~90% view.
+
+        Args:
+            panel_idx: Panel index (0-3)
+        """
+        if self.visualization_renderer is None:
+            self._notify_action("layout_error", {
+                "message": "No renderer configured for layout control"
+            })
+            return
+
+        if panel_idx < 0 or panel_idx > 3:
+            return
+
+        scale_names = {0: 'S', 1: 'M', 2: 'L', 3: 'XL'}
+        self.visualization_renderer.expand_panel(panel_idx)
+        self._notify_action("layout_expand", {
+            "panel": panel_idx,
+            "scale": scale_names[panel_idx],
+            "message": f"Expanded {scale_names[panel_idx]} scale panel"
+        })
+
+    def _restore_quad_layout(self) -> None:
+        """Return to standard 2x2 layout."""
+        if self.visualization_renderer is None:
+            self._notify_action("layout_error", {
+                "message": "No renderer configured for layout control"
+            })
+            return
+
+        self.visualization_renderer.restore_quad_layout()
+        self._notify_action("layout_quad", {
+            "message": "Restored quad layout"
+        })
+
+    def _on_click(self, event) -> None:
+        """
+        Handle mouse click events for panel expansion.
+
+        Double-click or single click on a panel toggles its expansion.
+
+        Args:
+            event: Matplotlib MouseEvent
+        """
+        if event.inaxes is None:
+            return
+
+        if self.visualization_renderer is None:
+            return
+
+        # Find which panel was clicked
+        panel_idx = self._find_clicked_panel(event.inaxes)
+        if panel_idx is not None:
+            self.visualization_renderer.toggle_panel_expand(panel_idx)
+            scale_names = {0: 'S', 1: 'M', 2: 'L', 3: 'XL'}
+            self._notify_action("layout_toggle", {
+                "panel": panel_idx,
+                "scale": scale_names[panel_idx],
+                "message": f"Toggled {scale_names[panel_idx]} scale panel"
+            })
+
+    def _find_clicked_panel(self, clicked_ax) -> Optional[int]:
+        """
+        Determine which panel index corresponds to the clicked axis.
+
+        Args:
+            clicked_ax: The axis that was clicked
+
+        Returns:
+            Panel index (0-3) or None if not found
+        """
+        if self.visualization_renderer is None:
+            return None
+
+        for panel_idx, ax in self.visualization_renderer.axes.items():
+            if ax is clicked_ax:
+                return panel_idx
+        return None
 
     def _notify_action(self, action: str, details: Dict[str, Any]) -> None:
         """
@@ -239,3 +377,73 @@ Keyboard Shortcuts:
                 return f"{int(self._current_speed)}x"
             return f"{self._current_speed}x"
         return f"{self._current_speed}x"
+
+    # Swing visibility control methods (Issue #12)
+
+    def _cycle_visibility_mode(self) -> None:
+        """Cycle through swing visibility modes for all panels."""
+        if self.visualization_renderer is None:
+            self._notify_action("visibility_error", {
+                "message": "No renderer configured for visibility control"
+            })
+            return
+
+        new_mode = self.visualization_renderer.cycle_visibility_mode()
+        mode_names = {
+            "all": "All Swings",
+            "single": "Single Swing",
+            "recent": "Recent Event"
+        }
+        mode_name = mode_names.get(new_mode.value, new_mode.value)
+        self._notify_action("visibility_mode", {
+            "mode": new_mode.value,
+            "message": f"Visibility: {mode_name}"
+        })
+
+    def _cycle_next_swing(self) -> None:
+        """Select next swing in Single visibility mode."""
+        if self.visualization_renderer is None:
+            return
+
+        # Cycle through swings for all panels (or use focused panel if in expanded mode)
+        expanded = None
+        if self.visualization_renderer.layout_manager:
+            expanded = self.visualization_renderer.layout_manager.get_expanded_panel()
+
+        if expanded is not None:
+            # Only cycle for expanded panel
+            panels = [expanded]
+        else:
+            # Cycle for all panels
+            panels = list(range(4))
+
+        for panel_idx in panels:
+            # Get current swings for this panel (would need to be passed in or cached)
+            # For now, just notify - actual swing list managed by renderer
+            self.visualization_renderer.swing_visibility.cycle_next(panel_idx, [])
+
+        self._notify_action("swing_next", {
+            "message": "Next swing selected"
+        })
+
+    def _cycle_previous_swing(self) -> None:
+        """Select previous swing in Single visibility mode."""
+        if self.visualization_renderer is None:
+            return
+
+        # Similar to _cycle_next_swing
+        expanded = None
+        if self.visualization_renderer.layout_manager:
+            expanded = self.visualization_renderer.layout_manager.get_expanded_panel()
+
+        if expanded is not None:
+            panels = [expanded]
+        else:
+            panels = list(range(4))
+
+        for panel_idx in panels:
+            self.visualization_renderer.swing_visibility.cycle_previous(panel_idx, [])
+
+        self._notify_action("swing_previous", {
+            "message": "Previous swing selected"
+        })

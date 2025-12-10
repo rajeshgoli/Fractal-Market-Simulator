@@ -49,7 +49,11 @@ class RenderConfig:
     
     # Performance settings
     max_visible_bars: int = 500  # Sliding window size
-    
+
+    # Frame skipping for high-speed playback
+    enable_frame_skipping: bool = True
+    min_render_interval_ms: int = 60  # ~16 FPS max, skip renders faster than this
+
     def __post_init__(self):
         """Initialize default level colors if not provided."""
         if self.level_colors is None:

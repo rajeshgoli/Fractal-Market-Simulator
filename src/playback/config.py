@@ -68,7 +68,12 @@ class PlaybackStatus:
     bars_per_second: float              # Current processing rate
     time_remaining_seconds: Optional[float]
     last_pause_reason: Optional[str]
-    
+
+    # Render performance fields (Issue #12 enhancement)
+    effective_speed: float = 1.0        # Actual achieved speed multiplier
+    frames_skipped: int = 0             # Frames skipped due to render throttling
+    render_limited: bool = False        # True if speed is limited by rendering
+
     @classmethod
     def create_initial(cls, total_bars: int) -> 'PlaybackStatus':
         """Create initial status for new playback session."""
@@ -80,5 +85,8 @@ class PlaybackStatus:
             progress_percent=0.0,
             bars_per_second=0.0,
             time_remaining_seconds=None,
-            last_pause_reason=None
+            last_pause_reason=None,
+            effective_speed=1.0,
+            frames_skipped=0,
+            render_limited=False
         )

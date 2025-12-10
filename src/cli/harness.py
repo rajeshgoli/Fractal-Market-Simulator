@@ -241,7 +241,8 @@ class VisualizationHarness:
         """Initialize keyboard handler for UI-based playback control."""
         self.keyboard_handler = KeyboardHandler(
             playback_controller=self.playback_controller,
-            on_action_callback=self._on_keyboard_action
+            on_action_callback=self._on_keyboard_action,
+            visualization_renderer=self.visualization_renderer
         )
 
         # Connect to the visualization figure
