@@ -190,11 +190,19 @@ def load_ohlc(filepath: str) -> Tuple[pd.DataFrame, List[Tuple[pd.Timestamp, pd.
             # This is slow if we iterate. Vectorized approach?
             # We can get the index location
             loc = df.index.get_loc(end_time)
-            start_time = df.index[loc - 1]
-            duration = (end_time - start_time).total_seconds() / 60.0
-            # Gap duration is the missing time.
-            # If t1=10:00, t2=10:02. Diff is 2 min. Gap is 1 min (10:01 is missing).
-            # Spec: "gap_duration_minutes".
-            gaps.append((start_time, end_time, duration))
+            
+            # Handle case where get_loc returns a slice (duplicate timestamps)
+            if isinstance(loc, slice):
+                # Use the first occurrence of the duplicate timestamp
+                loc = loc.start
+                
+            # Ensure we don't go below index 0
+            if loc > 0:
+                start_time = df.index[loc - 1]
+                duration = (end_time - start_time).total_seconds() / 60.0
+                # Gap duration is the missing time.
+                # If t1=10:00, t2=10:02. Diff is 2 min. Gap is 1 min (10:01 is missing).
+                # Spec: "gap_duration_minutes".
+                gaps.append((start_time, end_time, duration))
 
     return df, gaps
