@@ -572,23 +572,34 @@ class VisualizationRenderer:
     def _clear_panel_artists(self, panel_idx: int) -> None:
         """Clear all artists from a panel for redraw."""
         artists = self.artists[panel_idx]
-        
+
+        def safe_remove(artist):
+            """Safely remove an artist, handling cases where it's already removed."""
+            try:
+                if hasattr(artist, 'remove'):
+                    # Check if artist is still in an axes before removing
+                    # This prevents "list.remove(x): x not in list" errors
+                    if hasattr(artist, 'axes') and artist.axes is not None:
+                        artist.remove()
+                    elif hasattr(artist, 'figure') and artist.figure is not None:
+                        artist.remove()
+            except (ValueError, AttributeError):
+                # Artist was already removed or not properly attached
+                pass
+
         # Remove candlesticks
         for artist in artists['candlesticks']:
-            if hasattr(artist, 'remove'):
-                artist.remove()
+            safe_remove(artist)
         artists['candlesticks'].clear()
-        
+
         # Remove level lines
         for line in artists['levels']:
-            if hasattr(line, 'remove'):
-                line.remove()
+            safe_remove(line)
         artists['levels'].clear()
-        
+
         # Remove event markers
         for marker in artists['events']:
-            if hasattr(marker, 'remove'):
-                marker.remove()
+            safe_remove(marker)
         artists['events'].clear()
     
     def get_scale_colors(self, scale: str) -> Dict[str, str]:

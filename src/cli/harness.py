@@ -14,6 +14,7 @@ Author: Generated for Market Simulator Project
 
 import argparse
 import logging
+import queue
 import signal
 import sys
 import threading
@@ -76,7 +77,11 @@ class VisualizationHarness:
         # State management
         self.is_running = False
         self.current_bar_idx = 0
-        
+
+        # Thread-safe update queue for GUI updates from background playback thread
+        # This solves the "main thread is not in main loop" matplotlib error
+        self._update_queue = queue.Queue()
+
         # Setup logging
         logging.basicConfig(
             level=logging.INFO,
@@ -239,22 +244,28 @@ class VisualizationHarness:
             self.logger.error(f"Failed to render initial display: {e}")
 
     def _on_playback_step(self, bar_idx: int, recent_events: list):
-        """Handle playback step updates."""
+        """
+        Handle playback step updates.
+
+        This is called from the playback controller's background thread.
+        To avoid matplotlib's "main thread is not in main loop" error,
+        we queue GUI updates and process them on the main thread.
+        """
         try:
             if bar_idx >= len(self.bars):
                 self.logger.warning(f"Bar index {bar_idx} exceeds data range")
                 return
-            
+
             self.current_bar_idx = bar_idx
             current_bar = self.bars[bar_idx]
-            
-            # Update swing state manager
+
+            # Update swing state manager (thread-safe data operations)
             update_result = self.swing_state_manager.update_swings(current_bar, bar_idx)
-            
-            # Log events
+
+            # Log events (thread-safe)
             for event in update_result.events:
                 self.event_logger.log_event(event)
-            
+
             # Check for auto-pause conditions
             for event in update_result.events:
                 if self.playback_controller.should_pause_for_event(event):
@@ -262,39 +273,108 @@ class VisualizationHarness:
                         f"Auto-paused: {event.event_type.value} on {event.scale}-scale"
                     )
                     break
-            
-            # Update visualization
+
+            # Queue GUI update for main thread instead of updating directly
+            # This prevents "main thread is not in main loop" errors
             active_swings = self.swing_state_manager.get_active_swings()
-            self.visualization_renderer.update_display(
-                current_bar_idx=bar_idx,
-                active_swings=active_swings,
-                recent_events=update_result.events,
-                highlighted_events=[e for e in update_result.events 
-                                  if e.severity.value == 'major']
-            )
-            
+            self._update_queue.put({
+                'bar_idx': bar_idx,
+                'active_swings': active_swings,
+                'events': update_result.events,
+                'highlighted_events': [e for e in update_result.events
+                                       if e.severity.value == 'major']
+            })
+
         except Exception as e:
             self.logger.error(f"Error during playback step {bar_idx}: {e}")
+
+    def _process_pending_gui_updates(self):
+        """
+        Process any pending GUI updates from the background playback thread.
+
+        This should be called from the main thread (e.g., in the interactive loop)
+        to safely update the matplotlib visualization.
+        """
+        updates_processed = 0
+        while not self._update_queue.empty():
+            try:
+                update = self._update_queue.get_nowait()
+                self.visualization_renderer.update_display(
+                    current_bar_idx=update['bar_idx'],
+                    active_swings=update['active_swings'],
+                    recent_events=update['events'],
+                    highlighted_events=update['highlighted_events']
+                )
+                updates_processed += 1
+            except queue.Empty:
+                break
+            except Exception as e:
+                self.logger.error(f"Error processing GUI update: {e}")
+        return updates_processed
     
     def run_interactive(self):
         """Run the harness in interactive mode."""
+        import select
+        import sys
+
         self.is_running = True
         self.logger.info("Starting interactive visualization harness")
-        
+
         # Print initial status
         self._print_status()
         self._print_help()
-        
-        try:
+
+        # Use a separate thread for input to avoid blocking GUI updates
+        input_queue = queue.Queue()
+
+        def input_thread():
+            """Background thread to collect user input without blocking main thread."""
             while self.is_running:
                 try:
-                    command = input("\nharness> ").strip().lower()
-                    self._handle_command(command)
-                except KeyboardInterrupt:
-                    print("\nUse 'quit' to exit properly")
+                    # Use a simple blocking input in the background thread
+                    line = input()
+                    input_queue.put(line.strip().lower())
                 except EOFError:
+                    input_queue.put(None)  # Signal end of input
                     break
-                    
+                except Exception:
+                    break
+
+        # Start input collection thread
+        input_collector = threading.Thread(target=input_thread, daemon=True)
+        input_collector.start()
+
+        print("\nharness> ", end="", flush=True)
+
+        try:
+            while self.is_running:
+                # Process any pending GUI updates on the main thread
+                # This is critical for matplotlib to work correctly
+                self._process_pending_gui_updates()
+
+                # Also process matplotlib events to keep window responsive
+                try:
+                    self.fig = self.visualization_renderer.fig
+                    if self.fig:
+                        self.fig.canvas.flush_events()
+                except Exception:
+                    pass
+
+                # Check for user input (non-blocking)
+                try:
+                    command = input_queue.get_nowait()
+                    if command is None:
+                        break  # EOF received
+                    self._handle_command(command)
+                    print("\nharness> ", end="", flush=True)
+                except queue.Empty:
+                    pass
+
+                # Small sleep to prevent CPU spinning
+                time.sleep(0.05)
+
+        except KeyboardInterrupt:
+            print("\nUse 'quit' to exit properly")
         except Exception as e:
             self.logger.error(f"Error in interactive mode: {e}")
         finally:

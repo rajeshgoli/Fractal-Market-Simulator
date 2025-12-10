@@ -18,8 +18,11 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 import argparse
+import queue
 import sys
 import logging
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -262,27 +265,75 @@ class ValidationHarness:
         return self._run_interactive_validation()
     
     def _run_interactive_validation(self) -> bool:
-        """Run interactive validation with expert input."""
-        try:
-            while True:
+        """
+        Run interactive validation with expert input.
+
+        Uses a non-blocking input approach to allow GUI updates to be processed
+        on the main thread, preventing matplotlib threading errors.
+        """
+        # Use a separate thread for input to avoid blocking GUI updates
+        input_queue = queue.Queue()
+        is_running = True
+
+        def input_thread():
+            """Background thread to collect user input without blocking main thread."""
+            nonlocal is_running
+            while is_running:
                 try:
-                    command = input("\nvalidation> ").strip().lower()
-                    
-                    if self._handle_validation_command(command):
-                        continue
-                    else:
-                        break
-                        
-                except KeyboardInterrupt:
-                    print("\nUse 'quit' to exit properly")
+                    line = input()
+                    input_queue.put(line.strip().lower())
                 except EOFError:
+                    input_queue.put(None)
                     break
-                    
+                except Exception:
+                    break
+
+        # Start input collection thread
+        input_collector = threading.Thread(target=input_thread, daemon=True)
+        input_collector.start()
+
+        print("\nvalidation> ", end="", flush=True)
+
+        try:
+            while is_running:
+                # Process any pending GUI updates from the core harness
+                # This is critical for matplotlib to work correctly from background threads
+                if hasattr(self.core_harness, '_process_pending_gui_updates'):
+                    self.core_harness._process_pending_gui_updates()
+
+                # Also process matplotlib events to keep window responsive
+                try:
+                    fig = self.core_harness.visualization_renderer.fig
+                    if fig:
+                        fig.canvas.flush_events()
+                except Exception:
+                    pass
+
+                # Check for user input (non-blocking)
+                try:
+                    command = input_queue.get_nowait()
+                    if command is None:
+                        break  # EOF received
+                    if not self._handle_validation_command(command):
+                        is_running = False
+                        break
+                    print("\nvalidation> ", end="", flush=True)
+                except queue.Empty:
+                    pass
+
+                # Small sleep to prevent CPU spinning
+                time.sleep(0.05)
+
             return True
-            
+
+        except KeyboardInterrupt:
+            print("\nUse 'quit' to exit properly")
+            return True
         except Exception as e:
             self.logger.error(f"Interactive validation error: {e}")
             return False
+        finally:
+            is_running = False
     
     def _handle_validation_command(self, command: str) -> bool:
         """
