@@ -1,0 +1,1244 @@
+"""
+Reference Swing Detector
+
+Detects valid bull and bear reference swings from OHLC price data.
+
+Bull Reference Swing: A completed bear leg (high followed by low) that the 
+current market is actively countering from below.
+
+Bear Reference Swing: A completed bull leg (low followed by high) that the 
+current market is actively countering from above.
+
+Bull Algorithm:
+1. Finds swing lows (local minima) using configurable lookback window
+2. For each swing low, scans backward to find all bear legs feeding into it
+3. Filters by retracement validity (current price between 0.382 and 2x)
+4. Filters by low protection (swing low not violated beyond tolerance)
+5. Applies subsumption to remove redundant swings
+
+Bear Algorithm (symmetric):
+1. Finds swing highs (local maxima) using configurable lookback window
+2. For each swing high, scans backward to find all bull legs feeding into it
+3. Filters by retracement validity (current price between -0.382 and -2x of swing)
+4. Filters by high protection (swing high not violated beyond tolerance)
+5. Applies subsumption to remove redundant swings
+
+Both preserve:
+- Largest swing per anchor point
+- Most explosive swings (high speed)
+- Swings whose termination is also a swing point
+- Most recent swing for immediate context
+
+Author: Generated for Market Simulator Project
+"""
+
+import csv
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import List, Dict, Set, Optional, Tuple
+from enum import Enum
+
+
+class SwingType(Enum):
+    ORDINARY = "ordinary"
+    EXPLOSIVE = "explosive"
+    SWING_HIGH = "swing_high"
+    SWING_LOW = "swing_low"
+
+
+@dataclass
+class Bar:
+    """Single OHLC bar"""
+    index: int
+    timestamp: int
+    open: float
+    high: float
+    low: float
+    close: float
+    
+    @property
+    def date(self) -> datetime:
+        return datetime.fromtimestamp(self.timestamp)
+
+
+@dataclass
+class BearReferenceSwing:
+    """A valid bear reference swing (completed bull leg being countered)"""
+    low_index: int
+    low_price: float
+    low_date: datetime
+    high_index: int
+    high_price: float
+    high_date: datetime
+    range: float
+    duration: int  # bars from low to high
+    speed: float  # points per bar
+    is_explosive: bool
+    is_swing_low: bool  # low is also a swing low (downswing termination)
+    
+    # Computed Fibonacci levels
+    levels: Dict[str, float] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """Compute Fibonacci levels after initialization"""
+        self._compute_levels()
+    
+    def _compute_levels(self):
+        """Compute all structural levels for this swing (measured from high downward)"""
+        high = self.high_price
+        r = self.range
+        
+        self.levels = {
+            '-0.1': high + 0.1 * r,  # above high (stop level)
+            '0': high,  # swing high
+            '0.1': high - 0.1 * r,
+            '0.382': high - 0.382 * r,
+            '0.5': high - 0.5 * r,
+            '0.618': high - 0.618 * r,
+            '0.9': high - 0.9 * r,
+            '1': high - r,  # swing low
+            '1.1': high - 1.1 * r,
+            '1.382': high - 1.382 * r,
+            '1.5': high - 1.5 * r,
+            '1.618': high - 1.618 * r,
+            '2': high - 2.0 * r,  # 2x extension (bear move completion)
+        }
+    
+    def get_retracement(self, current_price: float) -> float:
+        """Get current price as retracement level (0 = high, 1 = low, 2 = 2x down)"""
+        return (self.high_price - current_price) / self.range
+    
+    def get_zone(self, current_price: float) -> str:
+        """Get descriptive zone for current price position"""
+        ret = self.get_retracement(current_price)
+        
+        if ret < 0:
+            return "ABOVE_HIGH"
+        elif ret < 0.382:
+            return "INVALID_RETRACEMENT"
+        elif ret < 1.0:
+            return "ABOVE_LOW"
+        elif ret < 1.382:
+            return "BUILDING_1_TO_1382"
+        elif ret < 1.618:
+            return "DECISION_ZONE"
+        elif ret < 2.0:
+            return "LIQUIDITY_VOID"
+        else:
+            return "EXHAUSTION"
+    
+    def __repr__(self):
+        markers = []
+        if self.is_explosive:
+            markers.append("EXPLOSIVE")
+        if self.is_swing_low:
+            markers.append("SWING-LOW")
+        marker_str = f" [{', '.join(markers)}]" if markers else ""
+        
+        return (f"BearRef({self.low_price:.2f} -> {self.high_price:.2f}, "
+                f"range={self.range:.2f}, speed={self.speed:.1f}{marker_str})")
+
+
+@dataclass
+class BullReferenceSwing:
+    """A valid bull reference swing (completed bear leg being countered)"""
+    high_index: int
+    high_price: float
+    high_date: datetime
+    low_index: int
+    low_price: float
+    low_date: datetime
+    range: float
+    duration: int  # bars from high to low
+    speed: float  # points per bar
+    is_explosive: bool
+    is_swing_high: bool  # high is also a swing high (upswing termination)
+    
+    # Computed Fibonacci levels
+    levels: Dict[str, float] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """Compute Fibonacci levels after initialization"""
+        self._compute_levels()
+    
+    def _compute_levels(self):
+        """Compute all structural levels for this swing"""
+        low = self.low_price
+        r = self.range
+        
+        self.levels = {
+            '-0.1': low - 0.1 * r,
+            '0': low,
+            '0.1': low + 0.1 * r,
+            '0.382': low + 0.382 * r,
+            '0.5': low + 0.5 * r,
+            '0.618': low + 0.618 * r,
+            '0.9': low + 0.9 * r,
+            '1': low + r,  # swing high
+            '1.1': low + 1.1 * r,
+            '1.382': low + 1.382 * r,
+            '1.5': low + 1.5 * r,
+            '1.618': low + 1.618 * r,
+            '2': low + 2.0 * r,  # 2x extension (bull move completion)
+        }
+    
+    def get_retracement(self, current_price: float) -> float:
+        """Get current price as retracement level (0 = low, 1 = high, 2 = 2x)"""
+        return (current_price - self.low_price) / self.range
+    
+    def get_zone(self, current_price: float) -> str:
+        """Get descriptive zone for current price position"""
+        ret = self.get_retracement(current_price)
+        
+        if ret < 0:
+            return "BELOW_LOW"
+        elif ret < 0.382:
+            return "INVALID_RETRACEMENT"
+        elif ret < 1.0:
+            return "BELOW_HIGH"
+        elif ret < 1.382:
+            return "BUILDING_1_TO_1382"
+        elif ret < 1.618:
+            return "DECISION_ZONE"
+        elif ret < 2.0:
+            return "LIQUIDITY_VOID"
+        else:
+            return "EXHAUSTION"
+    
+    def __repr__(self):
+        markers = []
+        if self.is_explosive:
+            markers.append("EXPLOSIVE")
+        if self.is_swing_high:
+            markers.append("SWING-HIGH")
+        marker_str = f" [{', '.join(markers)}]" if markers else ""
+        
+        return (f"BullRef({self.high_price:.2f} -> {self.low_price:.2f}, "
+                f"range={self.range:.2f}, speed={self.speed:.1f}{marker_str})")
+
+
+@dataclass
+class DetectorConfig:
+    """Configuration for the swing detector"""
+    # Swing detection
+    swing_lookback: int = 1  # bars to look back/forward for swing detection
+    min_swing_range: float = 20.0  # minimum range in points to consider
+    
+    # Retracement validity
+    min_retracement: float = 0.382  # minimum retracement for valid reference
+    max_retracement: float = 2.0  # maximum (2x extension)
+    
+    # Protection levels
+    low_violation_tolerance: float = 0.1  # as fraction of range (for bull swings)
+    high_violation_tolerance: float = 0.1  # as fraction of range (for bear swings)
+    
+    # Explosive classification
+    explosive_speed_threshold: float = 100.0  # points per bar
+    explosive_speed_multiplier: float = 2.0  # relative to group average
+    
+    # Subsumption
+    recent_duration_threshold: int = 3  # bars - keep if within this of low
+
+
+class BearReferenceDetector:
+    """
+    Detects bear reference swings from OHLC data.
+    
+    Usage:
+        detector = BearReferenceDetector(config)
+        bars = detector.load_csv("data.csv")
+        swings = detector.detect(bars, current_price)
+    """
+    
+    def __init__(self, config: Optional[DetectorConfig] = None):
+        self.config = config or DetectorConfig()
+        self._swing_highs: Set[int] = set()
+        self._swing_lows: Set[int] = set()
+    
+    def load_csv(self, filepath: str, last_n_bars: Optional[int] = None) -> List[Bar]:
+        """
+        Load OHLC data from CSV file.
+        
+        Supports two formats:
+        - TradingView: time,open,high,low,close (comma-separated, unix timestamp)
+        - Historical: date;open;high;low;close (semicolon-separated)
+        """
+        bars = []
+        
+        with open(filepath, 'r') as f:
+            # Detect format by reading first line
+            first_line = f.readline()
+            f.seek(0)
+            
+            if ';' in first_line:
+                # Historical format
+                reader = csv.DictReader(f, delimiter=';')
+                for i, row in enumerate(reader):
+                    # Parse European date format
+                    try:
+                        dt = datetime.strptime(row['date'], '%d.%m.%Y %H:%M:%S')
+                        timestamp = int(dt.timestamp())
+                    except:
+                        continue
+                    
+                    bars.append(Bar(
+                        index=i,
+                        timestamp=timestamp,
+                        open=float(row['open']),
+                        high=float(row['high']),
+                        low=float(row['low']),
+                        close=float(row['close'])
+                    ))
+            else:
+                # TradingView format
+                reader = csv.DictReader(f)
+                for i, row in enumerate(reader):
+                    bars.append(Bar(
+                        index=i,
+                        timestamp=int(row['time']),
+                        open=float(row['open']),
+                        high=float(row['high']),
+                        low=float(row['low']),
+                        close=float(row['close'])
+                    ))
+        
+        if last_n_bars and len(bars) > last_n_bars:
+            bars = bars[-last_n_bars:]
+            # Re-index
+            for i, bar in enumerate(bars):
+                bar.index = i
+        
+        return bars
+    
+    def detect(self, bars: List[Bar], current_price: Optional[float] = None) -> List[BearReferenceSwing]:
+        """
+        Detect all valid bear reference swings.
+        
+        Args:
+            bars: List of OHLC bars
+            current_price: Current price for retracement calculation. 
+                          If None, uses the close of the last bar.
+        
+        Returns:
+            List of valid BearReferenceSwing objects, sorted by range (largest first)
+        """
+        if not bars:
+            return []
+        
+        if current_price is None:
+            current_price = bars[-1].close
+        
+        # Step 1: Find all swing highs and lows
+        self._find_swing_points(bars)
+        
+        # Step 2: For each swing high, find all bull legs
+        all_bull_legs = []
+        for high_idx in self._swing_highs:
+            bull_legs = self._find_bull_legs(bars, high_idx)
+            all_bull_legs.extend(bull_legs)
+        
+        # Step 3: Filter by retracement validity
+        valid_legs = [
+            leg for leg in all_bull_legs
+            if self._check_bear_retracement_validity(leg, current_price)
+        ]
+        
+        # Step 4: Filter by high protection
+        valid_legs = [
+            leg for leg in valid_legs
+            if self._check_high_protection(bars, leg)
+        ]
+        
+        # Step 5: Filter by minimum range
+        valid_legs = [
+            leg for leg in valid_legs
+            if leg['range'] >= self.config.min_swing_range
+        ]
+        
+        # Step 6: Enrich with metadata
+        for leg in valid_legs:
+            leg['speed'] = leg['range'] / leg['duration'] if leg['duration'] > 0 else leg['range']
+            leg['is_swing_low'] = leg['low_index'] in self._swing_lows
+            leg['high_date'] = bars[leg['high_index']].date
+            leg['low_date'] = bars[leg['low_index']].date
+        
+        # Step 7: Classify explosive swings
+        self._classify_explosive(valid_legs)
+        
+        # Step 8: Apply subsumption
+        final_legs = self._subsume_same_high(valid_legs)
+        final_legs = self._subsume_nested_bear(final_legs)
+        
+        # Step 9: Convert to BearReferenceSwing objects
+        result = []
+        for leg in final_legs:
+            swing = BearReferenceSwing(
+                low_index=leg['low_index'],
+                low_price=leg['low_price'],
+                low_date=leg['low_date'],
+                high_index=leg['high_index'],
+                high_price=leg['high_price'],
+                high_date=leg['high_date'],
+                range=leg['range'],
+                duration=leg['duration'],
+                speed=leg['speed'],
+                is_explosive=leg.get('is_explosive', False),
+                is_swing_low=leg['is_swing_low']
+            )
+            result.append(swing)
+        
+        # Sort by range (largest first)
+        result.sort(key=lambda x: x.range, reverse=True)
+        
+        return result
+    
+    def _find_swing_points(self, bars: List[Bar]) -> None:
+        """Find all swing highs and swing lows"""
+        self._swing_highs = set()
+        self._swing_lows = set()
+        
+        lookback = self.config.swing_lookback
+        
+        for i in range(lookback, len(bars) - lookback):
+            # Check for swing high
+            is_swing_high = True
+            for j in range(1, lookback + 1):
+                if bars[i].high < bars[i - j].high or bars[i].high < bars[i + j].high:
+                    is_swing_high = False
+                    break
+            if is_swing_high:
+                self._swing_highs.add(i)
+            
+            # Check for swing low
+            is_swing_low = True
+            for j in range(1, lookback + 1):
+                if bars[i].low > bars[i - j].low or bars[i].low > bars[i + j].low:
+                    is_swing_low = False
+                    break
+            if is_swing_low:
+                self._swing_lows.add(i)
+    
+    def _find_bull_legs(self, bars: List[Bar], high_index: int) -> List[Dict]:
+        """
+        Find all bull legs (low -> high) feeding into a swing high.
+        
+        Scans backward from the high, recording each new lower low as a bull leg.
+        Stops when encountering a bar whose high is above the swing high (prior structure).
+        """
+        high_price = bars[high_index].high
+        bull_legs = []
+        best_low_so_far = high_price
+        
+        for i in range(high_index - 1, -1, -1):
+            bar = bars[i]
+            
+            # Stop if this bar's high is above our swing high
+            # (we've entered territory of prior, higher structure)
+            if bar.high > high_price:
+                break
+            
+            # Record new lower low as a bull leg
+            if bar.low < best_low_so_far:
+                bull_legs.append({
+                    'low_index': i,
+                    'low_price': bar.low,
+                    'high_index': high_index,
+                    'high_price': high_price,
+                    'range': high_price - bar.low,
+                    'duration': high_index - i
+                })
+                best_low_so_far = bar.low
+        
+        return bull_legs
+    
+    def _check_bear_retracement_validity(self, leg: Dict, current_price: float) -> bool:
+        """Check if current price is in valid bear retracement zone"""
+        high = leg['high_price']
+        r = leg['range']
+        
+        # For bear swings, valid retracement is below the low
+        # -0.382 means 0.382 * range below the low
+        # -2.0 means 2.0 * range below the low
+        level_max = high - self.config.min_retracement * r  # less negative (higher price)
+        level_min = high - self.config.max_retracement * r  # more negative (lower price)
+        
+        return level_min <= current_price <= level_max
+    
+    def _check_high_protection(self, bars: List[Bar], leg: Dict) -> bool:
+        """Check if the swing high has been protected (not violated beyond tolerance)"""
+        high = leg['high_price']
+        high_index = leg['high_index']
+        r = leg['range']
+        
+        tolerance = self.config.high_violation_tolerance * r
+        violation_threshold = high + tolerance
+        
+        for i in range(high_index + 1, len(bars)):
+            if bars[i].high > violation_threshold:
+                return False
+        
+        return True
+    
+    def _classify_explosive(self, legs: List[Dict]) -> None:
+        """Mark legs as explosive based on speed"""
+        if not legs:
+            return
+        
+        # Group by high_index to calculate peer averages
+        by_high = {}
+        for leg in legs:
+            high_idx = leg['high_index']
+            if high_idx not in by_high:
+                by_high[high_idx] = []
+            by_high[high_idx].append(leg)
+        
+        for high_idx, group in by_high.items():
+            avg_speed = sum(l['speed'] for l in group) / len(group)
+            
+            for leg in group:
+                # Explosive if above absolute threshold OR significantly above peer average
+                leg['is_explosive'] = (
+                    leg['speed'] >= self.config.explosive_speed_threshold or
+                    leg['speed'] >= avg_speed * self.config.explosive_speed_multiplier
+                )
+    
+    def _subsume_same_high(self, legs: List[Dict]) -> List[Dict]:
+        """
+        For swings sharing the same swing high, keep only structurally significant ones:
+        - The largest (HTF context)
+        - The most explosive (if significantly faster than average)
+        - Any whose low is a swing low (downswing termination)
+        - The most recent (if within threshold of high)
+        """
+        by_high = {}
+        for leg in legs:
+            high_idx = leg['high_index']
+            if high_idx not in by_high:
+                by_high[high_idx] = []
+            by_high[high_idx].append(leg)
+        
+        survivors = []
+        
+        for high_idx, group in by_high.items():
+            if len(group) == 1:
+                survivors.append(group[0])
+                continue
+            
+            kept_ids = set()
+            
+            # Keep largest
+            largest = max(group, key=lambda x: x['range'])
+            kept_ids.add(id(largest))
+            
+            # Keep most explosive
+            most_explosive = max(group, key=lambda x: x['speed'])
+            if most_explosive['is_explosive']:
+                kept_ids.add(id(most_explosive))
+            
+            # Keep any swing-low terminations
+            for leg in group:
+                if leg['is_swing_low']:
+                    kept_ids.add(id(leg))
+            
+            # Keep most recent if within threshold
+            most_recent = max(group, key=lambda x: x['low_index'])
+            if most_recent['duration'] <= self.config.recent_duration_threshold:
+                kept_ids.add(id(most_recent))
+            
+            for leg in group:
+                if id(leg) in kept_ids:
+                    survivors.append(leg)
+        
+        return survivors
+    
+    def _subsume_nested_bear(self, legs: List[Dict]) -> List[Dict]:
+        """
+        Remove swings completely contained within larger swings,
+        unless they are explosive or swing-low terminations.
+        """
+        # Sort by range descending (process largest first)
+        legs = sorted(legs, key=lambda x: x['range'], reverse=True)
+        
+        survivors = []
+        
+        for leg in legs:
+            subsumed = False
+            
+            for survivor in survivors:
+                # Check if leg is contained within survivor
+                time_contained = (
+                    survivor['low_index'] <= leg['low_index'] and
+                    survivor['high_index'] >= leg['high_index']
+                )
+                price_contained = (
+                    survivor['low_price'] <= leg['low_price'] and
+                    survivor['high_price'] >= leg['high_price']
+                )
+                
+                if time_contained and price_contained:
+                    # Keep if explosive or swing-low termination
+                    if not leg['is_explosive'] and not leg['is_swing_low']:
+                        subsumed = True
+                        break
+            
+            if not subsumed:
+                survivors.append(leg)
+        
+        return survivors
+    
+    def print_analysis(self, swings: List[BearReferenceSwing], current_price: float) -> None:
+        """Print a formatted analysis of detected bear swings"""
+        print("=" * 80)
+        print(f"BEAR REFERENCE SWINGS (Current Price: {current_price:.2f})")
+        print("=" * 80)
+        
+        for i, swing in enumerate(swings, 1):
+            ret = swing.get_retracement(current_price)
+            zone = swing.get_zone(current_price)
+            
+            markers = []
+            if swing.is_explosive:
+                markers.append("EXPLOSIVE")
+            if swing.is_swing_low:
+                markers.append("SWING-LOW")
+            marker_str = f" [{', '.join(markers)}]" if markers else ""
+            
+            print(f"\n{i}. {swing.low_price:.2f} ({swing.low_date.date()}) -> "
+                  f"{swing.high_price:.2f} ({swing.high_date.date()})")
+            print(f"   Range: {swing.range:.2f} | Duration: {swing.duration} bars | "
+                  f"Speed: {swing.speed:.1f} pts/bar{marker_str}")
+            print(f"   Current: {ret:.3f} retracement -> {zone}")
+            print(f"   Levels: 1.0={swing.levels['1']:.2f}, "
+                  f"1.382={swing.levels['1.382']:.2f}, "
+                  f"1.5={swing.levels['1.5']:.2f}, "
+                  f"2x={swing.levels['2']:.2f}")
+
+
+class BullReferenceDetector:
+    """
+    Detects bull reference swings from OHLC data.
+    
+    Usage:
+        detector = BullReferenceDetector(config)
+        bars = detector.load_csv("data.csv")
+        swings = detector.detect(bars, current_price)
+    """
+    
+    def __init__(self, config: Optional[DetectorConfig] = None):
+        self.config = config or DetectorConfig()
+        self._swing_highs: Set[int] = set()
+        self._swing_lows: Set[int] = set()
+    
+    def load_csv(self, filepath: str, last_n_bars: Optional[int] = None) -> List[Bar]:
+        """
+        Load OHLC data from CSV file.
+        
+        Supports two formats:
+        - TradingView: time,open,high,low,close (comma-separated, unix timestamp)
+        - Historical: date;open;high;low;close (semicolon-separated)
+        """
+        bars = []
+        
+        with open(filepath, 'r') as f:
+            # Detect format by reading first line
+            first_line = f.readline()
+            f.seek(0)
+            
+            if ';' in first_line:
+                # Historical format
+                reader = csv.DictReader(f, delimiter=';')
+                for i, row in enumerate(reader):
+                    # Parse European date format
+                    try:
+                        dt = datetime.strptime(row['date'], '%d.%m.%Y %H:%M:%S')
+                        timestamp = int(dt.timestamp())
+                    except:
+                        continue
+                    
+                    bars.append(Bar(
+                        index=i,
+                        timestamp=timestamp,
+                        open=float(row['open']),
+                        high=float(row['high']),
+                        low=float(row['low']),
+                        close=float(row['close'])
+                    ))
+            else:
+                # TradingView format
+                reader = csv.DictReader(f)
+                for i, row in enumerate(reader):
+                    bars.append(Bar(
+                        index=i,
+                        timestamp=int(row['time']),
+                        open=float(row['open']),
+                        high=float(row['high']),
+                        low=float(row['low']),
+                        close=float(row['close'])
+                    ))
+        
+        if last_n_bars and len(bars) > last_n_bars:
+            bars = bars[-last_n_bars:]
+            # Re-index
+            for i, bar in enumerate(bars):
+                bar.index = i
+        
+        return bars
+    
+    def detect(self, bars: List[Bar], current_price: Optional[float] = None) -> List[BullReferenceSwing]:
+        """
+        Detect all valid bull reference swings.
+        
+        Args:
+            bars: List of OHLC bars
+            current_price: Current price for retracement calculation. 
+                          If None, uses the close of the last bar.
+        
+        Returns:
+            List of valid BullReferenceSwing objects, sorted by range (largest first)
+        """
+        if not bars:
+            return []
+        
+        if current_price is None:
+            current_price = bars[-1].close
+        
+        # Step 1: Find all swing highs and lows
+        self._find_swing_points(bars)
+        
+        # Step 2: For each swing low, find all bear legs
+        all_bear_legs = []
+        for low_idx in self._swing_lows:
+            bear_legs = self._find_bear_legs(bars, low_idx)
+            all_bear_legs.extend(bear_legs)
+        
+        # Step 3: Filter by retracement validity
+        valid_legs = [
+            leg for leg in all_bear_legs
+            if self._check_retracement_validity(leg, current_price)
+        ]
+        
+        # Step 4: Filter by low protection
+        valid_legs = [
+            leg for leg in valid_legs
+            if self._check_low_protection(bars, leg)
+        ]
+        
+        # Step 5: Filter by minimum range
+        valid_legs = [
+            leg for leg in valid_legs
+            if leg['range'] >= self.config.min_swing_range
+        ]
+        
+        # Step 6: Enrich with metadata
+        for leg in valid_legs:
+            leg['speed'] = leg['range'] / leg['duration'] if leg['duration'] > 0 else leg['range']
+            leg['is_swing_high'] = leg['high_index'] in self._swing_highs
+            leg['high_date'] = bars[leg['high_index']].date
+            leg['low_date'] = bars[leg['low_index']].date
+        
+        # Step 7: Classify explosive swings
+        self._classify_explosive(valid_legs)
+        
+        # Step 8: Apply subsumption
+        final_legs = self._subsume_same_low(valid_legs)
+        final_legs = self._subsume_nested(final_legs)
+        
+        # Step 9: Apply simple structural deduplication for high-granularity data
+        final_legs = self._deduplicate_structural_variations(final_legs)
+        
+        # Step 10: Convert to BullReferenceSwing objects
+        result = []
+        for leg in final_legs:
+            swing = BullReferenceSwing(
+                high_index=leg['high_index'],
+                high_price=leg['high_price'],
+                high_date=leg['high_date'],
+                low_index=leg['low_index'],
+                low_price=leg['low_price'],
+                low_date=leg['low_date'],
+                range=leg['range'],
+                duration=leg['duration'],
+                speed=leg['speed'],
+                is_explosive=leg.get('is_explosive', False),
+                is_swing_high=leg['is_swing_high']
+            )
+            result.append(swing)
+        
+        # Sort by range (largest first)
+        result.sort(key=lambda x: x.range, reverse=True)
+        
+        return result
+    
+    def _find_swing_points(self, bars: List[Bar]) -> None:
+        """Find all swing highs and swing lows"""
+        self._swing_highs = set()
+        self._swing_lows = set()
+        
+        lookback = self.config.swing_lookback
+        
+        for i in range(lookback, len(bars) - lookback):
+            # Check for swing high
+            is_swing_high = True
+            for j in range(1, lookback + 1):
+                if bars[i].high < bars[i - j].high or bars[i].high < bars[i + j].high:
+                    is_swing_high = False
+                    break
+            if is_swing_high:
+                self._swing_highs.add(i)
+            
+            # Check for swing low
+            is_swing_low = True
+            for j in range(1, lookback + 1):
+                if bars[i].low > bars[i - j].low or bars[i].low > bars[i + j].low:
+                    is_swing_low = False
+                    break
+            if is_swing_low:
+                self._swing_lows.add(i)
+    
+    def _find_bear_legs(self, bars: List[Bar], low_index: int) -> List[Dict]:
+        """
+        Find all bear legs (high -> low) feeding into a swing low.
+        
+        Scans backward from the low, recording each new higher high as a bear leg.
+        Stops when encountering a bar whose low is below the swing low (prior structure).
+        """
+        low_price = bars[low_index].low
+        bear_legs = []
+        best_high_so_far = low_price
+        
+        for i in range(low_index - 1, -1, -1):
+            bar = bars[i]
+            
+            # Stop if this bar's low is below our swing low
+            # (we've entered territory of prior, deeper structure)
+            if bar.low < low_price:
+                break
+            
+            # Record new higher high as a bear leg
+            if bar.high > best_high_so_far:
+                bear_legs.append({
+                    'high_index': i,
+                    'high_price': bar.high,
+                    'low_index': low_index,
+                    'low_price': low_price,
+                    'range': bar.high - low_price,
+                    'duration': low_index - i
+                })
+                best_high_so_far = bar.high
+        
+        return bear_legs
+    
+    def _check_retracement_validity(self, leg: Dict, current_price: float) -> bool:
+        """Check if current price is in valid retracement zone"""
+        low = leg['low_price']
+        r = leg['range']
+        
+        level_min = low + self.config.min_retracement * r
+        level_max = low + self.config.max_retracement * r
+        
+        return level_min <= current_price <= level_max
+    
+    def _check_low_protection(self, bars: List[Bar], leg: Dict) -> bool:
+        """Check if the swing low has been protected (not violated beyond tolerance)"""
+        low = leg['low_price']
+        low_index = leg['low_index']
+        r = leg['range']
+        
+        tolerance = self.config.low_violation_tolerance * r
+        violation_threshold = low - tolerance
+        
+        for i in range(low_index + 1, len(bars)):
+            if bars[i].low < violation_threshold:
+                return False
+        
+        return True
+    
+    def _classify_explosive(self, legs: List[Dict]) -> None:
+        """Mark legs as explosive based on speed"""
+        if not legs:
+            return
+        
+        # Group by low_index to calculate peer averages
+        by_low = {}
+        for leg in legs:
+            low_idx = leg['low_index']
+            if low_idx not in by_low:
+                by_low[low_idx] = []
+            by_low[low_idx].append(leg)
+        
+        for low_idx, group in by_low.items():
+            avg_speed = sum(l['speed'] for l in group) / len(group)
+            
+            for leg in group:
+                # Explosive if above absolute threshold OR significantly above peer average
+                leg['is_explosive'] = (
+                    leg['speed'] >= self.config.explosive_speed_threshold or
+                    leg['speed'] >= avg_speed * self.config.explosive_speed_multiplier
+                )
+    
+    def _subsume_same_low(self, legs: List[Dict]) -> List[Dict]:
+        """
+        For swings sharing the same swing low, keep only structurally significant ones:
+        - The largest (HTF context)
+        - The most explosive (if significantly faster than average)
+        - Any whose high is a swing high (upswing termination)
+        - The most recent (if within threshold of low)
+        """
+        by_low = {}
+        for leg in legs:
+            low_idx = leg['low_index']
+            if low_idx not in by_low:
+                by_low[low_idx] = []
+            by_low[low_idx].append(leg)
+        
+        survivors = []
+        
+        for low_idx, group in by_low.items():
+            if len(group) == 1:
+                survivors.append(group[0])
+                continue
+            
+            kept_ids = set()
+            
+            # Keep largest
+            largest = max(group, key=lambda x: x['range'])
+            kept_ids.add(id(largest))
+            
+            # Keep most explosive
+            most_explosive = max(group, key=lambda x: x['speed'])
+            if most_explosive['is_explosive']:
+                kept_ids.add(id(most_explosive))
+            
+            # Keep any swing-high terminations
+            for leg in group:
+                if leg['is_swing_high']:
+                    kept_ids.add(id(leg))
+            
+            # Keep most recent if within threshold
+            most_recent = max(group, key=lambda x: x['high_index'])
+            if most_recent['duration'] <= self.config.recent_duration_threshold:
+                kept_ids.add(id(most_recent))
+            
+            for leg in group:
+                if id(leg) in kept_ids:
+                    survivors.append(leg)
+        
+        return survivors
+    
+    def _deduplicate_structural_variations(self, legs: List[Dict]) -> List[Dict]:
+        """
+        Simple deduplication to eliminate variations of the same structural swing.
+        
+        Groups swings by high price proximity and keeps only the most significant
+        variations from each high group. This mimics hourly aggregation behavior.
+        """
+        if len(legs) <= 1:
+            return legs
+            
+        # Group swings by high price (within 30 points = same structural high)
+        high_groups = {}
+        for leg in legs:
+            high_bucket = round(leg['high_price'] / 30) * 30
+            if high_bucket not in high_groups:
+                high_groups[high_bucket] = []
+            high_groups[high_bucket].append(leg)
+        
+        survivors = []
+        
+        for high_bucket, group in high_groups.items():
+            if len(group) == 1:
+                survivors.extend(group)
+                continue
+                
+            # For each high group, keep only structurally distinct swings
+            # Sort by range to prioritize larger swings
+            group = sorted(group, key=lambda x: x['range'], reverse=True)
+            
+            group_survivors = [group[0]]  # Always keep the largest
+            
+            for candidate in group[1:]:
+                # Check if this candidate is sufficiently different from kept swings
+                is_distinct = True
+                
+                for survivor in group_survivors:
+                    # If lows are too close, skip this variation
+                    low_diff = abs(candidate['low_price'] - survivor['low_price'])
+                    max_range = max(candidate['range'], survivor['range'])
+                    
+                    # Require at least 5% range separation for different lows
+                    if low_diff < 0.05 * max_range:
+                        is_distinct = False
+                        break
+                
+                if is_distinct:
+                    group_survivors.append(candidate)
+                    # Limit to 3 variations per high to match hourly behavior
+                    if len(group_survivors) >= 3:
+                        break
+            
+            survivors.extend(group_survivors)
+        
+        return survivors
+    
+    def _filter_by_structural_significance(self, legs: List[Dict]) -> List[Dict]:
+        """
+        Apply global Fibonacci level-based filtering to eliminate redundant swings.
+        
+        Groups swings by structural proximity and only keeps those separated by 
+        meaningful Fibonacci levels. This prevents 5-minute granularity from 
+        creating multiple variations of the same hourly structural swing.
+        """
+        if len(legs) <= 1:
+            return legs
+            
+        # Sort by range descending to process largest swings first
+        legs = sorted(legs, key=lambda x: x['range'], reverse=True)
+        
+        survivors = []
+        
+        for leg in legs:
+            # Check if this swing is structurally significant relative to already kept swings
+            should_keep = True
+            
+            for survivor in survivors:
+                # Check if this leg is too structurally similar to an existing survivor
+                if self._are_structurally_redundant(leg, survivor):
+                    should_keep = False
+                    break
+            
+            # Always keep if it passes structural significance test
+            if should_keep:
+                survivors.append(leg)
+            # OR keep if it's explosive or swing termination (rare but important)
+            elif leg['is_explosive'] or leg['is_swing_high']:
+                survivors.append(leg)
+        
+        return survivors
+    
+    def _are_structurally_redundant(self, leg1: Dict, leg2: Dict) -> bool:
+        """
+        Check if two swings are structurally redundant (variations of same structure).
+        
+        Two patterns of redundancy:
+        1. Same high, different lows - keep only most significant lows (largest range + specific levels)
+        2. Different highs, same/similar lows - keep only if highs are sufficiently separated
+        """
+        high_diff = abs(leg1['high_price'] - leg2['high_price'])
+        low_diff = abs(leg1['low_price'] - leg2['low_price'])
+        
+        # Determine reference swing (larger range)
+        if leg1['range'] >= leg2['range']:
+            ref_leg, test_leg = leg1, leg2
+        else:
+            ref_leg, test_leg = leg2, leg1
+            
+        ref_range = ref_leg['range']
+        
+        # Case 1: Same or very similar high (within 10 points)
+        if high_diff < 10.0:
+            # For same-high swings, check both price and time significance
+            
+            # If lows are very close in price (within 1% of range), check time separation
+            if low_diff < 0.01 * ref_range:
+                return True  # Same high, same low - definitely redundant
+                
+            # If lows differ by significant amount, keep both (different anchor levels)
+            # This handles cases like 6955->6524.75 vs 6955->6539.00 (temporal progression)
+            min_meaningful_low_diff = 0.02 * ref_range  # 2% of swing range
+            if low_diff >= min_meaningful_low_diff:
+                return False  # Keep both - represent different structural anchors
+                
+            # For intermediate cases, filter out the smaller swing
+            return True
+            
+        # Case 2: Different highs
+        else:
+            # Check if highs are too close (within same structural zone)
+            min_high_separation = 0.382 * ref_range
+            if high_diff < min_high_separation:
+                return True
+                
+            # If they share similar lows, require more high separation
+            share_similar_lows = low_diff < 0.1 * ref_range
+            if share_similar_lows:
+                min_high_separation = 0.5 * ref_range
+                return high_diff < min_high_separation
+                
+        return False
+    
+    def _subsume_nested(self, legs: List[Dict]) -> List[Dict]:
+        """
+        Remove swings completely contained within larger swings,
+        unless they are explosive or swing-high terminations.
+        """
+        # Sort by range descending (process largest first)
+        legs = sorted(legs, key=lambda x: x['range'], reverse=True)
+        
+        survivors = []
+        
+        for leg in legs:
+            subsumed = False
+            
+            for survivor in survivors:
+                # Check if leg is contained within survivor
+                time_contained = (
+                    survivor['high_index'] <= leg['high_index'] and
+                    survivor['low_index'] >= leg['low_index']
+                )
+                price_contained = (
+                    survivor['high_price'] >= leg['high_price'] and
+                    survivor['low_price'] <= leg['low_price']
+                )
+                
+                if time_contained and price_contained:
+                    # Keep if explosive or swing-high termination
+                    if not leg['is_explosive'] and not leg['is_swing_high']:
+                        subsumed = True
+                        break
+            
+            if not subsumed:
+                survivors.append(leg)
+        
+        return survivors
+    
+    def print_analysis(self, swings: List[BullReferenceSwing], current_price: float) -> None:
+        """Print a formatted analysis of detected swings"""
+        print("=" * 80)
+        print(f"BULL REFERENCE SWINGS (Current Price: {current_price:.2f})")
+        print("=" * 80)
+        
+        for i, swing in enumerate(swings, 1):
+            ret = swing.get_retracement(current_price)
+            zone = swing.get_zone(current_price)
+            
+            markers = []
+            if swing.is_explosive:
+                markers.append("EXPLOSIVE")
+            if swing.is_swing_high:
+                markers.append("SWING-HIGH")
+            marker_str = f" [{', '.join(markers)}]" if markers else ""
+            
+            print(f"\n{i}. {swing.high_price:.2f} ({swing.high_date.date()}) -> "
+                  f"{swing.low_price:.2f} ({swing.low_date.date()})")
+            print(f"   Range: {swing.range:.2f} | Duration: {swing.duration} bars | "
+                  f"Speed: {swing.speed:.1f} pts/bar{marker_str}")
+            print(f"   Current: {ret:.3f} retracement -> {zone}")
+            print(f"   Levels: 1.0={swing.levels['1']:.2f}, "
+                  f"1.382={swing.levels['1.382']:.2f}, "
+                  f"1.5={swing.levels['1.5']:.2f}, "
+                  f"2x={swing.levels['2']:.2f}")
+
+
+class ReferenceSwingDetector:
+    """
+    Unified interface for detecting both bull and bear reference swings.
+    
+    Usage:
+        detector = ReferenceSwingDetector(config)
+        bars = detector.load_csv("data.csv")
+        bull_swings, bear_swings = detector.detect_all(bars, current_price)
+    """
+    
+    def __init__(self, config: Optional[DetectorConfig] = None):
+        self.config = config or DetectorConfig()
+        self.bull_detector = BullReferenceDetector(self.config)
+        self.bear_detector = BearReferenceDetector(self.config)
+    
+    def load_csv(self, filepath: str, last_n_bars: Optional[int] = None) -> List[Bar]:
+        """Load OHLC data from CSV file"""
+        return self.bull_detector.load_csv(filepath, last_n_bars)
+    
+    def detect_all(self, bars: List[Bar], current_price: Optional[float] = None) -> Tuple[List[BullReferenceSwing], List[BearReferenceSwing]]:
+        """
+        Detect both bull and bear reference swings.
+        
+        Returns:
+            Tuple of (bull_swings, bear_swings)
+        """
+        bull_swings = self.bull_detector.detect(bars, current_price)
+        bear_swings = self.bear_detector.detect(bars, current_price)
+        return bull_swings, bear_swings
+    
+    def detect_bull(self, bars: List[Bar], current_price: Optional[float] = None) -> List[BullReferenceSwing]:
+        """Detect only bull reference swings"""
+        return self.bull_detector.detect(bars, current_price)
+    
+    def detect_bear(self, bars: List[Bar], current_price: Optional[float] = None) -> List[BearReferenceSwing]:
+        """Detect only bear reference swings"""
+        return self.bear_detector.detect(bars, current_price)
+    
+    def print_analysis(self, bull_swings: List[BullReferenceSwing], bear_swings: List[BearReferenceSwing], current_price: float) -> None:
+        """Print comprehensive analysis of both bull and bear swings"""
+        self.bull_detector.print_analysis(bull_swings, current_price)
+        print()
+        self.bear_detector.print_analysis(bear_swings, current_price)
+
+
+def main():
+    """Example usage demonstrating both bull and bear detection"""
+    # Configuration
+    config = DetectorConfig(
+        swing_lookback=1,  # Use 1 for daily data, higher for 1-min
+        min_swing_range=20.0,  # Minimum 20 points
+        explosive_speed_threshold=100.0,
+    )
+    
+    # Initialize unified detector
+    detector = ReferenceSwingDetector(config)
+    
+    # Load data - update path as needed
+    bars = detector.load_csv('test.csv', last_n_bars=150)
+    
+    if not bars:
+        print("No data loaded")
+        return
+    
+    current_price = bars[-1].close
+    
+    print(f"Loaded {len(bars)} bars")
+    print(f"Date range: {bars[0].date.date()} to {bars[-1].date.date()}")
+    print(f"Current price: {current_price:.2f}")
+    print()
+    
+    # Detect both bull and bear swings
+    bull_swings, bear_swings = detector.detect_all(bars, current_price)
+    
+    # Print analysis for both
+    detector.print_analysis(bull_swings, bear_swings, current_price)
+    
+    # Print combined level clustering analysis
+    print("\n" + "=" * 80)
+    print("COMBINED LEVEL CLUSTERING ANALYSIS")
+    print("=" * 80)
+    
+    # Collect all key levels from both bull and bear swings
+    all_levels = []
+    for swing in bull_swings:
+        for level_name in ['1', '1.382', '1.5', '1.618', '2']:
+            all_levels.append({
+                'price': swing.levels[level_name],
+                'level': level_name,
+                'swing_range': swing.range,
+                'swing_type': 'bull'
+            })
+    
+    for swing in bear_swings:
+        for level_name in ['1', '1.382', '1.5', '1.618', '2']:
+            all_levels.append({
+                'price': swing.levels[level_name],
+                'level': level_name,
+                'swing_range': swing.range,
+                'swing_type': 'bear'
+            })
+    
+    # Sort by price
+    all_levels.sort(key=lambda x: x['price'])
+    
+    # Find clusters (levels within 20 points of each other)
+    print("\nKey levels (sorted by price):")
+    for level in all_levels:
+        print(f"  {level['price']:.2f} ({level['level']} of {level['swing_range']:.0f}pt {level['swing_type']} swing)")
+
+
+if __name__ == "__main__":
+    main()

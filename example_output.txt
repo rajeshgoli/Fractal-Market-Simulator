@@ -1,0 +1,13 @@
+multiplier=-0.1 price=643.25 type=STOP
+multiplier=0 price=646.00 type=SWING_EXTREME
+multiplier=0.1 price=648.75 type=SUPPORT_RESISTANCE
+multiplier=0.382 price=656.75 type=SUPPORT_RESISTANCE
+multiplier=0.5 price=660.00 type=SUPPORT_RESISTANCE
+multiplier=0.618 price=663.25 type=SUPPORT_RESISTANCE
+multiplier=0.9 price=671.25 type=SUPPORT_RESISTANCE
+multiplier=1 price=674.00 type=SUPPORT_RESISTANCE
+multiplier=1.1 price=676.75 type=SUPPORT_RESISTANCE
+multiplier=1.382 price=684.75 type=DECISION_ZONE
+multiplier=1.5 price=688.00 type=DECISION_ZONE
+multiplier=1.618 price=691.25 type=DECISION_ZONE
+multiplier=2 price=702.00 type=EXHAUSTION
