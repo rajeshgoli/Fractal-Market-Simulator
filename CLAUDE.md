@@ -33,6 +33,24 @@ Interactive session with auto-start:
 python main.py --data market_data.csv --auto-start --speed 2.0
 ```
 
+### Historical Data Validation (New)
+Discover available historical data:
+```bash
+python3 -m src.cli.main list-data --symbol ES
+python3 -m src.cli.main list-data --symbol ES --resolution 1m --verbose
+```
+
+Run systematic validation across historical data:
+```bash
+python3 -m src.cli.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11 --verbose
+```
+
+CLI aliases for data discovery:
+```bash
+python3 -m src.cli.main describe --symbol ES
+python3 -m src.cli.main inspect --symbol ES --verbose
+```
+
 ### Testing
 Run tests using pytest:
 ```bash
@@ -131,12 +149,22 @@ Event Detection → Visualization → Playback Control → Event Logging
 - **Features**: Interactive commands, session management, configuration override
 - **Commands**: help, status, play/pause, step, jump, speed, events, filter, export
 
+**Main CLI** (`main.py`)
+- **Purpose**: Multi-command CLI for validation and data discovery
+- **Commands**: harness (existing), list-data/describe/inspect (data discovery), validate (historical validation)
+- **Features**: Data availability visibility, enhanced error messages, verbose logging
+
 #### 6. Data Management (`src/data/`)
 
 **OHLC Loader** (`ohlc_loader.py`)
 - **Purpose**: Multi-format OHLC data loading with automatic detection
 - **Formats**: TradingView CSV, custom semicolon format
 - **Features**: Gap detection, data validation, Bar object conversion
+
+**Historical Data Loader** (`loader.py`)
+- **Purpose**: Enhanced data loading for historical validation with date range filtering
+- **Features**: Multi-resolution support (1m, 5m, 1d), data discovery, availability checking
+- **Functions**: `load_historical_data()`, `get_data_summary()`, `validate_data_availability()`
 
 ### Legacy Components (`src/legacy/`)
 
@@ -175,13 +203,14 @@ Uses Python `Decimal` for price calculations and respects market-specific quanti
 ```
 src/
 ├── analysis/           # Core analytical pipeline
-├── cli/               # Command-line interface  
-├── data/              # Data loading utilities
+├── cli/               # Command-line interface and validation tools
+├── data/              # Data loading utilities (OHLC, historical)
 ├── examples/          # Demo scripts and examples
 ├── legacy/            # Historical components (preserved)
 ├── logging/           # Event logging system
 ├── playback/          # Playback control system
 ├── utils/             # Utility scripts and tools
+├── validation/        # Historical validation infrastructure
 └── visualization/     # Visualization components
 ```
 
@@ -233,6 +262,12 @@ python main.py --data data.csv --auto-start --speed 2.0
 
 # Export analysis results
 python main.py --data data.csv --export-only results.json
+
+# Discover available historical data
+python3 -m src.cli.main list-data --symbol ES --verbose
+
+# Run historical validation
+python3 -m src.cli.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11
 ```
 
 ### Interactive Commands (in running application)
@@ -250,12 +285,39 @@ python main.py --data data.csv --export-only results.json
 3. **Performance validation**: Use built-in profiling for optimization
 4. **Data validation**: Always test with diverse market data
 
-## Next Development Phase
+## Current Development Phase
 
-The project is ready for **Market Data Generator** implementation. The completed harness provides:
-- Validated swing detection algorithms
-- Proven data structures and interfaces
-- Performance benchmarks and quality standards
-- Comprehensive test framework for validation
+The project has completed the **Swing Visualization Harness** and **Historical Data Validation** infrastructure. Current status:
 
-The generator phase will reverse the analytical process - generating realistic price data by simulating swing formation according to the validated market structure rules.
+### ✅ Completed Components
+- **Swing Visualization Harness**: Complete analytical pipeline with real-time visualization
+- **Historical Data Validation**: Infrastructure for systematic validation across market regimes
+- **CLI Data Discovery**: Commands for exploring available historical data and debugging validation issues
+
+### 🎯 Current Focus: Validation Execution
+The system is ready for systematic validation of swing detection logic using historical data:
+- Load historical datasets across multiple market regimes (trending, ranging, volatile)
+- Step through swing detection with expert review capabilities
+- Document detection issues and edge cases for refinement
+
+### 🔮 Next Development Phase: Market Data Generator
+After validation establishes expert confidence in swing detection foundations:
+- Reverse the analytical process to generate realistic price data
+- Simulate swing formation according to validated market structure rules
+- Create production-quality synthetic datasets for market simulation
+
+## Common Development Commands
+
+### Data Discovery and Validation
+```bash
+# Check what data is available
+python3 -m src.cli.main list-data --symbol ES
+
+# Run validation with enhanced error messages
+python3 -m src.cli.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11 --verbose
+```
+
+### When validation fails due to date ranges:
+1. The error message shows available date ranges and suggests discovery commands
+2. Use `list-data --verbose` to see detailed file information
+3. Adjust `--start` and `--end` parameters based on available data

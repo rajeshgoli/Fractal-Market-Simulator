@@ -1,236 +1,149 @@
-# Market Simulator - Architecture & Next Steps
+# Market Simulator - Architecture & Direction
 
-## Project Overview
+## Current Project State
 
-This project is building a fractal market simulator that generates realistic 1-minute OHLC price data by modeling actual market structure (Fibonacci-based extensions and retracements) rather than random walks. The **Swing Visualization Harness** phase has been completed and provides a comprehensive validation tool for swing detection logic.
+This project builds a fractal market simulator that generates realistic 1-minute OHLC data by modeling actual market structure using Fibonacci-based swing analysis. **Historical data validation infrastructure is now complete** and ready for systematic validation of swing detection logic across diverse market regimes.
 
-## Current Architecture
+## Deployed Architecture
 
-### Core System Components
+### Foundation: Swing Visualization Harness (Production Ready)
 
-The market simulator consists of two main phases:
+The visualization harness provides a complete analytical pipeline for processing historical OHLC data and validating swing detection across four structural scales (S, M, L, XL):
 
-1. **✅ COMPLETED: Swing Visualization Harness** - Real-time validation tool for swing detection across four structural scales (S, M, L, XL)
-2. **🎯 NEXT PHASE: Market Data Generator** - Core simulator that generates realistic OHLC data using validated swing structure rules
+**Core Components:**
+- **ScaleCalibrator**: Determines size boundaries for swing categorization
+- **BarAggregator**: Pre-computes aggregated OHLC bars for efficient retrieval  
+- **SwingStateManager**: Tracks active swings with event-driven state transitions
+- **EventDetector**: Identifies structural events (completions, invalidations, level crossings)
+- **VisualizationRenderer**: 4-panel synchronized display with Fibonacci overlays
+- **PlaybackController**: Interactive historical data replay with auto-pause
 
-### Completed Foundation
+### Extension: Historical Data Validation System (Newly Complete)
 
-The visualization harness provides a complete analytical pipeline with production-ready components:
-
-**Data Processing Pipeline:**
+**Data Pipeline:**
 ```
-OHLC Data → ScaleCalibrator → BarAggregator → SwingStateManager
-              ↓                    ↓               ↓
-         ScaleConfig        EventDetector    ActiveSwings
-                                ↓               ↓
-                           StructuralEvents → VisualizationHarness
-```
-
-**Key Capabilities Now Available:**
-- Multi-scale swing detection (S, M, L, XL) with automatic scale calibration
-- Real-time event detection for level crossings, completions, and invalidations  
-- 4-panel synchronized visualization with Fibonacci level overlays
-- Interactive playback with auto-pause on major structural events
-- Comprehensive event logging with filtering and export capabilities
-- Command-line interface for configuration and session management
-
-**Performance Characteristics:**
-- Processes 200k+ bars efficiently with <100ms UI updates
-- 18x performance margin above original targets
-- Memory-optimized with sliding window display
-- Thread-safe operation with responsive user controls
-
-### Technical Foundation Ready for Next Phase
-
-**Validated Swing Detection Logic:**
-- Fibonacci-based level calculations with proper scaling
-- Event-driven state management with completion/invalidation rules
-- Multi-timeframe aggregation with natural boundary alignment
-- Robust error handling and graceful degradation
-
-**Proven Data Structures:**
-- Bar objects with timestamp, OHLC, and metadata
-- ActiveSwing tracking with state transitions
-- StructuralEvent capture with market context
-- ScaleConfig with boundaries and aggregation settings
-
-**Integration Patterns:**
-- Component isolation with clean interfaces
-- Configuration-driven behavior
-- Event callback architecture
-- Resource management with proper cleanup
-
-## Next Phase: Market Data Generator
-
-### Architectural Direction
-
-The market generator will reverse the analytical process - instead of detecting swings from historical data, it will generate realistic price data by simulating the formation of swing structures according to validated market rules.
-
-**Generator Architecture:**
-```
-MarketRules → SwingSimulator → PriceGenerator → OHLC Output
-      ↓             ↓               ↓             ↓
- FibonacciRules  SwingEvents   TickData    MinuteCandles
+Historical CSV Files → DataLoader → ValidationSession → ExpertReview
+         ↓               ↓              ↓               ↓
+   DateFiltered     BarObjects    IssueTracking    FindingsExport
 ```
 
-### Core Components Needed
+**Validation Components:**
+- **Enhanced DataLoader**: Date range filtering with multi-resolution support (1m, 5m, 1d)
+- **ValidationSession**: Expert review workflow with progress tracking and session persistence
+- **IssueCatalog**: Structured issue classification and analysis system
+- **ValidationHarness**: Composition-based integration with existing visualization harness
+- **CLI Extension**: `validate` command for systematic historical analysis
 
-**1. Market Rules Engine**
-- Fibonacci-based price level definitions
-- Probability distributions for swing completion vs invalidation
-- Scale-dependent behavior rules (S, M, L, XL characteristics)
-- Temporal patterns (volatility cycles, trend persistence)
+**Integration Architecture:**
+```
+CLI validate → DataLoader → ValidationSession → ValidationHarness → VisualizationHarness
+      ↓            ↓              ↓                    ↓                    ↓
+  DateRange    HistoricalBars  ProgressTracking  IssueLogging    InteractiveReplay
+```
 
-**2. Swing Formation Simulator**
-- Progressive swing development with realistic timing
-- Level interaction modeling (support/resistance behavior) 
-- Event sequence generation (completion, invalidation, new swing initiation)
-- Multi-scale coordination (how larger swings influence smaller ones)
+## Immediate Development Phase: Validation Execution
 
-**3. Price Tick Generator**
-- Realistic bid/ask spread simulation
-- Intrabar price action that respects swing constraints
-- Volume-weighted price movement
-- Microstructure noise and market impact modeling
+### Current Objective
+Execute systematic validation of swing detection logic using completed infrastructure to establish expert confidence before any generation development.
 
-**4. Data Output Pipeline**
-- OHLC bar aggregation from tick data
-- Metadata preservation for validation
-- Format compatibility with existing data loader
-- Quality assurance against known market characteristics
+### Validation Methodology
 
-### Design Principles for Generator
+**Target Market Regimes:**
+- **Trending Markets**: Extended directional moves with clear swing progression
+- **Ranging Markets**: Sideways consolidation with contained oscillation
+- **Volatile Markets**: High volatility periods with rapid swing formation
+- **Transition Periods**: Market state changes and structural shifts
 
-**Fractal Consistency:**
-- Larger timeframe swings constrain smaller timeframe movements
-- Fibonacci relationships maintained across all scales
-- Event sequences follow validated probability distributions
+**Expert Review Process:**
+1. **Historical Data Loading**: Use `validate` command to load specific date ranges
+2. **Systematic Playback**: Step through historical periods with swing annotations visible
+3. **Issue Documentation**: Log detection problems through ValidationSession interface
+4. **Pattern Analysis**: Identify systematic vs. isolated detection issues
+5. **Confidence Assessment**: Determine foundation readiness for next phase
 
-**Behavioral Realism:**
-- Price movements exhibit clustering and persistence
-- Volatility regimes with transitions
-- Realistic gap and trend behavior
-- Proper correlation with volume patterns
+**Success Criteria:**
+- Detection logic behaves correctly across diverse market conditions
+- Expert confidence established in swing detection foundation
+- Issue inventory complete with clear categorization
+- Performance adequate for interactive historical analysis
 
-**Validation Integration:**
-- Generated data validates against the completed visualization harness
-- Real-time monitoring of swing formation accuracy
-- Statistical comparison with historical market data
-- Performance benchmarking for generator speed
+### Architectural Priorities for Validation Phase
 
-## Risk Assessment
+**Performance Optimization:**
+- Validate memory usage patterns with large historical datasets
+- Ensure responsive UI during extended replay sessions
+- Monitor session persistence overhead during long validation runs
 
-### Technical Risks
+**User Experience Enhancement:**
+- Progress indicators for historical data loading operations
+- Enhanced error context for data availability and loading issues
+- Interactive help system for expert validation workflow
 
-**Model Complexity:**
-- Risk: Generator algorithms become too complex to validate
-- Mitigation: Incremental development with constant validation against harness
-- Status: Manageable with existing foundation
+**Data Management:**
+- Automatic session cleanup for old validation sessions
+- Concurrent session access controls for multi-expert scenarios
+- Export format optimization for development iteration feedback
 
-**Performance Requirements:**
-- Risk: Generator cannot produce data fast enough for practical use
-- Mitigation: Profile-driven optimization, parallel processing architecture
-- Status: Foundation performance demonstrates feasibility
+## Technical Debt Resolution Pipeline
 
-**Market Realism:**
-- Risk: Generated data lacks sufficient realism for practical applications
-- Mitigation: Statistical validation against diverse historical datasets
-- Status: Existing swing detection provides realism benchmark
+### Immediate Technical Debt (Low Risk, High Value)
+1. **Memory Usage Monitoring**: Add tracking and warnings for large dataset scenarios
+2. **Session Directory Cleanup**: Implement automatic cleanup of sessions older than 30 days
+3. **Progress Indicators**: Add real-time feedback for data loading operations
+4. **Error Context Enhancement**: Improve error messages with specific resolution guidance
 
-### Integration Risks
+### Medium-Term Refactoring (Architectural Improvement)
+1. **Harness Integration**: Replace temporary file approach with direct Bar list integration
+2. **Bar Object Migration**: Move Bar dataclass from legacy module to core data structures  
+3. **Configuration System**: Implement centralized configuration management
+4. **Data Source Abstraction**: Unify data loading paths under common interface
 
-**Data Compatibility:**
-- Risk: Generated data incompatible with existing analytical tools
-- Mitigation: Use proven data structures and formats from harness phase
-- Status: Low risk due to established interfaces
+### Future Scalability Considerations
+1. **Streaming Data Processing**: Chunked processing for very large historical datasets
+2. **Concurrent Session Management**: Multi-user session locking and conflict resolution
+3. **Performance Testing Framework**: Automated testing with realistic dataset sizes
+4. **Memory Management Strategy**: Implement memory optimization for production deployment
 
-**Scale Coordination:**
-- Risk: Multi-scale relationships break down in generation mode
-- Mitigation: Leverage validated scale calibration and state management
-- Status: Manageable with existing multi-scale architecture
+## Future Phase: Market Data Generator
 
-### Project Risks
+**Architecture Readiness**: Generator architecture design is complete but **development is explicitly deferred** until validation phase establishes expert confidence in swing detection foundations.
 
-**Scope Creep:**
-- Risk: Generator requirements expand beyond core swing simulation
-- Mitigation: Maintain focus on Fibonacci-based structural generation
-- Status: Requires ongoing scope discipline
+**Planned Generator Components:**
+1. **Market Rules Engine**: Fibonacci-based price level definitions and probability distributions
+2. **Swing Formation Simulator**: Progressive swing development with realistic timing patterns
+3. **Price Tick Generator**: Realistic bid/ask spreads and microstructure modeling
+4. **Data Output Pipeline**: OHLC aggregation with metadata preservation for validation
 
-## Development Approach
+**Integration Strategy**: Generator will reverse the analytical process, using validated swing detection logic as the foundation for creating realistic market structure in synthetic data.
 
-### Incremental Strategy
+## Development Sequencing
 
-**Phase 2.1: Core Generator Framework**
-- Basic swing formation simulator with single scale
-- Simple price generation between swing points
-- Integration with existing Bar data structures
-- Validation against historical swing patterns
+**Current Phase: Historical Validation Execution**
+- Use completed validation infrastructure for systematic swing detection testing
+- Execute expert review across representative market regimes
+- Document findings and prioritize any required detection logic refinements
 
-**Phase 2.2: Multi-Scale Coordination**
-- Scale interaction modeling (L swings influence M swings, etc.)
-- Event sequence coordination across scales
-- Performance optimization for real-time generation
-- Statistical validation of scale relationships
+**Next Phase Gate: Foundation Validation**
+- Advancement to generator development gated by expert confidence establishment
+- All systematic detection issues must be resolved before generation work begins
+- Performance characteristics validated for production historical analysis scenarios
 
-**Phase 2.3: Enhanced Realism**
-- Intrabar price action modeling
-- Volatility regimes and transitions
-- Volume correlation and market impact
-- Comprehensive validation against diverse markets
+**Future Phase: Market Data Generation** 
+- Implement synthetic data generation using validated swing detection as foundation
+- Build realistic market structure modeling with proven Fibonacci-based analysis
+- Create production-quality synthetic datasets for market simulation applications
 
-**Phase 2.4: Production Optimization**
-- High-performance data generation pipeline
-- Configurable market characteristics
-- Quality assurance and monitoring tools
-- Documentation and deployment preparation
+## Risk Mitigation Strategy
 
-### Success Metrics
+**Validation Phase Risks:**
+- **Detection Logic Issues**: Systematic problems may require architectural changes
+- **Performance Degradation**: Historical data loading may impact responsiveness  
+- **Scope Expansion**: Validation requirements may grow beyond core detection verification
 
-**Technical Metrics:**
-- Generation speed: >1000 bars/second for practical use
-- Memory efficiency: Stable usage during extended generation
-- Accuracy: Generated swings match statistical properties of real markets
-- Validation: Generated data passes all harness tests
+**Mitigation Approach:**
+- Maintain strict focus on swing detection validation only
+- Leverage existing harness architecture with minimal extensions
+- Document all issues systematically for prioritized resolution
+- Gate advancement by correctness validation, not calendar timelines
 
-**Quality Metrics:**
-- Statistical similarity to historical data across multiple timeframes
-- Proper Fibonacci level respect in generated price action
-- Realistic event sequence distribution (completions vs invalidations)
-- Visual indistinguishability from real market data in harness display
-
-### Resource Requirements
-
-**Development Environment:**
-- Existing codebase provides complete foundation
-- Test data infrastructure already established
-- Performance monitoring and validation tools available
-
-**Technical Skills:**
-- Quantitative modeling for price generation algorithms
-- Statistical analysis for validation and calibration
-- Performance optimization for high-frequency data generation
-- Financial markets understanding for realism validation
-
-## Dependencies and Prerequisites
-
-### External Dependencies
-- NumPy/SciPy for statistical modeling and generation
-- Pandas for data manipulation and analysis
-- Matplotlib for validation visualization (existing)
-- Pytest for comprehensive testing (existing)
-
-### Data Requirements
-- Diverse historical datasets for validation across different markets
-- Real market data for statistical comparison and calibration
-- Performance benchmarks for generation speed targets
-
-### Infrastructure
-- Sufficient computational resources for large-scale data generation
-- Storage capacity for generated datasets and validation results
-- Version control and backup for generated market configurations
-
-## Next Steps
-
-The project is ready to transition from the analytical validation phase to the core market generation implementation. All foundational components are complete, tested, and production-ready. The visualization harness provides both the validation framework and the architectural patterns needed for the generator phase.
-
-The immediate next step is **product clarification** on the specific market characteristics and generation requirements to guide the detailed design of the Market Data Generator components.
+The current architecture provides a solid foundation for systematic validation while maintaining clear separation between validation infrastructure and future generation capabilities.

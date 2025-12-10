@@ -41,6 +41,7 @@ from src.playback.config import PlaybackConfig, PlaybackMode
 from src.logging.event_logger import EventLogger
 from src.logging.display import EventLogDisplay
 from src.logging.filters import FilterBuilder
+from src.legacy.bull_reference_detector import Bar
 
 
 class VisualizationHarness:
@@ -95,10 +96,10 @@ class VisualizationHarness:
             
             # Convert DataFrame to Bar objects
             self.bars = []
-            for idx, row in df.iterrows():
+            for bar_index, (idx, row) in enumerate(df.iterrows()):
                 bar = Bar(
-                    index=idx,
-                    timestamp=int(row['timestamp'].timestamp()),
+                    index=bar_index,
+                    timestamp=int(idx.timestamp()),
                     open=float(row['open']),
                     high=float(row['high']),
                     low=float(row['low']),
@@ -113,8 +114,8 @@ class VisualizationHarness:
             
             # Calibrate scales
             self.logger.info("Calibrating structural scales...")
-            calibrator = ScaleCalibrator(self.bars)
-            self.scale_config = calibrator.calibrate_scales()
+            calibrator = ScaleCalibrator()
+            self.scale_config = calibrator.calibrate(self.bars)
             
             self.logger.info("Scale boundaries:")
             for scale, (min_pts, max_pts) in self.scale_config.boundaries.items():

@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "symbol": "NONEXISTENT",
+    "resolution": "1m",
+    "start_date": "2024-10-10T00:00:00+00:00",
+    "end_date": "2024-10-11T00:00:00+00:00",
+    "session_id": "95753595",
+    "created_at": "2025-12-10T08:46:48.226038",
+    "session_start": "2025-12-10T08:46:48.226084",
+    "date_range_start": "2024-10-10T00:00:00+00:00",
+    "date_range_end": "2024-10-11T00:00:00+00:00"
+  },
+  "state": {
+    "is_active": true,
+    "current_bar_index": 0,
+    "total_bars": 0,
+    "session_start": "2025-12-10T08:46:48.226084",
+    "last_update": "2025-12-10T08:46:48.226084"
+  },
+  "issues": [],
+  "expert_notes": []
+}
