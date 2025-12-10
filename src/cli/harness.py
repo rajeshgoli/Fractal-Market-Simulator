@@ -33,7 +33,6 @@ from src.data.ohlc_loader import load_ohlc
 from src.analysis.scale_calibrator import ScaleCalibrator
 from src.analysis.bar_aggregator import BarAggregator
 from src.analysis.swing_state_manager import SwingStateManager
-from src.analysis.event_detector import EventDetector
 from src.visualization.renderer import VisualizationRenderer
 from src.visualization.config import RenderConfig
 from src.playback.controller import PlaybackController
@@ -139,15 +138,13 @@ class VisualizationHarness:
         # Bar aggregator
         self.bar_aggregator = BarAggregator(self.bars)
         
-        # Event detector
-        self.event_detector = EventDetector()
-        
-        # Swing state manager
+        # Swing state manager (creates its own EventDetector internally)
         self.swing_state_manager = SwingStateManager(
-            scale_config=self.scale_config,
-            bar_aggregator=self.bar_aggregator,
-            event_detector=self.event_detector
+            scale_config=self.scale_config
         )
+
+        # Reference the event detector from swing state manager
+        self.event_detector = self.swing_state_manager.event_detector
         
         # Initialize with first portion of data for swing detection
         init_bars = min(200, len(self.bars))
