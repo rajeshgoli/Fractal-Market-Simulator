@@ -130,10 +130,21 @@ class VisualizationHarness:
             self.logger.info("Calibrating structural scales...")
             calibrator = ScaleCalibrator()
             self.scale_config = calibrator.calibrate(self.bars)
-            
+
+            # For validation purposes, ensure S-scale always shows source resolution (1m)
+            # This guarantees at least one panel updates visibly with each bar step
+            if self.scale_config.aggregations.get('S', 1) > 1:
+                self.logger.info(f"Overriding S-scale aggregation from {self.scale_config.aggregations['S']}m to 1m for validation")
+                self.scale_config.aggregations['S'] = 1
+
             self.logger.info("Scale boundaries:")
             for scale, (min_pts, max_pts) in self.scale_config.boundaries.items():
                 self.logger.info(f"  {scale}: {min_pts:.1f} - {max_pts} pts")
+
+            self.logger.info("Panel timeframes:")
+            for scale in ['S', 'M', 'L', 'XL']:
+                tf = self.scale_config.aggregations.get(scale, 1)
+                self.logger.info(f"  {scale}: {tf}m")
             
             # Initialize components
             self._initialize_analysis_components()
@@ -214,12 +225,13 @@ class VisualizationHarness:
                 setattr(playback_config, key, value)
 
         # Determine step timeframe (how many source bars per "step")
-        # If not specified, use smallest displayed timeframe from scale config
+        # Default to 1 (step one source bar at a time) for fine-grained validation
+        # User can override with --step-timeframe for faster progression
         if self.step_timeframe is not None:
             self._step_bars = self.step_timeframe  # Step by this many minutes
         else:
-            # Default: smallest displayed timeframe (S scale aggregation)
-            self._step_bars = self.scale_config.aggregations.get('S', 1)
+            # Default: 1 bar at a time for precise validation
+            self._step_bars = 1
 
         self.logger.info(f"Playback step size: {self._step_bars} minute(s) per step")
 
