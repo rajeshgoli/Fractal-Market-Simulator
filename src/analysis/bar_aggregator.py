@@ -347,3 +347,72 @@ class BarAggregator:
                 }
         
         return info
+    
+    def _append_bar(self, new_bar: Bar) -> None:
+        """
+        Append a new source bar and update aggregations efficiently.
+        
+        Args:
+            new_bar: New source bar to append
+        """
+        # Validate timestamp ordering
+        if self._source_bars and new_bar.timestamp <= self._source_bars[-1].timestamp:
+            raise ValueError(f"New bar timestamp {new_bar.timestamp} must be greater than "
+                           f"last bar timestamp {self._source_bars[-1].timestamp}")
+        
+        # Add to source bars
+        new_bar.index = len(self._source_bars)
+        self._source_bars.append(new_bar)
+        
+        # Update aggregations for each timeframe
+        for timeframe in self.STANDARD_TIMEFRAMES:
+            self._update_aggregation_with_new_bar(timeframe, new_bar)
+    
+    def _update_aggregation_with_new_bar(self, timeframe_minutes: int, new_bar: Bar) -> None:
+        """Update a specific timeframe aggregation with a new source bar."""
+        if timeframe_minutes == 1:
+            # 1-minute is direct mapping
+            self._aggregations[1].bars.append(new_bar)
+            self._source_to_agg_mapping[1][new_bar.index] = new_bar.index
+            return
+        
+        aggregation = self._aggregations[timeframe_minutes]
+        source_to_agg_map = self._source_to_agg_mapping[timeframe_minutes]
+        
+        if not aggregation.bars:
+            # First bar for this timeframe
+            period_start = self._get_period_start(new_bar.timestamp, timeframe_minutes)
+            agg_bar = Bar(
+                timestamp=period_start,
+                open=new_bar.open,
+                high=new_bar.high,
+                low=new_bar.low,
+                close=new_bar.close,
+                index=0
+            )
+            aggregation.bars.append(agg_bar)
+            source_to_agg_map[new_bar.index] = 0
+            return
+        
+        # Get the period this bar belongs to
+        period_start = self._get_period_start(new_bar.timestamp, timeframe_minutes)
+        last_agg_bar = aggregation.bars[-1]
+        
+        if period_start == last_agg_bar.timestamp:
+            # Update existing aggregated bar
+            last_agg_bar.high = max(last_agg_bar.high, new_bar.high)
+            last_agg_bar.low = min(last_agg_bar.low, new_bar.low)
+            last_agg_bar.close = new_bar.close
+            source_to_agg_map[new_bar.index] = len(aggregation.bars) - 1
+        else:
+            # Create new aggregated bar
+            agg_bar = Bar(
+                timestamp=period_start,
+                open=new_bar.open,
+                high=new_bar.high,
+                low=new_bar.low,
+                close=new_bar.close,
+                index=len(aggregation.bars)
+            )
+            aggregation.bars.append(agg_bar)
+            source_to_agg_map[new_bar.index] = len(aggregation.bars) - 1
