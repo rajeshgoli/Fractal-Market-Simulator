@@ -220,19 +220,22 @@ class VisualizationRenderer:
         if not visible_bars:
             return
 
-        # Draw OHLC bars
+        # Draw OHLC bars (drawn at local indices 0 to N-1)
         self.draw_price_bars(panel_idx, visible_bars, self.current_bar_idx)
 
         # Draw Fibonacci levels for each swing
+        # Pass num_visible for label positioning in local coordinates
         for swing in scale_swings:
-            self.draw_fibonacci_levels(panel_idx, swing, view_window)
+            self.draw_fibonacci_levels(panel_idx, swing, view_window, num_visible=len(visible_bars))
 
-        # Draw event markers
+        # Draw event markers - pass timeframe for source-to-aggregated translation
         if scale_events:
-            self.draw_event_markers(panel_idx, scale_events, view_window)
+            self.draw_event_markers(panel_idx, scale_events, view_window, timeframe)
 
-        # Set axis limits
-        ax.set_xlim(view_window.start_idx, view_window.end_idx)
+        # Set axis limits - use local drawing coordinates (0 to N)
+        # Bars are drawn at positions 0, 1, 2, ..., N-1
+        num_visible = len(visible_bars)
+        ax.set_xlim(-0.5, num_visible - 0.5)  # Add margin for bar width
         ax.set_ylim(view_window.price_min, view_window.price_max)
 
         # Configure time-based X-axis labels
@@ -298,39 +301,46 @@ class VisualizationRenderer:
     def draw_fibonacci_levels(self,
                              panel_idx: int,
                              swing: ActiveSwing,
-                             view_window: ViewWindow) -> None:
+                             view_window: ViewWindow,
+                             num_visible: int = 100) -> None:
         """
         Draw horizontal lines for all Fibonacci levels of a swing.
-        
+
         Level styling:
         - Solid lines: Key levels (0, 1, 2)
         - Dashed lines: Retracement levels (0.382, 0.5, 0.618)
         - Dotted lines: Extension levels (1.382, 1.5, 1.618)
         - Bold lines: Critical levels (-0.1, 2)
+
+        Args:
+            panel_idx: Panel index to draw on
+            swing: Active swing with Fibonacci levels
+            view_window: View window for price range filtering
+            num_visible: Number of visible bars (for local X coordinate positioning)
         """
         if not swing.levels:
             return
-            
+
         ax = self.axes[panel_idx]
         scale = PANEL_SCALE_MAPPING[panel_idx]
         colors = get_scale_colors(self.config, scale)
-        
+
         level_lines = []
-        
+
         for level_name, level_price in swing.levels.items():
             # Skip levels outside view window
             if level_price < view_window.price_min or level_price > view_window.price_max:
                 continue
-            
+
             # Get color and line style
             color = colors["levels"].get(level_name, self.config.text_color)
             line_style = LEVEL_LINE_STYLES.get(level_name, "-")
-            
+
             # Adjust line width for critical levels
             line_width = self.config.level_line_width
             if level_name in ["-0.1", "2.0"]:
                 line_width *= 2.0
-            
+
             # Draw horizontal line across view window
             line = ax.axhline(
                 y=level_price,
@@ -341,9 +351,10 @@ class VisualizationRenderer:
                 label=f"{swing.swing_id[:8]}-{level_name}"
             )
             level_lines.append(line)
-            
-            # Add level label on right side
-            label_x = view_window.end_idx - (view_window.end_idx - view_window.start_idx) * 0.02
+
+            # Add level label on right side (use local coordinates)
+            # Bars are drawn at 0 to num_visible-1, place label near right edge
+            label_x = num_visible - 1 - num_visible * 0.02
             ax.text(
                 label_x, level_price,
                 level_name,
@@ -359,31 +370,45 @@ class VisualizationRenderer:
     def draw_event_markers(self,
                           panel_idx: int,
                           events: List[StructuralEvent],
-                          view_window: ViewWindow) -> None:
+                          view_window: ViewWindow,
+                          timeframe: int = 1) -> None:
         """
         Draw event markers on the chart.
-        
+
         Marker types:
         - Triangle up: Level cross up
-        - Triangle down: Level cross down  
+        - Triangle down: Level cross down
         - Star: Completion
         - X: Invalidation
+
+        Args:
+            panel_idx: Panel index to draw on
+            events: List of structural events to mark
+            view_window: Current view window (in aggregated bar space)
+            timeframe: Timeframe in minutes for this scale (for index translation)
         """
         if not events:
             return
-            
+
         ax = self.axes[panel_idx]
         event_artists = []
-        
+
         for event in events:
-            # Skip events outside view window
-            if (event.source_bar_idx < view_window.start_idx or 
-                event.source_bar_idx > view_window.end_idx):
+            # Translate event's source bar index to aggregated bar index
+            agg_bar = self.bar_aggregator.get_bar_at_source_time(timeframe, event.source_bar_idx)
+            if agg_bar is None:
                 continue
-            
+
+            event_agg_idx = agg_bar.index
+
+            # Skip events outside view window (in aggregated space)
+            if (event_agg_idx < view_window.start_idx or
+                event_agg_idx > view_window.end_idx):
+                continue
+
             # Get marker style
             marker = EVENT_MARKERS.get(event.event_type.value, "o")
-            
+
             # Get color based on severity
             if event.severity == EventSeverity.MAJOR:
                 color = self.config.major_event_color
@@ -391,11 +416,12 @@ class VisualizationRenderer:
             else:
                 color = self.config.minor_event_color
                 size = self.config.event_marker_size
-            
-            # Calculate position
-            x_pos = event.source_bar_idx - view_window.start_idx
+
+            # Calculate position in local drawing coordinates
+            # Bars are drawn at positions 0, 1, 2, ... so translate agg_idx to local
+            x_pos = event_agg_idx - view_window.start_idx
             y_pos = event.level_price
-            
+
             # Draw marker
             marker_artist = ax.scatter(
                 x_pos, y_pos,
@@ -406,28 +432,41 @@ class VisualizationRenderer:
                 zorder=10  # Ensure markers appear on top
             )
             event_artists.append(marker_artist)
-        
+
         self.artists[panel_idx]['events'].extend(event_artists)
     
     def calculate_view_window(self,
                              scale: str,
-                             current_bar_idx: int,
+                             source_bar_idx: int,
                              active_swings: List[ActiveSwing]) -> ViewWindow:
         """
         Calculate optimal view window for a scale panel.
-        
+
         Logic:
-        - Time range: Show last max_visible_bars
+        - Time range: Show last max_visible_bars in AGGREGATED space
         - Price range: Include all active swing extremes + 5% margin
         - Auto-scaling: Adjust for current price action
+
+        IMPORTANT: source_bar_idx is in source (1-minute) bar space.
+        We must translate it to aggregated bar space for each timeframe.
         """
-        # Calculate time window
-        start_idx = max(0, current_bar_idx - self.config.max_visible_bars)
-        end_idx = current_bar_idx + 10  # Small lookahead for clarity
-        
         # Get timeframe for this scale
         timeframe = self.scale_config.aggregations.get(scale, 1)
-        
+
+        # CRITICAL FIX: Translate source bar index to aggregated bar index
+        # This ensures all panels are synchronized to the same wall-clock time
+        agg_bar = self.bar_aggregator.get_bar_at_source_time(timeframe, source_bar_idx)
+        if agg_bar is not None:
+            # Use the aggregated bar's index for view window calculation
+            current_agg_idx = agg_bar.index
+        else:
+            # Fallback: if no mapping exists yet, use 0
+            current_agg_idx = 0
+
+        # Calculate time window in AGGREGATED bar space
+        start_idx = max(0, current_agg_idx - self.config.max_visible_bars)
+        end_idx = current_agg_idx + 10  # Small lookahead for clarity
+
         try:
             # Get bars for price range calculation
             aggregated_bars = self.bar_aggregator.get_bars(timeframe)
