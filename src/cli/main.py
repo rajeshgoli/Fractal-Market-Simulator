@@ -12,6 +12,11 @@ Commands:
 Author: Generated for Market Simulator Project
 """
 
+# Configure matplotlib backend BEFORE any matplotlib imports
+# This must happen before pyplot is imported anywhere in the import chain
+import matplotlib
+matplotlib.use('TkAgg')
+
 import argparse
 import sys
 import logging

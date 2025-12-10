@@ -168,11 +168,14 @@ class VisualizationHarness:
             bar_aggregator=self.bar_aggregator,
             render_config=render_config
         )
-        
+
         # Initialize display
         self.visualization_renderer.initialize_display()
         self.visualization_renderer.set_interactive_mode(True)
-        
+
+        # Show the visualization window (makes it visible on screen)
+        self.visualization_renderer.show_display()
+
         self.logger.info("Visualization components initialized")
     
     def _initialize_playback_components(self):

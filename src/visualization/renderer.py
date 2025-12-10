@@ -82,6 +82,9 @@ class VisualizationRenderer:
         self.fig = plt.figure(figsize=self.config.figure_size, layout='constrained')
         self.fig.patch.set_facecolor(self.config.background_color)
 
+        # Store figure number for later reference
+        self._fig_num = self.fig.number
+
         # Create 2x2 subplot grid
         gs = self.fig.add_gridspec(
             self.config.panel_rows,
@@ -175,8 +178,9 @@ class VisualizationRenderer:
         
         # Refresh display
         self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()  # Process GUI events to keep window responsive
         self.update_count += 1
-        
+
         if self.update_count % 100 == 0:
             logging.debug(f"Display updated {self.update_count} times")
     
@@ -510,6 +514,34 @@ class VisualizationRenderer:
             plt.ion()  # Interactive mode on
         else:
             plt.ioff()  # Interactive mode off
+
+    def show_display(self) -> None:
+        """
+        Make the figure window visible.
+
+        Must be called after initialize_display() to actually show the matplotlib
+        window on screen. Uses non-blocking show to allow the CLI to remain
+        interactive while the visualization is displayed.
+
+        On macOS, this requires a GUI backend (TkAgg, MacOSX, Qt5Agg) to be
+        configured before any matplotlib figures are created.
+        """
+        if self.fig is None:
+            logging.warning("Cannot show display: figure not initialized")
+            return
+
+        # Ensure the figure is the current figure
+        plt.figure(self._fig_num)
+
+        # Show the figure in non-blocking mode
+        # This creates the window and starts the GUI event loop in the background
+        plt.show(block=False)
+
+        # Force an initial draw to ensure the window appears
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+
+        logging.info("Visualization window displayed")
     
     # Helper methods
     
