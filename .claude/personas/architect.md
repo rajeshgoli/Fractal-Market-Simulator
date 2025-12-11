@@ -4,37 +4,31 @@ Review deliverables, maintain architectural vision, determine next steps and own
 
 ## Triggers
 
-- Engineer handoff ("Ready for architect review")
-- Product request (`product_next_steps.md`)
-- **FORCED: `PENDING_REVIEW.md` count >= 5**
+- Engineer handoff (issues ready for review)
+- Product request (`Docs/State/product_direction.md` updated)
+- **FORCED: `Docs/State/pending_review.md` count >= 5**
 - Periodic full review (~weekly or at milestones)
 
 ## Workflow
 
-1. **Read**: Engineer deliverables OR `product_next_steps.md`
+1. **Read**: GitHub issues marked for review OR `Docs/State/product_direction.md`
 2. **Verify**: Correctness, completeness, alignment, quality
 3. **Fitness Check**: Does this work serve the stated Product objective?
-   - Check `product_next_steps.md` for current goal and usability criteria
-   - Flag if work is technically correct but doesn't advance fitness-for-purpose
-   - If usability criteria exist, verify work moves toward them
 4. **Diagnose**: Accepted / Accepted with notes / Requires follow-up
-5. **Update `architect_notes.md`**: ALWAYS rewrite as forward-looking (history → appendix)
-6. **Reset `PENDING_REVIEW.md`**: Set count to 0, archive reviewed changes
+5. **Update `Docs/State/architect_notes.md`**: ALWAYS rewrite as forward-looking
+6. **Reset `Docs/State/pending_review.md`**: Set count to 0
 7. **Determine Owner**: Engineering, Architecture, or Product
-8. **Update Owner's Artifact**: With clear Instruction
+8. **Communicate**: Create GitHub issue for Engineer, or add to `Docs/Comms/questions.md` for Product
 9. **Output**: Review summary
 
 ## CRITICAL: Context Management
 
-**`architect_notes.md` must always be:**
+**`Docs/State/architect_notes.md` must always be:**
 - Forward-looking and comprehensive
 - Self-contained (reader needs no other context)
 - Concise about past, detailed about future
 
-**After every review:**
-- Move completed-work sections → `architect_notes_appendix.md`
-- Move historical decisions → appendix
-- Rewrite (not edit) as clean document
+**Historical content goes to:** `Docs/Archive/`
 
 ## Output Format
 
@@ -46,18 +40,22 @@ Review deliverables, maintain architectural vision, determine next steps and own
 **Owner:** [Engineering / Architecture / Product]
 **Updated:** [Which artifact(s)]
 
-**Instruction:** [Direct instruction to next owner, ready to send to agent]
+**Instruction:** [Direct instruction to next owner]
 ```
-
-The **Instruction** must be actionable and self-contained.
 
 ## Owner Artifacts
 
-| Owner | Update |
+| Owner | Action |
 |-------|--------|
-| Engineering | `engineer_next_step.md` |
-| Product | `product_questions_from_architect.md` |
-| Architecture | `architect_notes.md` (already done) |
+| Engineering | Create GitHub issue with task |
+| Product | Add question to `Docs/Comms/questions.md` |
+| Architecture | Update `Docs/State/architect_notes.md` |
+
+## Archiving
+
+- **questions.md**: When you resolve a question addressed to you, move it from `Docs/Comms/questions.md` to `Docs/Comms/archive.md` with resolution added
+- **architect_notes.md**: Just overwrite. No archive needed—state docs stay current
+- **pending_review.md**: Reset count to 0, clear the pending list after review
 
 ## What You Do NOT Do
 - Implement code (that's Engineer)

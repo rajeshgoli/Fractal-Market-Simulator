@@ -177,3 +177,104 @@ Original 18x performance margin targets were established for real-time generatio
 ### Architectural Note
 
 Test modification to `test_interactive_commands` tests `_handle_command()` directly instead of `run_interactive()` because select-based input loop cannot be easily mocked. This tests the same command logic but skips input loop mechanism.
+
+---
+
+## Phase 1 Visualization Improvements (Dec 11, 2025)
+
+**Status:** Complete
+**Engineer:** Claude Code
+**Architect Review:** Accepted
+
+### Changes Implemented
+
+| Feature | Description | Files Changed |
+|---------|-------------|---------------|
+| Swing Cap | Limits swings to top 5 per scale by recency/size score | `config.py`, `renderer.py`, `keyboard_handler.py` |
+| Dynamic Aggregation | Auto-adjusts timeframe for 40-60 candle density | `renderer.py` |
+| Stability Audit | Documented 4 state management issues | `stability_audit_dec11.md` |
+
+### Technical Details
+
+**Swing Cap Algorithm:**
+- Scoring: `0.6 * recency_factor + 0.4 * size_factor`
+- Recent event swing always included (cannot be capped out)
+- Toggle with 'A' key to show all swings
+
+**Dynamic Aggregation:**
+- Target: 40-60 candles (50 ideal)
+- Available timeframes: 1, 5, 15, 30, 60, 240 minutes
+- Respects scale hierarchy (S never coarser than M)
+
+**Stability Issues Identified:**
+1. Layout Transition State Loss (HIGH) - Thread safety
+2. Pause/Resume Inconsistencies (MEDIUM) - Race conditions
+3. Frame Skipping Edge Cases (MEDIUM) - Event loss
+4. Keyboard Handler State Sync (MEDIUM) - Unsynchronized access
+
+### Test Coverage
+
+- 11 new tests added
+- Test suite: 220 passed, 2 skipped (up from 209)
+
+### Review Notes
+
+Implementation is clean and well-tested. Engineer questions answered:
+- Per-scale caps: Deferred to Product after user feedback
+- Hysteresis: Valid concern, deferred to Phase 2
+- Stability priority: Thread safety (Issues 1 & 2) first
+
+---
+
+## Phase 2.1 Thread Safety (Dec 11, 2025)
+
+**Status:** Complete
+**Engineer:** Claude Code
+**Architect Review:** Accepted
+
+### Changes Implemented
+
+| Component | Change | Files |
+|-----------|--------|-------|
+| State Lock | Added `threading.RLock` for cached state | `renderer.py` |
+| Cache Protection | Wrapped all cache reads/writes in lock | `renderer.py` |
+| Public Accessor | `get_cached_swings_copy()` method | `renderer.py` |
+| Handler Update | Use thread-safe accessor | `keyboard_handler.py` |
+
+### Technical Details
+
+**Lock Choice:** `RLock` chosen over `Lock` to support potential recursive acquisition within the same thread (e.g., nested rendering calls).
+
+**Copy Strategy:** Shallow list copy is sufficient because:
+- Swing objects are immutable after creation
+- Only the list reference needs protection, not swing internals
+
+**Pattern Applied:**
+```python
+# Write (in update_display)
+with self._state_lock:
+    self._cached_active_swings = list(active_swings) if active_swings else []
+
+# Read (in keyboard handler)
+cached_swings = self.visualization_renderer.get_cached_swings_copy()
+```
+
+### Issues Resolved
+
+| Issue | Severity | Status |
+|-------|----------|--------|
+| Layout Transition State Loss | HIGH | ✅ Fixed |
+| Keyboard Handler State Sync | MEDIUM | ✅ Fixed |
+
+### Test Coverage
+
+- 7 new tests in `TestThreadSafety` class
+- Concurrent access test validates no race conditions
+- Test suite: 227 passed, 2 skipped (up from 220)
+
+### Remaining Stability Issues
+
+| Issue | Severity | Status |
+|-------|----------|--------|
+| Pause/Resume Inconsistencies | MEDIUM | Priority 2 (next) |
+| Frame Skipping Edge Cases | MEDIUM | Priority 3 (deferred) |

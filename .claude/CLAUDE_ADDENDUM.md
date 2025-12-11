@@ -8,41 +8,46 @@ When asked to work as a specific role, read `.claude/personas/[role].md` first.
 
 | Role | Invocation | Primary Artifacts |
 |------|------------|-------------------|
-| Engineer | "As engineer..." | `engineer_notes/`, code |
-| Architect | "As architect..." | `architect_notes.md`, `engineer_next_step.md` |
-| Product | "As product..." | `product_next_steps.md`, interview notes |
-| Director | "As director..." | `.claude/personas/*` (workflow system) |
+| Engineer | "As engineer..." | GitHub issues, code |
+| Architect | "As architect..." | `Docs/State/architect_notes.md` |
+| Product | "As product..." | `Docs/State/product_direction.md` |
+| Director | "As director..." | `.claude/personas/*` |
 
-## Workflow Artifact Ownership
+## Docs Structure
 
-**Only Director may modify workflow system files:**
-- `.claude/CLAUDE_ADDENDUM.md`
-- `.claude/personas/*.md`
-- `.claude/personas/director/process_updates.md`
+```
+Docs/
+├── State/              # Current state (single files, overwrite)
+│   ├── architect_notes.md
+│   ├── product_direction.md
+│   └── pending_review.md
+├── Comms/              # Cross-role communication
+│   ├── questions.md    # Active questions (From, To, Status)
+│   └── archive.md      # Resolved questions
+├── Reference/          # Long-lived documents
+│   ├── product_north_star.md
+│   ├── user_guide.md
+│   └── interview_notes.md
+└── Archive/            # Historical content
+```
 
-Other roles must escalate process issues to Director.
+## Key Principles
 
-## Context is Precious
+**State docs:** Single file, always current, overwrite on update. No date suffixes.
 
-Persona files are kept lean. Full system details live in `director.md`.
-Revision history tracked in `personas/director/process_updates.md`.
+**Tasks:** Engineer work tracked in GitHub issues, not docs.
 
-## Critical Context Rules
+**Questions:** Cross-role questions in `Docs/Comms/questions.md`.
 
-Context is a precious resource. All roles must:
-1. Keep primary artifacts forward-looking and self-contained
-2. Move historical content to appendix/archive files
-3. Write for the next reader who has no prior context
-4. Avoid duplication across artifacts
+**Archiving:** The role that resolves a question moves it to `archive.md` with resolution. State docs just get overwritten—no archiving needed.
 
 ## Handoff Protocol
 
 Every task ends with explicit handoff:
 1. State what was completed
-2. Declare next step owner (Engineer, Architect, or Product)
-3. Update the appropriate artifact for that owner
-4. **Include Instruction** - actionable directive ready to send to agent
-5. Ensure receiving role can start immediately without archaeology
+2. Declare next step owner
+3. Update the appropriate artifact
+4. Include instruction for next agent
 
 ## /handoff
 
@@ -56,27 +61,8 @@ The next agent should be able to start immediately from that instruction with no
 
 ## Change Tracking
 
-Engineer maintains `Docs/engineer_notes/PENDING_REVIEW.md`:
-- Tracks all changes since last architect review
+Engineer maintains `Docs/State/pending_review.md`:
+- Tracks changes since last architect review
+- Lists GitHub issue numbers
 - **If count reaches 5 → Architect review is FORCED**
-- Only Architect can reset count to 0
-
-## Artifact Locations
-
-```
-Docs/
-├── Architect/
-│   ├── architect_notes.md           # Forward-looking, comprehensive
-│   ├── architect_notes_appendix.md  # Historical decisions
-│   └── engineer_next_step.md        # Current engineering task (milestone work)
-├── Product/
-│   ├── Product North Star.md        # Immutable vision (read-only)
-│   ├── Tactical/
-│   │   └── product_next_steps.md    # Current product direction
-│   ├── Interview notes/
-│   └── user_guide.md                # User-facing documentation
-├── engineer_notes/
-│   ├── PENDING_REVIEW.md            # Change tracking (critical)
-│   └── <task>_<date>.md             # Engineer deliverables
-└── engineer_reports/                 # Detailed implementation reports
-```
+- Only Architect resets count to 0

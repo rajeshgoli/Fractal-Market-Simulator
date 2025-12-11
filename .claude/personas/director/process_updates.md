@@ -4,6 +4,55 @@ Revision history for workflow system changes.
 
 ---
 
+## 2025-12-11: Major Docs Restructure
+
+**Triggered by:** User feedback on doc proliferation. `engineer_notes/` had 17 files, `product_next_steps*.md` had 4 versions.
+
+**Changes Made:**
+
+1. **New Docs structure:**
+   ```
+   Docs/
+   ├── State/       # Single files, overwrite (no proliferation)
+   ├── Comms/       # questions.md + archive.md
+   ├── Reference/   # Long-lived docs
+   └── Archive/     # All old files moved here
+   ```
+
+2. **State docs (single file, always current):**
+   - `architect_notes.md` - architectural state
+   - `product_direction.md` - product state (replaces product_next_steps)
+   - `pending_review.md` - review tracking
+
+3. **GitHub Issues replace engineer_notes/*.md:**
+   - Tasks tracked as issues
+   - Implementation notes as issue comments
+   - No more doc proliferation
+
+4. **Cross-role communication:**
+   - `Comms/questions.md` - active questions with From/To/Status
+   - `Comms/archive.md` - resolved questions
+   - Resolver moves question to archive
+
+5. **Reference docs consolidated:**
+   - `interview_notes.md` - all interviews in one file (most recent first)
+   - `product_north_star.md` - immutable vision
+   - `user_guide.md` - user documentation
+
+6. **Updated all personas** for new paths and archiving responsibilities
+
+7. **Added `/handoff` command** to CLAUDE_ADDENDUM.md for consistent handoff format
+
+**Rationale:** Prevent doc proliferation by using state docs (overwrite) and GitHub issues (external tracking) instead of accumulating files.
+
+**Impact on Roles:**
+- **Engineer**: Tasks from GitHub issues, notes as issue comments
+- **Architect**: Reviews issues, maintains architect_notes.md state
+- **Product**: Single product_direction.md, append to interview_notes.md
+- **All**: Resolver archives questions, state docs just overwrite
+
+---
+
 ## 2025-12-11: Added Role Recognition Guidance to CLAUDE.md
 
 **Triggered by:** User feedback after Claude failed to recognize "As a product manager" as a Product persona invocation
@@ -84,12 +133,12 @@ Revision history for workflow system changes.
    - **Checkpoint Trigger** section (when user should invoke Product for fit-for-purpose review)
 
 2. `engineer.md`: Added workflow step 2:
-   - **Filter by Product Goal**: Check product_next_steps.md, prioritize issues serving stated goal
+   - **Filter by Product Goal**: Check product_direction.md, prioritize issues serving stated goal
 
 3. `architect.md`: Added workflow step 3:
    - **Fitness Check**: Verify work serves stated Product objective and usability criteria
 
-4. Created `Docs/Product/Tactical/product_questions_from_director.md`:
+4. Added MCP server question to `Docs/Comms/questions.md`:
    - MCP server scoping question for Product to reason about
    - Could enable Product to directly experience the tool
 
@@ -97,7 +146,7 @@ Revision history for workflow system changes.
 
 **Impact on Roles:**
 - **Product**: Must think about usability and checkpoint timing at handoff
-- **Engineer**: Must consult product_next_steps.md before selecting issues
+- **Engineer**: Must consult product_direction.md before selecting issues
 - **Architect**: Must verify fitness-for-purpose during review
 - **User**: Sees explicit checkpoint triggers in product artifacts
 
