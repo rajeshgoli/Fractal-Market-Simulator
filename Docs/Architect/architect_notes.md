@@ -1,149 +1,260 @@
 # Market Simulator - Architecture & Direction
 
-## Current Project State
+## Current Project State (December 2025)
 
-This project builds a fractal market simulator that generates realistic 1-minute OHLC data by modeling actual market structure using Fibonacci-based swing analysis. **Historical data validation infrastructure is now complete** and ready for systematic validation of swing detection logic across diverse market regimes.
+This project builds a fractal market simulator that generates realistic 1-minute OHLC data by modeling actual market structure using Fibonacci-based swing analysis. **The validation harness is feature-complete** with robust visualization, playback controls, and scale-differentiated swing validation logic. The system is production-ready for systematic validation of swing detection across historical market data.
 
-## Deployed Architecture
+## System Architecture
 
-### Foundation: Swing Visualization Harness (Production Ready)
+### Complete Component Stack
 
-The visualization harness provides a complete analytical pipeline for processing historical OHLC data and validating swing detection across four structural scales (S, M, L, XL):
-
-**Core Components:**
-- **ScaleCalibrator**: Determines size boundaries for swing categorization
-- **BarAggregator**: Pre-computes aggregated OHLC bars for efficient retrieval  
-- **SwingStateManager**: Tracks active swings with event-driven state transitions
-- **EventDetector**: Identifies structural events (completions, invalidations, level crossings)
-- **VisualizationRenderer**: 4-panel synchronized display with Fibonacci overlays
-- **PlaybackController**: Interactive historical data replay with auto-pause
-
-### Extension: Historical Data Validation System (Newly Complete)
-
-**Data Pipeline:**
 ```
-Historical CSV Files → DataLoader → ValidationSession → ExpertReview
-         ↓               ↓              ↓               ↓
-   DateFiltered     BarObjects    IssueTracking    FindingsExport
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CLI Layer                                      │
+│  main.py → validate command → list-data/describe/inspect commands           │
+└───────────────────────────────────┬─────────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼─────────────────────────────────────────┐
+│                         Validation Harness                                  │
+│  harness.py: Orchestrates all components, handles interactive REPL          │
+│  session.py: ValidationSession with progress tracking, persistence          │
+│  issue_catalog.py: Structured issue classification and export               │
+└───────────────────────────────────┬─────────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼─────────────────────────────────────────┐
+│                        Visualization Layer                                  │
+│  renderer.py: 4-panel matplotlib display with OHLC + Fibonacci levels       │
+│  keyboard_handler.py: SPACE/arrows/1-4/V for interactive control            │
+│  layout_manager.py: Quad ↔ Expanded panel transitions                       │
+│  pip_inset.py: Picture-in-Picture for off-screen swing reference            │
+│  swing_visibility.py: All/Single/Recent visibility modes                    │
+│  progress_logger.py: Verbose CLI feedback during playback                   │
+└───────────────────────────────────┬─────────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼─────────────────────────────────────────┐
+│                          Analysis Pipeline                                  │
+│  scale_calibrator.py: Quartile-based S/M/L/XL boundary computation          │
+│  bar_aggregator.py: Pre-computed aggregations (1m/5m/15m/30m/60m/240m)      │
+│  swing_state_manager.py: Multi-scale swing tracking with state transitions  │
+│  event_detector.py: Scale-differentiated invalidation + encroachment        │
+└───────────────────────────────────┬─────────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼─────────────────────────────────────────┐
+│                            Data Layer                                       │
+│  loader.py: Historical data with date filtering, multi-resolution support   │
+│  ohlc_loader.py: CSV parsing with duplicate timestamp handling              │
+│  Data/Historical/: ES futures data (1m: 2007-2024, 5m, 1d available)        │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Validation Components:**
-- **Enhanced DataLoader**: Date range filtering with multi-resolution support (1m, 5m, 1d)
-- **ValidationSession**: Expert review workflow with progress tracking and session persistence
-- **IssueCatalog**: Structured issue classification and analysis system
-- **ValidationHarness**: Composition-based integration with existing visualization harness
-- **CLI Extension**: `validate` command for systematic historical analysis
+### Key Technical Achievements
 
-**Integration Architecture:**
+| Component | Performance | Key Features |
+|-----------|-------------|--------------|
+| Scale Calibrator | <50ms for 7K bars | Quartile boundaries, 0.25 ES tick rounding |
+| Bar Aggregator | O(1) retrieval | 6 timeframes, natural boundary alignment |
+| Swing State Manager | 27ms/bar | Multi-scale independence, intelligent replacement |
+| Event Detector | <1ms/bar | Scale-aware invalidation (S/M strict, L/XL soft) |
+| Visualization | <100ms updates | Frame skipping at 16 FPS, PiP for off-screen swings |
+| Data Loading | 22s for 114K bars | Duplicate handling, date range filtering |
+
+## Swing Validation Rules (Issue #13)
+
+### S/M Scales (Strict Rules)
+- **Bull swing**: Invalidates when price ever trades below L (swing low)
+- **Bear swing**: Invalidates when price ever trades above H (swing high)
+
+### L/XL Scales (Soft Rules)
+| Condition | Bull Swing | Bear Swing |
+|-----------|------------|------------|
+| Deep threshold | Trade below L - 0.15*delta | Trade above H + 0.15*delta |
+| Soft threshold | Close below L - 0.10*delta | Close above H + 0.10*delta |
+
+### Encroachment Tracking
+- Swing achieves encroachment when price retraces to 0.382 Fibonacci level
+- Tracked per-swing for potential future use in validation confidence
+
+## Visualization Features
+
+### Keyboard Controls
+| Key | Action | Key | Action |
+|-----|--------|-----|--------|
+| SPACE | Toggle play/pause | V | Cycle visibility mode |
+| RIGHT | Step one bar | [ / ] | Cycle through swings |
+| UP/DOWN | Double/halve speed | 1-4 | Expand panel S/M/L/XL |
+| R | Reset to beginning | 0/ESC | Restore quad layout |
+| H | Show help | Click | Toggle panel expand |
+
+### Layout Modes
+- **Quad (default)**: 2x2 grid showing all scales simultaneously
+- **Expanded**: One panel at 90% with mini-panels for context
+
+### PiP (Picture-in-Picture)
+- Appears when reference swing body scrolls off left edge
+- Shows normalized schematic with key levels (0, 0.5, 1.0, 1.618, 2.0)
+- Bull (green) / Bear (red) color coding
+
+## CLI Reference
+
+### Data Discovery
+```bash
+# List available data
+python3 -m src.cli.main list-data --symbol ES
+python3 -m src.cli.main list-data --symbol ES --resolution 1m --verbose
+
+# Aliases
+python3 -m src.cli.main describe --symbol ES
+python3 -m src.cli.main inspect --symbol ES --verbose
 ```
-CLI validate → DataLoader → ValidationSession → ValidationHarness → VisualizationHarness
-      ↓            ↓              ↓                    ↓                    ↓
-  DateRange    HistoricalBars  ProgressTracking  IssueLogging    InteractiveReplay
+
+### Validation Commands
+```bash
+# Basic validation
+python3 -m src.cli.main validate --symbol ES --resolution 1m \
+  --start 2024-01-01 --end 2024-01-31
+
+# With reference period (calibrate on Jan-Mar, playback from April)
+python3 -m src.cli.main validate --symbol ES --resolution 1m \
+  --start 2020-01-01 --end 2020-05-01 \
+  --playback-start 2020-04-01
+
+# With timeframe stepping (60-minute chunks for faster review)
+python3 -m src.cli.main validate --symbol ES --resolution 1m \
+  --start 2024-01-01 --end 2024-01-31 \
+  --step-timeframe 60 --verbose
 ```
 
-## Immediate Development Phase: Validation Execution
+### Interactive Commands
+| Command | Description |
+|---------|-------------|
+| `play` / `play fast` | Start auto/fast playback |
+| `pause` | Pause playback |
+| `step [N]` | Step forward N bars (default 1) |
+| `jump <idx>` | Jump to bar index |
+| `speed <mult>` | Set speed multiplier |
+| `status` | Show current position |
+| `log <type> [desc]` | Log validation issue |
+| `help` / `h` / `?` | Show command reference |
+| `quit` / `q` | End session |
 
-### Current Objective
-Execute systematic validation of swing detection logic using completed infrastructure to establish expert confidence before any generation development.
+## Resolved Technical Issues
 
-### Validation Methodology
+### Threading and GUI (Issues #5, #7)
+- **Problem**: Matplotlib GUI operations from background thread caused crashes
+- **Solution**: Select-based non-blocking input on main thread, producer-consumer pattern for GUI updates
+- **Key**: All matplotlib operations must run on main thread
 
-**Target Market Regimes:**
-- **Trending Markets**: Extended directional moves with clear swing progression
-- **Ranging Markets**: Sideways consolidation with contained oscillation
-- **Volatile Markets**: High volatility periods with rapid swing formation
-- **Transition Periods**: Market state changes and structural shifts
+### Large Reference Period Hang (Issue #10)
+- **Problem**: S-scale override propagated to SwingStateManager, causing 86K bar processing
+- **Solution**: Separate `scale_config` (analysis) from `display_aggregations` (visualization)
+- **Key**: Shared configuration objects must be deep-copied when divergent behavior needed
 
-**Expert Review Process:**
-1. **Historical Data Loading**: Use `validate` command to load specific date ranges
-2. **Systematic Playback**: Step through historical periods with swing annotations visible
-3. **Issue Documentation**: Log detection problems through ValidationSession interface
-4. **Pattern Analysis**: Identify systematic vs. isolated detection issues
-5. **Confidence Assessment**: Determine foundation readiness for next phase
+### Duplicate Timestamps (Issues #1, #2)
+- **Problem**: pandas `get_loc()` returns slice for duplicates, breaking arithmetic
+- **Solution**: Check for slice type, use `.start` for first occurrence
+- **Key**: High-frequency data commonly has duplicates from overlapping sources
 
-**Success Criteria:**
-- Detection logic behaves correctly across diverse market conditions
-- Expert confidence established in swing detection foundation
-- Issue inventory complete with clear categorization
-- Performance adequate for interactive historical analysis
+### Scale-Differentiated Validation (Issue #13)
+- **Problem**: Single invalidation threshold inappropriate for all scales
+- **Solution**: S/M strict rules (any trade-through), L/XL soft rules (threshold-based)
+- **Key**: Larger scales need tolerance for noise; smaller scales need precision
 
-### Architectural Priorities for Validation Phase
+## Configuration Architecture
 
-**Performance Optimization:**
-- Validate memory usage patterns with large historical datasets
-- Ensure responsive UI during extended replay sessions
-- Monitor session persistence overhead during long validation runs
+### Analysis vs Display Separation
+```python
+# Analysis configuration (for SwingStateManager)
+scale_config = calibrator.calibrate(bars)  # Original calibrated values
 
-**User Experience Enhancement:**
-- Progress indicators for historical data loading operations
-- Enhanced error context for data availability and loading issues
-- Interactive help system for expert validation workflow
+# Display configuration (for VisualizationRenderer)
+display_aggregations = dict(scale_config.aggregations)
+display_aggregations['S'] = 1  # Override S to 1m for per-bar visibility
+display_scale_config = deepcopy(scale_config)
+display_scale_config.aggregations = display_aggregations
+```
 
-**Data Management:**
-- Automatic session cleanup for old validation sessions
-- Concurrent session access controls for multi-expert scenarios
-- Export format optimization for development iteration feedback
+### State Caching for Layout Transitions
+```python
+# Cache state before layout change
+_cached_active_swings = active_swings
+_cached_recent_events = recent_events
 
-## Technical Debt Resolution Pipeline
+# After _apply_layout(), re-render from cache
+_rerender_cached_state()
+```
 
-### Immediate Technical Debt (Low Risk, High Value)
-1. **Memory Usage Monitoring**: Add tracking and warnings for large dataset scenarios
-2. **Session Directory Cleanup**: Implement automatic cleanup of sessions older than 30 days
-3. **Progress Indicators**: Add real-time feedback for data loading operations
-4. **Error Context Enhancement**: Improve error messages with specific resolution guidance
+## Performance Characteristics
 
-### Medium-Term Refactoring (Architectural Improvement)
-1. **Harness Integration**: Replace temporary file approach with direct Bar list integration
-2. **Bar Object Migration**: Move Bar dataclass from legacy module to core data structures  
-3. **Configuration System**: Implement centralized configuration management
-4. **Data Source Abstraction**: Unify data loading paths under common interface
+### Initialization Timing (114K bars, 3-month reference)
+| Phase | Duration |
+|-------|----------|
+| Data loading | ~22s |
+| Scale calibration | ~68s |
+| SwingStateManager init | 0.7s |
+| Visualization setup | <1s |
+| **Total** | **~92s** |
 
-### Future Scalability Considerations
-1. **Streaming Data Processing**: Chunked processing for very large historical datasets
-2. **Concurrent Session Management**: Multi-user session locking and conflict resolution
-3. **Performance Testing Framework**: Automated testing with realistic dataset sizes
-4. **Memory Management Strategy**: Implement memory optimization for production deployment
+### Memory Considerations
+- Sliding window display prevents unbounded artist accumulation
+- Session persistence every 100 bars balances safety vs overhead
+- Frame skipping at 60ms intervals prevents UI thread starvation
 
-## Future Phase: Market Data Generator
+## Test Coverage
 
-**Architecture Readiness**: Generator architecture design is complete but **development is explicitly deferred** until validation phase establishes expert confidence in swing detection foundations.
+| Module | Tests | Status |
+|--------|-------|--------|
+| ScaleCalibrator | 9 | Pass |
+| BarAggregator | 8 | Pass |
+| SwingStateManager | 22 | Pass |
+| EventDetector | 36 | Pass |
+| VisualizationRenderer | 15 | Pass |
+| PlaybackController | 23 | Pass |
+| EventLogger | 33 | Pass |
+| **Total** | **158+** | **Pass** |
 
-**Planned Generator Components:**
-1. **Market Rules Engine**: Fibonacci-based price level definitions and probability distributions
-2. **Swing Formation Simulator**: Progressive swing development with realistic timing patterns
-3. **Price Tick Generator**: Realistic bid/ask spreads and microstructure modeling
-4. **Data Output Pipeline**: OHLC aggregation with metadata preservation for validation
+## Future Development: Market Data Generator
 
-**Integration Strategy**: Generator will reverse the analytical process, using validated swing detection logic as the foundation for creating realistic market structure in synthetic data.
+**Status**: Architecture designed, development deferred until validation establishes expert confidence.
 
-## Development Sequencing
+### Planned Components
+1. **Market Rules Engine**: Fibonacci-based level definitions, probability distributions
+2. **Swing Formation Simulator**: Progressive swing development with realistic timing
+3. **Price Tick Generator**: Bid/ask spreads, microstructure modeling
+4. **Data Output Pipeline**: OHLC aggregation with metadata preservation
 
-**Current Phase: Historical Validation Execution**
-- Use completed validation infrastructure for systematic swing detection testing
-- Execute expert review across representative market regimes
-- Document findings and prioritize any required detection logic refinements
+### Integration Strategy
+Generator will reverse the analytical process:
+- Validated swing detection logic becomes the rule set for generation
+- Swing formation rules drive realistic price development
+- Generated data can be validated using the same harness (feedback loop)
 
-**Next Phase Gate: Foundation Validation**
-- Advancement to generator development gated by expert confidence establishment
-- All systematic detection issues must be resolved before generation work begins
-- Performance characteristics validated for production historical analysis scenarios
+## Risk Mitigation
 
-**Future Phase: Market Data Generation** 
-- Implement synthetic data generation using validated swing detection as foundation
-- Build realistic market structure modeling with proven Fibonacci-based analysis
-- Create production-quality synthetic datasets for market simulation applications
+### Current Phase Risks
+| Risk | Mitigation |
+|------|------------|
+| Detection logic issues | Systematic validation with expert review |
+| Performance degradation | Monitoring, frame skipping, sliding windows |
+| Scope expansion | Strict focus on swing validation only |
 
-## Risk Mitigation Strategy
+### Architectural Guardrails
+- Generator development explicitly gated by validation confidence
+- All detection issues must be resolved before generation work
+- Performance validated for production historical analysis scenarios
 
-**Validation Phase Risks:**
-- **Detection Logic Issues**: Systematic problems may require architectural changes
-- **Performance Degradation**: Historical data loading may impact responsiveness  
-- **Scope Expansion**: Validation requirements may grow beyond core detection verification
+## Development Standards
 
-**Mitigation Approach:**
-- Maintain strict focus on swing detection validation only
-- Leverage existing harness architecture with minimal extensions
-- Document all issues systematically for prioritized resolution
-- Gate advancement by correctness validation, not calendar timelines
+### Error Handling
+- Graceful degradation over termination (preserve session state)
+- Specific error messages with resolution guidance
+- Logging at appropriate levels (WARNING for data anomalies)
 
-The current architecture provides a solid foundation for systematic validation while maintaining clear separation between validation infrastructure and future generation capabilities.
+### Threading Rules
+- All matplotlib operations on main thread
+- Use `select()` for non-blocking input (not background threads)
+- Producer-consumer pattern for cross-thread communication
+
+### Configuration Patterns
+- Deep copy shared objects when divergent behavior needed
+- Separate analysis config from display config
+- Cache state before layout transitions
