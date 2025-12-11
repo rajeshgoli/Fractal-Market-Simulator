@@ -73,3 +73,4 @@ test.csv
 # Claude Code Settings
 .claude/settings.local.json
 test_data/es-1m.csv
+.archive/
