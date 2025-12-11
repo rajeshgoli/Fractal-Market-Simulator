@@ -95,14 +95,19 @@ class VisualizationRenderer:
         # Swing visibility controller for overlapping swings (Issue #12)
         self.swing_visibility: SwingVisibilityController = SwingVisibilityController()
 
+        # Cached render state for re-rendering after layout transitions (Issue #12)
+        self._cached_active_swings: List[ActiveSwing] = []
+        self._cached_recent_events: List[StructuralEvent] = []
+        self._cached_highlighted_events: Optional[List[StructuralEvent]] = None
+
         logging.info(f"VisualizationRenderer initialized with {len(self.scale_config.boundaries)} scales")
     
     def initialize_display(self) -> None:
         """Setup matplotlib figure and subplots for 4-panel display."""
         # Create figure with dark background
-        # Use layout='constrained' instead of tight_layout() to avoid warnings
-        # about incompatible axes configurations
-        self.fig = plt.figure(figsize=self.config.figure_size, layout='constrained')
+        # Disable constrained_layout to avoid warnings during dynamic layout transitions
+        # (constrained_layout conflicts with manual GridSpec manipulation in _apply_layout)
+        self.fig = plt.figure(figsize=self.config.figure_size)
         self.fig.patch.set_facecolor(self.config.background_color)
 
         # Store figure number for later reference
@@ -211,6 +216,7 @@ class VisualizationRenderer:
         if self.layout_manager is None:
             return
         self._apply_layout(LayoutMode.EXPANDED, panel_idx)
+        self._rerender_cached_state()  # Re-render to restore swings/events
         logging.info(f"Expanded panel {panel_idx} ({PANEL_SCALE_MAPPING[panel_idx]} scale)")
 
     def restore_quad_layout(self) -> None:
@@ -218,7 +224,24 @@ class VisualizationRenderer:
         if self.layout_manager is None:
             return
         self._apply_layout(LayoutMode.QUAD)
+        self._rerender_cached_state()  # Re-render to restore swings/events
         logging.info("Restored QUAD layout")
+
+    def _rerender_cached_state(self) -> None:
+        """
+        Re-render the display using cached state.
+
+        Called after layout transitions to restore swing/event visualization
+        without requiring new data from the harness.
+        """
+        if self._cached_active_swings or self._cached_recent_events:
+            # Use _do_render directly to bypass frame skipping during layout transitions
+            self._do_render(
+                self.current_bar_idx,
+                self._cached_active_swings,
+                self._cached_recent_events,
+                self._cached_highlighted_events
+            )
 
     def toggle_panel_expand(self, panel_idx: int) -> None:
         """
@@ -282,35 +305,60 @@ class VisualizationRenderer:
         self.current_bar_idx = current_bar_idx
         self.last_events = recent_events
 
+        # Cache state for re-rendering after layout transitions (Issue #12)
+        self._cached_active_swings = active_swings
+        self._cached_recent_events = recent_events
+        self._cached_highlighted_events = highlighted_events
+
+        # Do the actual rendering
+        self._do_render(current_bar_idx, active_swings, recent_events, highlighted_events)
+
+    def _do_render(self,
+                   current_bar_idx: int,
+                   active_swings: List[ActiveSwing],
+                   recent_events: List[StructuralEvent],
+                   highlighted_events: Optional[List[StructuralEvent]] = None) -> None:
+        """
+        Perform the actual rendering of all panels.
+
+        This is extracted from update_display to allow re-rendering after
+        layout transitions without going through frame skipping logic.
+
+        Args:
+            current_bar_idx: Current position in source bar timeline
+            active_swings: All active swings across scales
+            recent_events: Recent structural events
+            highlighted_events: Events to emphasize
+        """
         # Group swings by scale
         swings_by_scale = self._group_swings_by_scale(active_swings)
         events_by_scale = self._group_events_by_scale(recent_events)
-        
+
         # Update each panel
         for panel_idx in range(4):
             scale = PANEL_SCALE_MAPPING[panel_idx]
             scale_swings = swings_by_scale.get(scale, [])
             scale_events = events_by_scale.get(scale, [])
-            
+
             # Calculate view window for this scale
             view_window = self.calculate_view_window(scale, current_bar_idx, scale_swings)
             self.view_windows[scale] = view_window
-            
+
             # Render the panel
             self.render_panel(panel_idx, scale, view_window, scale_swings, scale_events)
-        
+
         # Update panel annotations
         for panel_idx in range(4):
             scale = PANEL_SCALE_MAPPING[panel_idx]
             swing_count = len(swings_by_scale.get(scale, []))
             latest_event = None
-            
+
             scale_events = events_by_scale.get(scale, [])
             if scale_events:
                 latest_event = max(scale_events, key=lambda e: e.source_bar_idx)
-            
+
             self.update_panel_annotations(panel_idx, scale, swing_count, latest_event)
-        
+
         # Refresh display
         self.fig.canvas.draw_idle()
         self.fig.canvas.flush_events()  # Process GUI events to keep window responsive
@@ -359,11 +407,18 @@ class VisualizationRenderer:
         # Apply swing visibility filtering (Issue #12)
         visible_swings = self.swing_visibility.get_visible_swings(panel_idx, scale_swings)
 
-        # Draw Fibonacci levels for each visible swing with opacity
+        # Draw swing body and Fibonacci levels for each visible swing with opacity
         # Pass num_visible for label positioning in local coordinates
         for swing in visible_swings:
             opacity = self.swing_visibility.get_swing_opacity(swing, panel_idx)
             if opacity > 0:
+                # Draw schematic swing body on left margin (Issue #12 Bug Fix)
+                self.draw_swing_body(
+                    panel_idx, swing, view_window,
+                    num_visible=len(visible_bars),
+                    opacity=opacity
+                )
+                # Draw Fibonacci level lines
                 self.draw_fibonacci_levels(
                     panel_idx, swing, view_window,
                     num_visible=len(visible_bars),
@@ -386,10 +441,11 @@ class VisualizationRenderer:
         if scale_events:
             self.draw_event_markers(panel_idx, scale_events, view_window, timeframe)
 
-        # Set axis limits - use local drawing coordinates (0 to N)
+        # Set axis limits - use local drawing coordinates
         # Bars are drawn at positions 0, 1, 2, ..., N-1
+        # Extended left margin (-4.0) to show swing body schematic (drawn at x=-2.5 with width 2)
         num_visible = len(visible_bars)
-        ax.set_xlim(-0.5, num_visible - 0.5)  # Add margin for bar width
+        ax.set_xlim(-4.0, num_visible - 0.5)  # Extended margin for swing body
         ax.set_ylim(view_window.price_min, view_window.price_max)
 
         # Configure time-based X-axis labels
@@ -525,7 +581,99 @@ class VisualizationRenderer:
             )
 
         self.artists[panel_idx]['levels'].extend(level_lines)
-    
+
+    def draw_swing_body(self,
+                        panel_idx: int,
+                        swing: ActiveSwing,
+                        view_window: ViewWindow,
+                        num_visible: int = 100,
+                        opacity: float = 1.0) -> None:
+        """
+        Draw a schematic swing body representation at a fixed position.
+
+        The swing body is drawn as a bounded vertical rectangle on the left side
+        of the chart, showing the swing's high-low range. This provides a clear
+        visual reference separate from the Fibonacci level lines.
+
+        Args:
+            panel_idx: Panel index to draw on
+            swing: Active swing with high/low prices
+            view_window: View window for price range filtering
+            num_visible: Number of visible bars (for positioning)
+            opacity: Opacity multiplier for visibility control (0.0 to 1.0)
+        """
+        ax = self.axes[panel_idx]
+        scale = PANEL_SCALE_MAPPING[panel_idx]
+        colors = get_scale_colors(self.config, scale)
+
+        # Swing body color based on direction
+        if swing.is_bull:
+            body_color = colors.get("bullish", "#26A69A")
+        else:
+            body_color = colors.get("bearish", "#EF5350")
+
+        # Draw swing body as a fixed-width rectangle on the left side
+        # Position at x = -3 to -1 (off the main chart area but visible in margin)
+        body_x = -2.5
+        body_width = 2.0
+
+        # Height based on swing high/low
+        body_height = abs(swing.high_price - swing.low_price)
+        body_bottom = min(swing.high_price, swing.low_price)
+
+        # Only draw if swing overlaps visible price range
+        if body_bottom > view_window.price_max or (body_bottom + body_height) < view_window.price_min:
+            return
+
+        effective_alpha = 0.6 * opacity
+
+        # Draw the swing body rectangle
+        body_rect = Rectangle(
+            (body_x, body_bottom),
+            body_width, body_height,
+            facecolor=body_color,
+            edgecolor='white',
+            linewidth=1.5,
+            alpha=effective_alpha,
+            zorder=5
+        )
+        ax.add_patch(body_rect)
+        self.artists[panel_idx]['levels'].append(body_rect)
+
+        # Add H and L labels
+        label_x = body_x + body_width / 2
+        ax.text(
+            label_x, swing.high_price,
+            'H',
+            color='white',
+            fontsize=7,
+            fontweight='bold',
+            ha='center',
+            va='bottom',
+            alpha=effective_alpha
+        )
+        ax.text(
+            label_x, swing.low_price,
+            'L',
+            color='white',
+            fontsize=7,
+            fontweight='bold',
+            ha='center',
+            va='top',
+            alpha=effective_alpha
+        )
+
+        # Mark the 0 and 1 levels on the swing body (these are the actual swing prices)
+        for level_name, level_y in [("0", swing.low_price), ("1", swing.high_price)]:
+            ax.plot(
+                [body_x, body_x + body_width],
+                [level_y, level_y],
+                color='white',
+                linewidth=2,
+                alpha=effective_alpha,
+                zorder=6
+            )
+
     def draw_event_markers(self,
                           panel_idx: int,
                           events: List[StructuralEvent],
