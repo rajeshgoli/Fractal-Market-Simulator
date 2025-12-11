@@ -1,6 +1,6 @@
 # Market Simulator Specification
 
-I want to create a market simulator whose job is to generate OHLC data that's as close to real market behavior as possible.
+This project aims to create a market simulator whose job is to generate OHLC data that's as close to real market behavior as possible.
 
 ## Foundational Philosophy
 
