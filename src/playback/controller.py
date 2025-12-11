@@ -148,7 +148,7 @@ class PlaybackController:
     def step_forward(self) -> bool:
         """
         Move forward one bar.
-        
+
         Returns:
             True if step successful, False if at end
         """
@@ -156,9 +156,47 @@ class PlaybackController:
             self.state = PlaybackState.FINISHED
             logging.debug("Already at end of data")
             return False
-        
+
         self.current_bar_idx += 1
         return self._execute_step()
+
+    def step_forward_bulk(self, num_bars: int, skip_callbacks: bool = True) -> int:
+        """
+        Move forward multiple bars efficiently.
+
+        This method advances the bar index without triggering per-bar callbacks,
+        which is much faster for large jumps. The caller is responsible for
+        updating swing state and visualization after this call.
+
+        Args:
+            num_bars: Number of bars to advance
+            skip_callbacks: If True, only advances index without callbacks (fast).
+                          If False, executes callback for each bar (slow but processes events).
+
+        Returns:
+            Number of bars actually advanced (may be less if hitting end)
+        """
+        if self.current_bar_idx >= self.total_bars - 1:
+            self.state = PlaybackState.FINISHED
+            return 0
+
+        # Calculate how many bars we can actually advance
+        max_advance = self.total_bars - 1 - self.current_bar_idx
+        actual_advance = min(num_bars, max_advance)
+
+        if skip_callbacks:
+            # Fast path: just update the index
+            self.current_bar_idx += actual_advance
+        else:
+            # Slow path: execute callback for each bar
+            for _ in range(actual_advance):
+                self.current_bar_idx += 1
+                self._execute_step()
+
+        if self.current_bar_idx >= self.total_bars - 1:
+            self.state = PlaybackState.FINISHED
+
+        return actual_advance
     
     def step_backward(self) -> bool:
         """

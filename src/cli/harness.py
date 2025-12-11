@@ -263,6 +263,10 @@ class VisualizationHarness:
         """
         message = details.get('message', action)
 
+        # Handle bulk time steps - need to catch up swing state
+        if action == 'time_step' and details.get('bulk_step'):
+            self._handle_bulk_step(details)
+
         # Update status overlay in visualization
         if self.visualization_renderer:
             status = self.playback_controller.get_status()
@@ -274,6 +278,53 @@ class VisualizationHarness:
         # Print to CLI
         print(f"\n[{action.upper()}] {message}")
         print("harness> ", end="", flush=True)
+
+    def _handle_bulk_step(self, details: dict):
+        """
+        Handle bulk time step by catching up swing state efficiently.
+
+        Instead of processing bars one-by-one with visualization updates,
+        we process all bars in bulk and update visualization once at the end.
+
+        Args:
+            details: Dictionary with bar_idx (target), steps (count)
+        """
+        target_bar_idx = details.get('bar_idx', self.current_bar_idx)
+        steps = details.get('steps', 0)
+
+        if steps <= 0:
+            return
+
+        # Calculate the starting position (before the bulk step)
+        start_idx = target_bar_idx - steps
+
+        # Process all bars from start to target, collecting events
+        all_events = []
+        for bar_idx in range(start_idx + 1, target_bar_idx + 1):
+            if bar_idx >= len(self.bars):
+                break
+
+            current_bar = self.bars[bar_idx]
+            update_result = self.swing_state_manager.update_swings(current_bar, bar_idx)
+
+            # Collect events for logging
+            for event in update_result.events:
+                self.event_logger.log_event(event)
+                all_events.append(event)
+
+        # Update current bar index
+        self.current_bar_idx = target_bar_idx
+
+        # Single visualization update at the end
+        active_swings = self.swing_state_manager.get_active_swings()
+        highlighted = [e for e in all_events if e.severity.value == 'major']
+
+        self.visualization_renderer.update_display(
+            current_bar_idx=target_bar_idx,
+            active_swings=active_swings,
+            recent_events=all_events[-20:] if all_events else [],  # Last 20 events
+            highlighted_events=highlighted
+        )
     
     def _initialize_playback_components(self):
         """Initialize playback control components."""
@@ -708,10 +759,15 @@ class VisualizationHarness:
         print("\nKeyboard Shortcuts (in matplotlib window):")
         print("  SPACE        - Pause/Resume playback")
         print("  RIGHT ARROW  - Step forward one bar")
+        print("  F            - Step forward 1 hour (60 bars)")
+        print("  G            - Step forward 4 hours (240 bars)")
+        print("  D            - Step forward 1 day (1440 bars)")
         print("  UP ARROW     - Increase playback speed")
         print("  DOWN ARROW   - Decrease playback speed")
         print("  R            - Reset to beginning")
         print("  H            - Show keyboard help")
+        print("  V            - Cycle visibility mode")
+        print("  [ / ]        - Navigate swings (in Single mode)")
         print("\nCLI Commands:")
         print("  help                    - Show this help message")
         print("  status                  - Show harness status")

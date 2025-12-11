@@ -13,6 +13,11 @@ Keyboard Shortcuts:
 - R: Reset to beginning
 - H: Show help
 
+Time-Based Stepping (Issue #14):
+- F: Step forward 1 hour (60 bars at 1m resolution)
+- G: Step forward 4 hours (240 bars at 1m resolution)
+- D: Step forward 1 day (1440 bars at 1m resolution, skips weekends)
+
 Layout Controls (Issue #12):
 - 1-4: Expand panel 1/2/3/4 (S/M/L/XL scale)
 - 0/ESC: Return to quad layout
@@ -134,6 +139,13 @@ class KeyboardHandler:
             self._reset()
         elif key == 'h':
             self._show_help()
+        # Time-based stepping (Issue #14)
+        elif key == 'f':
+            self._step_time(60)  # 1 hour
+        elif key == 'g':
+            self._step_time(240)  # 4 hours
+        elif key == 'd':
+            self._step_time(1440)  # 1 day
         # Layout controls (Issue #12)
         elif key in ['1', '2', '3', '4']:
             self._expand_panel(int(key) - 1)
@@ -189,6 +201,49 @@ class KeyboardHandler:
                 "bar_idx": new_status.current_bar_idx,
                 "total_bars": new_status.total_bars,
                 "message": f"Stepped to bar {new_status.current_bar_idx}"
+            })
+        else:
+            self._notify_action("step_failed", {
+                "message": "Cannot step - at end of data"
+            })
+
+    def _step_time(self, minutes: int) -> None:
+        """
+        Step forward by a fixed time interval.
+
+        This assumes 1-minute source bars. The method steps forward by
+        the specified number of minutes efficiently using bulk stepping.
+
+        Args:
+            minutes: Number of minutes to step forward (60=1h, 240=4h, 1440=1d)
+        """
+        # Ensure we're paused for manual stepping
+        status = self.playback_controller.get_status()
+        if status.state == PlaybackState.PLAYING:
+            self.playback_controller.pause_playback("Time-based step requested")
+
+        # Use bulk step for efficiency - this skips per-bar callbacks
+        # The harness will need to catch up swing state separately
+        steps_taken = self.playback_controller.step_forward_bulk(minutes, skip_callbacks=True)
+
+        if steps_taken > 0:
+            new_status = self.playback_controller.get_status()
+            # Format time label
+            if minutes >= 1440:
+                time_label = f"{minutes // 1440} day(s)"
+            elif minutes >= 60:
+                time_label = f"{minutes // 60} hour(s)"
+            else:
+                time_label = f"{minutes} minute(s)"
+
+            # Notify action with bulk_step flag so harness knows to catch up swing state
+            self._notify_action("time_step", {
+                "bar_idx": new_status.current_bar_idx,
+                "total_bars": new_status.total_bars,
+                "steps": steps_taken,
+                "minutes": minutes,
+                "bulk_step": True,  # Signal that swing state needs catch-up
+                "message": f"Stepped {time_label} ({steps_taken} bars) to bar {new_status.current_bar_idx}"
             })
         else:
             self._notify_action("step_failed", {
@@ -258,6 +313,11 @@ Keyboard Shortcuts:
   DOWN   - Decrease speed
   R      - Reset to beginning
   H      - Show this help
+
+Time-Based Stepping:
+  F      - Step forward 1 hour (60 bars)
+  G      - Step forward 4 hours (240 bars)
+  D      - Step forward 1 day (1440 bars)
 
 Layout Controls:
   1-4    - Expand panel 1/2/3/4 (S/M/L/XL)
@@ -395,6 +455,10 @@ Swing Visibility:
             "recent": "Recent Event"
         }
         mode_name = mode_names.get(new_mode.value, new_mode.value)
+
+        # Trigger redraw to reflect new visibility mode
+        self.visualization_renderer._rerender_cached_state()
+
         self._notify_action("visibility_mode", {
             "mode": new_mode.value,
             "message": f"Visibility: {mode_name}"
@@ -404,6 +468,10 @@ Swing Visibility:
         """Select next swing in Single visibility mode."""
         if self.visualization_renderer is None:
             return
+
+        # Get cached swings from renderer, grouped by scale
+        cached_swings = self.visualization_renderer._cached_active_swings
+        swings_by_scale = self.visualization_renderer._group_swings_by_scale(cached_swings)
 
         # Cycle through swings for all panels (or use focused panel if in expanded mode)
         expanded = None
@@ -417,10 +485,14 @@ Swing Visibility:
             # Cycle for all panels
             panels = list(range(4))
 
+        scale_names = {0: 'S', 1: 'M', 2: 'L', 3: 'XL'}
         for panel_idx in panels:
-            # Get current swings for this panel (would need to be passed in or cached)
-            # For now, just notify - actual swing list managed by renderer
-            self.visualization_renderer.swing_visibility.cycle_next(panel_idx, [])
+            scale = scale_names[panel_idx]
+            panel_swings = swings_by_scale.get(scale, [])
+            self.visualization_renderer.swing_visibility.cycle_next(panel_idx, panel_swings)
+
+        # Trigger redraw to reflect new selection
+        self.visualization_renderer._rerender_cached_state()
 
         self._notify_action("swing_next", {
             "message": "Next swing selected"
@@ -430,6 +502,10 @@ Swing Visibility:
         """Select previous swing in Single visibility mode."""
         if self.visualization_renderer is None:
             return
+
+        # Get cached swings from renderer, grouped by scale
+        cached_swings = self.visualization_renderer._cached_active_swings
+        swings_by_scale = self.visualization_renderer._group_swings_by_scale(cached_swings)
 
         # Similar to _cycle_next_swing
         expanded = None
@@ -441,8 +517,14 @@ Swing Visibility:
         else:
             panels = list(range(4))
 
+        scale_names = {0: 'S', 1: 'M', 2: 'L', 3: 'XL'}
         for panel_idx in panels:
-            self.visualization_renderer.swing_visibility.cycle_previous(panel_idx, [])
+            scale = scale_names[panel_idx]
+            panel_swings = swings_by_scale.get(scale, [])
+            self.visualization_renderer.swing_visibility.cycle_previous(panel_idx, panel_swings)
+
+        # Trigger redraw to reflect new selection
+        self.visualization_renderer._rerender_cached_state()
 
         self._notify_action("swing_previous", {
             "message": "Previous swing selected"
