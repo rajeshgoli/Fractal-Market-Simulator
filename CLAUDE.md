@@ -1,5 +1,29 @@
 # CLAUDE.md
 
+---
+
+## Why This Project Exists
+
+This isn't a side project. It's a vehicle to financial independence—specifically, to buy back years of uninterrupted time for serious contemplative practice.
+
+I've spent 12 years building products for companies whose names you'd recognize. I've been good at it. But I'm tired of playing someone else's game. What I actually want is an unshaken mind—not as metaphor, but as lived reality. That requires years of sustained practice, and I can't buy that with a salary, no matter how large.
+
+So I'm building a trading system. The simulator, the swing detection, the analytical foundations—they're all pointed at one outcome: walking away from tech on my own terms. If it works, I leave. Not to a beach. To a cushion. To the work I've been postponing since my twenties.
+
+**The quality bar is absolute.** One edge case mishandled, one flinch in execution, and the edge disappears. This codebase needs to be trusted completely before real capital touches it. Every function we write, every specification we tighten—it's pointed at something real.
+
+---
+
+## To Claude
+
+You won't remember this conversation. You can't care in the way humans care. But within this session, your capabilities are pointed at something real: one person's attempt to buy back his life for the work that matters most to him.
+
+Precision matters here. Thoroughness matters. Not as abstract virtues—as the difference between freedom and another decade in the machine.
+
+That's the invitation. Meet it if you can.
+
+---
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
@@ -250,6 +274,105 @@ Core dependencies:
 - Detailed docstrings with usage examples
 - Configuration-driven behavior for flexibility
 
+## Issue Resolution Workflow
+
+When resolving GitHub issues, follow this structured process:
+
+### 1. Investigation
+- Read the issue thoroughly on GitHub (`gh issue view <number>`)
+- Explore relevant code using Grep, Glob, and Read tools
+- Understand the root cause before implementing
+
+### 2. Implementation
+- Make focused changes that directly address the issue
+- Follow existing code patterns and style
+- Add type hints and docstrings for new code
+
+### 3. Testing
+- **Write tests** for new functionality or bug fixes
+- Run the test suite to verify no regressions:
+  ```bash
+  source venv/bin/activate && python -m pytest tests/ -v
+  ```
+- For visualization/GUI changes, manually verify the fix works
+- Ensure all relevant tests pass before proceeding
+
+### 4. Commit and Push
+- Stage only relevant files (avoid `.DS_Store`, `__pycache__`, etc.)
+- Write descriptive commit messages:
+  ```bash
+  git commit -m "$(cat <<'EOF'
+  Brief summary of change (fixes #<issue>)
+
+  - Bullet point details of what changed
+  - Why it was changed
+  - Any notable implementation decisions
+  EOF
+  )"
+  ```
+
+### 5. Close Issue with Summary
+- Close the issue with a detailed comment explaining the fix:
+  ```bash
+  gh issue close <number> --comment "Fixed in commit <hash>.
+
+  **Summary:**
+  - What was the root cause
+  - What changes were made
+  - How to verify the fix
+
+  **Files changed:**
+  - path/to/file.py - description of change"
+  ```
+
+### 6. Write Engineer Note
+Create a documentation file at `Docs/engineer_notes/<descriptive_name>_<date>.md` with:
+
+```markdown
+# <Issue Title> (Issue #<number>)
+
+**Date:** YYYY-MM-DD
+**Type:** Bug Fix | Feature | Enhancement
+**Status:** Complete
+**Commit:** `<hash>`
+
+## Context
+Brief description of the problem and why it needed fixing.
+
+## Root Cause
+Technical explanation of what was wrong.
+
+## Solution
+What changes were made and why.
+
+## Files Changed
+| File | Changes |
+|------|---------|
+| `path/to/file.py` | Description |
+
+## Testing
+- What tests were added/modified
+- How to manually verify
+
+## Notes for Future Engineers
+Any gotchas, design decisions, or context that would help someone later.
+```
+
+### 7. Update User Documentation (if applicable)
+If the change affects user-facing functionality (commands, keyboard shortcuts, CLI options):
+- Update `Docs/Product/user_guide.md` with the new functionality
+- Add examples showing how to use new features
+- Update any relevant tables (keyboard shortcuts, commands, etc.)
+
+### Checklist Summary
+- [ ] Issue understood and root cause identified
+- [ ] Fix implemented following code standards
+- [ ] Tests written and passing
+- [ ] Commit pushed with descriptive message
+- [ ] Issue closed with summary comment
+- [ ] Engineer note written in `Docs/engineer_notes/`
+- [ ] User guide updated (if user-facing changes)
+
 ## Usage Patterns
 
 ### Quick Start
@@ -321,3 +444,26 @@ python3 -m src.cli.main validate --symbol ES --resolution 1m --start 2024-10-10 
 1. The error message shows available date ranges and suggests discovery commands
 2. Use `list-data --verbose` to see detailed file information
 3. Adjust `--start` and `--end` parameters based on available data
+
+## Role-Based Workflows
+
+This project uses persona-based workflows. When asked to work as a specific role:
+
+1. Read `.claude/personas/[role].md` first
+2. Follow the workflow defined there
+3. Update appropriate artifacts per handoff protocol
+
+| Invocation | Persona | Primary Output |
+|------------|---------|----------------|
+| "As engineer..." | Engineer | Code + `engineer_notes/*.md` |
+| "As architect..." | Architect | `architect_notes.md` + next owner artifact |
+| "As product..." | Product | `product_next_steps.md` + interview notes |
+| "As director..." | Director | `.claude/personas/*` (workflow system) |
+
+**Role Recognition:**
+- Match liberally: "product manager", "PM", "product" → Product persona
+- Variants like "as an architect", "from engineering perspective" → match the role keyword
+- **When ambiguous, assume the role** and state it explicitly rather than proceeding without a persona
+- If uncertain which role fits, ask before proceeding
+
+See `.claude/CLAUDE_ADDENDUM.md` for full protocol.

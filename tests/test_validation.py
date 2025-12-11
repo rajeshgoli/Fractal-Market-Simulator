@@ -17,7 +17,7 @@ import os
 import pytest
 import tempfile
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -41,25 +41,25 @@ def temp_data_dir():
         # Create test CSV files
         test_data_1m = Path(temp_dir) / "ES_1m_20231001.csv"
         test_data_5m = Path(temp_dir) / "ES_5m_20231001.csv"
-        
-        # Sample 1-minute data
+
+        # Sample 1-minute data - use timezone-aware datetime for consistent timestamps
         with open(test_data_1m, 'w') as f:
-            f.write("time,open,high,low,close\n")
-            base_time = int(datetime(2023, 10, 1, 9, 30).timestamp())
+            f.write("time,open,high,low,close,volume\n")
+            base_time = int(datetime(2023, 10, 1, 9, 30, tzinfo=timezone.utc).timestamp())
             for i in range(100):  # 100 minutes of data
                 timestamp = base_time + (i * 60)
                 price = 5800 + (i * 0.25)  # Simple price progression
-                f.write(f"{timestamp},{price},{price+1},{price-1},{price+0.5}\n")
-        
+                f.write(f"{timestamp},{price},{price+1},{price-1},{price+0.5},1000\n")
+
         # Sample 5-minute data
         with open(test_data_5m, 'w') as f:
-            f.write("time,open,high,low,close\n")
-            base_time = int(datetime(2023, 10, 1, 9, 30).timestamp())
+            f.write("time,open,high,low,close,volume\n")
+            base_time = int(datetime(2023, 10, 1, 9, 30, tzinfo=timezone.utc).timestamp())
             for i in range(20):  # 20 five-minute bars
                 timestamp = base_time + (i * 300)  # 5 minutes = 300 seconds
                 price = 5800 + (i * 1.25)
-                f.write(f"{timestamp},{price},{price+2},{price-2},{price+1}\n")
-        
+                f.write(f"{timestamp},{price},{price+2},{price-2},{price+1},1000\n")
+
         yield temp_dir
 
 
@@ -125,11 +125,11 @@ class TestHistoricalDataLoader:
     
     def test_load_historical_data_success(self, temp_data_dir):
         """Test successful historical data loading."""
-        start_date = datetime(2023, 10, 1, 9, 30)
-        end_date = datetime(2023, 10, 1, 10, 30)
-        
+        start_date = datetime(2023, 10, 1, 9, 30, tzinfo=timezone.utc)
+        end_date = datetime(2023, 10, 1, 10, 30, tzinfo=timezone.utc)
+
         bars = load_historical_data("ES", "1m", start_date, end_date, temp_data_dir)
-        
+
         assert len(bars) > 0
         assert isinstance(bars[0], Bar)
         assert bars[0].timestamp >= start_date.timestamp()
@@ -142,30 +142,31 @@ class TestHistoricalDataLoader:
     def test_load_historical_data_date_filtering(self, temp_data_dir):
         """Test date range filtering."""
         # Load narrow range
-        start_date = datetime(2023, 10, 1, 10, 0)
-        end_date = datetime(2023, 10, 1, 10, 10)
-        
+        start_date = datetime(2023, 10, 1, 10, 0, tzinfo=timezone.utc)
+        end_date = datetime(2023, 10, 1, 10, 10, tzinfo=timezone.utc)
+
         bars = load_historical_data("ES", "1m", start_date, end_date, temp_data_dir)
-        
+
         # Should have approximately 10 minutes of data
         assert 8 <= len(bars) <= 12  # Allow some tolerance
     
     def test_load_historical_data_invalid_inputs(self, temp_data_dir):
         """Test error handling for invalid inputs."""
-        start_date = datetime(2023, 10, 1, 10, 0)
-        end_date = datetime(2023, 10, 1, 9, 0)  # End before start
-        
+        start_date = datetime(2023, 10, 1, 10, 0, tzinfo=timezone.utc)
+        end_date = datetime(2023, 10, 1, 9, 0, tzinfo=timezone.utc)  # End before start
+
         with pytest.raises(ValueError, match="Start date must be before end date"):
             load_historical_data("ES", "1m", start_date, end_date, temp_data_dir)
-        
-        # Invalid resolution
+
+        # Invalid resolution - use valid date range
+        valid_start = datetime(2023, 10, 1, 9, 30, tzinfo=timezone.utc)
+        valid_end = datetime(2023, 10, 1, 10, 30, tzinfo=timezone.utc)
         with pytest.raises(ValueError, match="Invalid resolution"):
-            load_historical_data("ES", "30s", start_date, end_date, temp_data_dir)
-        
+            load_historical_data("ES", "30s", valid_start, valid_end, temp_data_dir)
+
         # Non-existent symbol
-        valid_end = datetime(2023, 10, 1, 10, 30)
         with pytest.raises(FileNotFoundError):
-            load_historical_data("INVALID", "1m", start_date, valid_end, temp_data_dir)
+            load_historical_data("INVALID", "1m", valid_start, valid_end, temp_data_dir)
     
     def test_get_available_date_ranges(self, temp_data_dir):
         """Test date range discovery."""
@@ -179,14 +180,14 @@ class TestHistoricalDataLoader:
     
     def test_validate_data_availability(self, temp_data_dir):
         """Test data availability validation."""
-        start_date = datetime(2023, 10, 1, 9, 30)
-        end_date = datetime(2023, 10, 1, 10, 30)
-        
+        start_date = datetime(2023, 10, 1, 9, 30, tzinfo=timezone.utc)
+        end_date = datetime(2023, 10, 1, 10, 30, tzinfo=timezone.utc)
+
         # Valid request
         is_available, message = validate_data_availability("ES", "1m", start_date, end_date, temp_data_dir)
         assert is_available
         assert "available" in message.lower()
-        
+
         # Invalid symbol
         is_available, message = validate_data_availability("INVALID", "1m", start_date, end_date, temp_data_dir)
         assert not is_available
@@ -518,11 +519,11 @@ class TestCLIIntegration:
         """Test successful validation command execution."""
         # Mock successful data validation
         mock_validate.return_value = (True, "Data available")
-        
+
         # Mock data loading
         mock_bars = [
-            Bar(timestamp=1696152600, open=5800.0, high=5801.0, low=5799.0, close=5800.5)
-            for _ in range(10)
+            Bar(timestamp=1696152600, open=5800.0, high=5801.0, low=5799.0, close=5800.5, index=i)
+            for i in range(10)
         ]
         mock_load.return_value = mock_bars
         

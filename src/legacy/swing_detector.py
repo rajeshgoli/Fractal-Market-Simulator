@@ -1,7 +1,82 @@
+import bisect
+import math
 from decimal import Decimal
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import pandas as pd
 from .level_calculator import calculate_levels, Level
+
+
+class SparseTable:
+    """
+    Sparse Table for O(1) Range Minimum/Maximum Queries.
+
+    Preprocessing: O(N log N) time and space
+    Query: O(1) time
+
+    Used to efficiently check if any value in a range is below/above a threshold.
+    """
+
+    def __init__(self, values: List[float], mode: str = 'min'):
+        """
+        Build sparse table from values.
+
+        Args:
+            values: List of values to build the table from
+            mode: 'min' for range minimum queries, 'max' for range maximum
+        """
+        self.n = len(values)
+        self.mode = mode
+
+        if self.n == 0:
+            self.log_table = []
+            self.table = []
+            return
+
+        # Precompute log values
+        self.log_table = [0] * (self.n + 1)
+        for i in range(2, self.n + 1):
+            self.log_table[i] = self.log_table[i // 2] + 1
+
+        self.k = self.log_table[self.n] + 1 if self.n > 0 else 1
+
+        # Build sparse table
+        # table[j][i] = min/max of range [i, i + 2^j - 1]
+        self.table = [[float('inf') if mode == 'min' else float('-inf')] * self.n for _ in range(self.k)]
+
+        # Initialize with original values
+        for i in range(self.n):
+            self.table[0][i] = values[i]
+
+        # Build table
+        compare = min if mode == 'min' else max
+        for j in range(1, self.k):
+            length = 1 << j  # 2^j
+            for i in range(self.n - length + 1):
+                self.table[j][i] = compare(
+                    self.table[j - 1][i],
+                    self.table[j - 1][i + (1 << (j - 1))]
+                )
+
+    def query(self, left: int, right: int) -> Optional[float]:
+        """
+        Query min/max in range [left, right) (exclusive right).
+
+        Returns None if range is empty or invalid.
+        """
+        if left >= right or left < 0 or right > self.n:
+            return None
+
+        length = right - left
+        if length == 0:
+            return None
+
+        k = self.log_table[length]
+        compare = min if self.mode == 'min' else max
+
+        return compare(
+            self.table[k][left],
+            self.table[k][right - (1 << k)]
+        )
 
 def get_level_band(price: float, levels: List[Level]) -> Decimal:
     """
@@ -214,94 +289,116 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     bear_references = []
 
     # 2. Pair and Validate Swings
-    
+    # Pre-compute sorted index/price arrays for O(log N) binary search lookups
+    # Both arrays are already sorted by bar_index due to chronological detection order
+    low_indices = [l["bar_index"] for l in swing_lows]
+    low_prices = [l["price"] for l in swing_lows]
+    high_indices = [h["bar_index"] for h in swing_highs]
+    high_prices = [h["price"] for h in swing_highs]
+
+    # Build sparse tables for O(1) range min/max queries
+    low_min_table = SparseTable(low_prices, mode='min')
+    high_max_table = SparseTable(high_prices, mode='max')
+
     # Bull References: High BEFORE Low (Downswing)
+    # O(H × avg_valid_pairs) with O(1) interval validation
     for high_swing in swing_highs:
-        for low_swing in swing_lows:
-            if high_swing["bar_index"] < low_swing["bar_index"]:
-                # Candidate found
-                high_price = high_swing["price"]
-                low_price = low_swing["price"]
-                size = high_price - low_price
+        high_idx = high_swing["bar_index"]
+        high_price = high_swing["price"]
 
-                if size <= 0:
-                    continue  # skip invalid geometric configuration
+        # Binary search: find first low_swing where bar_index > high_idx
+        start_j = bisect.bisect_right(low_indices, high_idx)
 
-                # STRICT VALIDITY CHECK:
-                # The Low must be the lowest point between High and Low.
-                # If there is a lower low in between, then this is not a valid single swing.
-                # We can check against other swing_lows in the interval.
-                is_valid_structure = True
-                for intermediate_low in swing_lows:
-                    if high_swing["bar_index"] < intermediate_low["bar_index"] < low_swing["bar_index"]:
-                        if intermediate_low["price"] < low_price:
-                            is_valid_structure = False
-                            break
-                    # Optimization: if intermediate_low index > low_index, stop (assuming sorted list? No, not guaranteed sorted by index)
-                    # swing_lows is appended in chronological order, so it IS sorted by index.
-                    if intermediate_low["bar_index"] >= low_swing["bar_index"]:
-                        break
-                
-                if not is_valid_structure:
-                    continue
+        for j in range(start_j, len(swing_lows)):
+            low_swing = swing_lows[j]
+            low_idx = low_swing["bar_index"]
+            low_price = low_swing["price"]
+            size = high_price - low_price
 
-                # Validation: low + 0.382 * size < current < low + 2.0 * size
-                level_0382 = low_price + (0.382 * size)
-                level_2x = low_price + (2.0 * size)
-                
-                if level_0382 < current_price < level_2x:
-                    bull_references.append({
-                        "high_price": high_price,
-                        "high_bar_index": high_swing["bar_index"],
-                        "low_price": low_price,
-                        "low_bar_index": low_swing["bar_index"],
-                        "size": size,
-                        "level_0382": level_0382,
-                        "level_2x": level_2x,
-                        "rank": 0 # Placeholder
-                    })
+            if size <= 0:
+                continue  # skip invalid geometric configuration
+
+            # STRICT VALIDITY CHECK using O(1) RMQ:
+            # The Low must be the lowest point between High and Low.
+            # Find range of swing_lows in interval (high_idx, low_idx)
+            interval_start = start_j  # Already computed, reuse
+            interval_end = j  # Current position (exclusive, the low we're checking)
+
+            is_valid_structure = True
+            if interval_start < interval_end:
+                # Check if minimum in interval is lower than our candidate low
+                interval_min = low_min_table.query(interval_start, interval_end)
+                if interval_min is not None and interval_min < low_price:
+                    is_valid_structure = False
+
+            if not is_valid_structure:
+                continue
+
+            # Validation: low + 0.382 * size < current < low + 2.0 * size
+            level_0382 = low_price + (0.382 * size)
+            level_2x = low_price + (2.0 * size)
+
+            if level_0382 < current_price < level_2x:
+                bull_references.append({
+                    "high_price": high_price,
+                    "high_bar_index": high_idx,
+                    "low_price": low_price,
+                    "low_bar_index": low_idx,
+                    "size": size,
+                    "level_0382": level_0382,
+                    "level_2x": level_2x,
+                    "rank": 0  # Placeholder
+                })
 
     # Bear References: Low BEFORE High (Upswing)
+    # O(L × avg_valid_pairs) with O(1) interval validation
     for low_swing in swing_lows:
-        for high_swing in swing_highs:
-            if low_swing["bar_index"] < high_swing["bar_index"]:
-                # Candidate found
-                high_price = high_swing["price"]
-                low_price = low_swing["price"]
-                size = high_price - low_price
+        low_idx = low_swing["bar_index"]
+        low_price = low_swing["price"]
 
-                if size <= 0:
-                    continue  # skip invalid geometric configuration
-                
-                # STRICT VALIDITY CHECK:
-                # The High must be the highest point between Low and High.
-                is_valid_structure = True
-                for intermediate_high in swing_highs:
-                    if low_swing["bar_index"] < intermediate_high["bar_index"] < high_swing["bar_index"]:
-                        if intermediate_high["price"] > high_price:
-                            is_valid_structure = False
-                            break
-                    if intermediate_high["bar_index"] >= high_swing["bar_index"]:
-                        break
-                
-                if not is_valid_structure:
-                    continue
+        # Binary search: find first high_swing where bar_index > low_idx
+        start_j = bisect.bisect_right(high_indices, low_idx)
 
-                # Validation: high - 2.0 * size < current < high - 0.382 * size
-                level_0382 = high_price - (0.382 * size)
-                level_2x = high_price - (2.0 * size)
-                
-                if level_2x < current_price < level_0382:
-                    bear_references.append({
-                        "high_price": high_price,
-                        "high_bar_index": high_swing["bar_index"],
-                        "low_price": low_price,
-                        "low_bar_index": low_swing["bar_index"],
-                        "size": size,
-                        "level_0382": level_0382,
-                        "level_2x": level_2x,
-                        "rank": 0 # Placeholder
-                    })
+        for j in range(start_j, len(swing_highs)):
+            high_swing = swing_highs[j]
+            high_idx = high_swing["bar_index"]
+            high_price = high_swing["price"]
+            size = high_price - low_price
+
+            if size <= 0:
+                continue  # skip invalid geometric configuration
+
+            # STRICT VALIDITY CHECK using O(1) RMQ:
+            # The High must be the highest point between Low and High.
+            # Find range of swing_highs in interval (low_idx, high_idx)
+            interval_start = start_j  # Already computed, reuse
+            interval_end = j  # Current position (exclusive, the high we're checking)
+
+            is_valid_structure = True
+            if interval_start < interval_end:
+                # Check if maximum in interval is higher than our candidate high
+                interval_max = high_max_table.query(interval_start, interval_end)
+                if interval_max is not None and interval_max > high_price:
+                    is_valid_structure = False
+
+            if not is_valid_structure:
+                continue
+
+            # Validation: high - 2.0 * size < current < high - 0.382 * size
+            level_0382 = high_price - (0.382 * size)
+            level_2x = high_price - (2.0 * size)
+
+            if level_2x < current_price < level_0382:
+                bear_references.append({
+                    "high_price": high_price,
+                    "high_bar_index": high_idx,
+                    "low_price": low_price,
+                    "low_bar_index": low_idx,
+                    "size": size,
+                    "level_0382": level_0382,
+                    "level_2x": level_2x,
+                    "rank": 0  # Placeholder
+                })
 
     # 3. Filter Redundant Swings (Optional)
     if filter_redundant:

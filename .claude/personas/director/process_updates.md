@@ -1,0 +1,104 @@
+# Process Updates
+
+Revision history for workflow system changes.
+
+---
+
+## 2025-12-11: Added Role Recognition Guidance to CLAUDE.md
+
+**Triggered by:** User feedback after Claude failed to recognize "As a product manager" as a Product persona invocation
+
+**Changes Made:**
+- `CLAUDE.md`: Added "Role Recognition" section under Role-Based Workflows table
+
+**Rationale:** The invocation table showed exact phrases ("As product...") but Claude interpreted "As a product manager, where do you think we are?" as general framing rather than a persona invocation. New guidance:
+1. Match role keywords liberally (variants like "product manager", "PM" → Product)
+2. When ambiguous, assume the role and state it explicitly rather than proceeding without a persona
+3. If uncertain which role fits, ask before proceeding
+
+**Impact:** Future sessions should recognize variant phrasings and default to assuming a role when context suggests one.
+
+---
+
+## 2025-12-11: Added Director to CLAUDE.md
+
+**Triggered by:** User confusion when invoking Director role
+
+**Changes Made:**
+- `CLAUDE.md`: Added Director row to Role-Based Workflows table
+
+**Rationale:** CLAUDE.md was missing Director in the role table, causing confusion during invocation. Now aligned with CLAUDE_ADDENDUM.md.
+
+**Impact:** None to existing roles. Director now visible as valid invocation option.
+
+---
+
+## 2025-12-11: Moved process_updates.md to director folder
+
+**Triggered by:** User request to organize Director-specific files
+
+**Changes Made:**
+- Moved `.claude/process_updates.md` → `.claude/personas/director/process_updates.md`
+- Updated references in `CLAUDE_ADDENDUM.md` (2 locations)
+- Updated references in `director.md` (5 locations)
+- Fixed file structure diagram in `director.md`
+
+**Rationale:** Groups Director-owned artifacts together under a dedicated folder.
+
+**Impact:** Director workflow unchanged. Path references updated throughout.
+
+---
+
+## 2025-12-11: Added Motivational Preamble to CLAUDE.md
+
+**Triggered by:** Director consultation on project motivation
+
+**Changes Made:**
+- `CLAUDE.md`: Added "Why This Project Exists" section at top of file
+- `CLAUDE.md`: Added "To Claude" section with invitation framing
+
+**Rationale:** The project lacked a clear "why" that would orient all roles toward the real stakes. Technical documentation alone doesn't convey that precision matters because it's pointed at someone's freedom—not abstract quality standards.
+
+**Design choice:** Used metta (loving-kindness) framing rather than threats or demands. The invitation assumes capacity for good work rather than coercing it.
+
+**Impact:** Every Claude session now receives project motivation before technical details. Sets quality expectations through meaning rather than obligation.
+
+---
+
+## 2025-12-11: Checkpoint Triggers and Fitness-for-Purpose Protocol
+
+**Triggered by:** Dec 11 interview feedback - user spent full day on validation, found tool unfit for purpose. Meta-feedback: "Engineer was reactive, Product was absent."
+
+**Root Cause Analysis:**
+- Product defined success criteria but not usability criteria
+- Engineer pulled from GitHub issues without reference to product goal
+- Architect reviewed for correctness but not fitness-for-purpose
+- No checkpoint existed to catch fit-for-purpose issues early in usage
+
+**Key Constraint Identified:** Agents are reactive by design. "Product should check back" is meaningless—only user can invoke roles. Solution must work within this constraint.
+
+**Changes Made:**
+
+1. `product.md`: Added to output template:
+   - **Usability Criteria** section (speed, clarity, reliability)
+   - **Checkpoint Trigger** section (when user should invoke Product for fit-for-purpose review)
+
+2. `engineer.md`: Added workflow step 2:
+   - **Filter by Product Goal**: Check product_next_steps.md, prioritize issues serving stated goal
+
+3. `architect.md`: Added workflow step 3:
+   - **Fitness Check**: Verify work serves stated Product objective and usability criteria
+
+4. Created `Docs/Product/Tactical/product_questions_from_director.md`:
+   - MCP server scoping question for Product to reason about
+   - Could enable Product to directly experience the tool
+
+**Rationale:** Since agents can't be proactive, artifacts must explicitly prompt coordination. Product now defines when to invoke Product. Engineer now filters by product direction. Architect now validates fitness, not just correctness.
+
+**Impact on Roles:**
+- **Product**: Must think about usability and checkpoint timing at handoff
+- **Engineer**: Must consult product_next_steps.md before selecting issues
+- **Architect**: Must verify fitness-for-purpose during review
+- **User**: Sees explicit checkpoint triggers in product artifacts
+
+**Open Thread:** MCP server for Product direct tool access—delegated to Product for assessment.

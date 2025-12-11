@@ -79,28 +79,27 @@ def test_format_detection(format_a_file, format_b_file):
 
 def test_invalid_ohlc_rows(tmp_path):
     """Test Case 4: Invalid OHLC Rows."""
-    # Need < 1% invalid rows to avoid exception.
-    # Create 200 rows. 1 invalid.
+    # Need < 50% invalid rows to avoid exception (stricter threshold).
+    # Create 200 rows with unique timestamps. 1 invalid.
     # Format A
     rows = []
-    base_ts = 1600000000
-    # 199 valid rows
+    # 199 valid rows with unique timestamps
     for i in range(199):
-        # 01/04/2007;18:00:00...
-        # Just use dummy dates, logic doesn't care about continuity for validity check (only for gaps)
-        # But let's make them valid format
-        rows.append(f"01/04/2007;18:00:00;100;110;90;105;100\n")
-        
-    # 1 invalid row (High < Low)
-    rows.append(f"01/04/2007;18:01:00;100;90;95;100;100\n")
-    
+        # Each row gets a unique minute: 18:00:00, 18:01:00, etc.
+        hour = 18 + (i // 60)
+        minute = i % 60
+        rows.append(f"01/04/2007;{hour:02d}:{minute:02d}:00;100;110;90;105;100\n")
+
+    # 1 invalid row (High < Low) with unique timestamp
+    rows.append(f"02/04/2007;09:30:00;100;90;95;100;100\n")
+
     p = tmp_path / "invalid.csv"
     with open(p, 'w') as f:
         f.writelines(rows)
-    
+
     df, gaps = load_ohlc(str(p))
-    
-    assert len(df) == 199 # 1 dropped
+
+    assert len(df) == 199  # 1 dropped
 
 def test_gap_detection(tmp_path):
     """Test Case 5: Gap Detection."""
