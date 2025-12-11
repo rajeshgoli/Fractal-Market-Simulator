@@ -9,17 +9,31 @@ This file tracks engineering changes since the last architect review.
 
 ## Current Status
 
-No pending changes. Phase 0 algorithm rewrite reviewed and accepted.
+No pending changes. All work has been reviewed.
 
 ---
 
 ## Change Log (Since Last Review)
 
-None.
+*No changes pending.*
 
 ---
 
 ## Previously Reviewed (Archive)
+
+### Review: 2025-12-11 (Phase 1 Visualization Improvements)
+
+**Changes Reviewed:**
+- `src/visualization/config.py` - Added swing cap config
+- `src/visualization/renderer.py` - Swing cap + dynamic aggregation
+- `src/visualization/keyboard_handler.py` - Toggle shortcut
+- `tests/test_visualization_renderer.py` - 11 new tests
+- `Docs/engineer_notes/stability_audit_dec11.md` - Audit findings
+- `Docs/engineer_notes/phase1_visualization_dec11.md` - Engineer note
+
+**Outcome:** Accepted. Phase 1 complete. Phase 2 (stability) ready to begin.
+
+**Review Document:** `Docs/Architect/architect_notes_appendix.md`
 
 ### Review: 2025-12-11 (Algorithm Rewrite)
 

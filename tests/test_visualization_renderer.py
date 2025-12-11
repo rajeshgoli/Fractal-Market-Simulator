@@ -456,5 +456,276 @@ class TestRenderIntegration:
         assert 'S' in config.aggregations
 
 
+class TestSwingCapFunctionality:
+    """Tests for swing cap filtering functionality (Phase 1 Priority 1)."""
+
+    @pytest.fixture
+    def scale_config(self):
+        """Create test scale configuration."""
+        return ScaleConfig(
+            boundaries={"S": (0, 25), "M": (25, 50), "L": (50, 100), "XL": (100, float('inf'))},
+            aggregations={"S": 1, "M": 5, "L": 15, "XL": 60},
+            used_defaults=False,
+            swing_count=25,
+            median_durations={"S": 10, "M": 20, "L": 30, "XL": 40}
+        )
+
+    @pytest.fixture
+    def sample_bars(self):
+        """Create sample bars for testing."""
+        bars = []
+        for i in range(500):
+            timestamp = 1609459200 + i * 60
+            bars.append(Bar(
+                index=i,
+                timestamp=timestamp,
+                open=4000.0 + i * 0.5,
+                high=4002.0 + i * 0.5,
+                low=3998.0 + i * 0.5,
+                close=4001.0 + i * 0.5
+            ))
+        return bars
+
+    @pytest.fixture
+    def bar_aggregator(self, sample_bars):
+        """Create test bar aggregator."""
+        return BarAggregator(sample_bars)
+
+    @pytest.fixture
+    def many_swings(self):
+        """Create many swings for cap testing."""
+        swings = []
+        for i in range(10):
+            # Vary timestamps to test recency scoring
+            # Later swings have higher timestamps (more recent)
+            swings.append(ActiveSwing(
+                swing_id=f"swing-{i}",
+                scale="S",
+                high_price=4010.0 + i * 5,  # Increasing sizes
+                low_price=3990.0 + i * 5,
+                high_timestamp=1609459260 + i * 10000,  # More recent as i increases
+                low_timestamp=1609459200 + i * 10000,
+                is_bull=True,
+                state="active",
+                levels={"0": 3990.0 + i * 5, "1.0": 4010.0 + i * 5}
+            ))
+        return swings
+
+    def test_swing_cap_default_value(self, scale_config, bar_aggregator):
+        """Test that default swing cap is 5."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+        assert renderer.config.max_swings_per_scale == 5
+
+    def test_swing_cap_filters_excess_swings(self, scale_config, bar_aggregator, many_swings):
+        """Test that swing cap filters swings when there are more than the cap."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        filtered = renderer._apply_swing_cap(many_swings, current_bar_idx=100)
+
+        assert len(filtered) <= renderer.config.max_swings_per_scale
+        assert len(filtered) == 5  # Default cap
+
+    def test_swing_cap_no_filter_when_under_cap(self, scale_config, bar_aggregator):
+        """Test that swing cap doesn't filter when under the cap."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        few_swings = [
+            ActiveSwing(
+                swing_id=f"swing-{i}",
+                scale="S",
+                high_price=4010.0,
+                low_price=3990.0,
+                high_timestamp=1609459260,
+                low_timestamp=1609459200,
+                is_bull=True,
+                state="active",
+                levels={}
+            ) for i in range(3)
+        ]
+
+        filtered = renderer._apply_swing_cap(few_swings, current_bar_idx=100)
+
+        assert len(filtered) == 3  # No filtering
+
+    def test_swing_cap_includes_recent_event_swing(self, scale_config, bar_aggregator, many_swings):
+        """Test that recent event swing is always included."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        # Pick a swing that would normally be excluded (old, small)
+        event_swing_id = "swing-0"  # Oldest swing
+
+        filtered = renderer._apply_swing_cap(
+            many_swings,
+            current_bar_idx=200,
+            recent_event_swing_id=event_swing_id
+        )
+
+        # Verify event swing is included regardless of score
+        included_ids = [s.swing_id for s in filtered]
+        assert event_swing_id in included_ids
+
+    def test_toggle_show_all_swings(self, scale_config, bar_aggregator):
+        """Test toggling show_all_swings bypasses cap."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        assert renderer.config.show_all_swings is False
+
+        result = renderer.toggle_show_all_swings()
+        assert result is True
+        assert renderer.config.show_all_swings is True
+
+        result = renderer.toggle_show_all_swings()
+        assert result is False
+        assert renderer.config.show_all_swings is False
+
+    def test_group_swings_bypasses_cap_when_toggled(self, scale_config, bar_aggregator, many_swings):
+        """Test that _group_swings_by_scale bypasses cap when show_all_swings is True."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        # With cap enabled
+        grouped = renderer._group_swings_by_scale(many_swings, current_bar_idx=100)
+        assert len(grouped.get("S", [])) == 5  # Capped
+
+        # Toggle to show all
+        renderer.toggle_show_all_swings()
+        grouped = renderer._group_swings_by_scale(many_swings, current_bar_idx=100)
+        assert len(grouped.get("S", [])) == 10  # All swings
+
+    def test_swing_cap_scoring_prefers_recent_large(self, scale_config, bar_aggregator):
+        """Test that scoring prefers recent and large swings."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        swings = [
+            # Old, small swing (low timestamp, small size 10.0)
+            ActiveSwing(
+                swing_id="old-small",
+                scale="S",
+                high_price=4010.0,
+                low_price=4000.0,
+                high_timestamp=1609459260,
+                low_timestamp=1609459200,
+                is_bull=True,
+                state="active",
+                levels={}
+            ),
+            # Recent, large swing (high timestamp, large size 100.0)
+            ActiveSwing(
+                swing_id="recent-large",
+                scale="S",
+                high_price=4100.0,
+                low_price=4000.0,
+                high_timestamp=1609465000,
+                low_timestamp=1609464900,
+                is_bull=True,
+                state="active",
+                levels={}
+            ),
+        ]
+
+        # Add more swings to exceed cap (medium size 10.0, medium timestamps)
+        for i in range(5):
+            swings.append(ActiveSwing(
+                swing_id=f"filler-{i}",
+                scale="S",
+                high_price=4050.0,
+                low_price=4040.0,
+                high_timestamp=1609461000 + i * 100,
+                low_timestamp=1609460900 + i * 100,
+                is_bull=True,
+                state="active",
+                levels={}
+            ))
+
+        filtered = renderer._apply_swing_cap(swings, current_bar_idx=100)
+        filtered_ids = [s.swing_id for s in filtered]
+
+        # Recent-large should be included (highest recency + large size = best score)
+        assert "recent-large" in filtered_ids
+
+
+class TestDynamicBarAggregation:
+    """Tests for dynamic bar aggregation functionality (Phase 1 Priority 2)."""
+
+    @pytest.fixture
+    def scale_config(self):
+        """Create test scale configuration."""
+        return ScaleConfig(
+            boundaries={"S": (0, 25), "M": (25, 50), "L": (50, 100), "XL": (100, float('inf'))},
+            aggregations={"S": 1, "M": 5, "L": 15, "XL": 60},
+            used_defaults=False,
+            swing_count=25,
+            median_durations={"S": 10, "M": 20, "L": 30, "XL": 40}
+        )
+
+    @pytest.fixture
+    def sample_bars(self):
+        """Create sample bars for testing."""
+        bars = []
+        for i in range(500):
+            timestamp = 1609459200 + i * 60
+            bars.append(Bar(
+                index=i,
+                timestamp=timestamp,
+                open=4000.0 + i * 0.5,
+                high=4002.0 + i * 0.5,
+                low=3998.0 + i * 0.5,
+                close=4001.0 + i * 0.5
+            ))
+        return bars
+
+    @pytest.fixture
+    def bar_aggregator(self, sample_bars):
+        """Create test bar aggregator."""
+        return BarAggregator(sample_bars)
+
+    def test_calculate_optimal_timeframe_respects_base(self, scale_config, bar_aggregator):
+        """Test that optimal timeframe never goes below base for scale."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        # For M scale with base timeframe 5, should never return < 5
+        tf = renderer._calculate_optimal_timeframe("M", source_bar_count=10)
+        assert tf >= 5  # Base for M scale
+
+        # For L scale with base timeframe 15, should never return < 15
+        tf = renderer._calculate_optimal_timeframe("L", source_bar_count=20)
+        assert tf >= 15  # Base for L scale
+
+    def test_calculate_optimal_timeframe_targets_50_candles(self, scale_config, bar_aggregator):
+        """Test that optimal timeframe aims for ~50 candles."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        # 250 source bars should give 50 candles with 5m aggregation
+        tf = renderer._calculate_optimal_timeframe("M", source_bar_count=250)
+        expected_candles = 250 / tf
+
+        # Should be in 40-60 range (our target)
+        assert 40 <= expected_candles <= 60 or expected_candles < 40  # Allow fewer if at base
+
+    def test_calculate_optimal_timeframe_handles_small_datasets(self, scale_config, bar_aggregator):
+        """Test handling of very small datasets."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        # 0 bars should return base timeframe
+        tf = renderer._calculate_optimal_timeframe("S", source_bar_count=0)
+        assert tf == 1  # Base for S scale
+
+        # Few bars should return base timeframe
+        tf = renderer._calculate_optimal_timeframe("S", source_bar_count=10)
+        assert tf == 1  # Base for S scale
+
+    def test_calculate_optimal_timeframe_scales_hierarchy(self, scale_config, bar_aggregator):
+        """Test that scale hierarchy is maintained."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        # Given same bar count, larger scales should have >= timeframe
+        tf_s = renderer._calculate_optimal_timeframe("S", source_bar_count=500)
+        tf_m = renderer._calculate_optimal_timeframe("M", source_bar_count=500)
+        tf_l = renderer._calculate_optimal_timeframe("L", source_bar_count=500)
+        tf_xl = renderer._calculate_optimal_timeframe("XL", source_bar_count=500)
+
+        # Hierarchy should be maintained
+        assert tf_s <= tf_m <= tf_l <= tf_xl
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -27,6 +27,7 @@ Swing Visibility Controls (Issue #12):
 - V: Cycle visibility mode (All -> Single -> Recent Event -> All)
 - [: Previous swing in Single mode
 - ]: Next swing in Single mode
+- A: Toggle show all swings (bypass swing cap)
 
 Author: Generated for Market Simulator Project
 """
@@ -158,6 +159,8 @@ class KeyboardHandler:
             self._cycle_previous_swing()
         elif key == ']':
             self._cycle_next_swing()
+        elif key == 'a':
+            self._toggle_show_all_swings()
 
     def _toggle_pause_resume(self) -> None:
         """Toggle between paused and playing states."""
@@ -328,6 +331,7 @@ Swing Visibility:
   V      - Cycle mode (All -> Single -> Recent -> All)
   [      - Previous swing (in Single mode)
   ]      - Next swing (in Single mode)
+  A      - Toggle show all swings (bypass cap)
 """
         self._notify_action("help", {
             "message": help_text
@@ -529,3 +533,29 @@ Swing Visibility:
         self._notify_action("swing_previous", {
             "message": "Previous swing selected"
         })
+
+    def _toggle_show_all_swings(self) -> None:
+        """Toggle between showing capped swings and all swings."""
+        if self.visualization_renderer is None:
+            self._notify_action("swing_cap_error", {
+                "message": "No renderer configured for swing cap control"
+            })
+            return
+
+        show_all = self.visualization_renderer.toggle_show_all_swings()
+
+        # Trigger redraw to reflect new visibility
+        self.visualization_renderer._rerender_cached_state()
+
+        if show_all:
+            self._notify_action("swing_cap_toggle", {
+                "show_all": True,
+                "message": "Showing all swings (cap bypassed)"
+            })
+        else:
+            cap = self.visualization_renderer.config.max_swings_per_scale
+            self._notify_action("swing_cap_toggle", {
+                "show_all": False,
+                "cap": cap,
+                "message": f"Showing top {cap} swings per scale"
+            })

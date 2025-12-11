@@ -100,6 +100,9 @@ class VisualizationRenderer:
         self._cached_recent_events: List[StructuralEvent] = []
         self._cached_highlighted_events: Optional[List[StructuralEvent]] = None
 
+        # Track currently used timeframes per scale (for dynamic aggregation display)
+        self._current_timeframes: Dict[str, int] = {}
+
         logging.info(f"VisualizationRenderer initialized with {len(self.scale_config.boundaries)} scales")
     
     def initialize_display(self) -> None:
@@ -330,8 +333,19 @@ class VisualizationRenderer:
             recent_events: Recent structural events
             highlighted_events: Events to emphasize
         """
-        # Group swings by scale
-        swings_by_scale = self._group_swings_by_scale(active_swings)
+        # Extract most recent event's swing ID for swing cap special rule
+        recent_event_swing_id = None
+        if recent_events:
+            most_recent = max(recent_events, key=lambda e: e.source_bar_idx)
+            if hasattr(most_recent, 'swing_id'):
+                recent_event_swing_id = most_recent.swing_id
+
+        # Group swings by scale with swing cap filtering
+        swings_by_scale = self._group_swings_by_scale(
+            active_swings,
+            current_bar_idx,
+            recent_event_swing_id
+        )
         events_by_scale = self._group_events_by_scale(recent_events)
 
         # Update each panel
@@ -388,8 +402,15 @@ class VisualizationRenderer:
         # Clear previous artists
         self._clear_panel_artists(panel_idx)
 
-        # Get aggregated bars for this scale
-        timeframe = self.scale_config.aggregations.get(scale, 1)
+        # Calculate source bar span for dynamic timeframe selection
+        source_bar_span = view_window.end_idx - view_window.start_idx
+
+        # Use dynamic timeframe calculation for optimal candle density (40-60 candles)
+        timeframe = self._calculate_optimal_timeframe(scale, source_bar_span)
+
+        # Track current timeframe for title display
+        self._current_timeframes[scale] = timeframe
+
         try:
             aggregated_bars = self.bar_aggregator.get_bars(timeframe)
         except Exception as e:
@@ -839,8 +860,8 @@ class VisualizationRenderer:
         """Update panel title and status annotations."""
         ax = self.axes[panel_idx]
 
-        # Get resolution info
-        aggregation = self.scale_config.aggregations.get(scale, 1)
+        # Get resolution info - use dynamic timeframe if available, else base config
+        aggregation = self._current_timeframes.get(scale, self.scale_config.aggregations.get(scale, 1))
         resolution_label = self._format_resolution(aggregation)
 
         # Build status line
@@ -900,15 +921,106 @@ class VisualizationRenderer:
     
     # Helper methods
     
-    def _group_swings_by_scale(self, swings: List[ActiveSwing]) -> Dict[str, List[ActiveSwing]]:
-        """Group swings by their scale."""
+    def _group_swings_by_scale(self, swings: List[ActiveSwing],
+                               current_bar_idx: int = None,
+                               recent_event_swing_id: str = None) -> Dict[str, List[ActiveSwing]]:
+        """
+        Group swings by scale, applying swing cap filtering.
+
+        Args:
+            swings: List of all active swings
+            current_bar_idx: Current bar index for recency calculation
+            recent_event_swing_id: ID of swing associated with most recent event (always shown)
+
+        Returns:
+            Dictionary mapping scale name to filtered list of swings
+        """
         groups = {}
         for swing in swings:
             scale = swing.scale
             if scale not in groups:
                 groups[scale] = []
             groups[scale].append(swing)
+
+        # Apply swing cap if enabled and not bypassed
+        if self.config.max_swings_per_scale > 0 and not self.config.show_all_swings:
+            bar_idx = current_bar_idx if current_bar_idx is not None else self.current_bar_idx
+            for scale, scale_swings in groups.items():
+                groups[scale] = self._apply_swing_cap(
+                    scale_swings,
+                    bar_idx,
+                    recent_event_swing_id
+                )
+
         return groups
+
+    def _apply_swing_cap(self,
+                         swings: List[ActiveSwing],
+                         current_bar_idx: int,
+                         recent_event_swing_id: str = None) -> List[ActiveSwing]:
+        """
+        Filter swings to top N by recency × size score.
+
+        Scoring formula:
+            score = 0.6 * recency_factor + 0.4 * normalized_size
+            where:
+                recency_factor = based on timestamp (more recent = higher)
+                normalized_size = swing_size / max_swing_size
+
+        The swing associated with the most recent event is ALWAYS included.
+
+        Args:
+            swings: List of swings to filter
+            current_bar_idx: Current bar index for recency calculation
+            recent_event_swing_id: ID of swing to always include (from recent event)
+
+        Returns:
+            Filtered list of top-scoring swings (up to max_swings_per_scale)
+        """
+        cap = self.config.max_swings_per_scale
+        if len(swings) <= cap:
+            return swings
+
+        # Calculate sizes and timestamps for scoring
+        def get_size(s: ActiveSwing) -> float:
+            return abs(s.high_price - s.low_price)
+
+        def get_timestamp(s: ActiveSwing) -> int:
+            return max(s.high_timestamp, s.low_timestamp)
+
+        sizes = [get_size(s) for s in swings]
+        timestamps = [get_timestamp(s) for s in swings]
+
+        max_size = max(sizes) if sizes else 1
+        max_ts = max(timestamps) if timestamps else 1
+        min_ts = min(timestamps) if timestamps else 0
+        ts_range = max(max_ts - min_ts, 1)
+
+        def score(swing: ActiveSwing) -> float:
+            # Recency based on timestamp (0 = oldest, 1 = newest)
+            swing_ts = get_timestamp(swing)
+            recency_factor = (swing_ts - min_ts) / ts_range
+
+            # Size normalized
+            swing_size = get_size(swing)
+            size_norm = swing_size / max_size if max_size > 0 else 0
+
+            return 0.6 * recency_factor + 0.4 * size_norm
+
+        # Sort by score descending
+        scored = sorted(swings, key=score, reverse=True)
+        top_swings = scored[:cap]
+
+        # Ensure recent event swing is included
+        if recent_event_swing_id:
+            already_included = any(s.swing_id == recent_event_swing_id for s in top_swings)
+            if not already_included:
+                for swing in swings:
+                    if swing.swing_id == recent_event_swing_id:
+                        top_swings.append(swing)
+                        break
+
+        return top_swings
     
     def _group_events_by_scale(self, events: List[StructuralEvent]) -> Dict[str, List[StructuralEvent]]:
         """Group events by their scale."""
@@ -1183,3 +1295,91 @@ class VisualizationRenderer:
             scale: Scale index (0-3)
         """
         self.swing_visibility.record_event(event, scale)
+
+    # Swing cap control methods (Phase 1)
+
+    def toggle_show_all_swings(self) -> bool:
+        """
+        Toggle between showing capped swings and all swings.
+
+        Returns:
+            New state of show_all_swings (True = showing all, False = capped)
+        """
+        self.config.show_all_swings = not self.config.show_all_swings
+        return self.config.show_all_swings
+
+    def get_swing_cap_status(self, scale_swings_count: Dict[str, int]) -> str:
+        """
+        Get status summary of swing cap filtering.
+
+        Args:
+            scale_swings_count: Dictionary of scale -> total swing count before filtering
+
+        Returns:
+            Status string describing current cap state
+        """
+        if self.config.show_all_swings:
+            return "Showing all swings (cap bypassed)"
+        elif self.config.max_swings_per_scale > 0:
+            cap = self.config.max_swings_per_scale
+            filtered = any(count > cap for count in scale_swings_count.values())
+            if filtered:
+                return f"Showing top {cap} swings per scale (A to show all)"
+            return f"All swings visible (< {cap} per scale)"
+        return "Swing cap disabled"
+
+    # Dynamic bar aggregation methods (Phase 1 Priority 2)
+
+    def _calculate_optimal_timeframe(self,
+                                      scale: str,
+                                      source_bar_count: int) -> int:
+        """
+        Select timeframe to achieve 40-60 visible candles.
+
+        Dynamically adjusts aggregation based on the visible time range to maintain
+        optimal candle density. Respects scale hierarchy (S never coarser than M, etc.).
+
+        Args:
+            scale: Current scale (S, M, L, XL)
+            source_bar_count: Number of 1-minute bars in visible range
+
+        Returns:
+            Optimal aggregation timeframe in minutes
+        """
+        AVAILABLE_TIMEFRAMES = [1, 5, 15, 30, 60, 240]
+        TARGET_CANDLES_MIN = 40
+        TARGET_CANDLES_MAX = 60
+        TARGET_CANDLES = 50  # Ideal target
+
+        # Base timeframe from scale config (never go below this)
+        base_timeframe = self.scale_config.aggregations.get(scale, 1)
+
+        # If very few source bars, use base timeframe
+        if source_bar_count <= 0:
+            return base_timeframe
+
+        # Find optimal timeframe
+        best_tf = base_timeframe
+        best_diff = float('inf')
+
+        for tf in AVAILABLE_TIMEFRAMES:
+            if tf < base_timeframe:
+                continue  # Respect scale hierarchy
+
+            candle_count = source_bar_count / tf
+
+            if TARGET_CANDLES_MIN <= candle_count <= TARGET_CANDLES_MAX:
+                # Within target range - prefer lower timeframe for more detail
+                diff = abs(candle_count - TARGET_CANDLES)
+                if diff < best_diff:
+                    best_tf = tf
+                    best_diff = diff
+            elif candle_count > TARGET_CANDLES_MAX:
+                # Too many candles - need higher timeframe
+                # Check if this timeframe gets us closer to target
+                diff = abs(candle_count - TARGET_CANDLES)
+                if diff < best_diff:
+                    best_tf = tf
+                    best_diff = diff
+
+        return best_tf

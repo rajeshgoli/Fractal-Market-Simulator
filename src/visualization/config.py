@@ -54,6 +54,10 @@ class RenderConfig:
     enable_frame_skipping: bool = True
     min_render_interval_ms: int = 60  # ~16 FPS max, skip renders faster than this
 
+    # Swing cap settings (Issue #12 Phase 1)
+    max_swings_per_scale: int = 5  # Max swings to display per scale (0 = show all)
+    show_all_swings: bool = False  # Toggle state for bypassing swing cap
+
     def __post_init__(self):
         """Initialize default level colors if not provided."""
         if self.level_colors is None:

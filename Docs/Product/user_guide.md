@@ -95,6 +95,9 @@ Click on the matplotlib window to give it focus, then use:
 |-----|--------|
 | SPACE | Toggle play/pause |
 | RIGHT | Step forward one bar |
+| F | Step forward 1 hour (60 bars) |
+| G | Step forward 4 hours (240 bars) |
+| D | Step forward 1 day (1440 bars) |
 | UP | Double playback speed |
 | DOWN | Halve playback speed |
 | R | Reset to beginning |
@@ -116,6 +119,7 @@ Click on the matplotlib window to give it focus, then use:
 | V | Cycle visibility mode (All -> Single -> Recent -> All) |
 | [ | Previous swing (in Single mode) |
 | ] | Next swing (in Single mode) |
+| A | Toggle show all swings (bypass 5-swing cap) |
 
 ## Advanced Usage
 
