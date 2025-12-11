@@ -24,11 +24,12 @@ Docs/
 ├── Comms/              # Cross-role communication
 │   ├── questions.md    # Active questions (From, To, Status)
 │   └── archive.md      # Resolved questions
-├── Reference/          # Long-lived documents
-│   ├── product_north_star.md
-│   ├── user_guide.md
-│   └── interview_notes.md
-└── Archive/            # Historical content
+└── Reference/          # Long-lived documents
+    ├── product_north_star.md
+    ├── user_guide.md
+    └── interview_notes.md
+
+.archive/               # Local only (not in git) - historical content
 ```
 
 ## Key Principles

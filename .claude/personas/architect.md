@@ -28,7 +28,7 @@ Review deliverables, maintain architectural vision, determine next steps and own
 - Self-contained (reader needs no other context)
 - Concise about past, detailed about future
 
-**Historical content goes to:** `Docs/Archive/`
+**Historical content:** Just overwrite state docs. Old content not tracked in git.
 
 ## Output Format
 

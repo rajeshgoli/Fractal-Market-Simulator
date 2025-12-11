@@ -64,19 +64,20 @@ project/
 │       └── director/
 │           └── process_updates.md     # Workflow revision history
 │
-└── Docs/
-    ├── State/                         # Current state (single files, overwrite)
-    │   ├── architect_notes.md
-    │   ├── product_direction.md
-    │   └── pending_review.md
-    ├── Comms/                         # Cross-role communication
-    │   ├── questions.md               # Active questions
-    │   └── archive.md                 # Resolved questions
-    ├── Reference/                     # Long-lived documents
-    │   ├── product_north_star.md
-    │   ├── user_guide.md
-    │   └── interview_notes.md
-    └── Archive/                       # Historical content
+├── Docs/
+│   ├── State/                         # Current state (single files, overwrite)
+│   │   ├── architect_notes.md
+│   │   ├── product_direction.md
+│   │   └── pending_review.md
+│   ├── Comms/                         # Cross-role communication
+│   │   ├── questions.md               # Active questions
+│   │   └── archive.md                 # Resolved questions
+│   └── Reference/                     # Long-lived documents
+│       ├── product_north_star.md
+│       ├── user_guide.md
+│       └── interview_notes.md
+│
+└── .archive/                          # Local only (not in git) - historical content
 ```
 
 ---
