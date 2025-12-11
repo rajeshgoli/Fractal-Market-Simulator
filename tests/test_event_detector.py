@@ -269,93 +269,110 @@ class TestCompletion:
 
 
 class TestInvalidation:
-    """Test invalidation detection with close and wick thresholds."""
-    
-    def test_invalidation_close_below_minus_0_1(self, detector, sample_bull_swing):
-        """Close below -0.1 triggers invalidation"""
-        stop_level = sample_bull_swing.levels["-0.1"]
-        
-        previous_bar = Bar(timestamp=1600, open=stop_level+2, high=stop_level+5, low=stop_level, close=stop_level+1, index=0)
-        # Close below -0.1 level
-        current_bar = Bar(timestamp=1700, open=stop_level+1, high=stop_level+2, low=stop_level-5, close=stop_level-2, index=1)
-        
+    """Test invalidation detection - now scale-aware per Issue #13.
+
+    Note: Original tests used M scale with -0.1/-0.15 thresholds.
+    After Issue #13, M scale uses S/M strict rules (no trade below L).
+    The L/XL threshold rules are now tested in TestLXLScaleInvalidation.
+    These tests are updated to verify M scale now uses S/M rules.
+    """
+
+    def test_invalidation_m_scale_trade_below_l(self, detector, sample_bull_swing):
+        """M scale bull swing invalidates when price trades below L (Issue #13)"""
+        # M scale now uses S/M strict rules - any trade below L invalidates
+        # sample_bull_swing has scale="M", L=100, so trading below 100 triggers invalidation
+
+        previous_bar = Bar(timestamp=1600, open=102.0, high=105.0, low=101.0, close=102.0, index=0)
+        # Trade below L (100)
+        current_bar = Bar(timestamp=1700, open=101.0, high=102.0, low=98.0, close=99.0, index=1)
+
+        # Set lowest_since_low to reflect the bar's low (simulating state tracking)
+        sample_bull_swing.lowest_since_low = 98.0
+
         events = detector.detect_events(
             bar=current_bar,
             source_bar_idx=1,
             active_swings=[sample_bull_swing],
             previous_bar=previous_bar
         )
-        
+
         invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
         assert len(invalidation_events) == 1
-        
+
         invalidation = invalidation_events[0]
         assert invalidation.severity == EventSeverity.MAJOR
-        assert invalidation.level_name == "-0.1"
         assert "INVALIDATED" in invalidation.description
-        assert "close below" in invalidation.description
-    
-    def test_invalidation_wick_below_minus_0_15(self, detector, sample_bull_swing):
-        """Wick to -0.16 triggers invalidation even with close above -0.1"""
-        stop_level = sample_bull_swing.levels["-0.1"]
-        swing_size = sample_bull_swing.high_price - sample_bull_swing.low_price
-        wick_threshold = sample_bull_swing.low_price + (swing_size * detector.invalidation_wick_threshold)
-        
-        previous_bar = Bar(timestamp=1600, open=stop_level+2, high=stop_level+5, low=stop_level, close=stop_level+1, index=0)
-        # Wick below -0.15 threshold but close above -0.1
-        current_bar = Bar(timestamp=1700, open=stop_level+1, high=stop_level+2, low=wick_threshold-1, close=stop_level+0.5, index=1)
-        
+        assert "S/M strict rule" in invalidation.description
+
+    def test_invalidation_m_scale_valid_above_l(self, detector, sample_bull_swing):
+        """M scale bull swing valid when price stays above L (Issue #13)"""
+        previous_bar = Bar(timestamp=1600, open=102.0, high=105.0, low=101.0, close=102.0, index=0)
+        # Price stays above L (100)
+        current_bar = Bar(timestamp=1700, open=102.0, high=108.0, low=101.0, close=106.0, index=1)
+
+        # Set lowest_since_low above L
+        sample_bull_swing.lowest_since_low = 101.0
+
         events = detector.detect_events(
             bar=current_bar,
             source_bar_idx=1,
             active_swings=[sample_bull_swing],
             previous_bar=previous_bar
         )
-        
-        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
-        assert len(invalidation_events) == 1
-        
-        invalidation = invalidation_events[0]
-        assert "wick below" in invalidation.description
-    
-    def test_wick_between_thresholds_no_invalidation(self, detector, sample_bull_swing):
-        """Wick to -0.12 with close above -0.1 = no invalidation"""
-        stop_level = sample_bull_swing.levels["-0.1"]
-        
-        previous_bar = Bar(timestamp=1600, open=stop_level+2, high=stop_level+5, low=stop_level, close=stop_level+1, index=0)
-        # Wick between -0.1 and -0.15, close above -0.1
-        current_bar = Bar(timestamp=1700, open=stop_level+1, high=stop_level+2, low=stop_level-2, close=stop_level+0.5, index=1)
-        
-        events = detector.detect_events(
-            bar=current_bar,
-            source_bar_idx=1,
-            active_swings=[sample_bull_swing],
-            previous_bar=previous_bar
-        )
-        
+
         invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
         assert len(invalidation_events) == 0
+
+    def test_m_scale_no_longer_uses_minus_0_15_wick_threshold(self, detector, sample_bull_swing):
+        """M scale no longer uses -0.15 wick threshold - uses S/M strict rules (Issue #13)"""
+        # Under old rules, wick to -0.15 would trigger invalidation
+        # Under new S/M rules, ANY trade below L triggers invalidation
+        # So a wick slightly below L already invalidates, not waiting for -0.15
+
+        previous_bar = Bar(timestamp=1600, open=102.0, high=105.0, low=101.0, close=102.0, index=0)
+        # Wick just slightly below L (100), which didn't trigger old -0.15 rule
+        # but DOES trigger new S/M strict rule
+        current_bar = Bar(timestamp=1700, open=101.0, high=103.0, low=99.0, close=102.0, index=1)
+
+        sample_bull_swing.lowest_since_low = 99.0
+
+        events = detector.detect_events(
+            bar=current_bar,
+            source_bar_idx=1,
+            active_swings=[sample_bull_swing],
+            previous_bar=previous_bar
+        )
+
+        # Should invalidate under new S/M rules even though wick is only to -0.02 (99 vs L=100)
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 1
+        assert "S/M strict rule" in invalidation_events[0].description
     
-    def test_bear_invalidation(self, detector, sample_bear_swing):
-        """Bear swing invalidates on close above -0.1 (upward)"""
-        stop_level = sample_bear_swing.levels["-0.1"]
-        
-        previous_bar = Bar(timestamp=1600, open=stop_level-2, high=stop_level, low=stop_level-5, close=stop_level-1, index=0)
-        # Close above -0.1 level for bear swing
-        current_bar = Bar(timestamp=1700, open=stop_level-1, high=stop_level+5, low=stop_level-2, close=stop_level+2, index=1)
-        
+    def test_bear_invalidation_m_scale(self, detector, sample_bear_swing):
+        """M scale bear swing invalidates when price trades above H (Issue #13)"""
+        # M scale now uses S/M strict rules - any trade above H invalidates
+        # sample_bear_swing has scale="M", H=200
+
+        previous_bar = Bar(timestamp=1600, open=195.0, high=198.0, low=193.0, close=196.0, index=0)
+        # Trade above H (200)
+        current_bar = Bar(timestamp=1700, open=198.0, high=202.0, low=197.0, close=199.0, index=1)
+
+        # Set highest_since_high to reflect the bar's high
+        sample_bear_swing.highest_since_high = 202.0
+
         events = detector.detect_events(
             bar=current_bar,
             source_bar_idx=1,
             active_swings=[sample_bear_swing],
             previous_bar=previous_bar
         )
-        
+
         invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
         assert len(invalidation_events) == 1
-        
+
         invalidation = invalidation_events[0]
         assert invalidation.swing_id == "bear-M-002"
+        assert "S/M strict rule" in invalidation.description
 
 
 class TestEventPriority:
@@ -575,6 +592,490 @@ class TestLevelCalculatorIntegration:
         assert completion.level_price == level_2x
         assert completion.swing_id == "bull-integration-001"
         assert "COMPLETED" in completion.description
+
+
+class TestSMScaleInvalidation:
+    """Test S/M scale invalidation rules (Issue #13)."""
+
+    def test_sm_bull_valid_above_low(self, detector):
+        """S/M bull swing remains valid when price stays above L."""
+        swing = ActiveSwing(
+            swing_id="bull-S-001",
+            scale="S",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0, "-0.1": 95.0},
+            encroachment_achieved=True,
+            lowest_since_low=105.0,  # Stayed above L
+            highest_since_high=None
+        )
+
+        # Price stays above L
+        bar = Bar(timestamp=1700, open=110.0, high=120.0, low=105.0, close=115.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=105.0, high=112.0, low=104.0, close=110.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 0
+
+    def test_sm_bull_invalid_below_low(self, detector):
+        """S/M bull swing invalidates when price trades below L."""
+        swing = ActiveSwing(
+            swing_id="bull-S-002",
+            scale="S",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0, "-0.1": 95.0},
+            encroachment_achieved=True,
+            lowest_since_low=98.0,  # Traded below L
+            highest_since_high=None
+        )
+
+        bar = Bar(timestamp=1700, open=102.0, high=105.0, low=98.0, close=101.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=105.0, high=107.0, low=104.0, close=102.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 1
+        assert "S/M strict rule" in invalidation_events[0].description
+
+    def test_sm_bear_valid_below_high(self, detector):
+        """S/M bear swing remains valid when price stays below H."""
+        swing = ActiveSwing(
+            swing_id="bear-S-001",
+            scale="S",
+            high_price=200.0,
+            low_price=150.0,
+            high_timestamp=500,
+            low_timestamp=1000,
+            is_bull=False,
+            state="active",
+            levels={"0.618": 169.1, "1": 150.0, "2": 100.0, "-0.1": 205.0},
+            encroachment_achieved=True,
+            lowest_since_low=None,
+            highest_since_high=195.0  # Stayed below H
+        )
+
+        bar = Bar(timestamp=1700, open=175.0, high=195.0, low=170.0, close=180.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=180.0, high=190.0, low=178.0, close=175.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 0
+
+    def test_sm_bear_invalid_above_high(self, detector):
+        """S/M bear swing invalidates when price trades above H."""
+        swing = ActiveSwing(
+            swing_id="bear-S-002",
+            scale="S",
+            high_price=200.0,
+            low_price=150.0,
+            high_timestamp=500,
+            low_timestamp=1000,
+            is_bull=False,
+            state="active",
+            levels={"0.618": 169.1, "1": 150.0, "2": 100.0, "-0.1": 205.0},
+            encroachment_achieved=True,
+            lowest_since_low=None,
+            highest_since_high=202.0  # Traded above H
+        )
+
+        bar = Bar(timestamp=1700, open=198.0, high=202.0, low=196.0, close=199.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=195.0, high=198.0, low=194.0, close=198.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 1
+        assert "S/M strict rule" in invalidation_events[0].description
+
+    def test_m_scale_uses_sm_rules(self, detector):
+        """M scale uses S/M rules (not L/XL)."""
+        swing = ActiveSwing(
+            swing_id="bull-M-001",
+            scale="M",  # M scale
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0, "-0.1": 95.0},
+            encroachment_achieved=True,
+            lowest_since_low=98.0,  # Below L, should invalidate under S/M rules
+            highest_since_high=None
+        )
+
+        bar = Bar(timestamp=1700, open=102.0, high=105.0, low=98.0, close=101.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=105.0, high=107.0, low=104.0, close=102.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 1
+        assert "S/M strict rule" in invalidation_events[0].description
+
+
+class TestLXLScaleInvalidation:
+    """Test L/XL scale invalidation rules (Issue #13)."""
+
+    def test_lxl_bull_valid_above_deep_threshold(self, detector):
+        """L/XL bull swing valid when price above L - 0.15*delta."""
+        # swing_size = 50, so L - 0.15*delta = 100 - 7.5 = 92.5
+        swing = ActiveSwing(
+            swing_id="bull-L-001",
+            scale="L",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0, "-0.1": 95.0},
+            encroachment_achieved=True,
+            lowest_since_low=95.0,  # Between L and L-0.15*delta, valid for L/XL
+            highest_since_high=None
+        )
+
+        # Close above L - 0.10*delta (95.0)
+        bar = Bar(timestamp=1700, open=98.0, high=102.0, low=95.0, close=100.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=100.0, high=103.0, low=99.0, close=98.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 0
+
+    def test_lxl_bull_invalid_deep_trade_through(self, detector):
+        """L/XL bull swing invalid when price trades below L - 0.15*delta."""
+        # swing_size = 50, so L - 0.15*delta = 100 - 7.5 = 92.5
+        swing = ActiveSwing(
+            swing_id="bull-L-002",
+            scale="L",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0, "-0.1": 95.0},
+            encroachment_achieved=True,
+            lowest_since_low=91.0,  # Below L - 0.15*delta (92.5)
+            highest_since_high=None
+        )
+
+        bar = Bar(timestamp=1700, open=95.0, high=98.0, low=91.0, close=96.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=98.0, high=100.0, low=97.0, close=95.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 1
+        assert "L/XL deep threshold" in invalidation_events[0].description
+
+    def test_lxl_bull_invalid_close_below_soft(self, detector):
+        """L/XL bull swing invalid when close below L - 0.10*delta (even if no deep trade)."""
+        # swing_size = 50, L - 0.10*delta = 100 - 5 = 95
+        swing = ActiveSwing(
+            swing_id="bull-L-003",
+            scale="L",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0, "-0.1": 95.0},
+            encroachment_achieved=True,
+            lowest_since_low=96.0,  # Above deep threshold (92.5)
+            highest_since_high=None
+        )
+
+        # Close below soft threshold (95)
+        bar = Bar(timestamp=1700, open=98.0, high=100.0, low=93.0, close=94.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=100.0, high=102.0, low=99.0, close=98.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 1
+        assert "L/XL soft threshold" in invalidation_events[0].description
+
+    def test_lxl_bull_valid_wick_below_soft_close_above(self, detector):
+        """L/XL bull swing valid when wick below soft threshold but close above."""
+        swing = ActiveSwing(
+            swing_id="bull-L-004",
+            scale="L",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0, "-0.1": 95.0},
+            encroachment_achieved=True,
+            lowest_since_low=93.0,  # Above deep threshold, wick reached soft area
+            highest_since_high=None
+        )
+
+        # Wick below soft threshold (95) but close above
+        bar = Bar(timestamp=1700, open=98.0, high=100.0, low=93.0, close=97.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=100.0, high=102.0, low=99.0, close=98.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 0
+
+    def test_xl_scale_uses_lxl_rules(self, detector):
+        """XL scale uses L/XL rules (not S/M)."""
+        # swing_size = 50, L - 0.10*delta = 95
+        swing = ActiveSwing(
+            swing_id="bull-XL-001",
+            scale="XL",  # XL scale
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0, "-0.1": 95.0},
+            encroachment_achieved=True,
+            lowest_since_low=97.0,  # Below L (100), but above L-0.15*delta (92.5)
+            highest_since_high=None
+        )
+
+        # Under S/M rules this would invalidate, but L/XL allows it
+        bar = Bar(timestamp=1700, open=98.0, high=102.0, low=97.0, close=100.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=100.0, high=103.0, low=99.0, close=98.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 0
+
+    def test_lxl_bear_invalid_deep_trade_through(self, detector):
+        """L/XL bear swing invalid when price trades above H + 0.15*delta."""
+        # swing_size = 50, H + 0.15*delta = 200 + 7.5 = 207.5
+        swing = ActiveSwing(
+            swing_id="bear-L-001",
+            scale="L",
+            high_price=200.0,
+            low_price=150.0,
+            high_timestamp=500,
+            low_timestamp=1000,
+            is_bull=False,
+            state="active",
+            levels={"0.618": 169.1, "1": 150.0, "2": 100.0, "-0.1": 205.0},
+            encroachment_achieved=True,
+            lowest_since_low=None,
+            highest_since_high=209.0  # Above H + 0.15*delta
+        )
+
+        bar = Bar(timestamp=1700, open=205.0, high=209.0, low=203.0, close=206.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=202.0, high=205.0, low=201.0, close=205.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 1
+        assert "L/XL deep threshold" in invalidation_events[0].description
+
+    def test_lxl_bear_invalid_close_above_soft(self, detector):
+        """L/XL bear swing invalid when close above H + 0.10*delta."""
+        # swing_size = 50, H + 0.10*delta = 200 + 5 = 205
+        swing = ActiveSwing(
+            swing_id="bear-L-002",
+            scale="L",
+            high_price=200.0,
+            low_price=150.0,
+            high_timestamp=500,
+            low_timestamp=1000,
+            is_bull=False,
+            state="active",
+            levels={"0.618": 169.1, "1": 150.0, "2": 100.0, "-0.1": 205.0},
+            encroachment_achieved=True,
+            lowest_since_low=None,
+            highest_since_high=204.0  # Below deep threshold
+        )
+
+        # Close above soft threshold (205)
+        bar = Bar(timestamp=1700, open=203.0, high=207.0, low=202.0, close=206.0, index=1)
+        previous_bar = Bar(timestamp=1600, open=200.0, high=203.0, low=199.0, close=203.0, index=0)
+
+        events = detector.detect_events(
+            bar=bar,
+            source_bar_idx=1,
+            active_swings=[swing],
+            previous_bar=previous_bar
+        )
+
+        invalidation_events = [e for e in events if e.event_type == EventType.INVALIDATION]
+        assert len(invalidation_events) == 1
+        assert "L/XL soft threshold" in invalidation_events[0].description
+
+
+class TestEncroachmentTracking:
+    """Test encroachment state tracking (Issue #13)."""
+
+    def test_encroachment_not_achieved_initially(self, detector):
+        """New swing starts with encroachment_achieved=False."""
+        swing = ActiveSwing(
+            swing_id="bull-S-001",
+            scale="S",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0},
+            encroachment_achieved=False,  # Not yet achieved
+            lowest_since_low=100.0,
+            highest_since_high=None
+        )
+
+        assert swing.encroachment_achieved == False
+
+    def test_encroachment_level_calculation(self, detector):
+        """Encroachment level is L + 0.382*delta for bull swings."""
+        # For swing H=150, L=100: delta=50, encroachment = 100 + 0.382*50 = 119.1
+        swing = ActiveSwing(
+            swing_id="bull-S-002",
+            scale="S",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={"0.618": 130.9, "1": 150.0, "2": 200.0},
+            encroachment_achieved=False,
+            lowest_since_low=100.0,
+            highest_since_high=None
+        )
+
+        delta = swing.high_price - swing.low_price
+        expected_encroachment = swing.low_price + 0.382 * delta
+        assert abs(expected_encroachment - 119.1) < 0.1
+
+
+class TestScaleDispatch:
+    """Test that invalidation correctly dispatches by scale."""
+
+    def test_s_scale_dispatches_to_sm(self, detector):
+        """S scale swing uses S/M invalidation rules."""
+        # Price below L would invalidate under S/M but not L/XL
+        swing = ActiveSwing(
+            swing_id="bull-S-001",
+            scale="S",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={},
+            encroachment_achieved=True,
+            lowest_since_low=98.0,  # Below L
+            highest_since_high=None
+        )
+
+        bar = Bar(timestamp=1700, open=102.0, high=105.0, low=98.0, close=101.0, index=1)
+
+        event = detector.check_invalidation(bar, 1, swing)
+        assert event is not None
+        assert "S/M strict rule" in event.description
+
+    def test_l_scale_dispatches_to_lxl(self, detector):
+        """L scale swing uses L/XL invalidation rules."""
+        # Price below L but above L-0.15*delta is valid under L/XL
+        swing = ActiveSwing(
+            swing_id="bull-L-001",
+            scale="L",
+            high_price=150.0,
+            low_price=100.0,
+            high_timestamp=1000,
+            low_timestamp=500,
+            is_bull=True,
+            state="active",
+            levels={},
+            encroachment_achieved=True,
+            lowest_since_low=95.0,  # Below L but above L-0.15*delta (92.5)
+            highest_since_high=None
+        )
+
+        # Close above soft threshold
+        bar = Bar(timestamp=1700, open=98.0, high=102.0, low=95.0, close=97.0, index=1)
+
+        event = detector.check_invalidation(bar, 1, swing)
+        assert event is None  # No invalidation under L/XL rules
 
 
 if __name__ == "__main__":

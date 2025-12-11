@@ -16,7 +16,7 @@ Author: Generated for Market Simulator Project
 
 from enum import Enum
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import sys
 import os
 
@@ -59,7 +59,7 @@ class StructuralEvent:
     description: str                  # Human-readable description
 
 
-@dataclass 
+@dataclass
 class ActiveSwing:
     """Reference swing with computed levels for event detection."""
     swing_id: str                     # Unique identifier
@@ -71,6 +71,10 @@ class ActiveSwing:
     is_bull: bool                     # True = bull reference (fighting upward from below)
     state: str                        # "active", "completed", "invalidated"
     levels: dict[str, float]          # Level name -> price mapping
+    # Validation state tracking (added for Issue #13)
+    encroachment_achieved: bool = False       # Has price retraced to 0.382 level?
+    lowest_since_low: Optional[float] = None  # Track lowest price since L (for bull swing violation)
+    highest_since_high: Optional[float] = None  # Track highest price since H (for bear swing violation)
 
 
 class EventDetector:
@@ -260,65 +264,154 @@ class EventDetector:
                            swing: ActiveSwing) -> Optional[StructuralEvent]:
         """
         Check if the swing has been invalidated.
-        
-        Per spec section 9:
-        - Invalidation occurs when price closes below -0.1 level
-        - OR when price wicks below -0.15 level (even if closes above)
-        
-        For bear swings, directions are reversed.
-        
+
+        Dispatches to scale-specific validation rules:
+        - S/M scales: Strict validation (no trade below L)
+        - L/XL scales: Softer validation (trade-through and close thresholds)
+
         Returns:
             StructuralEvent if invalidation detected, None otherwise
         """
-        if "-0.1" not in swing.levels:
-            return None
-            
-        stop_level = swing.levels["-0.1"]
+        if swing.scale in ['S', 'M']:
+            return self._check_invalidation_sm(bar, source_bar_idx, swing)
+        else:  # L, XL
+            return self._check_invalidation_lxl(bar, source_bar_idx, swing)
+
+    def _check_invalidation_sm(self,
+                               bar: Bar,
+                               source_bar_idx: int,
+                               swing: ActiveSwing) -> Optional[StructuralEvent]:
+        """
+        S/M swing invalidation rules (Issue #13):
+
+        Bull swing invalidates if:
+        - Price ever trades below L (the swing low)
+
+        Bear swing invalidates if:
+        - Price ever trades above H (the swing high)
+
+        Note: The lowest_since_low / highest_since_high tracking is done by
+        SwingStateManager before calling this method.
+
+        Returns:
+            StructuralEvent if invalidation detected, None otherwise
+        """
         swing_size = abs(swing.high_price - swing.low_price)
         tolerance = swing_size * 0.001
-        
-        # Calculate wick threshold level
-        if swing.is_bull:
-            wick_threshold = swing.low_price + (swing_size * self.invalidation_wick_threshold)
-        else:
-            wick_threshold = swing.high_price - (swing_size * self.invalidation_wick_threshold)
-        
+
         invalidated = False
         reason = ""
-        
+        level_price = swing.low_price if swing.is_bull else swing.high_price
+
         if swing.is_bull:
-            # Bull swing invalidates if:
-            # 1. Closes below -0.1 level, OR
-            # 2. Wicks below -0.15 level
-            if bar.close < (stop_level - tolerance):
+            # Bull swing invalidates if price ever trades below L
+            # Check using tracked lowest price (more reliable) or current bar low
+            lowest = swing.lowest_since_low if swing.lowest_since_low is not None else bar.low
+            if lowest < (swing.low_price - tolerance):
                 invalidated = True
-                reason = "close below -0.1 threshold"
-            elif bar.low < (wick_threshold - tolerance):
-                invalidated = True
-                reason = "wick below -0.15 threshold"
+                reason = "trade below swing low L (S/M strict rule)"
         else:
-            # Bear swing invalidates if:
-            # 1. Closes above -0.1 level (upward), OR
-            # 2. Wicks above -0.15 level (upward)
-            if bar.close > (stop_level + tolerance):
+            # Bear swing invalidates if price ever trades above H
+            highest = swing.highest_since_high if swing.highest_since_high is not None else bar.high
+            if highest > (swing.high_price + tolerance):
                 invalidated = True
-                reason = "close above -0.1 threshold"
-            elif bar.high > (wick_threshold + tolerance):
-                invalidated = True
-                reason = "wick above -0.15 threshold"
-        
+                reason = "trade above swing high H (S/M strict rule)"
+
         if not invalidated:
             return None
-            
+
         description = f"{'Bull' if swing.is_bull else 'Bear'} swing {swing.swing_id}: INVALIDATED - {reason}"
-        
+
         return StructuralEvent(
             event_type=EventType.INVALIDATION,
             severity=EventSeverity.MAJOR,
             timestamp=bar.timestamp,
             source_bar_idx=source_bar_idx,
-            level_name="-0.1",
-            level_price=stop_level,
+            level_name="L" if swing.is_bull else "H",
+            level_price=level_price,
+            swing_id=swing.swing_id,
+            scale=swing.scale,
+            bar_open=bar.open,
+            bar_high=bar.high,
+            bar_low=bar.low,
+            bar_close=bar.close,
+            description=description
+        )
+
+    def _check_invalidation_lxl(self,
+                                bar: Bar,
+                                source_bar_idx: int,
+                                swing: ActiveSwing) -> Optional[StructuralEvent]:
+        """
+        L/XL swing invalidation rules (Issue #13):
+
+        Bull swing invalidates if:
+        - Price ever trades below L - 0.15 * delta (deep trade-through), OR
+        - Price closes below L - 0.10 * delta (soft invalidation)
+
+        Bear swing invalidates if:
+        - Price ever trades above H + 0.15 * delta (deep trade-through), OR
+        - Price closes above H + 0.10 * delta (soft invalidation)
+
+        Note: The CLOSE check uses the aggregated bar at the swing's aggregation
+        level (1H for L, 4H for XL), which is already provided by SwingStateManager.
+
+        Returns:
+            StructuralEvent if invalidation detected, None otherwise
+        """
+        swing_size = abs(swing.high_price - swing.low_price)
+        tolerance = swing_size * 0.001
+
+        invalidated = False
+        reason = ""
+
+        if swing.is_bull:
+            # Calculate thresholds
+            deep_threshold = swing.low_price - (0.15 * swing_size)
+            soft_threshold = swing.low_price - (0.10 * swing_size)
+            level_price = soft_threshold  # Report the soft threshold as the violated level
+
+            # Check deep trade-through using tracked lowest price
+            lowest = swing.lowest_since_low if swing.lowest_since_low is not None else bar.low
+            if lowest < (deep_threshold - tolerance):
+                invalidated = True
+                reason = f"trade below L - 0.15*delta ({deep_threshold:.2f}) (L/XL deep threshold)"
+                level_price = deep_threshold
+            # Check soft close threshold (aggregation-level close)
+            elif bar.close < (soft_threshold - tolerance):
+                invalidated = True
+                reason = f"close below L - 0.10*delta ({soft_threshold:.2f}) (L/XL soft threshold)"
+                level_price = soft_threshold
+        else:
+            # Bear swing: symmetric rules
+            deep_threshold = swing.high_price + (0.15 * swing_size)
+            soft_threshold = swing.high_price + (0.10 * swing_size)
+            level_price = soft_threshold
+
+            # Check deep trade-through using tracked highest price
+            highest = swing.highest_since_high if swing.highest_since_high is not None else bar.high
+            if highest > (deep_threshold + tolerance):
+                invalidated = True
+                reason = f"trade above H + 0.15*delta ({deep_threshold:.2f}) (L/XL deep threshold)"
+                level_price = deep_threshold
+            # Check soft close threshold (aggregation-level close)
+            elif bar.close > (soft_threshold + tolerance):
+                invalidated = True
+                reason = f"close above H + 0.10*delta ({soft_threshold:.2f}) (L/XL soft threshold)"
+                level_price = soft_threshold
+
+        if not invalidated:
+            return None
+
+        description = f"{'Bull' if swing.is_bull else 'Bear'} swing {swing.swing_id}: INVALIDATED - {reason}"
+
+        return StructuralEvent(
+            event_type=EventType.INVALIDATION,
+            severity=EventSeverity.MAJOR,
+            timestamp=bar.timestamp,
+            source_bar_idx=source_bar_idx,
+            level_name="L-0.10" if swing.is_bull else "H+0.10",
+            level_price=level_price,
             swing_id=swing.swing_id,
             scale=swing.scale,
             bar_open=bar.open,

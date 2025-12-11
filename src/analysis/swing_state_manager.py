@@ -187,10 +187,14 @@ class SwingStateManager:
         if source_bar_idx > 0:
             previous_agg_bar = self.bar_aggregator.get_bar_at_source_time(timeframe, source_bar_idx - 1)
         
+        # Update validation state tracking for all active swings (Issue #13)
+        if current_agg_bar and self.active_swings[scale]:
+            self._update_swing_validation_state(current_agg_bar, scale)
+
         # Detect events for existing swings
         if current_agg_bar and self.active_swings[scale]:
             scale_events = self.event_detector.detect_events(
-                current_agg_bar, 
+                current_agg_bar,
                 source_bar_idx,
                 self.active_swings[scale],
                 previous_agg_bar
@@ -342,7 +346,11 @@ class SwingStateManager:
                 low_timestamp=swing_ref.get('low_timestamp', 0),
                 is_bull=is_bull,
                 state="active",
-                levels=level_dict
+                levels=level_dict,
+                # Initialize validation state tracking (Issue #13)
+                encroachment_achieved=False,
+                lowest_since_low=low_price if is_bull else None,
+                highest_since_high=high_price if not is_bull else None
             )
             
         except Exception as e:
@@ -411,5 +419,49 @@ class SwingStateManager:
                     
                     logging.debug(f"Replaced swing {existing_swing.swing_id} with {new_swing.swing_id} "
                                 f"(size ratio: {size_ratio:.3f})")
-        
+
         return removed_ids
+
+    def _update_swing_validation_state(self, bar: Bar, scale: str) -> None:
+        """
+        Update validation state tracking for all active swings in a scale (Issue #13).
+
+        This method:
+        1. Updates lowest_since_low / highest_since_high tracking
+        2. Checks and updates encroachment_achieved flag
+
+        Called before event detection so that the EventDetector has accurate
+        state information for invalidation checks.
+
+        Args:
+            bar: Current aggregated bar at this scale's timeframe
+            scale: Scale being processed (S, M, L, or XL)
+        """
+        for swing in self.active_swings[scale]:
+            if swing.state != "active":
+                continue
+
+            delta = abs(swing.high_price - swing.low_price)
+
+            if swing.is_bull:
+                # Track lowest price since the swing low was printed
+                if swing.lowest_since_low is None or bar.low < swing.lowest_since_low:
+                    swing.lowest_since_low = bar.low
+
+                # Check encroachment: price must retrace to L + 0.382 * delta
+                encroachment_level = swing.low_price + (0.382 * delta)
+                if not swing.encroachment_achieved and bar.high >= encroachment_level:
+                    swing.encroachment_achieved = True
+                    logging.debug(f"Swing {swing.swing_id}: encroachment achieved at {bar.high:.2f} "
+                                f"(target: {encroachment_level:.2f})")
+            else:
+                # Bear swing: track highest price since the swing high was printed
+                if swing.highest_since_high is None or bar.high > swing.highest_since_high:
+                    swing.highest_since_high = bar.high
+
+                # Check encroachment: price must retrace to H - 0.382 * delta
+                encroachment_level = swing.high_price - (0.382 * delta)
+                if not swing.encroachment_achieved and bar.low <= encroachment_level:
+                    swing.encroachment_achieved = True
+                    logging.debug(f"Swing {swing.swing_id}: encroachment achieved at {bar.low:.2f} "
+                                f"(target: {encroachment_level:.2f})")
