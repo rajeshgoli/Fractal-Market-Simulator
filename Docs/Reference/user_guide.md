@@ -13,7 +13,7 @@ The Swing Validation Harness is an interactive tool for validating swing detecti
 
 ### Activate Environment
 ```bash
-cd /path/to/Market\ generator
+cd /path/to/fractal-market-simulator
 source venv/bin/activate
 ```
 
