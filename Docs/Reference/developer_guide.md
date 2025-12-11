@@ -178,9 +178,8 @@ All structural analysis uses Fibonacci ratios applied to reference swings:
 ```
 Level       Ratio    Meaning
 ──────────────────────────────────────────
--0.1        -0.10    Stop/invalidation zone
 0           0.00     Swing low (bullish) / high (bearish)
-0.382       0.382    Shallow retracement
+0.382       0.382    Shallow retracement / minimum encroachment
 0.5         0.500    50% retracement
 0.618       0.618    Deep retracement
 1.0         1.000    Swing high (bullish) / low (bearish)
@@ -197,9 +196,28 @@ A **reference swing** is a validated high-low pair used to calculate Fibonacci l
 - **Bull Reference**: High BEFORE Low (downswing completed, now bullish)
 - **Bear Reference**: Low BEFORE High (upswing completed, now bearish)
 
-Validation criteria:
-1. The swing must be the most extreme in its range (no intervening higher highs or lower lows)
-2. Current price must be within the 0.382-2.0 "active zone"
+### Swing Validation Rules (Scale-Dependent)
+
+Validation operates at the **swing's aggregation level** (not raw input bars). For a bull swing with `H` (high), `L` (low), and `Δ = H - L`:
+
+#### S/M Scales (Strict)
+
+A bull swing remains valid if ALL conditions hold:
+1. **Structure**: Price made H then L
+2. **Location**: Current price is between H and L
+3. **Minimum encroachment**: After L, price retraced to at least `L + 0.382 × Δ`
+4. **No violation**: Price never trades below L
+
+#### L/XL Scales (Soft)
+
+A bull swing remains valid if ALL conditions hold:
+1. **Structure**: Price made H then L
+2. **Location**: Current price is between H and L
+3. **Minimum encroachment**: After L, price retraced to at least `L + 0.382 × Δ`
+4. **No deep trade-through**: Price never trades below `L - 0.15 × Δ`
+5. **No close below soft threshold**: No CLOSE below `L - 0.10 × Δ` (at aggregated timeframe)
+
+Bear swings use symmetric rules (L then H, inequalities flipped).
 
 ### Structural Events
 
@@ -209,7 +227,7 @@ The system detects three types of structural events:
 |------------|-------------|---------|
 | **LEVEL_CROSS** | Price crosses a Fibonacci level | Bar close above/below level |
 | **COMPLETION** | Swing reaches target (2.0 extension) | Close above 2.0 level |
-| **INVALIDATION** | Swing breaks structure | Close below -0.1 level |
+| **INVALIDATION** | Swing breaks structure | Scale-dependent (see validation rules above) |
 
 Events have severity: **MAJOR** (completions, invalidations) or **MINOR** (level crosses).
 
@@ -262,7 +280,7 @@ For each new bar at index N:
        ├─▶ For each active swing:
        │   └─▶ Check level crossings
        │   └─▶ Check completions (2.0 break)
-       │   └─▶ Check invalidations (-0.1 break)
+       │   └─▶ Check invalidations (scale-dependent thresholds)
        │
        └─▶ Returns List[StructuralEvent]
 
@@ -480,7 +498,7 @@ events = detector.detect_events(current_bar, active_swings)
 |------|---------|----------|
 | `LEVEL_CROSS` | Bar closes above/below a level | MINOR |
 | `COMPLETION` | Bar closes above 2.0 extension | MAJOR |
-| `INVALIDATION` | Bar closes below -0.1 stop | MAJOR |
+| `INVALIDATION` | Scale-dependent threshold breach (see Core Concepts) | MAJOR |
 
 #### `src/swing_analysis/swing_detector.py`
 
