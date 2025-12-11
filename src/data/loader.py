@@ -401,7 +401,7 @@ def validate_data_availability(
             if available_resolutions:
                 return False, (
                     f"No {resolution} data files found for {symbol}, but data is available for: {', '.join(available_resolutions)}.\n"
-                    f"Run 'python3 -m src.cli.main list-data --symbol {symbol}' to see all available data."
+                    f"Run 'python3 -m src.visualization_harness.main list-data --symbol {symbol}' to see all available data."
                 )
             else:
                 return False, (
@@ -431,7 +431,7 @@ def validate_data_availability(
             f"Requested range {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} "
             f"does not overlap with available {resolution} data for {symbol}.\n"
             f"Available data spans: {earliest_date.strftime('%Y-%m-%d %H:%M UTC')} to {latest_date.strftime('%Y-%m-%d %H:%M UTC')}.\n"
-            f"Run 'python3 -m src.cli.main list-data --symbol {symbol} --resolution {resolution} --verbose' for detailed file information."
+            f"Run 'python3 -m src.visualization_harness.main list-data --symbol {symbol} --resolution {resolution} --verbose' for detailed file information."
         )
         
     except Exception as e:

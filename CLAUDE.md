@@ -113,7 +113,7 @@ Event Detection → Visualization → Playback Control → Event Logging
 
 ### Core Components
 
-#### 1. Analysis Pipeline (`src/analysis/`)
+#### 1. Swing Analysis (`src/swing_analysis/`)
 
 **Scale Calibrator** (`scale_calibrator.py`)
 - **Purpose**: Automatically determines size boundaries for 4 structural scales (S, M, L, XL)
@@ -121,7 +121,7 @@ Event Detection → Visualization → Playback Control → Event Logging
 - **Performance**: <50ms for 6,794 bars
 - **Key Function**: `ScaleCalibrator.calibrate(bars, instrument)`
 
-**Bar Aggregator** (`bar_aggregator.py`) 
+**Bar Aggregator** (`bar_aggregator.py`)
 - **Purpose**: Pre-computes aggregated OHLC bars for all timeframes
 - **Performance**: O(1) retrieval, 50ms pre-computation for 10K bars
 - **Key Feature**: Natural boundary alignment for proper technical analysis
@@ -136,7 +136,7 @@ Event Detection → Visualization → Playback Control → Event Logging
 - **Performance**: <1ms per bar
 - **Events**: Level crossings, swing completions, swing invalidations
 
-#### 2. Visualization System (`src/visualization/`)
+#### 2. Visualization Harness (`src/visualization_harness/`)
 
 **Visualization Renderer** (`renderer.py`)
 - **Purpose**: 4-panel synchronized matplotlib display with Fibonacci levels
@@ -144,18 +144,14 @@ Event Detection → Visualization → Playback Control → Event Logging
 - **Performance**: <100ms UI updates with sliding window optimization
 - **Layout**: 2x2 grid showing S/M/L/XL scales simultaneously
 
-**Render Config** (`config.py`)
+**Render Config** (`render_config.py`)
 - **Purpose**: Comprehensive styling and layout configuration
 - **Features**: Dark/light themes, scale-specific colors, level styling
-
-#### 3. Playback System (`src/playback/`)
 
 **Playback Controller** (`controller.py`)
 - **Purpose**: Interactive time-based navigation with auto-pause intelligence
 - **Modes**: Manual, Auto, Fast playback with configurable speeds
 - **Features**: Step navigation, jump-to-event, thread-safe operation
-
-#### 4. Event Logging (`src/logging/`)
 
 **Event Logger** (`event_logger.py`)
 - **Purpose**: Comprehensive event capture with rich market context
@@ -166,9 +162,7 @@ Event Detection → Visualization → Playback Control → Event Logging
 - **Purpose**: Real-time event formatting for console and UI
 - **Features**: Color coding, dashboard summaries, live feeds
 
-#### 5. CLI Integration (`src/cli/`)
-
-**Visualization Harness** (`harness.py`)
+**Visualization Harness CLI** (`harness.py`)
 - **Purpose**: Unified command-line interface integrating all components
 - **Features**: Interactive commands, session management, configuration override
 - **Commands**: help, status, play/pause, step, jump, speed, events, filter, export
@@ -178,7 +172,7 @@ Event Detection → Visualization → Playback Control → Event Logging
 - **Commands**: harness (existing), list-data/describe/inspect (data discovery), validate (historical validation)
 - **Features**: Data availability visibility, enhanced error messages, verbose logging
 
-#### 6. Data Management (`src/data/`)
+#### 3. Data Management (`src/data/`)
 
 **OHLC Loader** (`ohlc_loader.py`)
 - **Purpose**: Multi-format OHLC data loading with automatic detection
@@ -190,7 +184,7 @@ Event Detection → Visualization → Playback Control → Event Logging
 - **Features**: Multi-resolution support (1m, 5m, 1d), data discovery, availability checking
 - **Functions**: `load_historical_data()`, `get_data_summary()`, `validate_data_availability()`
 
-### Legacy Components (`src/legacy/`)
+### Legacy Components (in `src/swing_analysis/`)
 
 These are the original analytical components preserved for reference:
 

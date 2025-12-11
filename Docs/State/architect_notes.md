@@ -53,8 +53,8 @@ System is ready for expert validation of swing detection logic.
 
 **Commands:**
 ```bash
-python3 -m src.cli.main list-data --symbol ES
-python3 -m src.cli.main validate --symbol ES --resolution 1m --start 2024-01-01 --end 2024-01-31
+python3 -m src.visualization_harness.main list-data --symbol ES
+python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m --start 2024-01-01 --end 2024-01-31
 ```
 
 ---

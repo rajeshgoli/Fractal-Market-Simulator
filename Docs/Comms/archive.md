@@ -2,6 +2,36 @@
 
 ---
 
+## Q1: Stale CLI Path References Need Cleanup
+
+**From:** Product
+**To:** Architect
+**Status:** Resolved
+**Date:** 2024-12-11
+
+**Question:** Stale `src.cli.main` references in CLAUDE.md, src/data/loader.py, and Docs/State/architect_notes.md need cleanup. Should these be updated to `src.visualization_harness.main`, or is there a planned CLI restructuring?
+
+**Resolution (Architect):** **Updated all stale references.** No CLI restructuring is planned.
+
+Investigation confirmed:
+- `src/cli/` directory does not exist and never existed
+- All CLI functionality lives in `src/visualization_harness/` (main.py, harness.py)
+- References to `src.cli.main` were incorrect documentation artifacts
+
+**Files updated:**
+| File | Change |
+|------|--------|
+| `src/data/loader.py:404,434` | Updated error message CLI commands |
+| `src/visualization_harness/harness.py:8-10` | Updated docstring usage examples |
+| `CLAUDE.md:116-193` | Restructured Core Components to match actual directory layout |
+| `Docs/State/architect_notes.md:56-57` | Updated validation commands |
+
+**Additional cleanup:**
+- Consolidated 6 fake directories (`src/analysis/`, `src/visualization/`, `src/playback/`, `src/logging/`, `src/cli/`, `src/legacy/`) into actual structure (`src/swing_analysis/`, `src/visualization_harness/`, `src/data/`)
+- CLAUDE.md architecture section now accurately reflects codebase
+
+---
+
 ## Q-2025-12-11-2
 
 **From:** Architect

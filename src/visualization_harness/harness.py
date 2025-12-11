@@ -5,9 +5,9 @@ Command-line interface that integrates all visualization harness components
 into a unified interactive market data analysis tool.
 
 Usage:
-    python -m src.cli.harness --data test.csv
-    python -m src.cli.harness --data test.csv --session analysis_001
-    python -m src.cli.harness --help
+    python -m src.visualization_harness.harness --data test.csv
+    python -m src.visualization_harness.harness --data test.csv --session analysis_001
+    python -m src.visualization_harness.harness --help
 
 Author: Generated for Market Simulator Project
 """
