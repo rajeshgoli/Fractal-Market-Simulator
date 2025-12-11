@@ -5,7 +5,7 @@
 ```bash
 # Clone the repository
 git clone <repo-url>
-cd market-generator
+cd fractal-market-simulator
 
 # Create virtual environment
 python3 -m venv venv
@@ -24,7 +24,7 @@ python -m pytest tests/ -v
 ## Project Structure
 
 ```
-market-generator/
+fractal-market-simulator/
 ├── main.py                 # Application entry point
 ├── requirements.txt        # Python dependencies
 ├── CLAUDE.md              # AI assistant instructions

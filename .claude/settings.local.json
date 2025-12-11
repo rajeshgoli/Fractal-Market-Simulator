@@ -102,7 +102,9 @@
       "Bash(git commit -m \"$(cat <<''EOF''\nMove archive to .archive/ (local only, not tracked in git)\n\n- Moved Docs/Archive/* and Docs/Sample_outputs to top-level .archive/\n- Added .archive/ to .gitignore\n- Historical docs preserved locally but not polluting the repo\nEOF\n)\")",
       "Bash(tree:*)",
       "Bash(ls:*)",
-      "Bash({} ;)"
+      "Bash({} ;)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix stale CLI path references across codebase (resolves Q1)\n\n- Update src/data/loader.py error messages: src.cli.main → src.visualization_harness.main\n- Update src/visualization_harness/harness.py docstring usage examples\n- Restructure CLAUDE.md Core Components to match actual src/ directory layout\n- Update Docs/State/architect_notes.md validation commands\n- Archive resolved Q1 in Docs/Comms/archive.md\n\nConsolidated 6 non-existent directory references to actual structure:\n  src/analysis/ → src/swing_analysis/\n  src/visualization/ → src/visualization_harness/\n  src/playback/ → src/visualization_harness/controller.py\n  src/logging/ → src/visualization_harness/event_logger.py\n  src/cli/ → src/visualization_harness/main.py\n  src/legacy/ → files in src/swing_analysis/\nEOF\n)\")",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
