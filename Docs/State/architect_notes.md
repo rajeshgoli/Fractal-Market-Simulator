@@ -79,6 +79,19 @@ Key capabilities:
 
 ---
 
+## Recent Documentation Updates
+
+**2024-12-11:** Rewrote `Docs/Reference/Developer_guide.md` as comprehensive wiki-style reference:
+- Architecture overview with ASCII diagrams
+- Data flow documentation (initialization + per-bar processing)
+- Complete module reference with code examples
+- Key data structures documented
+- Configuration system reference
+- Extension patterns for new scales, events, data sources
+- Troubleshooting guide
+
+---
+
 ## Open Questions (Deferred to Product)
 
 1. Per-scale swing caps (S=5, M=3, L=2, XL=1)?
