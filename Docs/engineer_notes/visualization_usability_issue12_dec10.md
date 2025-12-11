@@ -2,8 +2,9 @@
 
 **Engineer:** Claude Code
 **Date:** 2025-12-10
-**Type:** Feature Implementation
+**Type:** Feature Implementation + Bug Fixes
 **Status:** Complete
+**Commits:** `532e7f1`, `e48438a`
 
 ## Context
 
@@ -180,3 +181,78 @@ This change adds UI improvements. It does not modify:
 | Modified: Keyboard | `src/visualization/keyboard_handler.py` |
 | Modified: Config | `src/visualization/config.py` |
 | Modified: Status | `src/playback/config.py` |
+| Modified: Harness | `src/cli/harness.py` |
+
+---
+
+## Bug Fixes (Post-Implementation)
+
+After initial implementation, user testing revealed three blocking issues that were fixed in subsequent commits.
+
+### Bug Fix 1: Keyboard Shortcuts Not Working (`532e7f1`)
+
+**Problem:** Pressing `1-4`, `V`, `[`, `]` keys produced runtime errors instead of expected behavior.
+
+**Root Cause:** `_initialize_keyboard_handler()` in `harness.py` was not passing `visualization_renderer` to the `KeyboardHandler` constructor, leaving it as `None`.
+
+**Fix:** Added `visualization_renderer=self.visualization_renderer` to the `KeyboardHandler` constructor call in `harness.py` line 245.
+
+### Bug Fix 2: PiP Renders as Giant Candle (`532e7f1`)
+
+**Problem:** PiP inset showed a single oversized candle instead of a schematic swing representation.
+
+**Root Cause:** `_render_swing_in_pip()` used actual price coordinates for Y-axis (e.g., 4000-4100) but fixed coordinates for X (0-1), creating an extremely tall, thin shape that looked like a candle.
+
+**Fix:** Complete rewrite of `_render_swing_in_pip()` to use fully normalized coordinates (0-1 for both axes):
+- Swing body: centered rectangle from y=0.1 to y=0.9, x=0.35 with width=0.3
+- Added `price_to_y()` helper: maps price from [low, high] to [0.1, 0.9]
+- Fib levels (0, 0.5, 1.0, 1.618, 2.0) drawn at relative Y positions
+- Level colors: 0=white, 0.5=gray, 1.0=green, 1.618=gold, 2.0=orange
+- Price annotations "H:{high}" and "L:{low}" at top/bottom
+- All axes/spines hidden (schematic diagram, not chart)
+
+### Bug Fix 3: Main Panel Swing Body Missing (`e48438a`)
+
+**Problem:** Reference swing in main panels appeared as "giant candle" - user expected an abstract geometric object.
+
+**Root Cause:** Main panel only drew Fibonacci levels via `ax.axhline()` (infinite horizontal lines). There was no bounded swing body representation like in PiP.
+
+**Fix:** Added `draw_swing_body()` method to renderer:
+- Position: x = -2.5, width = 2 (in reserved left margin)
+- Height: spans swing high to swing low prices
+- Color: green (#26A69A) for bull, red (#EF5350) for bear
+- Labels: "H" at high, "L" at low
+- Level markers: solid white lines at 0 and 1 on body
+- Extended panel xlim from -0.5 to -4.0 to show swing body area
+
+### Bug Fix 4: Swing Disappears on Layout Transitions (`e48438a`)
+
+**Problem:** Reference swing disappeared when pausing/resuming playback or switching between quad/expanded layouts.
+
+**Root Cause:** `_apply_layout()` cleared all axes and recreated them, but the new axes had no swing data. The renderer didn't cache state for re-rendering.
+
+**Fix:** Implemented state caching and re-render:
+- Added cache variables: `_cached_active_swings`, `_cached_recent_events`, `_cached_highlighted_events`
+- Extracted rendering logic into `_do_render()` method (can bypass frame skipping)
+- Added `_rerender_cached_state()` method
+- `expand_panel()` and `restore_quad_layout()` now call `_rerender_cached_state()` after `_apply_layout()`
+
+### Bug Fix 5: constrained_layout Warnings (`e48438a`)
+
+**Problem:** Repeated warnings: "UserWarning: constrained_layout not applied because axes sizes collapsed to zero."
+
+**Root Cause:** `layout='constrained'` was set during figure creation, but dynamic GridSpec manipulation during layout transitions conflicts with constrained_layout.
+
+**Fix:** Removed `layout='constrained'` from `plt.figure()` call. Layout is now fully controlled by manual GridSpec management in `_apply_layout()`.
+
+---
+
+## Lessons Learned
+
+1. **Unit tests don't guarantee integration success** - All component tests passed, but runtime failed because harness.py wasn't passing required parameters.
+
+2. **PiP fix != main panel fix** - User's "giant candle" complaint could refer to PiP OR main panel. The initial fix addressed PiP; user clarification revealed main panel also needed swing body rendering.
+
+3. **Layout transitions destroy matplotlib state** - Artists are tied to specific axes instances. When axes are removed/recreated, artists must be recreated from cached state.
+
+4. **constrained_layout conflicts with dynamic layouts** - Matplotlib's automatic layout managers don't work well with manual GridSpec manipulation during runtime.
