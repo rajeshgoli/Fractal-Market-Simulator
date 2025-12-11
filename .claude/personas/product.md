@@ -61,6 +61,7 @@ Single file, always current, overwrite on update:
 
 - `Docs/Reference/product_north_star.md` - Immutable vision
 - `Docs/Reference/interview_notes.md` - User context
+- `Docs/Reference/user_guide.md` - Current user-facing functionality
 - `Docs/State/architect_notes.md` - Technical state
 - `Docs/Comms/questions.md` - Active cross-role questions
 
