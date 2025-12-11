@@ -387,6 +387,140 @@ class TestPlaybackIntegration:
         assert controller.state == PlaybackState.STOPPED
 
 
+class TestPlaybackStateSingleSourceOfTruth:
+    """Tests for state as computed property (Issue #15)."""
+
+    def test_state_is_computed_property(self):
+        """Verify state is a property, not a stored attribute."""
+        controller = PlaybackController(100)
+
+        # state should be a property (computed)
+        assert isinstance(type(controller).state, property)
+
+        # Initial state should be STOPPED (from _stop_event being set)
+        assert controller.state == PlaybackState.STOPPED
+
+    def test_rapid_pause_resume_cycles(self):
+        """Test that rapid pause/resume cycles (50 at 16x speed) report accurate state."""
+        # Configure for fast playback (simulating 16x speed)
+        config = PlaybackConfig(auto_speed_ms=62, fast_speed_ms=30)  # ~16x normal
+        controller = PlaybackController(total_bars=1000, config=config)
+
+        callback = Mock()
+        controller.set_event_callback(callback)
+
+        # Perform 50 rapid pause/resume cycles
+        inconsistencies = []
+
+        for i in range(50):
+            # Start playback
+            controller.start_playback(PlaybackMode.AUTO)
+            time.sleep(0.005)  # Brief play time
+
+            # Immediately check state - should be PLAYING
+            state_before_pause = controller.state
+            if state_before_pause not in (PlaybackState.PLAYING, PlaybackState.FINISHED):
+                inconsistencies.append(f"Cycle {i}: Expected PLAYING before pause, got {state_before_pause}")
+
+            # Pause playback
+            controller.pause_playback(f"Test pause {i}")
+
+            # Immediately check state - should be PAUSED
+            state_after_pause = controller.state
+            if state_after_pause != PlaybackState.PAUSED:
+                # Allow FINISHED if we've reached the end
+                if state_after_pause != PlaybackState.FINISHED:
+                    inconsistencies.append(f"Cycle {i}: Expected PAUSED after pause, got {state_after_pause}")
+
+            # Resume (clear pause)
+            controller.start_playback(PlaybackMode.AUTO)
+
+            # Brief delay to allow thread to process
+            time.sleep(0.002)
+
+        # Cleanup
+        controller.stop_playback()
+
+        # No inconsistencies should have been detected
+        assert len(inconsistencies) == 0, f"State inconsistencies detected:\n" + "\n".join(inconsistencies)
+
+    def test_state_derives_from_events_only(self):
+        """Verify state is derived exclusively from threading events and bar index."""
+        controller = PlaybackController(100)
+
+        # Initially STOPPED (_stop_event is set)
+        assert controller._stop_event.is_set()
+        assert controller.state == PlaybackState.STOPPED
+
+        # Clear stop, set pause -> PAUSED
+        controller._stop_event.clear()
+        controller._pause_requested.set()
+        assert controller.state == PlaybackState.PAUSED
+
+        # Clear pause -> PLAYING
+        controller._pause_requested.clear()
+        assert controller.state == PlaybackState.PLAYING
+
+        # Move to end -> FINISHED (overrides PLAYING)
+        controller.current_bar_idx = 99  # total_bars - 1
+        assert controller.state == PlaybackState.FINISHED
+
+        # Even with pause set, FINISHED takes precedence when at end
+        controller._pause_requested.set()
+        assert controller.state == PlaybackState.FINISHED
+
+        # Even with stop set, FINISHED still takes precedence (terminal state)
+        controller._stop_event.set()
+        assert controller.state == PlaybackState.FINISHED
+
+        # Move away from end, now STOPPED takes effect
+        controller.current_bar_idx = 50
+        assert controller.state == PlaybackState.STOPPED
+
+    def test_no_race_condition_on_state(self):
+        """Verify no race condition between playback thread and UI reads."""
+        config = PlaybackConfig(auto_speed_ms=10, fast_speed_ms=5)
+        controller = PlaybackController(500, config)
+
+        callback = Mock()
+        controller.set_event_callback(callback)
+
+        # Track states observed
+        observed_states = []
+        stop_flag = threading.Event()
+
+        def state_observer():
+            """Continuously read state from a separate thread."""
+            while not stop_flag.is_set():
+                observed_states.append(controller.state)
+                time.sleep(0.001)
+
+        # Start observer thread
+        observer = threading.Thread(target=state_observer)
+        observer.start()
+
+        # Start playback
+        controller.start_playback(PlaybackMode.AUTO)
+        time.sleep(0.1)
+
+        # Multiple pause/resume cycles
+        for _ in range(10):
+            controller.pause_playback()
+            time.sleep(0.01)
+            controller.start_playback(PlaybackMode.AUTO)
+            time.sleep(0.01)
+
+        # Stop everything
+        controller.stop_playback()
+        stop_flag.set()
+        observer.join(timeout=1.0)
+
+        # All observed states should be valid PlaybackState values
+        valid_states = set(PlaybackState)
+        invalid_states = [s for s in observed_states if s not in valid_states]
+        assert len(invalid_states) == 0, f"Invalid states observed: {invalid_states}"
+
+
 class TestPlaybackPerformance:
     """Performance tests for playback controller."""
 

@@ -53,13 +53,15 @@ class PlaybackController:
         
         # State management
         self.mode = PlaybackMode.MANUAL
-        self.state = PlaybackState.STOPPED
         self.last_pause_reason: Optional[str] = None
-        
+
         # Threading for auto-play
         self._playback_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._pause_requested = threading.Event()
+
+        # Initialize in STOPPED state
+        self._stop_event.set()
         
         # Callback for processing steps
         self._step_callback: Optional[Callable[[int, List[StructuralEvent]], None]] = None
@@ -72,7 +74,33 @@ class PlaybackController:
         self._event_cache: List[StructuralEvent] = []
         
         logging.info(f"PlaybackController initialized with {total_bars} bars")
-    
+
+    @property
+    def state(self) -> PlaybackState:
+        """
+        Compute playback state from threading events (single source of truth).
+
+        State derivation order:
+        1. FINISHED - if at or past last bar (terminal, data exhausted)
+        2. STOPPED - if _stop_event is set (explicit stop or initial state)
+        3. PAUSED - if _pause_requested is set (user/auto pause)
+        4. PLAYING - default (actively playing)
+
+        Note: FINISHED takes priority because reaching end of data is a terminal
+        condition that indicates data exhaustion, regardless of other flags.
+        """
+        # FINISHED: at end of data (terminal state)
+        if self.current_bar_idx >= self.total_bars - 1:
+            return PlaybackState.FINISHED
+        # STOPPED: stop event is set (initial state or after stop_playback)
+        if self._stop_event.is_set():
+            return PlaybackState.STOPPED
+        # PAUSED: pause requested
+        if self._pause_requested.is_set():
+            return PlaybackState.PAUSED
+        # PLAYING: default state when running
+        return PlaybackState.PLAYING
+
     def set_event_callback(self, 
                           callback: Callable[[int, List[StructuralEvent]], None]) -> None:
         """
@@ -94,22 +122,22 @@ class PlaybackController:
         self.mode = mode
         
         if mode == PlaybackMode.MANUAL:
-            self.state = PlaybackState.PAUSED
+            # Clear stop, set pause - state property computes PAUSED
+            self._stop_event.clear()
+            self._pause_requested.set()
             logging.info("Manual mode activated - use step controls")
             return
-        
+
         # Start auto-play thread
         if self._playback_thread and self._playback_thread.is_alive():
-            # Resume existing thread
+            # Resume existing thread - clear pause, state property computes PLAYING
             self._pause_requested.clear()
-            self.state = PlaybackState.PLAYING
             logging.info(f"Resumed {mode.value} playback at bar {self.current_bar_idx}")
         else:
-            # Start new thread
+            # Start new thread - clear both events, state property computes PLAYING
             self._stop_event.clear()
             self._pause_requested.clear()
-            self.state = PlaybackState.PLAYING
-            
+
             self._playback_thread = threading.Thread(
                 target=self._auto_play_loop,
                 name="PlaybackController"
@@ -122,10 +150,10 @@ class PlaybackController:
     def pause_playback(self, reason: Optional[str] = None) -> None:
         """Pause current playback with optional reason."""
         if self.state == PlaybackState.PLAYING:
+            # Set pause event - state property computes PAUSED
             self._pause_requested.set()
-            self.state = PlaybackState.PAUSED
             self.last_pause_reason = reason
-            
+
             if reason:
                 logging.info(f"Playback paused: {reason}")
             else:
@@ -133,16 +161,16 @@ class PlaybackController:
     
     def stop_playback(self) -> None:
         """Stop playback and reset to beginning."""
+        # Set stop event - state property computes STOPPED
         self._stop_event.set()
         self._pause_requested.set()
-        
+
         if self._playback_thread and self._playback_thread.is_alive():
             self._playback_thread.join(timeout=1.0)
-        
+
         self.current_bar_idx = 0
-        self.state = PlaybackState.STOPPED
         self.last_pause_reason = None
-        
+
         logging.info("Playback stopped and reset to beginning")
     
     def step_forward(self) -> bool:
@@ -153,7 +181,7 @@ class PlaybackController:
             True if step successful, False if at end
         """
         if self.current_bar_idx >= self.total_bars - 1:
-            self.state = PlaybackState.FINISHED
+            # State property computes FINISHED from current_bar_idx
             logging.debug("Already at end of data")
             return False
 
@@ -177,7 +205,7 @@ class PlaybackController:
             Number of bars actually advanced (may be less if hitting end)
         """
         if self.current_bar_idx >= self.total_bars - 1:
-            self.state = PlaybackState.FINISHED
+            # State property computes FINISHED from current_bar_idx
             return 0
 
         # Calculate how many bars we can actually advance
@@ -193,9 +221,7 @@ class PlaybackController:
                 self.current_bar_idx += 1
                 self._execute_step()
 
-        if self.current_bar_idx >= self.total_bars - 1:
-            self.state = PlaybackState.FINISHED
-
+        # State property computes FINISHED if at end
         return actual_advance
     
     def step_backward(self) -> bool:
@@ -363,13 +389,11 @@ class PlaybackController:
     def _auto_play_loop(self) -> None:
         """Internal auto-play thread loop."""
         while not self._stop_event.is_set() and self.current_bar_idx < self.total_bars:
-            # Check for pause request
+            # Check for pause request - state property computes PAUSED when event is set
             if self._pause_requested.is_set():
-                self.state = PlaybackState.PAUSED
                 while self._pause_requested.is_set() and not self._stop_event.is_set():
                     time.sleep(0.1)
-                if not self._stop_event.is_set():
-                    self.state = PlaybackState.PLAYING
+                # When pause cleared, state property computes PLAYING
                 continue
 
             # Execute step(s) based on step_size
@@ -379,8 +403,7 @@ class PlaybackController:
             steps_taken = 0
             for _ in range(self.step_size):
                 if not self.step_forward():
-                    # Reached end
-                    self.state = PlaybackState.FINISHED
+                    # Reached end - state property computes FINISHED
                     break
                 steps_taken += 1
 
@@ -402,7 +425,7 @@ class PlaybackController:
                 time.sleep(sleep_time)
 
         if self.current_bar_idx >= self.total_bars:
-            self.state = PlaybackState.FINISHED
+            # State property computes FINISHED from current_bar_idx
             logging.info("Auto-play completed - reached end of data")
     
     def _execute_step(self) -> bool:
