@@ -15,7 +15,7 @@ import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src', 'legacy'))
 
-from src.legacy.swing_detector import detect_swings
+from src.swing_analysis.swing_detector import detect_swings
 
 
 class TestSwingDetectorPerformance(unittest.TestCase):

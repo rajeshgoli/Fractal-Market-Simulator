@@ -100,7 +100,9 @@
       "Bash(Docs/)",
       "Bash(git commit -m \"$(cat <<''EOF''\nRestructure Docs/ to prevent proliferation, add GitHub issue workflow\n\nMajor changes to workflow system:\n\n- Docs/State/: Single-file state docs (architect_notes, product_direction, pending_review)\n- Docs/Comms/: Cross-role questions with archive (replaces scattered question docs)\n- Docs/Reference/: Long-lived docs (north_star, user_guide, interview_notes)\n- Docs/Archive/: All historical content moved here\n\n- Engineer tasks now tracked via GitHub issues, not engineer_notes/*.md\n- Questions use From/To/Status format, resolver moves to archive\n- State docs overwrite (no date suffixes, no proliferation)\n- Added /handoff command for consistent agent handoffs\n- Updated all personas with new paths and archiving responsibilities\n\nConsolidates 17 engineer_notes files and 4 product_next_steps versions\ninto clean state-based system.\nEOF\n)\")",
       "Bash(git commit -m \"$(cat <<''EOF''\nMove archive to .archive/ (local only, not tracked in git)\n\n- Moved Docs/Archive/* and Docs/Sample_outputs to top-level .archive/\n- Added .archive/ to .gitignore\n- Historical docs preserved locally but not polluting the repo\nEOF\n)\")",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(ls:*)",
+      "Bash({} ;)"
     ],
     "deny": [],
     "ask": []

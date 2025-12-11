@@ -21,11 +21,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
-# Import existing Bar type
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from src.legacy.bull_reference_detector import Bar
+from .bull_reference_detector import Bar
 
 
 @dataclass

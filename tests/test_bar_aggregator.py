@@ -24,9 +24,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.analysis.bar_aggregator import BarAggregator, AggregatedBars
+from src.swing_analysis.bar_aggregator import BarAggregator, AggregatedBars
 from src.data.ohlc_loader import load_ohlc
-from src.legacy.bull_reference_detector import Bar
+from src.swing_analysis.bull_reference_detector import Bar
 
 
 class TestBarAggregator:
@@ -378,7 +378,7 @@ class TestBarAggregatorIntegration:
             ))
         
         # Test that BarAggregator works with ScaleCalibrator's standard timeframes
-        from src.analysis.scale_calibrator import ScaleCalibrator
+        from src.swing_analysis.scale_calibrator import ScaleCalibrator
         
         calibrator = ScaleCalibrator()
         config = calibrator.calibrate(bars)

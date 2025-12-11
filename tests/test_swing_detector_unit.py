@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from src.legacy.swing_detector import detect_swings
+from src.swing_analysis.swing_detector import detect_swings
 
 def create_df(prices):
     """Helper to create a DataFrame from a list of close prices.

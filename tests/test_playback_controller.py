@@ -16,9 +16,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.playback.controller import PlaybackController
-from src.playback.config import PlaybackMode, PlaybackState, PlaybackConfig, PlaybackStatus
-from src.analysis.event_detector import StructuralEvent, EventType, EventSeverity
+from src.visualization_harness.controller import PlaybackController
+from src.visualization_harness.playback_config import PlaybackMode, PlaybackState, PlaybackConfig, PlaybackStatus
+from src.swing_analysis.event_detector import StructuralEvent, EventType, EventSeverity
 
 
 class TestPlaybackController:

@@ -20,9 +20,9 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.cli.harness import VisualizationHarness
-from src.playback.config import PlaybackMode
-from src.logging.filters import FilterBuilder
+from src.visualization_harness.harness import VisualizationHarness
+from src.visualization_harness.config import PlaybackMode
+from src.visualization_harness.filters import FilterBuilder
 
 
 def create_demo_data():

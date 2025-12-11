@@ -23,13 +23,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-from src.legacy.bull_reference_detector import Bar
-from src.analysis.scale_calibrator import ScaleConfig
-from src.analysis.bar_aggregator import BarAggregator
-from src.analysis.swing_state_manager import ActiveSwing
-from src.analysis.event_detector import StructuralEvent, EventType, EventSeverity
-from src.visualization.renderer import VisualizationRenderer
-from src.visualization.config import RenderConfig
+from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.scale_calibrator import ScaleConfig
+from src.swing_analysis.bar_aggregator import BarAggregator
+from src.swing_analysis.swing_state_manager import ActiveSwing
+from src.swing_analysis.event_detector import StructuralEvent, EventType, EventSeverity
+from src.visualization_harness.renderer import VisualizationRenderer
+from src.visualization_harness.config import RenderConfig
 
 
 def create_sample_data(num_bars=200):

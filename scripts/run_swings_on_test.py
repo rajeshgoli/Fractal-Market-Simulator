@@ -6,7 +6,7 @@ import pandas as pd
 sys.path.append(os.getcwd())
 
 from src.data.ohlc_loader import load_ohlc
-from src.legacy.swing_detector import detect_swings
+from src.swing_analysis.swing_detector import detect_swings
 
 def main():
     filepath = "test.csv"

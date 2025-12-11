@@ -15,12 +15,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
-# Import existing modules
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from src.legacy.bull_reference_detector import BullReferenceDetector, BearReferenceDetector, Bar
+from .bull_reference_detector import BullReferenceDetector, BearReferenceDetector, Bar
 
 
 @dataclass

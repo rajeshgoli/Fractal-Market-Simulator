@@ -19,11 +19,11 @@ from datetime import datetime
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.logging.event_logger import EventLogger
-from src.logging.display import EventLogDisplay
-from src.logging.filters import FilterBuilder, LogFilter
-from src.analysis.event_detector import StructuralEvent, EventType, EventSeverity
-from src.analysis.swing_state_manager import ActiveSwing
+from src.visualization_harness.event_logger import EventLogger
+from src.visualization_harness.display import EventLogDisplay
+from src.visualization_harness.filters import FilterBuilder, LogFilter
+from src.swing_analysis.event_detector import StructuralEvent, EventType, EventSeverity
+from src.swing_analysis.swing_state_manager import ActiveSwing
 
 
 def create_demo_events():

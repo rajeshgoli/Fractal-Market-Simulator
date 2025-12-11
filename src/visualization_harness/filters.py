@@ -11,11 +11,7 @@ from dataclasses import dataclass
 from typing import Optional, Set, List
 from datetime import datetime
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from src.analysis.event_detector import EventType, EventSeverity
+from src.swing_analysis.event_detector import EventType, EventSeverity
 
 
 @dataclass

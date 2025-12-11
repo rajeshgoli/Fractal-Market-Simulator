@@ -60,19 +60,19 @@ python main.py --data market_data.csv --auto-start --speed 2.0
 ### Historical Data Validation (New)
 Discover available historical data:
 ```bash
-python3 -m src.cli.main list-data --symbol ES
-python3 -m src.cli.main list-data --symbol ES --resolution 1m --verbose
+python3 -m src.visualization_harness.main list-data --symbol ES
+python3 -m src.visualization_harness.main list-data --symbol ES --resolution 1m --verbose
 ```
 
 Run systematic validation across historical data:
 ```bash
-python3 -m src.cli.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11 --verbose
+python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11 --verbose
 ```
 
 CLI aliases for data discovery:
 ```bash
-python3 -m src.cli.main describe --symbol ES
-python3 -m src.cli.main inspect --symbol ES --verbose
+python3 -m src.visualization_harness.main describe --symbol ES
+python3 -m src.visualization_harness.main inspect --symbol ES --verbose
 ```
 
 ### Testing
@@ -226,20 +226,23 @@ Uses Python `Decimal` for price calculations and respects market-specific quanti
 ### Source Code (`src/`)
 ```
 src/
-├── analysis/           # Core analytical pipeline
-├── cli/               # Command-line interface and validation tools
-├── data/              # Data loading utilities (OHLC, historical)
-├── examples/          # Demo scripts and examples
-├── legacy/            # Historical components (preserved)
-├── logging/           # Event logging system
-├── playback/          # Playback control system
-├── utils/             # Utility scripts and tools
-├── validation/        # Historical validation infrastructure
-└── visualization/     # Visualization components
+├── swing_analysis/         # Core market structure detection & analysis
+├── visualization_harness/  # Interactive visualization tool
+├── data/                   # Data loading utilities (OHLC, historical)
+├── validation/             # Historical validation infrastructure
+└── examples/               # Demo scripts
+```
+
+### Scripts (`scripts/`)
+```
+scripts/
+├── profile_performance.py  # Performance profiling
+├── run_swings_on_test.py   # Utility for swing detection
+└── verify_loader.py        # Data loader verification
 ```
 
 ### Test Suite (`tests/`)
-- Comprehensive test coverage with 158+ tests
+- Comprehensive test coverage with 250+ tests
 - Performance benchmarks and integration tests
 - Fixtures for test data and mocked components
 
@@ -370,10 +373,10 @@ python main.py --data data.csv --auto-start --speed 2.0
 python main.py --data data.csv --export-only results.json
 
 # Discover available historical data
-python3 -m src.cli.main list-data --symbol ES --verbose
+python3 -m src.visualization_harness.main list-data --symbol ES --verbose
 
 # Run historical validation
-python3 -m src.cli.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11
+python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11
 ```
 
 ### Interactive Commands (in running application)
@@ -417,10 +420,10 @@ After validation establishes expert confidence in swing detection foundations:
 ### Data Discovery and Validation
 ```bash
 # Check what data is available
-python3 -m src.cli.main list-data --symbol ES
+python3 -m src.visualization_harness.main list-data --symbol ES
 
 # Run validation with enhanced error messages
-python3 -m src.cli.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11 --verbose
+python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11 --verbose
 ```
 
 ### When validation fails due to date ranges:

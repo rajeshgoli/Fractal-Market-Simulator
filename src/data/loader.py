@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple
 
 # Import existing components
 from .ohlc_loader import load_ohlc
-from ..legacy.bull_reference_detector import Bar
+from ..swing_analysis.bull_reference_detector import Bar
 
 logger = logging.getLogger(__name__)
 

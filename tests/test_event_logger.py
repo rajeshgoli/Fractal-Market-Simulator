@@ -19,11 +19,11 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.logging.event_logger import EventLogger, EventLogEntry
-from src.logging.filters import LogFilter, FilterBuilder, apply_filters
-from src.logging.display import EventLogDisplay
-from src.analysis.event_detector import StructuralEvent, EventType, EventSeverity
-from src.analysis.swing_state_manager import ActiveSwing
+from src.visualization_harness.event_logger import EventLogger, EventLogEntry
+from src.visualization_harness.filters import LogFilter, FilterBuilder, apply_filters
+from src.visualization_harness.display import EventLogDisplay
+from src.swing_analysis.event_detector import StructuralEvent, EventType, EventSeverity
+from src.swing_analysis.swing_state_manager import ActiveSwing
 
 
 class TestEventLogger:

@@ -18,8 +18,8 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from src.analysis.event_detector import StructuralEvent, EventType, EventSeverity
-from src.logging.event_logger import EventLogger, EventLogEntry
+from src.swing_analysis.event_detector import StructuralEvent, EventType, EventSeverity
+from .event_logger import EventLogger, EventLogEntry
 
 
 class ProgressLogger:

@@ -24,21 +24,17 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-# Project imports
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from src.cli.harness import VisualizationHarness
+from .harness import VisualizationHarness
 from src.data.loader import load_historical_data, validate_data_availability, get_data_summary, format_data_summary
 from src.validation.session import ValidationSession
 from src.validation.issue_catalog import ValidationIssue
-from src.legacy.bull_reference_detector import Bar
+from src.swing_analysis.bull_reference_detector import Bar
 
 
 def run_harness_command(args):
     """Run the existing visualization harness."""
     # Import and run existing harness functionality
-    from src.cli.harness import main as harness_main
+    from .harness import main as harness_main
     
     # Override sys.argv to pass arguments to harness
     original_argv = sys.argv

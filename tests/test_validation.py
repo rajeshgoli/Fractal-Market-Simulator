@@ -31,7 +31,7 @@ from src.data.loader import (
 )
 from src.validation.session import ValidationSession, ValidationProgress
 from src.validation.issue_catalog import ValidationIssue, IssueCatalog, IssueType, IssueSeverity
-from src.legacy.bull_reference_detector import Bar
+from src.swing_analysis.bull_reference_detector import Bar
 
 
 @pytest.fixture
@@ -513,8 +513,8 @@ class TestValidationIssue:
 class TestCLIIntegration:
     """Test CLI integration for validation commands."""
     
-    @patch('src.cli.main.load_historical_data')
-    @patch('src.cli.main.validate_data_availability')
+    @patch('src.visualization_harness.main.load_historical_data')
+    @patch('src.visualization_harness.main.validate_data_availability')
     def test_validation_command_success(self, mock_validate, mock_load):
         """Test successful validation command execution."""
         # Mock successful data validation
@@ -528,7 +528,7 @@ class TestCLIIntegration:
         mock_load.return_value = mock_bars
         
         # This would normally test the actual CLI, but we'll test the components
-        from src.cli.main import ValidationHarness
+        from src.visualization_harness.main import ValidationHarness
         from src.validation.session import ValidationSession
         
         session = ValidationSession(

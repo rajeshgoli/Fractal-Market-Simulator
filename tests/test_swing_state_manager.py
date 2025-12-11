@@ -14,10 +14,10 @@ from unittest.mock import Mock, patch
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.analysis.swing_state_manager import SwingStateManager, SwingUpdateResult
-from src.analysis.scale_calibrator import ScaleConfig
-from src.analysis.event_detector import EventType, EventSeverity, StructuralEvent, ActiveSwing
-from src.legacy.bull_reference_detector import Bar
+from src.swing_analysis.swing_state_manager import SwingStateManager, SwingUpdateResult
+from src.swing_analysis.scale_calibrator import ScaleConfig
+from src.swing_analysis.event_detector import EventType, EventSeverity, StructuralEvent, ActiveSwing
+from src.swing_analysis.bull_reference_detector import Bar
 
 
 # Global fixtures available to all test classes
@@ -437,7 +437,7 @@ class TestSwingQueries:
 class TestUpdateSwings:
     """Test main update_swings method integration."""
     
-    @patch('src.analysis.swing_state_manager.detect_swings')
+    @patch('src.swing_analysis.swing_state_manager.detect_swings')
     def test_update_swings_basic(self, mock_detect_swings, swing_state_manager, sample_bars):
         """Test basic update_swings functionality."""
         # Initialize with bars

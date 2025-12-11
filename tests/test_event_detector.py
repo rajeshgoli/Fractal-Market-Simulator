@@ -13,11 +13,11 @@ from decimal import Decimal
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.analysis.event_detector import (
+from src.swing_analysis.event_detector import (
     EventDetector, EventType, EventSeverity, StructuralEvent, ActiveSwing
 )
-from src.legacy.bull_reference_detector import Bar
-from src.legacy.level_calculator import calculate_levels
+from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.level_calculator import calculate_levels
 
 
 # Global fixtures available to all test classes

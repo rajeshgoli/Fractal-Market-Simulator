@@ -10,12 +10,8 @@ Author: Generated for Market Simulator Project
 from typing import List, Optional, Dict
 from datetime import datetime
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from src.analysis.event_detector import EventType, EventSeverity
-from src.logging.event_logger import EventLogger, EventLogEntry
+from src.swing_analysis.event_detector import EventType, EventSeverity
+from .event_logger import EventLogger, EventLogEntry
 
 
 class EventLogDisplay:
@@ -270,24 +266,24 @@ class EventLogFilter:
     @staticmethod
     def last_n_minutes(minutes: int, current_timestamp: int):
         """Filter for events in last N minutes."""
-        from src.logging.filters import LogFilter
+        from .filters import LogFilter
         start_time = current_timestamp - (minutes * 60)
         return LogFilter(start_timestamp=start_time)
     
     @staticmethod
     def major_events_only():
         """Filter for major events only."""
-        from src.logging.filters import LogFilter
+        from .filters import LogFilter
         return LogFilter(severities={EventSeverity.MAJOR})
     
     @staticmethod
     def specific_scale(scale: str):
         """Filter for specific scale."""
-        from src.logging.filters import LogFilter
+        from .filters import LogFilter
         return LogFilter(scales={scale})
     
     @staticmethod
     def critical_levels():
         """Filter for critical level events."""
-        from src.logging.filters import LogFilter
+        from .filters import LogFilter
         return LogFilter(level_names={"-0.1", "2.0"})

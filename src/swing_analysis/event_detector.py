@@ -17,12 +17,8 @@ Author: Generated for Market Simulator Project
 from enum import Enum
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
-import sys
-import os
 
-# Import existing Bar type
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from src.legacy.bull_reference_detector import Bar
+from .bull_reference_detector import Bar
 
 
 class EventType(Enum):

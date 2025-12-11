@@ -18,5 +18,5 @@ Author: Generated for Market Simulator Project
 """
 
 if __name__ == "__main__":
-    from src.cli.harness import main
+    from src.visualization_harness.harness import main
     main()

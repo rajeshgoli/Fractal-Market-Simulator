@@ -17,8 +17,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.legacy.bull_reference_detector import Bar
-from src.cli.harness import VisualizationHarness, create_argument_parser
+from src.swing_analysis.bull_reference_detector import Bar
+from src.visualization_harness.harness import VisualizationHarness, create_argument_parser
 
 
 class TestVisualizationHarness:
@@ -74,7 +74,7 @@ class TestVisualizationHarness:
     @patch('matplotlib.pyplot.show')  # Prevent GUI from showing
     def test_full_initialization(self, mock_show, harness):
         """Test complete harness initialization."""
-        with patch('src.visualization.renderer.VisualizationRenderer.initialize_display'):
+        with patch('src.visualization_harness.renderer.VisualizationRenderer.initialize_display'):
             success = harness.initialize()
             
             assert success
@@ -91,7 +91,7 @@ class TestVisualizationHarness:
     def test_playback_step(self, mock_show, harness):
         """Test playback step handling."""
         # Initialize harness
-        with patch('src.visualization.renderer.VisualizationRenderer.initialize_display'):
+        with patch('src.visualization_harness.renderer.VisualizationRenderer.initialize_display'):
             harness.initialize()
         
         # Test step callback
@@ -104,7 +104,7 @@ class TestVisualizationHarness:
     @patch('matplotlib.pyplot.show')
     def test_interactive_commands(self, mock_show, harness):
         """Test basic interactive command handling."""
-        with patch('src.visualization.renderer.VisualizationRenderer.initialize_display'):
+        with patch('src.visualization_harness.renderer.VisualizationRenderer.initialize_display'):
             harness.initialize()
 
             # Test command handling directly instead of run_interactive()
@@ -119,7 +119,7 @@ class TestVisualizationHarness:
     @patch('matplotlib.pyplot.show')
     def test_command_handling(self, mock_show, harness):
         """Test individual command handling."""
-        with patch('src.visualization.renderer.VisualizationRenderer.initialize_display'):
+        with patch('src.visualization_harness.renderer.VisualizationRenderer.initialize_display'):
             harness.initialize()
         
         # Test help command
@@ -144,7 +144,7 @@ class TestVisualizationHarness:
     @patch('matplotlib.pyplot.show')
     def test_export_commands(self, mock_show, harness):
         """Test export command handling."""
-        with patch('src.visualization.renderer.VisualizationRenderer.initialize_display'):
+        with patch('src.visualization_harness.renderer.VisualizationRenderer.initialize_display'):
             harness.initialize()
         
         # Generate some events first
@@ -269,7 +269,7 @@ class TestHarnessIntegration:
         # Initialize harness
         harness = VisualizationHarness(integration_csv, "integration_test")
         
-        with patch('src.visualization.renderer.VisualizationRenderer.initialize_display'):
+        with patch('src.visualization_harness.renderer.VisualizationRenderer.initialize_display'):
             success = harness.initialize()
             assert success
             
@@ -296,16 +296,16 @@ class TestHarnessIntegration:
     @patch('sys.argv', ['main.py', '--data', 'test.csv', '--export-only', 'test_output.txt'])
     def test_main_export_only(self):
         """Test main function in export-only mode."""
-        from src.cli.harness import main
+        from src.visualization_harness.harness import main
 
         # Mock Path.exists() to return True for the data file check
-        with patch('src.cli.harness.Path') as mock_path_class:
+        with patch('src.visualization_harness.harness.Path') as mock_path_class:
             mock_path_instance = Mock()
             mock_path_instance.exists.return_value = True
             mock_path_class.return_value = mock_path_instance
 
             # Mock the harness to avoid actual file operations
-            with patch('src.cli.harness.VisualizationHarness') as mock_harness_class:
+            with patch('src.visualization_harness.harness.VisualizationHarness') as mock_harness_class:
                 mock_harness = Mock()
                 mock_harness.initialize.return_value = True
                 mock_harness.bars = [Mock() for _ in range(100)]  # Mock bars
@@ -321,7 +321,7 @@ class TestHarnessIntegration:
 
     def test_signal_handling(self):
         """Test signal handler setup."""
-        from src.cli.harness import setup_signal_handlers
+        from src.visualization_harness.harness import setup_signal_handlers
         
         mock_harness = Mock()
         mock_harness.is_running = True

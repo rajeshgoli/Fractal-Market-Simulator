@@ -23,13 +23,9 @@ from dataclasses import dataclass, field, asdict
 from typing import List, Optional, Dict, Callable, Set, Any
 from datetime import datetime
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from src.analysis.event_detector import StructuralEvent, EventType, EventSeverity
-from src.analysis.swing_state_manager import ActiveSwing
-from src.logging.filters import LogFilter, apply_filters
+from src.swing_analysis.event_detector import StructuralEvent, EventType, EventSeverity
+from src.swing_analysis.swing_state_manager import ActiveSwing
+from .filters import LogFilter, apply_filters
 
 
 @dataclass

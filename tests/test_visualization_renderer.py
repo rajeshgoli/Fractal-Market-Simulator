@@ -17,13 +17,13 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.legacy.bull_reference_detector import Bar
-from src.analysis.swing_state_manager import ActiveSwing
-from src.analysis.event_detector import StructuralEvent, EventType, EventSeverity
-from src.analysis.scale_calibrator import ScaleConfig
-from src.analysis.bar_aggregator import BarAggregator
-from src.visualization.renderer import VisualizationRenderer
-from src.visualization.config import RenderConfig, ViewWindow
+from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.swing_state_manager import ActiveSwing
+from src.swing_analysis.event_detector import StructuralEvent, EventType, EventSeverity
+from src.swing_analysis.scale_calibrator import ScaleConfig
+from src.swing_analysis.bar_aggregator import BarAggregator
+from src.visualization_harness.renderer import VisualizationRenderer
+from src.visualization_harness.render_config import RenderConfig, ViewWindow
 
 
 class TestVisualizationRenderer:
@@ -422,7 +422,7 @@ class TestRenderIntegration:
         # This would test real integration but requires full component setup
         # For now, verify interface compatibility
         
-        from src.analysis.swing_state_manager import SwingUpdateResult
+        from src.swing_analysis.swing_state_manager import SwingUpdateResult
         
         # Verify that SwingUpdateResult has expected fields for renderer
         result = SwingUpdateResult(
@@ -439,7 +439,7 @@ class TestRenderIntegration:
 
     def test_scale_config_compatibility(self):
         """Test compatibility with ScaleConfig from ScaleCalibrator."""
-        from src.analysis.scale_calibrator import ScaleConfig
+        from src.swing_analysis.scale_calibrator import ScaleConfig
         
         config = ScaleConfig(
             boundaries={"S": (0, 25), "M": (25, 50), "L": (50, 100), "XL": (100, float('inf'))},
@@ -725,6 +725,192 @@ class TestDynamicBarAggregation:
 
         # Hierarchy should be maintained
         assert tf_s <= tf_m <= tf_l <= tf_xl
+
+
+class TestThreadSafety:
+    """Tests for thread safety of cached state access (Phase 2 Priority 1)."""
+
+    @pytest.fixture
+    def scale_config(self):
+        """Create test scale configuration."""
+        return ScaleConfig(
+            boundaries={"S": (0, 25), "M": (25, 50), "L": (50, 100), "XL": (100, float('inf'))},
+            aggregations={"S": 1, "M": 5, "L": 15, "XL": 60},
+            used_defaults=False,
+            swing_count=25,
+            median_durations={"S": 10, "M": 20, "L": 30, "XL": 40}
+        )
+
+    @pytest.fixture
+    def sample_bars(self):
+        """Create sample bars for testing."""
+        bars = []
+        for i in range(100):
+            timestamp = 1609459200 + i * 60
+            bars.append(Bar(
+                index=i,
+                timestamp=timestamp,
+                open=4000.0 + i * 0.5,
+                high=4002.0 + i * 0.5,
+                low=3998.0 + i * 0.5,
+                close=4001.0 + i * 0.5
+            ))
+        return bars
+
+    @pytest.fixture
+    def bar_aggregator(self, sample_bars):
+        """Create test bar aggregator."""
+        return BarAggregator(sample_bars)
+
+    @pytest.fixture
+    def sample_swings(self):
+        """Create sample active swings for testing."""
+        return [
+            ActiveSwing(
+                swing_id=f"swing-{i}",
+                scale="S",
+                high_price=4010.0 + i * 5,
+                low_price=3990.0 + i * 5,
+                high_timestamp=1609459260 + i * 1000,
+                low_timestamp=1609459200 + i * 1000,
+                is_bull=True,
+                state="active",
+                levels={"0": 3990.0 + i * 5, "1.0": 4010.0 + i * 5}
+            ) for i in range(5)
+        ]
+
+    def test_state_lock_exists(self, scale_config, bar_aggregator):
+        """Test that state lock is initialized."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+        assert hasattr(renderer, '_state_lock')
+        assert renderer._state_lock is not None
+
+    def test_get_cached_swings_copy_returns_list(self, scale_config, bar_aggregator, sample_swings):
+        """Test that get_cached_swings_copy returns a list."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+        renderer._cached_active_swings = sample_swings
+
+        result = renderer.get_cached_swings_copy()
+
+        assert isinstance(result, list)
+        assert len(result) == len(sample_swings)
+
+    def test_get_cached_swings_copy_returns_copy_not_reference(self, scale_config, bar_aggregator, sample_swings):
+        """Test that get_cached_swings_copy returns a copy, not a reference."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+        renderer._cached_active_swings = sample_swings
+
+        result = renderer.get_cached_swings_copy()
+
+        # Verify it's a different list object
+        assert result is not renderer._cached_active_swings
+
+        # Modify the returned list and verify original is unchanged
+        original_len = len(renderer._cached_active_swings)
+        result.append(sample_swings[0])
+        assert len(renderer._cached_active_swings) == original_len
+
+    def test_get_cached_swings_copy_empty_state(self, scale_config, bar_aggregator):
+        """Test get_cached_swings_copy with empty cached state."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+
+        result = renderer.get_cached_swings_copy()
+
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    def test_get_cached_swings_copy_none_state(self, scale_config, bar_aggregator):
+        """Test get_cached_swings_copy when cached state is None."""
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+        renderer._cached_active_swings = None
+
+        result = renderer.get_cached_swings_copy()
+
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+    @patch('matplotlib.pyplot.figure')
+    def test_concurrent_cache_access(self, mock_fig, scale_config, bar_aggregator, sample_swings):
+        """Test concurrent access to cached state from multiple threads."""
+        import threading
+        import time
+
+        mock_figure = MagicMock()
+        mock_fig.return_value = mock_figure
+
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+        renderer.axes = {i: MagicMock() for i in range(4)}
+        renderer.artists = {i: {'candlesticks': [], 'levels': [], 'events': []} for i in range(4)}
+        renderer.fig = mock_figure
+
+        errors = []
+        results = []
+
+        def writer_thread():
+            """Thread that writes to cache (simulates playback)."""
+            try:
+                for i in range(50):
+                    new_swings = sample_swings[:i % 5 + 1]
+                    with renderer._state_lock:
+                        renderer._cached_active_swings = list(new_swings)
+                    time.sleep(0.001)
+            except Exception as e:
+                errors.append(f"Writer error: {e}")
+
+        def reader_thread():
+            """Thread that reads from cache (simulates keyboard handler)."""
+            try:
+                for _ in range(50):
+                    swings = renderer.get_cached_swings_copy()
+                    results.append(len(swings))
+                    time.sleep(0.001)
+            except Exception as e:
+                errors.append(f"Reader error: {e}")
+
+        # Start concurrent threads
+        writer = threading.Thread(target=writer_thread)
+        reader = threading.Thread(target=reader_thread)
+
+        writer.start()
+        reader.start()
+
+        writer.join()
+        reader.join()
+
+        # No errors should have occurred
+        assert len(errors) == 0, f"Concurrent access errors: {errors}"
+
+        # Reader should have completed all iterations
+        assert len(results) == 50
+
+    @patch('matplotlib.pyplot.figure')
+    def test_rerender_cached_state_uses_lock(self, mock_fig, scale_config, bar_aggregator, sample_swings):
+        """Test that _rerender_cached_state properly uses the lock."""
+        mock_figure = MagicMock()
+        mock_fig.return_value = mock_figure
+
+        renderer = VisualizationRenderer(scale_config, bar_aggregator)
+        renderer.axes = {i: MagicMock() for i in range(4)}
+        renderer.artists = {i: {'candlesticks': [], 'levels': [], 'events': []} for i in range(4)}
+        renderer.fig = mock_figure
+        renderer._cached_active_swings = sample_swings
+        renderer._cached_recent_events = []
+
+        # Mock _do_render to capture what's passed to it
+        render_calls = []
+        def mock_do_render(bar_idx, swings, events, highlighted):
+            render_calls.append((bar_idx, swings, events, highlighted))
+
+        with patch.object(renderer, '_do_render', side_effect=mock_do_render):
+            renderer._rerender_cached_state()
+
+        # Verify _do_render was called
+        assert len(render_calls) == 1
+
+        # Verify the swings passed are a copy
+        passed_swings = render_calls[0][1]
+        assert passed_swings is not renderer._cached_active_swings
+        assert len(passed_swings) == len(sample_swings)
 
 
 if __name__ == "__main__":

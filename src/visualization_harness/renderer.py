@@ -16,6 +16,7 @@ Author: Generated for Market Simulator Project
 """
 
 import logging
+import threading
 import time
 from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
@@ -25,23 +26,18 @@ from matplotlib.patches import Rectangle
 import matplotlib.dates as mdates
 from datetime import datetime
 
-# Import project modules
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from src.legacy.bull_reference_detector import Bar
-from src.analysis.swing_state_manager import ActiveSwing
-from src.analysis.event_detector import StructuralEvent, EventType, EventSeverity
-from src.analysis.bar_aggregator import BarAggregator
-from src.analysis.scale_calibrator import ScaleConfig
-from src.visualization.config import (
+from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.swing_state_manager import ActiveSwing
+from src.swing_analysis.event_detector import StructuralEvent, EventType, EventSeverity
+from src.swing_analysis.bar_aggregator import BarAggregator
+from src.swing_analysis.scale_calibrator import ScaleConfig
+from .render_config import (
     RenderConfig, ViewWindow, PANEL_SCALE_MAPPING, LEVEL_LINE_STYLES,
     EVENT_MARKERS, get_scale_colors
 )
-from src.visualization.layout_manager import LayoutManager, LayoutMode, PanelGeometry
-from src.visualization.pip_inset import PiPInsetManager, PiPConfig
-from src.visualization.swing_visibility import SwingVisibilityController, VisibilityMode
+from .layout_manager import LayoutManager, LayoutMode, PanelGeometry
+from .pip_inset import PiPInsetManager, PiPConfig
+from .swing_visibility import SwingVisibilityController, VisibilityMode
 
 
 class VisualizationRenderer:
@@ -96,6 +92,8 @@ class VisualizationRenderer:
         self.swing_visibility: SwingVisibilityController = SwingVisibilityController()
 
         # Cached render state for re-rendering after layout transitions (Issue #12)
+        # Thread safety: Use _state_lock for all access to cached state
+        self._state_lock = threading.RLock()
         self._cached_active_swings: List[ActiveSwing] = []
         self._cached_recent_events: List[StructuralEvent] = []
         self._cached_highlighted_events: Optional[List[StructuralEvent]] = None
@@ -236,14 +234,22 @@ class VisualizationRenderer:
 
         Called after layout transitions to restore swing/event visualization
         without requiring new data from the harness.
+
+        Thread safety: Makes copies of cached state under lock before rendering.
         """
-        if self._cached_active_swings or self._cached_recent_events:
+        # Thread safety: copy cached state under lock, then render outside lock
+        with self._state_lock:
+            swings_copy = list(self._cached_active_swings) if self._cached_active_swings else []
+            events_copy = list(self._cached_recent_events) if self._cached_recent_events else []
+            highlighted_copy = list(self._cached_highlighted_events) if self._cached_highlighted_events else None
+
+        if swings_copy or events_copy:
             # Use _do_render directly to bypass frame skipping during layout transitions
             self._do_render(
                 self.current_bar_idx,
-                self._cached_active_swings,
-                self._cached_recent_events,
-                self._cached_highlighted_events
+                swings_copy,
+                events_copy,
+                highlighted_copy
             )
 
     def toggle_panel_expand(self, panel_idx: int) -> None:
@@ -309,9 +315,11 @@ class VisualizationRenderer:
         self.last_events = recent_events
 
         # Cache state for re-rendering after layout transitions (Issue #12)
-        self._cached_active_swings = active_swings
-        self._cached_recent_events = recent_events
-        self._cached_highlighted_events = highlighted_events
+        # Thread safety: protect cache writes with lock and make copies
+        with self._state_lock:
+            self._cached_active_swings = list(active_swings) if active_swings else []
+            self._cached_recent_events = list(recent_events) if recent_events else []
+            self._cached_highlighted_events = list(highlighted_events) if highlighted_events else None
 
         # Do the actual rendering
         self._do_render(current_bar_idx, active_swings, recent_events, highlighted_events)
@@ -1295,6 +1303,20 @@ class VisualizationRenderer:
             scale: Scale index (0-3)
         """
         self.swing_visibility.record_event(event, scale)
+
+    def get_cached_swings_copy(self) -> List[ActiveSwing]:
+        """
+        Get a thread-safe copy of cached active swings.
+
+        Thread safety: Returns a copy of the cached swings list, taken under lock.
+        Use this method from external threads (e.g., keyboard handler) to avoid
+        race conditions when accessing cached state.
+
+        Returns:
+            Copy of cached active swings list
+        """
+        with self._state_lock:
+            return list(self._cached_active_swings) if self._cached_active_swings else []
 
     # Swing cap control methods (Phase 1)
 

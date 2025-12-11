@@ -26,24 +26,20 @@ import matplotlib
 matplotlib.use('TkAgg')  # Ensure interactive backend
 import matplotlib.pyplot as plt
 
-# Project imports
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from src.data.ohlc_loader import load_ohlc
-from src.analysis.scale_calibrator import ScaleCalibrator
-from src.analysis.bar_aggregator import BarAggregator
-from src.analysis.swing_state_manager import SwingStateManager
-from src.visualization.renderer import VisualizationRenderer
-from src.visualization.config import RenderConfig
-from src.playback.controller import PlaybackController
-from src.playback.config import PlaybackConfig, PlaybackMode, PlaybackState
-from src.logging.event_logger import EventLogger
-from src.logging.display import EventLogDisplay
-from src.logging.filters import FilterBuilder
-from src.logging.progress_logger import ProgressLogger
-from src.legacy.bull_reference_detector import Bar
-from src.visualization.keyboard_handler import KeyboardHandler
+from src.swing_analysis.scale_calibrator import ScaleCalibrator
+from src.swing_analysis.bar_aggregator import BarAggregator
+from src.swing_analysis.swing_state_manager import SwingStateManager
+from src.swing_analysis.bull_reference_detector import Bar
+from .renderer import VisualizationRenderer
+from .render_config import RenderConfig
+from .controller import PlaybackController
+from .playback_config import PlaybackConfig, PlaybackMode, PlaybackState
+from .event_logger import EventLogger
+from .display import EventLogDisplay
+from .filters import FilterBuilder
+from .progress_logger import ProgressLogger
+from .keyboard_handler import KeyboardHandler
 
 
 class VisualizationHarness:

@@ -18,11 +18,11 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.data.ohlc_loader import load_ohlc
-from src.analysis.scale_calibrator import ScaleCalibrator
-from src.analysis.bar_aggregator import BarAggregator
-from src.analysis.swing_state_manager import SwingStateManager
-from src.analysis.event_detector import EventDetector
-from src.legacy.bull_reference_detector import Bar
+from src.swing_analysis.scale_calibrator import ScaleCalibrator
+from src.swing_analysis.bar_aggregator import BarAggregator
+from src.swing_analysis.swing_state_manager import SwingStateManager
+from src.swing_analysis.event_detector import EventDetector
+from src.swing_analysis.bull_reference_detector import Bar
 import pandas as pd
 
 
@@ -178,7 +178,7 @@ def profile_event_detection_isolated(bars, scale_config, num_bars=1000):
     print(f"{'='*60}")
 
     # Create mock active swings
-    from src.analysis.event_detector import ActiveSwing, EventDetector
+    from src.swing_analysis.event_detector import ActiveSwing, EventDetector
 
     detector = EventDetector()
 
@@ -235,7 +235,7 @@ def profile_swing_detection_standalone(bars, num_bars=100):
     print(f"{'='*60}")
 
     import pandas as pd
-    from src.legacy.swing_detector import detect_swings
+    from src.swing_analysis.swing_detector import detect_swings
 
     # Test with different data sizes
     test_sizes = [100, 500, 1000, 5000]

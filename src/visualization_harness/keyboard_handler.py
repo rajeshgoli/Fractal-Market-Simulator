@@ -37,8 +37,8 @@ from typing import Callable, Optional, Dict, Any
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import KeyEvent
 
-from src.playback.controller import PlaybackController
-from src.playback.config import PlaybackMode, PlaybackState
+from .controller import PlaybackController
+from .playback_config import PlaybackMode, PlaybackState
 
 
 class KeyboardHandler:
@@ -473,8 +473,8 @@ Swing Visibility:
         if self.visualization_renderer is None:
             return
 
-        # Get cached swings from renderer, grouped by scale
-        cached_swings = self.visualization_renderer._cached_active_swings
+        # Get thread-safe copy of cached swings from renderer, grouped by scale
+        cached_swings = self.visualization_renderer.get_cached_swings_copy()
         swings_by_scale = self.visualization_renderer._group_swings_by_scale(cached_swings)
 
         # Cycle through swings for all panels (or use focused panel if in expanded mode)
@@ -507,8 +507,8 @@ Swing Visibility:
         if self.visualization_renderer is None:
             return
 
-        # Get cached swings from renderer, grouped by scale
-        cached_swings = self.visualization_renderer._cached_active_swings
+        # Get thread-safe copy of cached swings from renderer, grouped by scale
+        cached_swings = self.visualization_renderer.get_cached_swings_copy()
         swings_by_scale = self.visualization_renderer._group_swings_by_scale(cached_swings)
 
         # Similar to _cycle_next_swing

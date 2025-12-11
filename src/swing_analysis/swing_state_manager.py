@@ -23,17 +23,12 @@ from decimal import Decimal
 from typing import Dict, List, Optional, Set, Tuple
 import pandas as pd
 
-# Import existing modules
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from src.legacy.bull_reference_detector import Bar
-from src.legacy.swing_detector import detect_swings
-from src.legacy.level_calculator import calculate_levels
-from src.analysis.scale_calibrator import ScaleConfig
-from src.analysis.bar_aggregator import BarAggregator
-from src.analysis.event_detector import EventDetector, EventType, StructuralEvent, ActiveSwing
+from .bull_reference_detector import Bar
+from .swing_detector import detect_swings
+from .level_calculator import calculate_levels
+from .scale_calibrator import ScaleConfig
+from .bar_aggregator import BarAggregator
+from .event_detector import EventDetector, EventType, StructuralEvent, ActiveSwing
 
 
 @dataclass
