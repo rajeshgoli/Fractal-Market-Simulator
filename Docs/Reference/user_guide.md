@@ -20,15 +20,15 @@ source venv/bin/activate
 ### Discover Available Data
 ```bash
 # See what data is available
-python3 -m src.cli.main list-data --symbol ES
+python3 -m src.visualization_harness.main list-data --symbol ES
 
 # Get detailed file information
-python3 -m src.cli.main list-data --symbol ES --resolution 1m --verbose
+python3 -m src.visualization_harness.main list-data --symbol ES --resolution 1m --verbose
 ```
 
 ### Launch Validation Session
 ```bash
-python3 -m src.cli.main validate --symbol ES --resolution 1m \
+python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
   --start 2024-01-01 --end 2024-01-31
 ```
 
@@ -129,7 +129,7 @@ Use `--playback-start` to specify when playback begins. Data between `--start` a
 
 ```bash
 # Use Jan-Mar 2020 as reference, start playback from April
-python3 -m src.cli.main validate --symbol ES --resolution 1m \
+python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
   --start 2020-01-01 --end 2020-05-01 \
   --playback-start 2020-04-01
 ```
@@ -142,7 +142,7 @@ Use `--step-timeframe` to advance by larger time chunks instead of 1-minute bars
 
 ```bash
 # Step by 60 minutes (1 hour) at a time
-python3 -m src.cli.main validate --symbol ES --resolution 1m \
+python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
   --start 2024-01-01 --end 2024-01-31 \
   --step-timeframe 60
 ```
@@ -154,7 +154,7 @@ Options: 1, 5, 15, 30, 60, 240 minutes.
 Add `--verbose` for detailed progress logging:
 
 ```bash
-python3 -m src.cli.main validate --symbol ES --resolution 1m \
+python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
   --start 2024-01-01 --end 2024-01-31 --verbose
 ```
 
@@ -167,7 +167,7 @@ Shows:
 
 ```bash
 # Full-featured validation session
-python3 -m src.cli.main validate --symbol ES --resolution 1m \
+python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
   --start 2020-01-01 --end 2020-06-01 \
   --playback-start 2020-04-01 \
   --step-timeframe 60 \
@@ -275,7 +275,7 @@ Validation sessions are automatically saved to `validation_sessions/` directory:
 ### Date range errors
 ```bash
 # Check what dates are available
-python3 -m src.cli.main list-data --symbol ES --resolution 1m --verbose
+python3 -m src.visualization_harness.main list-data --symbol ES --resolution 1m --verbose
 ```
 Adjust `--start` and `--end` to overlap with available data.
 
@@ -303,7 +303,7 @@ When logging issues, use these types:
 ## Example Session
 
 ```bash
-$ python3 -m src.cli.main validate --symbol ES --resolution 1m \
+$ python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
     --start 2024-01-15 --end 2024-01-20 --verbose
 
 Loading ES 1m data from 2024-01-15 to 2024-01-20...
