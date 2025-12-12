@@ -577,6 +577,9 @@
         let startBarIndex = null;
         let endBarIndex = null;
 
+        // Fibonacci preview lines
+        let fibLines = [];
+
         // Session and cascade info
         let sessionInfo = null;
         let cascadeState = null;
@@ -614,6 +617,45 @@
                 return SNAP_TOLERANCE[sessionInfo.scale] || 10;
             }
             return 10; // default
+        }
+
+        // Show Fibonacci preview lines on pending annotation
+        function showFibLines(startBarIdx, endBarIdx) {
+            clearFibLines();
+
+            const startBar = bars[startBarIdx];
+            const endBar = bars[endBarIdx];
+            if (!startBar || !endBar) return;
+
+            const isBull = startBar.high > endBar.high;
+            const startPrice = isBull ? startBar.high : startBar.low;
+            const endPrice = isBull ? endBar.low : endBar.high;
+            const range = endPrice - startPrice;
+
+            const levels = [
+                { level: 0, price: startPrice, label: '0' },
+                { level: 0.382, price: startPrice + range * 0.382, label: '0.382' },
+                { level: 1.0, price: endPrice, label: '1.0' },
+                { level: 2.0, price: startPrice + range * 2.0, label: '2.0' },
+            ];
+
+            levels.forEach(({ price, label }) => {
+                const line = mainCandleSeries.createPriceLine({
+                    price: price,
+                    color: '#9c27b0',
+                    lineWidth: 1,
+                    lineStyle: 2, // dashed
+                    axisLabelVisible: true,
+                    title: label,
+                });
+                fibLines.push(line);
+            });
+        }
+
+        // Clear Fibonacci preview lines
+        function clearFibLines() {
+            fibLines.forEach(line => mainCandleSeries.removePriceLine(line));
+            fibLines = [];
         }
 
         // Initialize main chart
@@ -865,6 +907,9 @@
                 text: 'End',
             });
             mainCandleSeries.setMarkers(tempMarkers);
+
+            // Show Fibonacci preview lines
+            showFibLines(startBarIndex, endBarIndex);
         }
 
         // Cancel current selection
@@ -879,12 +924,14 @@
         // Cancel annotation from modal
         function cancelAnnotation() {
             document.getElementById('confirmation-modal').classList.add('hidden');
+            clearFibLines();
             cancelSelection();
         }
 
         // Confirm annotation
         async function confirmAnnotation() {
             document.getElementById('confirmation-modal').classList.add('hidden');
+            clearFibLines();
 
             try {
                 const response = await fetch('/api/annotations', {
