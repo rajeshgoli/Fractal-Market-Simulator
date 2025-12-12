@@ -2,6 +2,93 @@
 
 ---
 
+## Q-2025-12-12-1: Ground Truth Annotation Tool Design
+
+**From:** Product
+**To:** Architect
+**Status:** Resolved
+**Date:** December 12, 2025
+
+**Context:** User feedback identified fundamental limitation in current validation approach: can't catch false negatives (swings user sees that system missed). New paradigm: user marks swings blind, then compare against system output.
+
+**Questions Asked:**
+1. Cascading scale implementation: How should the XL → L → M → S progression work technically?
+2. Annotation data model: What should be stored per annotation? How to match user vs system swings?
+3. Integration approach: Replace `lightweight_swing_validator` in place, or build parallel and swap?
+4. Window parameter behavior: Does current bar_aggregator support showing 50K bars aggregated at XL?
+5. Any feasibility concerns?
+
+**Resolution (Architect):**
+
+**1. Cascading Scales:**
+- XL: aggregate to ~50 bars (window / 50)
+- L: aggregate to ~200 bars (window / 200)
+- M: aggregate to ~800 bars (window / 800)
+- S: source resolution (no aggregation)
+- Panel layout: 25% reference (larger scale), 75% main (active annotation)
+
+**2. Annotation Data Model:**
+```python
+SwingAnnotation:
+    annotation_id, scale, direction, start_bar_index, end_bar_index,
+    start_source_index, end_source_index, start_price, end_price,
+    created_at, window_id
+```
+Matching: direction + scale + positional overlap (start/end within 10% tolerance)
+
+**3. Integration Approach:**
+Build parallel, then swap. Current validator may still be useful for quick checks. Reuse: ProgressiveLoader, BarAggregator, ScaleCalibrator, swing_detector. New: AnnotationStorage, ComparisonAnalyzer, CascadeController, Canvas UI.
+
+**4. Window Parameter:**
+Current bar_aggregator does NOT support arbitrary aggregation. Need new `aggregate_to_target_bars()` method. Straightforward extension of existing logic.
+
+**5. Feasibility:**
+No blockers. Medium risk on canvas UX at scale (mitigated by fixed aggregation per scale) and matching tolerance calibration (start at 10%, expose as parameter).
+
+**Next Step:** Engineering to create GitHub issue for MVP implementation.
+
+---
+
+## Q-2025-12-11-3: Harness vs Lightweight Validation Tool
+
+**From:** Product
+**To:** Architect
+**Status:** Resolved
+**Date:** December 11, 2025
+
+**Context:** Dogfooding revealed visualization harness cannot support validation - playback frozen, timestamp errors, auto-pause spam. User proposed pivoting to lightweight HTML-based swing validation tool.
+
+**Questions Asked:**
+1. Root cause of playback freeze?
+2. Effort to fix harness?
+3. Effort to build lightweight tool?
+4. What's salvageable from harness?
+
+**Resolution (Architect):**
+
+**Root cause:** Multiple interacting failures:
+- Timestamp ordering violations in BarAggregator (deep architectural issue - aggregator assumes forward-only stream but harness allows jumps/resets)
+- Aggressive auto-pause on S-scale events (fires constantly, masks all other issues)
+- Visualization update queue stalls when constantly paused
+
+**Effort assessment:**
+
+| Path | Effort | Risk |
+|------|--------|------|
+| Fix harness (minimum viable) | 2-3 weeks | Medium - state synchronization issues |
+| Fix harness (full polish) | 4-6 weeks | Medium |
+| Lightweight validator | 10-14 days | Low - clean implementation |
+
+**Salvageable from harness:** ~70% of codebase
+- Fully reusable: All of `src/swing_analysis/*`, `src/data/*`, `src/validation/*`
+- Not reusable: `src/visualization_harness/renderer.py`, `controller.py`, `harness.py`
+
+**Recommendation:** Path B (lightweight tool) - faster time to value, lower risk, directly serves validation objective.
+
+**Next step:** Awaiting Product decision on path. Full technical assessment in `Docs/State/architect_notes.md`.
+
+---
+
 ## Q1: Stale CLI Path References Need Cleanup
 
 **From:** Product
