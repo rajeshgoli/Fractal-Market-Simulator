@@ -4,6 +4,9 @@ Main entry point for the Ground Truth Annotator.
 Usage:
     python -m src.ground_truth_annotator.main --data test.csv --resolution 1m --window 50000
     python -m src.ground_truth_annotator.main --data es-1m.csv --port 8001 --scale S
+
+Cascade mode (XL → L → M → S progression):
+    python -m src.ground_truth_annotator.main --data test.csv --cascade
 """
 
 import argparse
@@ -89,6 +92,11 @@ def main():
         action="store_true",
         help="Enable auto-reload for development"
     )
+    parser.add_argument(
+        "--cascade",
+        action="store_true",
+        help="Enable XL → L → M → S cascade workflow (overrides --scale and --target-bars)"
+    )
 
     args = parser.parse_args()
 
@@ -111,8 +119,11 @@ def main():
         print(f"Resolution:  {args.resolution}")
         print(f"Total bars:  {format_number(metrics.total_bars)}")
         print(f"Window:      {format_number(args.window)} bars")
-        print(f"Scale:       {args.scale}")
-        print(f"Target bars: {args.target_bars}")
+        if args.cascade:
+            print(f"Mode:        CASCADE (XL → L → M → S)")
+        else:
+            print(f"Scale:       {args.scale}")
+            print(f"Target bars: {args.target_bars}")
         if metrics.first_timestamp and metrics.last_timestamp:
             print(f"Date range:  {metrics.first_timestamp.strftime('%Y-%m-%d')} to {metrics.last_timestamp.strftime('%Y-%m-%d')}")
         print()
@@ -132,7 +143,8 @@ def main():
             resolution_minutes=resolution_minutes,
             window_size=args.window,
             scale=args.scale,
-            target_bars=args.target_bars
+            target_bars=args.target_bars,
+            cascade=args.cascade
         )
         init_time = time.time() - start_time
     except FileNotFoundError as e:

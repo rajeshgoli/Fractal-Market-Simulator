@@ -15,6 +15,7 @@
             --accent-bull: #26a69a;
             --accent-bear: #ef5350;
             --accent-blue: #2196f3;
+            --accent-purple: #9c27b0;
             --border-color: #333;
         }
 
@@ -41,7 +42,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             padding-bottom: 15px;
             border-bottom: 1px solid var(--border-color);
         }
@@ -55,6 +56,7 @@
             display: flex;
             gap: 20px;
             font-size: 0.9rem;
+            align-items: center;
         }
 
         .info-item {
@@ -78,10 +80,53 @@
             font-weight: 600;
         }
 
+        .cascade-progress {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .progress-step {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            border: 2px solid var(--border-color);
+        }
+
+        .progress-step.completed {
+            background: var(--accent-bull);
+            color: white;
+            border-color: var(--accent-bull);
+        }
+
+        .progress-step.current {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+        }
+
+        .progress-arrow {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
         .main-content {
             display: grid;
             grid-template-columns: 1fr 320px;
             gap: 20px;
+        }
+
+        .charts-area {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
         .chart-container {
@@ -90,11 +135,42 @@
             padding: 15px;
         }
 
+        .chart-container.reference-panel {
+            border: 2px solid var(--accent-purple);
+            opacity: 0.9;
+        }
+
+        .chart-container.reference-panel .chart-header {
+            border-bottom: 1px solid var(--accent-purple);
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+        }
+
         .chart-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 10px;
+        }
+
+        .chart-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-title h3 {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .completed-badge {
+            background: var(--accent-purple);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
         }
 
         .instruction-text {
@@ -114,10 +190,24 @@
             color: var(--accent-bull);
         }
 
-        #chart {
+        .reference-chart {
             width: 100%;
-            height: 600px;
+            height: 200px;
+        }
+
+        .main-chart {
+            width: 100%;
+            height: 450px;
             cursor: crosshair;
+        }
+
+        .no-reference {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 150px;
+            color: var(--text-secondary);
+            font-style: italic;
         }
 
         .sidebar {
@@ -154,7 +244,7 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
-            max-height: 400px;
+            max-height: 300px;
             overflow-y: auto;
         }
 
@@ -217,6 +307,86 @@
         .annotation-details span {
             display: block;
             margin-top: 2px;
+        }
+
+        .btn {
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .btn-success {
+            background: var(--accent-bull);
+            color: white;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .empty-state {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .keyboard-hints {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .keyboard-hints kbd {
+            background: var(--bg-card);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            margin-right: 4px;
+        }
+
+        .hint-row {
+            margin-bottom: 6px;
+        }
+
+        .cascade-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .scale-info-text {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-bottom: 10px;
         }
 
         .confirmation-modal {
@@ -284,57 +454,8 @@
             margin-top: 20px;
         }
 
-        .btn {
+        .confirmation-buttons .btn {
             flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: var(--accent-blue);
-            color: white;
-        }
-
-        .btn-secondary {
-            background: var(--bg-card);
-            color: var(--text-primary);
-        }
-
-        .btn:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
-        }
-
-        .empty-state {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            text-align: center;
-            padding: 20px;
-        }
-
-        .keyboard-hints {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid var(--border-color);
-        }
-
-        .keyboard-hints kbd {
-            background: var(--bg-card);
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: monospace;
-            margin-right: 4px;
-        }
-
-        .hint-row {
-            margin-bottom: 6px;
         }
 
         @media (max-width: 1200px) {
@@ -349,9 +470,8 @@
         <header>
             <h1>Ground Truth Annotator</h1>
             <div class="session-info">
-                <div class="info-item">
-                    <span class="info-label">Scale:</span>
-                    <span class="scale-badge" id="scale-badge">-</span>
+                <div class="cascade-progress" id="cascade-progress">
+                    <!-- Populated dynamically -->
                 </div>
                 <div class="info-item">
                     <span class="info-label">Bars:</span>
@@ -365,13 +485,31 @@
         </header>
 
         <div class="main-content">
-            <div class="chart-container">
-                <div class="chart-header">
-                    <div class="instruction-text selecting-start" id="instruction">
-                        Click on the first candle to start marking a swing
+            <div class="charts-area">
+                <!-- Reference Panel (hidden when no completed scales) -->
+                <div class="chart-container reference-panel" id="reference-container" style="display: none;">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <h3>Reference: <span id="reference-scale-name">XL</span></h3>
+                            <span class="completed-badge">Completed</span>
+                        </div>
+                        <span class="info-value" id="reference-annotation-count">0 annotations</span>
                     </div>
+                    <div class="reference-chart" id="reference-chart"></div>
                 </div>
-                <div id="chart"></div>
+
+                <!-- Main Panel -->
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <h3>Current Scale: <span class="scale-badge" id="scale-badge">-</span></h3>
+                        </div>
+                        <div class="instruction-text selecting-start" id="instruction">
+                            Click on the first candle to start marking a swing
+                        </div>
+                    </div>
+                    <div class="main-chart" id="chart"></div>
+                </div>
             </div>
 
             <div class="sidebar">
@@ -387,6 +525,14 @@
                         <div class="hint-row"><kbd>Esc</kbd> Cancel selection</div>
                         <div class="hint-row"><kbd>Enter</kbd> Confirm annotation</div>
                         <div class="hint-row"><kbd>Delete</kbd> Delete last annotation</div>
+                    </div>
+                    <div class="cascade-actions" id="cascade-actions">
+                        <div class="scale-info-text" id="scale-info-text">
+                            Mark all swings visible at this scale
+                        </div>
+                        <button class="btn btn-success" id="next-scale-btn" onclick="advanceToNextScale()">
+                            Next Scale →
+                        </button>
                     </div>
                 </div>
             </div>
@@ -415,25 +561,30 @@
 
     <script>
         // State
-        let chart = null;
-        let candleSeries = null;
+        let mainChart = null;
+        let mainCandleSeries = null;
+        let referenceChart = null;
+        let referenceCandleSeries = null;
         let bars = [];
+        let referenceBars = [];
         let annotations = [];
+        let referenceAnnotations = [];
         let markers = [];
-        let lines = [];
 
         // Selection state
         let selectionState = 'idle'; // 'idle' | 'selecting_end' | 'confirming'
         let startBarIndex = null;
         let endBarIndex = null;
 
-        // Session info
+        // Session and cascade info
         let sessionInfo = null;
+        let cascadeState = null;
+        let isCascadeMode = false;
 
-        // Initialize chart
-        function initChart() {
+        // Initialize main chart
+        function initMainChart() {
             const container = document.getElementById('chart');
-            chart = LightweightCharts.createChart(container, {
+            mainChart = LightweightCharts.createChart(container, {
                 layout: {
                     background: { type: 'solid', color: '#16213e' },
                     textColor: '#a0a0a0',
@@ -454,7 +605,7 @@
                 },
             });
 
-            candleSeries = chart.addCandlestickSeries({
+            mainCandleSeries = mainChart.addCandlestickSeries({
                 upColor: '#26a69a',
                 downColor: '#ef5350',
                 borderDownColor: '#ef5350',
@@ -464,38 +615,71 @@
             });
 
             // Handle click on chart
-            chart.subscribeClick((param) => {
+            mainChart.subscribeClick((param) => {
                 if (!param.time) return;
-
-                // Find the clicked bar
                 const clickedBar = bars.find(b => b.timestamp === param.time);
                 if (!clickedBar) return;
-
                 handleBarClick(clickedBar);
             });
 
             // Handle resize
             window.addEventListener('resize', () => {
-                chart.applyOptions({ width: container.clientWidth });
+                mainChart.applyOptions({ width: container.clientWidth });
+                if (referenceChart) {
+                    const refContainer = document.getElementById('reference-chart');
+                    referenceChart.applyOptions({ width: refContainer.clientWidth });
+                }
+            });
+        }
+
+        // Initialize reference chart (for cascade mode)
+        function initReferenceChart() {
+            const container = document.getElementById('reference-chart');
+            referenceChart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { type: 'solid', color: '#16213e' },
+                    textColor: '#a0a0a0',
+                },
+                grid: {
+                    vertLines: { color: '#333' },
+                    horzLines: { color: '#333' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#333',
+                },
+                timeScale: {
+                    borderColor: '#333',
+                    timeVisible: true,
+                },
+                handleScroll: false,
+                handleScale: false,
+            });
+
+            referenceCandleSeries = referenceChart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
             });
         }
 
         // Handle click on a bar
         function handleBarClick(bar) {
             if (selectionState === 'idle') {
-                // First click - select start
                 startBarIndex = bar.index;
                 selectionState = 'selecting_end';
                 updateInstruction();
                 updateMarkers();
             } else if (selectionState === 'selecting_end') {
-                // Second click - select end
                 if (bar.index === startBarIndex) {
-                    // Clicked same bar - cancel
                     cancelSelection();
                     return;
                 }
-
                 endBarIndex = bar.index;
                 selectionState = 'confirming';
                 showConfirmation();
@@ -524,6 +708,7 @@
             annotations.forEach((ann, idx) => {
                 const startBar = bars[ann.start_bar_index];
                 const endBar = bars[ann.end_bar_index];
+                if (!startBar || !endBar) return;
                 const color = ann.direction === 'bull' ? '#26a69a' : '#ef5350';
 
                 markers.push({
@@ -545,27 +730,48 @@
             // Add selection marker
             if (selectionState === 'selecting_end' && startBarIndex !== null) {
                 const startBar = bars[startBarIndex];
-                markers.push({
-                    time: startBar.timestamp,
-                    position: 'aboveBar',
-                    color: '#2196f3',
-                    shape: 'arrowDown',
-                    text: 'Start',
-                });
+                if (startBar) {
+                    markers.push({
+                        time: startBar.timestamp,
+                        position: 'aboveBar',
+                        color: '#2196f3',
+                        shape: 'arrowDown',
+                        text: 'Start',
+                    });
+                }
             }
 
-            candleSeries.setMarkers(markers);
+            mainCandleSeries.setMarkers(markers);
         }
 
-        // Draw annotation lines on chart
-        function drawAnnotationLines() {
-            // Remove existing lines
-            lines.forEach(line => candleSeries.removePriceLine(line));
-            lines = [];
+        // Update reference chart markers
+        function updateReferenceMarkers() {
+            if (!referenceCandleSeries || !referenceBars.length) return;
 
-            // Note: lightweight-charts doesn't support arbitrary lines between points
-            // We'll rely on markers to show annotations visually
-            // For a more sophisticated solution, we could use a custom series or overlay canvas
+            const refMarkers = [];
+            referenceAnnotations.forEach((ann, idx) => {
+                const startBar = referenceBars[ann.start_bar_index];
+                const endBar = referenceBars[ann.end_bar_index];
+                if (!startBar || !endBar) return;
+                const color = ann.direction === 'bull' ? '#26a69a' : '#ef5350';
+
+                refMarkers.push({
+                    time: startBar.timestamp,
+                    position: ann.direction === 'bull' ? 'aboveBar' : 'belowBar',
+                    color: color,
+                    shape: 'circle',
+                    text: `${idx + 1}`,
+                });
+                refMarkers.push({
+                    time: endBar.timestamp,
+                    position: ann.direction === 'bull' ? 'belowBar' : 'aboveBar',
+                    color: color,
+                    shape: 'circle',
+                    text: `${idx + 1}`,
+                });
+            });
+
+            referenceCandleSeries.setMarkers(refMarkers);
         }
 
         // Show confirmation modal
@@ -573,7 +779,6 @@
             const startBar = bars[startBarIndex];
             const endBar = bars[endBarIndex];
 
-            // Infer direction
             const isBull = startBar.high > endBar.high;
             const direction = isBull ? 'bull' : 'bear';
             const directionText = isBull ? 'Bull Reference (Downswing)' : 'Bear Reference (Upswing)';
@@ -598,7 +803,7 @@
                 shape: 'arrowUp',
                 text: 'End',
             });
-            candleSeries.setMarkers(tempMarkers);
+            mainCandleSeries.setMarkers(tempMarkers);
         }
 
         // Cancel current selection
@@ -638,10 +843,7 @@
                 const newAnnotation = await response.json();
                 annotations.push(newAnnotation);
 
-                // Reset selection
                 cancelSelection();
-
-                // Update UI
                 renderAnnotationList();
                 updateMarkers();
                 updateCounts();
@@ -664,10 +866,7 @@
                     throw new Error(await response.text());
                 }
 
-                // Remove from local list
                 annotations = annotations.filter(a => a.annotation_id !== annotationId);
-
-                // Update UI
                 renderAnnotationList();
                 updateMarkers();
                 updateCounts();
@@ -718,14 +917,14 @@
         }
 
         // Load bars from API
-        async function loadBars() {
+        async function loadBars(scale = null) {
             try {
-                const response = await fetch('/api/bars');
+                const url = scale ? `/api/bars?scale=${scale}` : '/api/bars';
+                const response = await fetch(url);
                 if (!response.ok) throw new Error(await response.text());
 
                 bars = await response.json();
 
-                // Convert to chart format
                 const chartData = bars.map(bar => ({
                     time: bar.timestamp,
                     open: bar.open,
@@ -734,14 +933,38 @@
                     close: bar.close,
                 }));
 
-                candleSeries.setData(chartData);
-                chart.timeScale().fitContent();
+                mainCandleSeries.setData(chartData);
+                mainChart.timeScale().fitContent();
 
                 document.getElementById('bar-count').textContent = bars.length;
 
             } catch (error) {
                 console.error('Error loading bars:', error);
                 alert('Failed to load data: ' + error.message);
+            }
+        }
+
+        // Load reference bars
+        async function loadReferenceBars(scale) {
+            try {
+                const response = await fetch(`/api/bars?scale=${scale}`);
+                if (!response.ok) throw new Error(await response.text());
+
+                referenceBars = await response.json();
+
+                const chartData = referenceBars.map(bar => ({
+                    time: bar.timestamp,
+                    open: bar.open,
+                    high: bar.high,
+                    low: bar.low,
+                    close: bar.close,
+                }));
+
+                referenceCandleSeries.setData(chartData);
+                referenceChart.timeScale().fitContent();
+
+            } catch (error) {
+                console.error('Error loading reference bars:', error);
             }
         }
 
@@ -761,6 +984,22 @@
             }
         }
 
+        // Load reference annotations
+        async function loadReferenceAnnotations() {
+            try {
+                const response = await fetch('/api/cascade/reference');
+                if (!response.ok) throw new Error(await response.text());
+
+                referenceAnnotations = await response.json();
+                document.getElementById('reference-annotation-count').textContent =
+                    `${referenceAnnotations.length} annotation${referenceAnnotations.length !== 1 ? 's' : ''}`;
+                updateReferenceMarkers();
+
+            } catch (error) {
+                console.error('Error loading reference annotations:', error);
+            }
+        }
+
         // Load session info
         async function loadSession() {
             try {
@@ -772,6 +1011,119 @@
 
             } catch (error) {
                 console.error('Error loading session:', error);
+            }
+        }
+
+        // Load cascade state
+        async function loadCascadeState() {
+            try {
+                const response = await fetch('/api/cascade/state');
+                if (!response.ok) {
+                    // Not in cascade mode
+                    isCascadeMode = false;
+                    document.getElementById('cascade-actions').style.display = 'none';
+                    document.getElementById('cascade-progress').style.display = 'none';
+                    return;
+                }
+
+                cascadeState = await response.json();
+                isCascadeMode = true;
+
+                // Update progress indicator
+                updateCascadeProgress();
+
+                // Update scale badge
+                document.getElementById('scale-badge').textContent = cascadeState.current_scale;
+
+                // Show/hide reference panel
+                if (cascadeState.reference_scale) {
+                    document.getElementById('reference-container').style.display = 'block';
+                    document.getElementById('reference-scale-name').textContent = cascadeState.reference_scale;
+                    if (!referenceChart) {
+                        initReferenceChart();
+                    }
+                    await loadReferenceBars(cascadeState.reference_scale);
+                    await loadReferenceAnnotations();
+                } else {
+                    document.getElementById('reference-container').style.display = 'none';
+                }
+
+                // Update scale info text
+                const scaleInfo = cascadeState.scale_info[cascadeState.current_scale];
+                const compression = scaleInfo.compression_ratio.toFixed(0);
+                document.getElementById('scale-info-text').textContent =
+                    `${cascadeState.current_scale} scale (${scaleInfo.actual_bars} bars, ${compression}:1 compression)`;
+
+                // Update next button
+                const nextBtn = document.getElementById('next-scale-btn');
+                if (cascadeState.is_complete) {
+                    nextBtn.textContent = 'Session Complete!';
+                    nextBtn.disabled = true;
+                } else {
+                    const nextIndex = cascadeState.current_scale_index + 1;
+                    const scales = ['XL', 'L', 'M', 'S'];
+                    if (nextIndex < scales.length) {
+                        nextBtn.textContent = `Complete ${cascadeState.current_scale} → Start ${scales[nextIndex]}`;
+                    } else {
+                        nextBtn.textContent = `Complete ${cascadeState.current_scale}`;
+                    }
+                    nextBtn.disabled = false;
+                }
+
+                // Load bars for current scale
+                await loadBars(cascadeState.current_scale);
+
+            } catch (error) {
+                console.error('Error loading cascade state:', error);
+                isCascadeMode = false;
+            }
+        }
+
+        // Update cascade progress indicator
+        function updateCascadeProgress() {
+            const container = document.getElementById('cascade-progress');
+            const scales = ['XL', 'L', 'M', 'S'];
+
+            let html = '';
+            scales.forEach((scale, idx) => {
+                if (idx > 0) {
+                    html += '<span class="progress-arrow">→</span>';
+                }
+
+                let className = 'progress-step';
+                if (cascadeState.completed_scales.includes(scale)) {
+                    className += ' completed';
+                } else if (scale === cascadeState.current_scale) {
+                    className += ' current';
+                }
+
+                html += `<div class="${className}">${scale}</div>`;
+            });
+
+            container.innerHTML = html;
+            container.style.display = 'flex';
+        }
+
+        // Advance to next scale
+        async function advanceToNextScale() {
+            try {
+                const response = await fetch('/api/cascade/advance', {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const result = await response.json();
+
+                // Reload cascade state and UI
+                await loadCascadeState();
+                await loadAnnotations();
+
+            } catch (error) {
+                console.error('Error advancing scale:', error);
+                alert('Failed to advance: ' + error.message);
             }
         }
 
@@ -796,9 +1148,14 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
-            initChart();
+            initMainChart();
             await loadSession();
-            await loadBars();
+            await loadCascadeState();
+
+            if (!isCascadeMode) {
+                await loadBars();
+            }
+
             await loadAnnotations();
             updateInstruction();
         });

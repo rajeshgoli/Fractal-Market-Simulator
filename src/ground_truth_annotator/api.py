@@ -5,20 +5,22 @@ Provides REST API endpoints for:
 - Serving aggregated bars for chart display
 - Creating, listing, and deleting annotations
 - Session state management
+- Cascade workflow (XL → L → M → S scale progression)
 """
 
 import logging
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .cascade_controller import CascadeController
 from .models import AnnotationSession, SwingAnnotation
 from .storage import AnnotationStorage
 from ..data.ohlc_loader import load_ohlc
@@ -74,6 +76,35 @@ class SessionResponse(BaseModel):
     completed_scales: List[str]
 
 
+class ScaleInfo(BaseModel):
+    """Information about a single scale."""
+    scale: str
+    target_bars: Optional[int]
+    actual_bars: int
+    compression_ratio: float
+    annotation_count: int
+    is_complete: bool
+
+
+class CascadeStateResponse(BaseModel):
+    """Cascade workflow state."""
+    current_scale: str
+    current_scale_index: int
+    reference_scale: Optional[str]
+    completed_scales: List[str]
+    scales_remaining: int
+    is_complete: bool
+    scale_info: Dict[str, ScaleInfo]
+
+
+class CascadeAdvanceResponse(BaseModel):
+    """Response from advancing cascade."""
+    success: bool
+    previous_scale: str
+    current_scale: str
+    is_complete: bool
+
+
 @dataclass
 class AppState:
     """Application state."""
@@ -84,6 +115,8 @@ class AppState:
     session: AnnotationSession
     scale: str
     target_bars: int
+    cascade_controller: Optional[CascadeController] = None
+    aggregator: Optional[BarAggregator] = None
 
 
 # Global state
@@ -141,14 +174,39 @@ async def health():
 
 
 @app.get("/api/bars", response_model=List[BarResponse])
-async def get_bars():
+async def get_bars(scale: Optional[str] = Query(None, description="Scale to get bars for (XL, L, M, S)")):
     """
     Get aggregated bars for chart display.
 
     Returns bars aggregated to the target count for efficient visualization.
+    If scale is provided and cascade mode is active, returns bars for that scale.
     """
     s = get_state()
 
+    # If scale specified and cascade controller available, use cascade bars
+    if scale and s.cascade_controller:
+        try:
+            scale_bars = s.cascade_controller.get_bars_for_scale(scale)
+            agg_map = s.cascade_controller.get_aggregation_map(scale)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        bars = []
+        for agg_bar in scale_bars:
+            source_start, source_end = agg_map.get(agg_bar.index, (agg_bar.index, agg_bar.index))
+            bars.append(BarResponse(
+                index=agg_bar.index,
+                timestamp=agg_bar.timestamp,
+                open=agg_bar.open,
+                high=agg_bar.high,
+                low=agg_bar.low,
+                close=agg_bar.close,
+                source_start_index=source_start,
+                source_end_index=source_end,
+            ))
+        return bars
+
+    # Default: return pre-computed aggregated bars
     bars = []
     for agg_bar in s.aggregated_bars:
         source_start, source_end = s.aggregation_map.get(agg_bar.index, (agg_bar.index, agg_bar.index))
@@ -229,6 +287,10 @@ async def create_annotation(request: AnnotationCreate):
     # Reload session to get updated annotation list
     s.session = s.storage.get_session(s.session.session_id)
 
+    # Sync cascade controller's session if in cascade mode
+    if s.cascade_controller:
+        s.cascade_controller._session = s.session
+
     return AnnotationResponse(
         annotation_id=annotation.annotation_id,
         scale=annotation.scale,
@@ -281,6 +343,10 @@ async def delete_annotation(annotation_id: str):
     # Reload session
     s.session = s.storage.get_session(s.session.session_id)
 
+    # Sync cascade controller's session if in cascade mode
+    if s.cascade_controller:
+        s.cascade_controller._session = s.session
+
     return {"status": "ok", "annotation_id": annotation_id}
 
 
@@ -289,16 +355,116 @@ async def get_session():
     """Get current session state."""
     s = get_state()
 
+    # If cascade mode, use cascade controller's current scale
+    current_scale = s.scale
+    if s.cascade_controller:
+        current_scale = s.cascade_controller.get_current_scale()
+
     return SessionResponse(
         session_id=s.session.session_id,
         data_file=s.session.data_file,
         resolution=s.session.resolution,
         window_size=s.session.window_size,
-        scale=s.scale,
+        scale=current_scale,
         created_at=s.session.created_at.isoformat(),
         annotation_count=len(s.session.annotations),
         completed_scales=s.session.completed_scales
     )
+
+
+@app.get("/api/cascade/state", response_model=CascadeStateResponse)
+async def get_cascade_state():
+    """Get current cascade workflow state."""
+    s = get_state()
+
+    if not s.cascade_controller:
+        raise HTTPException(
+            status_code=400,
+            detail="Cascade mode not enabled. Start server with --cascade flag."
+        )
+
+    cascade_state = s.cascade_controller.get_cascade_state()
+
+    # Convert scale_info to Pydantic models
+    scale_info_models = {
+        scale: ScaleInfo(**info)
+        for scale, info in cascade_state["scale_info"].items()
+    }
+
+    return CascadeStateResponse(
+        current_scale=cascade_state["current_scale"],
+        current_scale_index=cascade_state["current_scale_index"],
+        reference_scale=cascade_state["reference_scale"],
+        completed_scales=cascade_state["completed_scales"],
+        scales_remaining=cascade_state["scales_remaining"],
+        is_complete=cascade_state["is_complete"],
+        scale_info=scale_info_models,
+    )
+
+
+@app.post("/api/cascade/advance", response_model=CascadeAdvanceResponse)
+async def advance_cascade():
+    """Mark current scale complete and advance to next scale."""
+    s = get_state()
+
+    if not s.cascade_controller:
+        raise HTTPException(
+            status_code=400,
+            detail="Cascade mode not enabled. Start server with --cascade flag."
+        )
+
+    previous_scale = s.cascade_controller.get_current_scale()
+    success = s.cascade_controller.advance_to_next_scale()
+    current_scale = s.cascade_controller.get_current_scale()
+
+    # Update state's scale to match cascade
+    s.scale = current_scale
+
+    # Persist session state
+    s.storage.update_session(s.session)
+
+    # Update aggregated bars for new scale
+    if s.cascade_controller:
+        s.aggregated_bars = s.cascade_controller.get_bars_for_scale(current_scale)
+        s.aggregation_map = s.cascade_controller.get_aggregation_map(current_scale)
+
+    return CascadeAdvanceResponse(
+        success=success,
+        previous_scale=previous_scale,
+        current_scale=current_scale,
+        is_complete=s.cascade_controller.is_session_complete(),
+    )
+
+
+@app.get("/api/cascade/reference", response_model=List[AnnotationResponse])
+async def get_reference_annotations():
+    """Get annotations from the reference scale (completed larger scale)."""
+    s = get_state()
+
+    if not s.cascade_controller:
+        raise HTTPException(
+            status_code=400,
+            detail="Cascade mode not enabled."
+        )
+
+    annotations = s.cascade_controller.get_reference_annotations()
+
+    return [
+        AnnotationResponse(
+            annotation_id=ann.annotation_id,
+            scale=ann.scale,
+            direction=ann.direction,
+            start_bar_index=ann.start_bar_index,
+            end_bar_index=ann.end_bar_index,
+            start_source_index=ann.start_source_index,
+            end_source_index=ann.end_source_index,
+            start_price=str(ann.start_price),
+            end_price=str(ann.end_price),
+            created_at=ann.created_at.isoformat(),
+            window_id=ann.window_id
+        )
+        for ann in annotations
+    ]
 
 
 def init_app(
@@ -307,7 +473,8 @@ def init_app(
     resolution_minutes: int = 1,
     window_size: int = 50000,
     scale: str = "S",
-    target_bars: int = 200
+    target_bars: int = 200,
+    cascade: bool = False
 ):
     """
     Initialize the application with data file.
@@ -317,8 +484,9 @@ def init_app(
         storage_dir: Directory for storing annotation sessions
         resolution_minutes: Source data resolution in minutes
         window_size: Total bars to load
-        scale: Scale to annotate (S, M, L, XL)
-        target_bars: Target number of bars to display
+        scale: Scale to annotate (S, M, L, XL) - ignored if cascade=True
+        target_bars: Target number of bars to display - ignored if cascade=True
+        cascade: Enable XL → L → M → S cascade workflow
     """
     global state
 
@@ -347,28 +515,13 @@ def init_app(
 
     logger.info(f"Loaded {len(source_bars)} source bars")
 
-    # Aggregate bars for display
+    # Create aggregator
     aggregator = BarAggregator(source_bars, resolution_minutes)
-    aggregated_bars = aggregator.aggregate_to_target_bars(target_bars)
-    logger.info(f"Aggregated to {len(aggregated_bars)} display bars")
-
-    # Build aggregation map (agg_index -> source indices range)
-    aggregation_map = {}
-    if len(source_bars) > target_bars:
-        bars_per_candle = len(source_bars) // target_bars
-        for agg_idx in range(len(aggregated_bars)):
-            source_start = agg_idx * bars_per_candle
-            source_end = min(source_start + bars_per_candle - 1, len(source_bars) - 1)
-            aggregation_map[agg_idx] = (source_start, source_end)
-    else:
-        # No aggregation - 1:1 mapping
-        for i in range(len(source_bars)):
-            aggregation_map[i] = (i, i)
 
     # Initialize storage
     storage = AnnotationStorage(storage_dir)
 
-    # Create or get session
+    # Create session
     resolution_str = f"{resolution_minutes}m"
     session = storage.create_session(
         data_file=data_file,
@@ -377,6 +530,37 @@ def init_app(
     )
     logger.info(f"Created session {session.session_id}")
 
+    # Initialize cascade controller if cascade mode
+    cascade_controller = None
+    if cascade:
+        cascade_controller = CascadeController(
+            session=session,
+            source_bars=source_bars,
+            aggregator=aggregator
+        )
+        # Use cascade's current scale and bars
+        scale = cascade_controller.get_current_scale()
+        aggregated_bars = cascade_controller.get_bars_for_scale(scale)
+        aggregation_map = cascade_controller.get_aggregation_map(scale)
+        logger.info(f"Cascade mode enabled, starting at scale {scale}")
+    else:
+        # Non-cascade mode: use fixed aggregation
+        aggregated_bars = aggregator.aggregate_to_target_bars(target_bars)
+        logger.info(f"Aggregated to {len(aggregated_bars)} display bars")
+
+        # Build aggregation map (agg_index -> source indices range)
+        aggregation_map = {}
+        if len(source_bars) > target_bars:
+            bars_per_candle = len(source_bars) // target_bars
+            for agg_idx in range(len(aggregated_bars)):
+                source_start = agg_idx * bars_per_candle
+                source_end = min(source_start + bars_per_candle - 1, len(source_bars) - 1)
+                aggregation_map[agg_idx] = (source_start, source_end)
+        else:
+            # No aggregation - 1:1 mapping
+            for i in range(len(source_bars)):
+                aggregation_map[i] = (i, i)
+
     state = AppState(
         source_bars=source_bars,
         aggregated_bars=aggregated_bars,
@@ -384,7 +568,9 @@ def init_app(
         storage=storage,
         session=session,
         scale=scale,
-        target_bars=target_bars
+        target_bars=target_bars,
+        cascade_controller=cascade_controller,
+        aggregator=aggregator
     )
 
     logger.info(f"Initialized annotator with {len(source_bars)} bars, scale={scale}")
