@@ -431,3 +431,40 @@ class BarAggregator:
             )
             aggregation.bars.append(agg_bar)
             source_to_agg_map[new_bar.index] = len(aggregation.bars) - 1
+
+    def aggregate_to_target_bars(self, target_count: int) -> List[Bar]:
+        """
+        Aggregate source bars to approximately target_count output bars.
+
+        Dynamically computes aggregation factor to compress source data into
+        the desired number of bars for display purposes (e.g., annotation UI).
+
+        Args:
+            target_count: Desired number of output bars
+
+        Returns:
+            List of aggregated bars, length approximately target_count
+
+        Raises:
+            ValueError: If target_count <= 0
+        """
+        if target_count <= 0:
+            raise ValueError("target_count must be positive")
+
+        # If we have fewer bars than target, return all source bars
+        if len(self._source_bars) <= target_count:
+            return self._source_bars.copy()
+
+        # Calculate how many source bars per output candle
+        bars_per_candle = len(self._source_bars) // target_count
+
+        aggregated_bars = []
+
+        # Process source bars in groups
+        for i in range(0, len(self._source_bars), bars_per_candle):
+            group = self._source_bars[i:i + bars_per_candle]
+            if group:
+                agg_bar = self._create_aggregated_bar(group, len(aggregated_bars))
+                aggregated_bars.append(agg_bar)
+
+        return aggregated_bars
