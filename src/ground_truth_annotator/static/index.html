@@ -582,6 +582,40 @@
         let cascadeState = null;
         let isCascadeMode = false;
 
+        // Snap-to-extrema tolerance (bars) by scale
+        const SNAP_TOLERANCE = { XL: 5, L: 10, M: 20, S: 30 };
+
+        // Find the bar with best extrema within tolerance radius
+        // lookingForHigh: true = find highest high, false = find lowest low
+        function findBestExtrema(clickedIndex, tolerance, lookingForHigh) {
+            const startIdx = Math.max(0, clickedIndex - tolerance);
+            const endIdx = Math.min(bars.length - 1, clickedIndex + tolerance);
+
+            let bestIndex = clickedIndex;
+            let bestValue = lookingForHigh ? bars[clickedIndex].high : bars[clickedIndex].low;
+
+            for (let i = startIdx; i <= endIdx; i++) {
+                const value = lookingForHigh ? bars[i].high : bars[i].low;
+                if (lookingForHigh ? value > bestValue : value < bestValue) {
+                    bestValue = value;
+                    bestIndex = i;
+                }
+            }
+
+            return bestIndex;
+        }
+
+        // Get current snap tolerance based on scale
+        function getSnapTolerance() {
+            if (cascadeState && cascadeState.current_scale) {
+                return SNAP_TOLERANCE[cascadeState.current_scale] || 10;
+            }
+            if (sessionInfo && sessionInfo.scale) {
+                return SNAP_TOLERANCE[sessionInfo.scale] || 10;
+            }
+            return 10; // default
+        }
+
         // Initialize main chart
         function initMainChart() {
             const container = document.getElementById('chart');
@@ -679,8 +713,18 @@
 
         // Handle click on a bar
         function handleBarClick(bar) {
+            const tolerance = getSnapTolerance();
+
             if (selectionState === 'idle') {
-                startBarIndex = bar.index;
+                // First click: find best extrema (either highest high or lowest low)
+                const highIdx = findBestExtrema(bar.index, tolerance, true);
+                const lowIdx = findBestExtrema(bar.index, tolerance, false);
+
+                // Pick whichever extrema is more prominent (further from clicked bar)
+                const highDelta = Math.abs(bars[highIdx].high - bar.high);
+                const lowDelta = Math.abs(bars[lowIdx].low - bar.low);
+
+                startBarIndex = highDelta >= lowDelta ? highIdx : lowIdx;
                 selectionState = 'selecting_end';
                 updateInstruction();
                 updateMarkers();
@@ -689,7 +733,15 @@
                     cancelSelection();
                     return;
                 }
-                endBarIndex = bar.index;
+
+                // Second click: snap to opposite extrema based on start bar
+                const startBar = bars[startBarIndex];
+                // If start is at a local high, we're marking a downswing (bull ref) -> find lowest low
+                // If start is at a local low, we're marking an upswing (bear ref) -> find highest high
+                const startIsHigh = startBar.high >= bars[bar.index].high;
+                const lookingForHigh = !startIsHigh;
+
+                endBarIndex = findBestExtrema(bar.index, tolerance, lookingForHigh);
                 selectionState = 'confirming';
                 showConfirmation();
             }
