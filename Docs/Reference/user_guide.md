@@ -103,6 +103,7 @@ The annotator automatically determines swing direction based on price movement:
 - **OHLC Candlesticks**: Green (bullish) and red (bearish) candles
 - **Selection Markers**: Blue arrows show selected start/end points
 - **Annotation Markers**: Numbered circles show saved annotations
+- **Fibonacci Preview Lines**: When confirming an annotation, purple dashed lines appear at key Fibonacci levels (0, 0.382, 1.0, 2.0) to help assess swing proportions. Lines auto-clear on confirm or cancel.
 
 ### Sidebar
 - **Annotation List**: All saved annotations with direction and bar range
