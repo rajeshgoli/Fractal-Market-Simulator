@@ -259,18 +259,83 @@ class TestScaleCalibrator(unittest.TestCase):
     def test_performance_large_dataset(self):
         """Test performance with large dataset"""
         import time
-        
+
         # Create large dataset (simulate 6 months of 1-minute data ≈ 100k bars)
         # Use smaller test size for practicality
         swing_sizes = list(range(5, 200)) * 200  # 39,000 swings
-        
+
         start_time = time.time()
         bars = self._create_synthetic_bars_with_swings(swing_sizes[:1000])  # Limit for test speed
         config = self.calibrator.calibrate(bars, "ES")
         end_time = time.time()
-        
+
         duration = end_time - start_time
         self.assertLess(duration, 30.0, f"Calibration took {duration:.2f}s, should be < 30s")
+
+    def test_performance_scaling_is_nlogn(self):
+        """Test that performance scales O(N log N), not O(N²).
+
+        Validates issue #17: O(N log N) swing detector integration.
+
+        For O(N²): doubling N should quadruple time (~4x ratio)
+        For O(N log N): doubling N should roughly double time (~2x ratio)
+        We test that the ratio is significantly below O(N²) threshold.
+        """
+        import time
+
+        # Create bars directly (faster than _create_synthetic_bars_with_swings)
+        def create_simple_bars(n: int) -> list:
+            """Create n bars with oscillating prices to generate swings."""
+            bars = []
+            for i in range(n):
+                # Create oscillating pattern to generate swings
+                cycle = (i % 100) / 100.0
+                base = 6000 + 50 * math.sin(2 * math.pi * cycle)
+                price = base + (i % 7) * 0.5  # Add small noise
+                bar = Bar(
+                    index=i,
+                    timestamp=1700000000 + i * 60,
+                    open=price,
+                    high=price + 2,
+                    low=price - 2,
+                    close=price + 0.5
+                )
+                bars.append(bar)
+            return bars
+
+        # Test with two sizes: N and 2N
+        n_small = 10000
+        n_large = 20000
+
+        # Time small dataset
+        bars_small = create_simple_bars(n_small)
+        start = time.time()
+        self.calibrator.calibrate(bars_small, "ES")
+        time_small = time.time() - start
+
+        # Time large dataset
+        bars_large = create_simple_bars(n_large)
+        start = time.time()
+        self.calibrator.calibrate(bars_large, "ES")
+        time_large = time.time() - start
+
+        # Calculate actual ratio
+        # Avoid division by zero with minimum time threshold
+        if time_small < 0.001:
+            time_small = 0.001
+        actual_ratio = time_large / time_small
+
+        # For O(N²), ratio should be ~4 (2² = 4)
+        # For O(N log N), ratio should be ~2 * log(2N)/log(N) ≈ 2.1-2.3 for these sizes
+        # We use 3.0 as threshold - safely above O(N log N) but well below O(N²)
+        max_acceptable_ratio = 3.0
+
+        self.assertLess(
+            actual_ratio, max_acceptable_ratio,
+            f"Performance ratio {actual_ratio:.2f}x for 2x input suggests O(N²) scaling. "
+            f"Expected <{max_acceptable_ratio}x for O(N log N). "
+            f"Times: {n_small} bars = {time_small:.3f}s, {n_large} bars = {time_large:.3f}s"
+        )
         
     def test_error_handling(self):
         """Test error handling with malformed data"""

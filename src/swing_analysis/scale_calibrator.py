@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
-from .bull_reference_detector import BullReferenceDetector, BearReferenceDetector, Bar
+import pandas as pd
+
+from .bull_reference_detector import Bar
+from .swing_detector import detect_swings
 
 
 @dataclass
@@ -140,50 +143,66 @@ class ScaleCalibrator:
     
     def _detect_all_swings(self, bars: List[Bar]) -> List[Dict]:
         """
-        Detect both bull and bear swings using existing detectors.
-        
+        Detect both bull and bear swings using the O(N log N) swing detector.
+
         Returns list of swing dictionaries with size, duration, etc.
         """
+        if not bars:
+            return []
+
         all_swings = []
-        
+
         try:
-            # Detect bull reference swings
-            bull_detector = BullReferenceDetector()
-            current_price = bars[-1].close if bars else 0
-            bull_swings = bull_detector.detect(bars, current_price)
-            
-            for swing in bull_swings:
+            # Convert List[Bar] to DataFrame for detect_swings()
+            df = pd.DataFrame({
+                'open': [bar.open for bar in bars],
+                'high': [bar.high for bar in bars],
+                'low': [bar.low for bar in bars],
+                'close': [bar.close for bar in bars]
+            })
+
+            # Use O(N log N) swing detector
+            result = detect_swings(df, lookback=5, filter_redundant=True)
+
+            # Map bull references to expected format
+            for ref in result.get('bull_references', []):
+                # Bull swing: high before low (downswing)
+                duration = ref['low_bar_index'] - ref['high_bar_index']
+                if duration > 0:
+                    speed = ref['size'] / duration
+                else:
+                    speed = 0.0
+
                 all_swings.append({
                     'type': 'bull',
-                    'size': swing.range,
-                    'duration': swing.duration,
-                    'high': swing.high_price,
-                    'low': swing.low_price,
-                    'speed': swing.speed
+                    'size': ref['size'],
+                    'duration': duration,
+                    'high': ref['high_price'],
+                    'low': ref['low_price'],
+                    'speed': speed
                 })
-                
-        except Exception as e:
-            self.logger.error(f"Error detecting bull swings: {e}")
-        
-        try:
-            # Detect bear reference swings using existing detector if available
-            bear_detector = BearReferenceDetector()
-            bear_swings = bear_detector.detect(bars, current_price)
-            
-            for swing in bear_swings:
+
+            # Map bear references to expected format
+            for ref in result.get('bear_references', []):
+                # Bear swing: low before high (upswing)
+                duration = ref['high_bar_index'] - ref['low_bar_index']
+                if duration > 0:
+                    speed = ref['size'] / duration
+                else:
+                    speed = 0.0
+
                 all_swings.append({
-                    'type': 'bear', 
-                    'size': swing.range,
-                    'duration': swing.duration,
-                    'high': swing.high_price,
-                    'low': swing.low_price,
-                    'speed': swing.speed
+                    'type': 'bear',
+                    'size': ref['size'],
+                    'duration': duration,
+                    'high': ref['high_price'],
+                    'low': ref['low_price'],
+                    'speed': speed
                 })
-                
+
         except Exception as e:
-            self.logger.warning(f"Bear detector not available or failed: {e}")
-            # Note: Could implement price inversion method here if needed
-        
+            self.logger.error(f"Error detecting swings: {e}")
+
         return all_swings
     
     def _compute_quartile_boundaries(self, swing_sizes: List[float], instrument: str) -> Optional[Dict]:
