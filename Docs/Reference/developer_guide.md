@@ -173,7 +173,7 @@ fractal-market-simulator/
 │       ├── storage.py              # Vote storage
 │       ├── progressive_loader.py   # Large file handling
 │       └── static/index.html       # Validation UI
-├── tests/                          # Test suite (450+ tests)
+├── tests/                          # Test suite (489 tests)
 ├── Docs/                           # Documentation
 └── data/                           # Sample data files
 ```
@@ -763,6 +763,30 @@ class AnnotationSession:
     created_at: datetime
     annotations: List[SwingAnnotation]
     completed_scales: List[str]
+
+@dataclass
+class SwingFeedback:
+    """Feedback on a single swing (match, FP, or FN) in Review Mode."""
+    feedback_id: str              # UUID
+    swing_type: str               # "match" | "false_positive" | "false_negative"
+    swing_reference: Dict[str, Any]  # annotation_id or DetectedSwing data
+    verdict: str                  # "correct" | "incorrect" | "noise" | "valid_missed" | "explained"
+    comment: Optional[str]        # Free text explanation
+    category: Optional[str]       # "too_small" | "wrong_direction" | "pattern" | etc.
+    created_at: datetime
+
+@dataclass
+class ReviewSession:
+    """Review feedback for a single annotation session."""
+    review_id: str                        # UUID
+    session_id: str                       # Links to AnnotationSession
+    phase: str                            # "matches" | "fp_sample" | "fn_feedback" | "complete"
+    match_feedback: List[SwingFeedback]
+    fp_feedback: List[SwingFeedback]
+    fn_feedback: List[SwingFeedback]
+    fp_sample_indices: List[int]          # Which FPs were sampled
+    started_at: datetime
+    completed_at: Optional[datetime]
 ```
 
 #### `src/ground_truth_annotator/storage.py`
@@ -794,6 +818,36 @@ storage.delete_annotation(session.session_id, annotation_id)
 csv_string = storage.export_session(session.session_id, format="csv")
 json_string = storage.export_session(session.session_id, format="json")
 ```
+
+**Key Class**: `ReviewStorage`
+
+```python
+review_storage = ReviewStorage(storage_dir="annotation_sessions")
+
+# Create review session for an annotation session
+review = review_storage.create_review(session_id="abc123")
+
+# Add feedback
+feedback = SwingFeedback.create(
+    swing_type="match",
+    swing_reference={"annotation_id": "xyz"},
+    verdict="correct"
+)
+review.add_feedback(feedback)
+review_storage.save_review(review)
+
+# Advance through phases
+review.advance_phase()  # matches -> fp_sample -> fn_feedback -> complete
+
+# Get review
+loaded = review_storage.get_review(session_id="abc123")
+
+# Export
+json_string = review_storage.export_review(session_id, format="json")
+csv_string = review_storage.export_review(session_id, format="csv")
+```
+
+**File Naming**: Reviews are stored as `{session_id}_review.json` in the same directory as annotation sessions.
 
 #### `src/ground_truth_annotator/api.py`
 
@@ -1203,7 +1257,7 @@ tests/
 ├── test_playback_controller.py        # Playback state machine
 ├── test_event_logger.py               # Logging and export
 ├── test_ohlc_loader.py                # Data loading
-├── test_ground_truth_foundation.py    # Annotation models and storage (38 tests)
+├── test_ground_truth_foundation.py    # Annotation models and storage (68 tests)
 ├── test_ground_truth_annotator_api.py # Annotator API endpoints (44 tests)
 ├── test_comparison_analyzer.py        # Comparison logic (23 tests)
 ├── test_cascade_controller.py         # Cascade workflow (29 tests)

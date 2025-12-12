@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-12
 
@@ -8,30 +8,10 @@
 
 ## Pending Changes
 
-### 2025-12-12 - Snap-to-extrema uses click price proximity
-- **Issue:** #37
-- **Type:** Bug Fix
-- **Files:** `src/ground_truth_annotator/static/index.html`, `Docs/Reference/user_guide.md`
-
-### 2025-12-12 - Inline confirmation panel with A/R/N hotkeys
-- **Issue:** #35
-- **Type:** Enhancement
-- **Files:** `src/ground_truth_annotator/static/index.html`, `Docs/Reference/user_guide.md`
-
-### 2025-12-12 - Fibonacci preview lines on pending annotation
-- **Issue:** #33
-- **Type:** Enhancement
-- **Files:** `src/ground_truth_annotator/static/index.html`
-
-### 2025-12-12 - Snap-to-extrema for annotation clicks
-- **Issue:** #32
-- **Type:** Enhancement
-- **Files:** `src/ground_truth_annotator/static/index.html`
-
-### 2025-12-12 - Reference panel aspect ratio fix
-- **Issue:** #34
-- **Type:** Enhancement
-- **Files:** `src/ground_truth_annotator/static/index.html`
+### 2025-12-12 - Review Mode Data Models
+- **Issue:** #39
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/models.py`, `src/ground_truth_annotator/storage.py`, `tests/test_ground_truth_foundation.py`
 
 ---
 
@@ -39,6 +19,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 12 | #32, #33, #34, #35, #37 - UX polish batch | All Accepted |
 | Dec 12 | #27, #28, #29, #30 - Ground truth annotation tool MVP | All Accepted |
 | Dec 12 | Ground truth annotation design question | Approved - ready for engineering |
 | Dec 12 | #22, #24 - Full dataset loading, resolution-agnostic | Accepted |
