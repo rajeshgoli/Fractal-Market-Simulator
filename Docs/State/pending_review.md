@@ -1,12 +1,20 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-11
 
 ---
 
 ## Pending Changes
+
+### 2025-12-12 - Integrate O(N log N) Swing Detector
+- **Issue:** #17
+- **Type:** Enhancement
+- **Files:**
+  - `src/swing_analysis/scale_calibrator.py` - Replaced legacy detectors with `detect_swings()`
+  - `tests/test_scale_calibrator.py` - Added O(N log N) scaling test
+- **Summary:** Integrated existing `detect_swings()` into scale calibrator. Profiling revealed underlying detector has bottlenecks (slow `df.iloc`, O(S²) pairing) preventing <60s target. Created follow-up issue #20.
 
 ### 2025-12-12 - Lightweight Swing Validator Implementation
 - **Issue:** #16
@@ -24,6 +32,7 @@
   - `Docs/Reference/user_guide.md` - Updated with validator documentation
   - `.gitignore` - Added `validation_results/`
 - **Summary:** Implements web-based swing validation tool per product direction. Replaces blocked matplotlib harness path with simpler HTML/JS approach. Reuses existing swing detection logic.
+- **Update (Dec 12):** Fixed missing dependencies (fastapi, pydantic, uvicorn, httpx) in requirements.txt. Added installation instructions to user guide. All 21 tests pass.
 
 ---
 
