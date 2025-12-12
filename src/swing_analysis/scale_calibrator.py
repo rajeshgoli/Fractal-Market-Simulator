@@ -162,7 +162,10 @@ class ScaleCalibrator:
             })
 
             # Use O(N log N) swing detector
-            result = detect_swings(df, lookback=5, filter_redundant=True)
+            # For large datasets (>100K bars), use max_pair_distance for performance
+            # 2000 bars ≈ 33 hours of 1-minute data, sufficient for most reference swings
+            max_distance = 2000 if len(bars) > 100_000 else None
+            result = detect_swings(df, lookback=5, filter_redundant=True, max_pair_distance=max_distance)
 
             # Map bull references to expected format
             for ref in result.get('bull_references', []):

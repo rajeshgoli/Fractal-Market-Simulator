@@ -2,6 +2,7 @@ import bisect
 import math
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
+import numpy as np
 import pandas as pd
 from .level_calculator import calculate_levels, Level
 
@@ -77,6 +78,55 @@ class SparseTable:
             self.table[k][left],
             self.table[k][right - (1 << k)]
         )
+
+def _detect_swing_points_vectorized(highs: np.ndarray, lows: np.ndarray, lookback: int) -> tuple:
+    """
+    Vectorized swing point detection using numpy rolling window operations.
+
+    A swing high at index i requires: highs[i] >= all highs in [i-lookback, i+lookback]
+    A swing low at index i requires: lows[i] <= all lows in [i-lookback, i+lookback]
+
+    Args:
+        highs: 1D numpy array of high prices
+        lows: 1D numpy array of low prices
+        lookback: Number of bars before/after to check
+
+    Returns:
+        Tuple of (swing_high_indices, swing_low_indices) as numpy arrays
+    """
+    n = len(highs)
+    window_size = 2 * lookback + 1
+
+    if n < window_size:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.int64)
+
+    # Use sliding_window_view for efficient rolling operations (numpy 1.20+)
+    # This creates views without copying data
+    high_windows = np.lib.stride_tricks.sliding_window_view(highs, window_size)
+    low_windows = np.lib.stride_tricks.sliding_window_view(lows, window_size)
+
+    # For each window, the center element is at index `lookback`
+    # Find rolling max/min across each window
+    rolling_max_high = np.max(high_windows, axis=1)
+    rolling_min_low = np.min(low_windows, axis=1)
+
+    # The window results correspond to positions [0, n-window_size]
+    # which map to center positions [lookback, n-lookback-1]
+    # Extract the center values for comparison
+    center_highs = highs[lookback:n - lookback]
+    center_lows = lows[lookback:n - lookback]
+
+    # Swing high: center value equals the rolling max (it's >= all neighbors)
+    is_swing_high = center_highs == rolling_max_high
+    # Swing low: center value equals the rolling min (it's <= all neighbors)
+    is_swing_low = center_lows == rolling_min_low
+
+    # Convert boolean masks to indices, offset by lookback to get original positions
+    swing_high_indices = np.where(is_swing_high)[0] + lookback
+    swing_low_indices = np.where(is_swing_low)[0] + lookback
+
+    return swing_high_indices, swing_low_indices
+
 
 def get_level_band(price: float, levels: List[Level]) -> Decimal:
     """
@@ -217,7 +267,8 @@ def filter_swings(references: List[Dict[str, Any]], direction: str, quantization
         
     return kept_references
 
-def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = True, quantization: float = 0.25) -> Dict[str, Any]:
+def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = True,
+                  quantization: float = 0.25, max_pair_distance: Optional[int] = None) -> Dict[str, Any]:
     """
     Identifies swing highs and lows and pairs them to find valid reference swings.
 
@@ -226,6 +277,9 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         lookback: Number of bars before and after to check for swing points.
         filter_redundant: Whether to apply structural filtering to remove redundant swings.
         quantization: Tick size for Fibonacci level calculation.
+        max_pair_distance: Maximum bar distance between swing pairs. None for no limit.
+            For large datasets (>100K bars), recommend setting to 2000-5000 for performance.
+            This limits reference swing detection to swings within this bar distance.
 
     Returns:
         A dictionary containing current price, detected swing points, and valid reference swings.
@@ -241,49 +295,17 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         }
         
     current_price = float(df.iloc[-1]['close'])
-    
-    swing_highs = []
-    swing_lows = []
-    
-    # 1. Detect Swing Points
-    # Iterate from lookback to len(df) - lookback
-    # Note: range is exclusive at the end, so we go up to len(df) - lookback
-    for i in range(lookback, len(df) - lookback):
-        # Check for Swing High
-        current_high = df.iloc[i]['high']
-        is_high = True
-        # Check N bars before
-        for j in range(1, lookback + 1):
-            if df.iloc[i - j]['high'] > current_high:
-                is_high = False
-                break
-        # Check N bars after
-        if is_high:
-            for j in range(1, lookback + 1):
-                if df.iloc[i + j]['high'] > current_high:
-                    is_high = False
-                    break
-        
-        if is_high:
-            swing_highs.append({"price": float(current_high), "bar_index": i})
 
-        # Check for Swing Low
-        current_low = df.iloc[i]['low']
-        is_low = True
-        # Check N bars before
-        for j in range(1, lookback + 1):
-            if df.iloc[i - j]['low'] < current_low:
-                is_low = False
-                break
-        # Check N bars after
-        if is_low:
-            for j in range(1, lookback + 1):
-                if df.iloc[i + j]['low'] < current_low:
-                    is_low = False
-                    break
-        
-        if is_low:
-            swing_lows.append({"price": float(current_low), "bar_index": i})
+    # 1. Detect Swing Points (vectorized)
+    # Extract numpy arrays for fast operations
+    highs = df['high'].values.astype(np.float64)
+    lows = df['low'].values.astype(np.float64)
+
+    swing_high_indices, swing_low_indices = _detect_swing_points_vectorized(highs, lows, lookback)
+
+    # Convert to list of dicts format
+    swing_highs = [{"price": float(highs[i]), "bar_index": int(i)} for i in swing_high_indices]
+    swing_lows = [{"price": float(lows[i]), "bar_index": int(i)} for i in swing_low_indices]
 
     bull_references = []
     bear_references = []
@@ -301,7 +323,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     high_max_table = SparseTable(high_prices, mode='max')
 
     # Bull References: High BEFORE Low (Downswing)
-    # O(H × avg_valid_pairs) with O(1) interval validation
+    # O(H × D) where D = swings within max_pair_distance, with O(1) interval validation
     for high_swing in swing_highs:
         high_idx = high_swing["bar_index"]
         high_price = high_swing["price"]
@@ -310,23 +332,33 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         start_j = bisect.bisect_right(low_indices, high_idx)
 
         for j in range(start_j, len(swing_lows)):
-            low_swing = swing_lows[j]
-            low_idx = low_swing["bar_index"]
-            low_price = low_swing["price"]
+            low_idx = low_indices[j]
+
+            # EARLY TERMINATION: distance check (enables O(D) inner loop)
+            bar_distance = low_idx - high_idx
+            if max_pair_distance is not None and bar_distance > max_pair_distance:
+                break  # All subsequent lows are even farther away
+
+            low_price = low_prices[j]
             size = high_price - low_price
 
+            # CHEAP CHECK 1: geometric validity
             if size <= 0:
-                continue  # skip invalid geometric configuration
+                continue
 
-            # STRICT VALIDITY CHECK using O(1) RMQ:
+            # CHEAP CHECK 2: price range validity (eliminates most pairs)
+            level_0382 = low_price + (0.382 * size)
+            level_2x = low_price + (2.0 * size)
+            if not (level_0382 < current_price < level_2x):
+                continue
+
+            # EXPENSIVE CHECK: structural validity using O(1) RMQ
             # The Low must be the lowest point between High and Low.
-            # Find range of swing_lows in interval (high_idx, low_idx)
-            interval_start = start_j  # Already computed, reuse
-            interval_end = j  # Current position (exclusive, the low we're checking)
+            interval_start = start_j
+            interval_end = j  # Current position (exclusive)
 
             is_valid_structure = True
             if interval_start < interval_end:
-                # Check if minimum in interval is lower than our candidate low
                 interval_min = low_min_table.query(interval_start, interval_end)
                 if interval_min is not None and interval_min < low_price:
                     is_valid_structure = False
@@ -334,24 +366,19 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             if not is_valid_structure:
                 continue
 
-            # Validation: low + 0.382 * size < current < low + 2.0 * size
-            level_0382 = low_price + (0.382 * size)
-            level_2x = low_price + (2.0 * size)
-
-            if level_0382 < current_price < level_2x:
-                bull_references.append({
-                    "high_price": high_price,
-                    "high_bar_index": high_idx,
-                    "low_price": low_price,
-                    "low_bar_index": low_idx,
-                    "size": size,
-                    "level_0382": level_0382,
-                    "level_2x": level_2x,
-                    "rank": 0  # Placeholder
-                })
+            bull_references.append({
+                "high_price": high_price,
+                "high_bar_index": high_idx,
+                "low_price": low_price,
+                "low_bar_index": low_idx,
+                "size": size,
+                "level_0382": level_0382,
+                "level_2x": level_2x,
+                "rank": 0  # Placeholder
+            })
 
     # Bear References: Low BEFORE High (Upswing)
-    # O(L × avg_valid_pairs) with O(1) interval validation
+    # O(L × D) where D = swings within max_pair_distance, with O(1) interval validation
     for low_swing in swing_lows:
         low_idx = low_swing["bar_index"]
         low_price = low_swing["price"]
@@ -360,23 +387,33 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         start_j = bisect.bisect_right(high_indices, low_idx)
 
         for j in range(start_j, len(swing_highs)):
-            high_swing = swing_highs[j]
-            high_idx = high_swing["bar_index"]
-            high_price = high_swing["price"]
+            high_idx = high_indices[j]
+
+            # EARLY TERMINATION: distance check (enables O(D) inner loop)
+            bar_distance = high_idx - low_idx
+            if max_pair_distance is not None and bar_distance > max_pair_distance:
+                break  # All subsequent highs are even farther away
+
+            high_price = high_prices[j]
             size = high_price - low_price
 
+            # CHEAP CHECK 1: geometric validity
             if size <= 0:
-                continue  # skip invalid geometric configuration
+                continue
 
-            # STRICT VALIDITY CHECK using O(1) RMQ:
+            # CHEAP CHECK 2: price range validity (eliminates most pairs)
+            level_0382 = high_price - (0.382 * size)
+            level_2x = high_price - (2.0 * size)
+            if not (level_2x < current_price < level_0382):
+                continue
+
+            # EXPENSIVE CHECK: structural validity using O(1) RMQ
             # The High must be the highest point between Low and High.
-            # Find range of swing_highs in interval (low_idx, high_idx)
-            interval_start = start_j  # Already computed, reuse
-            interval_end = j  # Current position (exclusive, the high we're checking)
+            interval_start = start_j
+            interval_end = j  # Current position (exclusive)
 
             is_valid_structure = True
             if interval_start < interval_end:
-                # Check if maximum in interval is higher than our candidate high
                 interval_max = high_max_table.query(interval_start, interval_end)
                 if interval_max is not None and interval_max > high_price:
                     is_valid_structure = False
@@ -384,21 +421,16 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             if not is_valid_structure:
                 continue
 
-            # Validation: high - 2.0 * size < current < high - 0.382 * size
-            level_0382 = high_price - (0.382 * size)
-            level_2x = high_price - (2.0 * size)
-
-            if level_2x < current_price < level_0382:
-                bear_references.append({
-                    "high_price": high_price,
-                    "high_bar_index": high_idx,
-                    "low_price": low_price,
-                    "low_bar_index": low_idx,
-                    "size": size,
-                    "level_0382": level_0382,
-                    "level_2x": level_2x,
-                    "rank": 0  # Placeholder
-                })
+            bear_references.append({
+                "high_price": high_price,
+                "high_bar_index": high_idx,
+                "low_price": low_price,
+                "low_bar_index": low_idx,
+                "size": size,
+                "level_0382": level_0382,
+                "level_2x": level_2x,
+                "rank": 0  # Placeholder
+            })
 
     # 3. Filter Redundant Swings (Optional)
     if filter_redundant:

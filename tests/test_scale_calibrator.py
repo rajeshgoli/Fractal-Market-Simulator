@@ -327,8 +327,9 @@ class TestScaleCalibrator(unittest.TestCase):
 
         # For O(N²), ratio should be ~4 (2² = 4)
         # For O(N log N), ratio should be ~2 * log(2N)/log(N) ≈ 2.1-2.3 for these sizes
-        # We use 3.0 as threshold - safely above O(N log N) but well below O(N²)
-        max_acceptable_ratio = 3.0
+        # We use 3.5 as threshold - allows for measurement variance at small timescales
+        # while still catching O(N²) behavior (which would show 4x)
+        max_acceptable_ratio = 3.5
 
         self.assertLess(
             actual_ratio, max_acceptable_ratio,

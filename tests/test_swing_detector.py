@@ -318,5 +318,60 @@ class TestSwingDetectorScaling(unittest.TestCase):
                        f"Scaling ratio {ratio:.2f}x suggests worse than O(N log N)")
 
 
+class TestSwingDetectorLargeDataset(unittest.TestCase):
+    """Test performance at production scale (6M bars target)"""
+
+    def _create_synthetic_bars(self, num_bars: int, seed: int = 42) -> pd.DataFrame:
+        """Create synthetic OHLC data."""
+        np.random.seed(seed)
+        prices = np.cumsum(np.random.randn(num_bars) * 2) + 5000
+        return pd.DataFrame({
+            'open': prices,
+            'high': prices + np.abs(np.random.randn(num_bars)),
+            'low': prices - np.abs(np.random.randn(num_bars)),
+            'close': prices + np.random.randn(num_bars) * 0.5
+        })
+
+    def test_1m_bars_with_distance_limit(self):
+        """
+        1M bars should complete in <10s with max_pair_distance=2000.
+        This validates the 6M bar target (<60s) is achievable.
+        """
+        df = self._create_synthetic_bars(1_000_000)
+
+        start = time.time()
+        result = detect_swings(df, lookback=5, filter_redundant=False, max_pair_distance=2000)
+        elapsed = time.time() - start
+
+        # 1M bars in <10s implies 6M bars in <60s
+        self.assertLess(elapsed, 10.0, f"1M bars took {elapsed:.2f}s, expected <10s")
+
+        # Sanity check results
+        self.assertGreater(len(result['swing_highs']), 0)
+        self.assertGreater(len(result['swing_lows']), 0)
+
+        print(f"1M bars: {elapsed:.2f}s, {len(result['swing_highs'])} highs, "
+              f"{len(result['swing_lows'])} lows, {len(result['bull_references'])} bull refs")
+
+    def test_extrapolated_6m_performance(self):
+        """
+        Test that extrapolated 6M performance meets <60s target.
+        Uses 100K bars and extrapolates (avoids memory issues in CI).
+        """
+        df = self._create_synthetic_bars(100_000)
+
+        start = time.time()
+        result = detect_swings(df, lookback=5, filter_redundant=False, max_pair_distance=2000)
+        elapsed = time.time() - start
+
+        # Extrapolate to 6M: With max_pair_distance, scaling is linear
+        extrapolated_6m = elapsed * 60  # 100K to 6M
+
+        self.assertLess(extrapolated_6m, 60.0,
+                       f"Extrapolated 6M time {extrapolated_6m:.1f}s exceeds 60s target")
+
+        print(f"100K bars: {elapsed:.3f}s -> Extrapolated 6M: {extrapolated_6m:.1f}s")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
