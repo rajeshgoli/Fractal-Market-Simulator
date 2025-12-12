@@ -68,12 +68,25 @@ python -m src.ground_truth_annotator.main --data data/es-5m.csv --resolution 5m 
 
 ## The Two-Click Annotation Workflow
 
-1. **Click Start**: Click on the first candle of the swing. A "Start" marker appears.
-2. **Click End**: Click on the last candle of the swing. A confirmation dialog appears.
+1. **Click Start**: Click near the first candle of the swing. The system **automatically snaps** to the best extrema (highest high or lowest low) within a tolerance radius. A "Start" marker appears on the snapped candle.
+2. **Click End**: Click near the last candle. The system snaps to the opposite extrema (if start was a high, snaps to lowest low; if start was a low, snaps to highest high). A confirmation dialog appears.
 3. **Confirm Direction**: The system infers the direction automatically:
    - If start.high > end.high → **Bull Reference** (downswing)
    - If start.low < end.low → **Bear Reference** (upswing)
 4. **Save or Cancel**: Click "Confirm" to save or "Cancel" to restart.
+
+### Snap-to-Extrema
+
+Clicks automatically snap to the best extrema within a scale-aware tolerance radius. This means you don't need pixel-perfect clicking—the system finds the optimal candle for you.
+
+| Scale | Snap Radius (bars) |
+|-------|-------------------|
+| XL | 5 |
+| L | 10 |
+| M | 20 |
+| S | 30 |
+
+Larger scales use tighter tolerances because fewer aggregated bars are visible.
 
 ### Direction Inference
 

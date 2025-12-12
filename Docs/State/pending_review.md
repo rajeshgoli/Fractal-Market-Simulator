@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-12
 
 ---
 
 ## Pending Changes
+
+### 2025-12-12 - Snap-to-extrema for annotation clicks
+- **Issue:** #32
+- **Type:** Enhancement
+- **Files:** `src/ground_truth_annotator/static/index.html`
 
 ### 2025-12-12 - Reference panel aspect ratio fix
 - **Issue:** #34

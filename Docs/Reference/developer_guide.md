@@ -827,6 +827,22 @@ else:
     end_price = end_bar.high
 ```
 
+**Snap-to-Extrema (Frontend)**:
+
+The UI automatically snaps clicks to the best extrema within a scale-aware tolerance radius. This is implemented in `static/index.html`:
+
+```javascript
+const SNAP_TOLERANCE = { XL: 5, L: 10, M: 20, S: 30 };
+
+function findBestExtrema(clickedIndex, tolerance, lookingForHigh) {
+    // Searches bars[clickedIndex - tolerance] to bars[clickedIndex + tolerance]
+    // Returns index of bar with highest high (or lowest low)
+}
+```
+
+- **First click**: Finds both highest high and lowest low in range, picks whichever is more prominent
+- **Second click**: Snaps to opposite extrema based on detected swing direction
+
 #### `src/ground_truth_annotator/main.py`
 
 **Purpose**: CLI entry point for the annotator.
