@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 # Threshold for progressive loading
 LARGE_FILE_THRESHOLD = 100_000  # bars
 DEFAULT_WINDOW_SIZE = 20_000  # bars per window
-MAX_WINDOWS = 10  # Maximum windows to load
 
 
 class WindowStatus(str, Enum):
@@ -284,35 +283,26 @@ class ProgressiveLoader:
 
     def _calculate_window_positions(self) -> List[tuple]:
         """
-        Calculate window start positions for diverse coverage.
+        Calculate window start positions for complete dataset coverage.
 
-        Uses stratified sampling to ensure windows cover different
-        parts of the dataset (different market regimes).
+        Creates contiguous non-overlapping windows that cover all bars
+        in the dataset. This ensures all data is loaded for full validation.
         """
         total_bars = self.metrics.total_bars
-        window_size = min(self.window_size, total_bars)
+        window_size = self.window_size
 
-        # Calculate number of windows
-        # Aim for ~10 windows for good coverage, but at least 3
-        num_windows = min(MAX_WINDOWS, max(3, total_bars // window_size))
-
-        # Calculate stride between window starts
-        # Leave room for the last window
-        available_range = total_bars - window_size
-        if num_windows <= 1:
+        if total_bars <= window_size:
             return [(0, total_bars)]
 
-        stride = available_range // (num_windows - 1)
-
         positions = []
-        for i in range(num_windows):
-            start = i * stride
-            # Add small random offset for variety (within 10% of stride)
-            if stride > 10:
-                offset = self.rng.randint(-stride // 10, stride // 10)
-                start = max(0, min(start + offset, available_range))
+        start = 0
 
-            positions.append((start, window_size))
+        while start < total_bars:
+            # Calculate how many bars remain
+            remaining = total_bars - start
+            num_rows = min(window_size, remaining)
+            positions.append((start, num_rows))
+            start += num_rows
 
         return positions
 
