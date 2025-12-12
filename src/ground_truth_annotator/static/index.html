@@ -390,35 +390,16 @@
             margin-bottom: 10px;
         }
 
-        .confirmation-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
+        .confirmation-panel {
+            border: 2px solid var(--accent-blue);
         }
 
-        .confirmation-modal.hidden {
+        .confirmation-panel.hidden {
             display: none;
         }
 
-        .confirmation-box {
-            background: var(--bg-secondary);
-            border-radius: 12px;
-            padding: 24px;
-            min-width: 350px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        }
-
-        .confirmation-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin-bottom: 16px;
+        .confirmation-content {
+            margin-bottom: 15px;
         }
 
         .confirmation-detail {
@@ -432,7 +413,7 @@
         }
 
         .confirmation-direction {
-            margin-top: 16px;
+            margin-top: 12px;
             padding: 12px;
             border-radius: 6px;
             font-weight: 600;
@@ -449,14 +430,24 @@
             color: var(--accent-bear);
         }
 
-        .confirmation-buttons {
+        .confirmation-actions {
             display: flex;
             gap: 10px;
-            margin-top: 20px;
         }
 
-        .confirmation-buttons .btn {
+        .confirmation-actions .btn {
             flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .confirmation-actions kbd {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8rem;
         }
 
         @media (max-width: 1200px) {
@@ -524,8 +515,10 @@
                     </div>
                     <div class="keyboard-hints">
                         <div class="hint-row"><kbd>Esc</kbd> Cancel selection</div>
-                        <div class="hint-row"><kbd>Enter</kbd> Confirm annotation</div>
-                        <div class="hint-row"><kbd>Delete</kbd> Delete last annotation</div>
+                        <div class="hint-row"><kbd>A</kbd> Accept annotation</div>
+                        <div class="hint-row"><kbd>R</kbd> Reject annotation</div>
+                        <div class="hint-row"><kbd>N</kbd> Next scale</div>
+                        <div class="hint-row"><kbd>Del</kbd> Delete last annotation</div>
                     </div>
                     <div class="cascade-actions" id="cascade-actions">
                         <div class="scale-info-text" id="scale-info-text">
@@ -536,29 +529,34 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- Inline confirmation panel -->
+                <div class="card confirmation-panel hidden" id="confirmation-panel">
+                    <div class="card-title">Confirm Annotation</div>
+                    <div class="confirmation-content">
+                        <div class="confirmation-detail">
+                            <strong>Start:</strong> Bar <span id="confirm-start-bar">-</span>
+                        </div>
+                        <div class="confirmation-detail">
+                            <strong>End:</strong> Bar <span id="confirm-end-bar">-</span>
+                        </div>
+                        <div class="confirmation-direction" id="confirm-direction">
+                            Bull Reference (Downswing)
+                        </div>
+                    </div>
+                    <div class="confirmation-actions">
+                        <button class="btn btn-secondary" onclick="cancelAnnotation()">
+                            <kbd>R</kbd> Reject
+                        </button>
+                        <button class="btn btn-primary" onclick="confirmAnnotation()">
+                            <kbd>A</kbd> Accept
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Confirmation Modal -->
-    <div class="confirmation-modal hidden" id="confirmation-modal">
-        <div class="confirmation-box">
-            <div class="confirmation-title">Confirm Annotation</div>
-            <div class="confirmation-detail">
-                <strong>Start:</strong> Bar <span id="confirm-start-bar">-</span>
-            </div>
-            <div class="confirmation-detail">
-                <strong>End:</strong> Bar <span id="confirm-end-bar">-</span>
-            </div>
-            <div class="confirmation-direction" id="confirm-direction">
-                Bull Reference (Downswing)
-            </div>
-            <div class="confirmation-buttons">
-                <button class="btn btn-secondary" onclick="cancelAnnotation()">Cancel</button>
-                <button class="btn btn-primary" onclick="confirmAnnotation()">Confirm</button>
-            </div>
-        </div>
-    </div>
 
     <script>
         // State
@@ -877,7 +875,7 @@
             referenceCandleSeries.setMarkers(refMarkers);
         }
 
-        // Show confirmation modal
+        // Show confirmation panel (inline in sidebar)
         function showConfirmation() {
             const startBar = bars[startBarIndex];
             const endBar = bars[endBarIndex];
@@ -894,7 +892,7 @@
             dirEl.classList.remove('bull', 'bear');
             dirEl.classList.add(direction);
 
-            document.getElementById('confirmation-modal').classList.remove('hidden');
+            document.getElementById('confirmation-panel').classList.remove('hidden');
 
             // Add temporary marker for end
             updateMarkers();
@@ -921,16 +919,16 @@
             updateMarkers();
         }
 
-        // Cancel annotation from modal
+        // Cancel annotation from confirmation panel
         function cancelAnnotation() {
-            document.getElementById('confirmation-modal').classList.add('hidden');
+            document.getElementById('confirmation-panel').classList.add('hidden');
             clearFibLines();
             cancelSelection();
         }
 
         // Confirm annotation
         async function confirmAnnotation() {
-            document.getElementById('confirmation-modal').classList.add('hidden');
+            document.getElementById('confirmation-panel').classList.add('hidden');
             clearFibLines();
 
             try {
@@ -1243,9 +1241,17 @@
                 } else {
                     cancelSelection();
                 }
-            } else if (e.key === 'Enter') {
+            } else if (e.key === 'Enter' || e.key.toLowerCase() === 'a') {
                 if (selectionState === 'confirming') {
                     confirmAnnotation();
+                }
+            } else if (e.key.toLowerCase() === 'r') {
+                if (selectionState === 'confirming') {
+                    cancelAnnotation();
+                }
+            } else if (e.key.toLowerCase() === 'n') {
+                if (selectionState === 'idle' && isCascadeMode) {
+                    advanceToNextScale();
                 }
             } else if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (selectionState === 'idle') {

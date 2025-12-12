@@ -69,11 +69,11 @@ python -m src.ground_truth_annotator.main --data data/es-5m.csv --resolution 5m 
 ## The Two-Click Annotation Workflow
 
 1. **Click Start**: Click near the first candle of the swing. The system **automatically snaps** to the best extrema (highest high or lowest low) within a tolerance radius. A "Start" marker appears on the snapped candle.
-2. **Click End**: Click near the last candle. The system snaps to the opposite extrema (if start was a high, snaps to lowest low; if start was a low, snaps to highest high). A confirmation dialog appears.
+2. **Click End**: Click near the last candle. The system snaps to the opposite extrema (if start was a high, snaps to lowest low; if start was a low, snaps to highest high). A confirmation panel appears in the sidebar.
 3. **Confirm Direction**: The system infers the direction automatically:
    - If start.high > end.high → **Bull Reference** (downswing)
    - If start.low < end.low → **Bear Reference** (upswing)
-4. **Save or Cancel**: Click "Confirm" to save or "Cancel" to restart.
+4. **Accept or Reject**: Press `A` (or click Accept) to save, or press `R` (or click Reject) to cancel. Charts remain fully visible during confirmation.
 
 ### Snap-to-Extrema
 
@@ -109,6 +109,7 @@ The annotator automatically determines swing direction based on price movement:
 - **Annotation List**: All saved annotations with direction and bar range
 - **Delete Button**: Click × to remove an annotation
 - **Keyboard Hints**: Quick reference for shortcuts
+- **Confirmation Panel**: Appears inline when confirming annotations (charts remain visible)
 
 ### Header
 - **Scale Badge**: Shows current scale being annotated
@@ -120,8 +121,11 @@ The annotator automatically determines swing direction based on price movement:
 | Key | Action |
 |-----|--------|
 | `Esc` | Cancel current selection |
-| `Enter` | Confirm annotation (when dialog open) |
-| `Delete` / `Backspace` | Delete last annotation |
+| `A` | Accept annotation (when confirming) |
+| `R` | Reject annotation (when confirming) |
+| `N` | Next scale (cascade mode only) |
+| `Enter` | Confirm annotation (alternative to A) |
+| `Del` / `Backspace` | Delete last annotation |
 
 ## API Endpoints
 
