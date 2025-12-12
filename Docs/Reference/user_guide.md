@@ -19,6 +19,17 @@ The Lightweight Swing Validator is a web-based tool for human-in-the-loop valida
 - Python 3.8+ with virtual environment
 - OHLC data in CSV format (test data included in `test_data/`)
 
+### Installation
+
+```bash
+# Create virtual environment (if not exists)
+python3 -m venv venv
+
+# Activate and install dependencies
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
 ### Launch the Validator
 
 ```bash
