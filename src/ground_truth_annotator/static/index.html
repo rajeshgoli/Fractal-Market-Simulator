@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ground Truth Annotator</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #0f3460;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent-bull: #26a69a;
+            --accent-bear: #ef5350;
+            --accent-blue: #2196f3;
+            --border-color: #333;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+
+        .session-info {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+        }
+
+        .info-value {
+            font-weight: 600;
+        }
+
+        .scale-badge {
+            background: var(--accent-blue);
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+        }
+
+        .chart-container {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .instruction-text {
+            font-size: 0.95rem;
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .instruction-text.selecting-start {
+            background: rgba(33, 150, 243, 0.2);
+            color: var(--accent-blue);
+        }
+
+        .instruction-text.selecting-end {
+            background: rgba(38, 166, 154, 0.2);
+            color: var(--accent-bull);
+        }
+
+        #chart {
+            width: 100%;
+            height: 600px;
+            cursor: crosshair;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .annotation-count {
+            background: var(--bg-card);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .annotation-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .annotation-item {
+            background: var(--bg-card);
+            border-radius: 6px;
+            padding: 12px;
+            border-left: 3px solid;
+        }
+
+        .annotation-item.bull {
+            border-left-color: var(--accent-bull);
+        }
+
+        .annotation-item.bear {
+            border-left-color: var(--accent-bear);
+        }
+
+        .annotation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .annotation-type {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .annotation-type.bull {
+            color: var(--accent-bull);
+        }
+
+        .annotation-type.bear {
+            color: var(--accent-bear);
+        }
+
+        .delete-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .delete-btn:hover {
+            background: rgba(239, 83, 80, 0.2);
+            color: var(--accent-bear);
+        }
+
+        .annotation-details {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .annotation-details span {
+            display: block;
+            margin-top: 2px;
+        }
+
+        .confirmation-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .confirmation-modal.hidden {
+            display: none;
+        }
+
+        .confirmation-box {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 24px;
+            min-width: 350px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .confirmation-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .confirmation-detail {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .confirmation-detail strong {
+            color: var(--text-primary);
+        }
+
+        .confirmation-direction {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .confirmation-direction.bull {
+            background: rgba(38, 166, 154, 0.2);
+            color: var(--accent-bull);
+        }
+
+        .confirmation-direction.bear {
+            background: rgba(239, 83, 80, 0.2);
+            color: var(--accent-bear);
+        }
+
+        .confirmation-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .empty-state {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .keyboard-hints {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .keyboard-hints kbd {
+            background: var(--bg-card);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            margin-right: 4px;
+        }
+
+        .hint-row {
+            margin-bottom: 6px;
+        }
+
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Ground Truth Annotator</h1>
+            <div class="session-info">
+                <div class="info-item">
+                    <span class="info-label">Scale:</span>
+                    <span class="scale-badge" id="scale-badge">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Bars:</span>
+                    <span class="info-value" id="bar-count">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Annotations:</span>
+                    <span class="info-value" id="annotation-count">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="instruction-text selecting-start" id="instruction">
+                        Click on the first candle to start marking a swing
+                    </div>
+                </div>
+                <div id="chart"></div>
+            </div>
+
+            <div class="sidebar">
+                <div class="card">
+                    <div class="card-title">
+                        Annotations
+                        <span class="annotation-count" id="sidebar-count">0</span>
+                    </div>
+                    <div class="annotation-list" id="annotation-list">
+                        <div class="empty-state">No annotations yet. Click on the chart to start marking swings.</div>
+                    </div>
+                    <div class="keyboard-hints">
+                        <div class="hint-row"><kbd>Esc</kbd> Cancel selection</div>
+                        <div class="hint-row"><kbd>Enter</kbd> Confirm annotation</div>
+                        <div class="hint-row"><kbd>Delete</kbd> Delete last annotation</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="confirmation-modal hidden" id="confirmation-modal">
+        <div class="confirmation-box">
+            <div class="confirmation-title">Confirm Annotation</div>
+            <div class="confirmation-detail">
+                <strong>Start:</strong> Bar <span id="confirm-start-bar">-</span>
+            </div>
+            <div class="confirmation-detail">
+                <strong>End:</strong> Bar <span id="confirm-end-bar">-</span>
+            </div>
+            <div class="confirmation-direction" id="confirm-direction">
+                Bull Reference (Downswing)
+            </div>
+            <div class="confirmation-buttons">
+                <button class="btn btn-secondary" onclick="cancelAnnotation()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmAnnotation()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let chart = null;
+        let candleSeries = null;
+        let bars = [];
+        let annotations = [];
+        let markers = [];
+        let lines = [];
+
+        // Selection state
+        let selectionState = 'idle'; // 'idle' | 'selecting_end' | 'confirming'
+        let startBarIndex = null;
+        let endBarIndex = null;
+
+        // Session info
+        let sessionInfo = null;
+
+        // Initialize chart
+        function initChart() {
+            const container = document.getElementById('chart');
+            chart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { type: 'solid', color: '#16213e' },
+                    textColor: '#a0a0a0',
+                },
+                grid: {
+                    vertLines: { color: '#333' },
+                    horzLines: { color: '#333' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#333',
+                },
+                timeScale: {
+                    borderColor: '#333',
+                    timeVisible: true,
+                },
+            });
+
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+            });
+
+            // Handle click on chart
+            chart.subscribeClick((param) => {
+                if (!param.time) return;
+
+                // Find the clicked bar
+                const clickedBar = bars.find(b => b.timestamp === param.time);
+                if (!clickedBar) return;
+
+                handleBarClick(clickedBar);
+            });
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                chart.applyOptions({ width: container.clientWidth });
+            });
+        }
+
+        // Handle click on a bar
+        function handleBarClick(bar) {
+            if (selectionState === 'idle') {
+                // First click - select start
+                startBarIndex = bar.index;
+                selectionState = 'selecting_end';
+                updateInstruction();
+                updateMarkers();
+            } else if (selectionState === 'selecting_end') {
+                // Second click - select end
+                if (bar.index === startBarIndex) {
+                    // Clicked same bar - cancel
+                    cancelSelection();
+                    return;
+                }
+
+                endBarIndex = bar.index;
+                selectionState = 'confirming';
+                showConfirmation();
+            }
+        }
+
+        // Update instruction text
+        function updateInstruction() {
+            const el = document.getElementById('instruction');
+            el.classList.remove('selecting-start', 'selecting-end');
+
+            if (selectionState === 'idle') {
+                el.textContent = 'Click on the first candle to start marking a swing';
+                el.classList.add('selecting-start');
+            } else if (selectionState === 'selecting_end') {
+                el.textContent = `Start: Bar ${startBarIndex}. Click on the end candle (or click start again to cancel)`;
+                el.classList.add('selecting-end');
+            }
+        }
+
+        // Update chart markers
+        function updateMarkers() {
+            markers = [];
+
+            // Add annotation markers
+            annotations.forEach((ann, idx) => {
+                const startBar = bars[ann.start_bar_index];
+                const endBar = bars[ann.end_bar_index];
+                const color = ann.direction === 'bull' ? '#26a69a' : '#ef5350';
+
+                markers.push({
+                    time: startBar.timestamp,
+                    position: ann.direction === 'bull' ? 'aboveBar' : 'belowBar',
+                    color: color,
+                    shape: 'circle',
+                    text: `${idx + 1}`,
+                });
+                markers.push({
+                    time: endBar.timestamp,
+                    position: ann.direction === 'bull' ? 'belowBar' : 'aboveBar',
+                    color: color,
+                    shape: 'circle',
+                    text: `${idx + 1}`,
+                });
+            });
+
+            // Add selection marker
+            if (selectionState === 'selecting_end' && startBarIndex !== null) {
+                const startBar = bars[startBarIndex];
+                markers.push({
+                    time: startBar.timestamp,
+                    position: 'aboveBar',
+                    color: '#2196f3',
+                    shape: 'arrowDown',
+                    text: 'Start',
+                });
+            }
+
+            candleSeries.setMarkers(markers);
+        }
+
+        // Draw annotation lines on chart
+        function drawAnnotationLines() {
+            // Remove existing lines
+            lines.forEach(line => candleSeries.removePriceLine(line));
+            lines = [];
+
+            // Note: lightweight-charts doesn't support arbitrary lines between points
+            // We'll rely on markers to show annotations visually
+            // For a more sophisticated solution, we could use a custom series or overlay canvas
+        }
+
+        // Show confirmation modal
+        function showConfirmation() {
+            const startBar = bars[startBarIndex];
+            const endBar = bars[endBarIndex];
+
+            // Infer direction
+            const isBull = startBar.high > endBar.high;
+            const direction = isBull ? 'bull' : 'bear';
+            const directionText = isBull ? 'Bull Reference (Downswing)' : 'Bear Reference (Upswing)';
+
+            document.getElementById('confirm-start-bar').textContent = startBarIndex;
+            document.getElementById('confirm-end-bar').textContent = endBarIndex;
+
+            const dirEl = document.getElementById('confirm-direction');
+            dirEl.textContent = directionText;
+            dirEl.classList.remove('bull', 'bear');
+            dirEl.classList.add(direction);
+
+            document.getElementById('confirmation-modal').classList.remove('hidden');
+
+            // Add temporary marker for end
+            updateMarkers();
+            const tempMarkers = [...markers];
+            tempMarkers.push({
+                time: endBar.timestamp,
+                position: 'belowBar',
+                color: '#2196f3',
+                shape: 'arrowUp',
+                text: 'End',
+            });
+            candleSeries.setMarkers(tempMarkers);
+        }
+
+        // Cancel current selection
+        function cancelSelection() {
+            startBarIndex = null;
+            endBarIndex = null;
+            selectionState = 'idle';
+            updateInstruction();
+            updateMarkers();
+        }
+
+        // Cancel annotation from modal
+        function cancelAnnotation() {
+            document.getElementById('confirmation-modal').classList.add('hidden');
+            cancelSelection();
+        }
+
+        // Confirm annotation
+        async function confirmAnnotation() {
+            document.getElementById('confirmation-modal').classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/annotations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        start_bar_index: startBarIndex,
+                        end_bar_index: endBarIndex
+                    })
+                });
+
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(text);
+                }
+
+                const newAnnotation = await response.json();
+                annotations.push(newAnnotation);
+
+                // Reset selection
+                cancelSelection();
+
+                // Update UI
+                renderAnnotationList();
+                updateMarkers();
+                updateCounts();
+
+            } catch (error) {
+                console.error('Error creating annotation:', error);
+                alert('Failed to create annotation: ' + error.message);
+                cancelSelection();
+            }
+        }
+
+        // Delete annotation
+        async function deleteAnnotation(annotationId) {
+            try {
+                const response = await fetch(`/api/annotations/${annotationId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                // Remove from local list
+                annotations = annotations.filter(a => a.annotation_id !== annotationId);
+
+                // Update UI
+                renderAnnotationList();
+                updateMarkers();
+                updateCounts();
+
+            } catch (error) {
+                console.error('Error deleting annotation:', error);
+                alert('Failed to delete annotation: ' + error.message);
+            }
+        }
+
+        // Delete last annotation
+        async function deleteLastAnnotation() {
+            if (annotations.length === 0) return;
+            const lastAnnotation = annotations[annotations.length - 1];
+            await deleteAnnotation(lastAnnotation.annotation_id);
+        }
+
+        // Render annotation list in sidebar
+        function renderAnnotationList() {
+            const container = document.getElementById('annotation-list');
+
+            if (annotations.length === 0) {
+                container.innerHTML = '<div class="empty-state">No annotations yet. Click on the chart to start marking swings.</div>';
+                return;
+            }
+
+            container.innerHTML = annotations.map((ann, idx) => {
+                const directionText = ann.direction === 'bull' ? 'Bull (Downswing)' : 'Bear (Upswing)';
+                return `
+                    <div class="annotation-item ${ann.direction}">
+                        <div class="annotation-header">
+                            <span class="annotation-type ${ann.direction}">${idx + 1}. ${directionText}</span>
+                            <button class="delete-btn" onclick="deleteAnnotation('${ann.annotation_id}')" title="Delete">&times;</button>
+                        </div>
+                        <div class="annotation-details">
+                            <span>Bars ${ann.start_bar_index} → ${ann.end_bar_index}</span>
+                            <span>Price ${ann.start_price} → ${ann.end_price}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update count displays
+        function updateCounts() {
+            document.getElementById('annotation-count').textContent = annotations.length;
+            document.getElementById('sidebar-count').textContent = annotations.length;
+        }
+
+        // Load bars from API
+        async function loadBars() {
+            try {
+                const response = await fetch('/api/bars');
+                if (!response.ok) throw new Error(await response.text());
+
+                bars = await response.json();
+
+                // Convert to chart format
+                const chartData = bars.map(bar => ({
+                    time: bar.timestamp,
+                    open: bar.open,
+                    high: bar.high,
+                    low: bar.low,
+                    close: bar.close,
+                }));
+
+                candleSeries.setData(chartData);
+                chart.timeScale().fitContent();
+
+                document.getElementById('bar-count').textContent = bars.length;
+
+            } catch (error) {
+                console.error('Error loading bars:', error);
+                alert('Failed to load data: ' + error.message);
+            }
+        }
+
+        // Load annotations from API
+        async function loadAnnotations() {
+            try {
+                const response = await fetch('/api/annotations');
+                if (!response.ok) throw new Error(await response.text());
+
+                annotations = await response.json();
+                renderAnnotationList();
+                updateMarkers();
+                updateCounts();
+
+            } catch (error) {
+                console.error('Error loading annotations:', error);
+            }
+        }
+
+        // Load session info
+        async function loadSession() {
+            try {
+                const response = await fetch('/api/session');
+                if (!response.ok) throw new Error(await response.text());
+
+                sessionInfo = await response.json();
+                document.getElementById('scale-badge').textContent = sessionInfo.scale;
+
+            } catch (error) {
+                console.error('Error loading session:', error);
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (selectionState === 'confirming') {
+                    cancelAnnotation();
+                } else {
+                    cancelSelection();
+                }
+            } else if (e.key === 'Enter') {
+                if (selectionState === 'confirming') {
+                    confirmAnnotation();
+                }
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (selectionState === 'idle') {
+                    deleteLastAnnotation();
+                }
+            }
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            initChart();
+            await loadSession();
+            await loadBars();
+            await loadAnnotations();
+            updateInstruction();
+        });
+    </script>
+</body>
+</html>
