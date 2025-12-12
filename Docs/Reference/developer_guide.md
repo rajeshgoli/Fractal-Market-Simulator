@@ -162,6 +162,8 @@ fractal-market-simulator/
 │   │   ├── api.py                  # FastAPI endpoints
 │   │   ├── models.py               # SwingAnnotation, AnnotationSession
 │   │   ├── storage.py              # JSON-backed persistence
+│   │   ├── comparison_analyzer.py  # Compare annotations vs system detection
+│   │   ├── cascade_controller.py   # XL→L→M→S scale progression
 │   │   └── static/index.html       # Two-click annotation UI
 │   └── lightweight_swing_validator/
 │       ├── main.py                 # CLI entry point
@@ -171,7 +173,7 @@ fractal-market-simulator/
 │       ├── storage.py              # Vote storage
 │       ├── progressive_loader.py   # Large file handling
 │       └── static/index.html       # Validation UI
-├── tests/                          # Test suite (380+ tests)
+├── tests/                          # Test suite (450+ tests)
 ├── Docs/                           # Documentation
 └── data/                           # Sample data files
 ```
@@ -844,6 +846,70 @@ python -m src.ground_truth_annotator.main --data test.csv --scale S --target-bar
 | `--target-bars` | 200 | Bars to display in chart |
 | `--port` | 8000 | Server port |
 
+#### `src/ground_truth_annotator/comparison_analyzer.py`
+
+**Purpose**: Compare user annotations against system-detected swings to identify false negatives and false positives.
+
+**Key Classes**:
+
+```python
+@dataclass
+class DetectedSwing:
+    """System-detected swing in normalized format."""
+    direction: str          # "bull" or "bear"
+    start_index: int        # Bar index where swing starts
+    end_index: int          # Bar index where swing ends
+    high_price: float
+    low_price: float
+    size: float
+    rank: int
+
+@dataclass
+class ComparisonResult:
+    """Result of comparing annotations against detection for one scale."""
+    scale: str
+    false_negatives: List[SwingAnnotation]  # User marked, system missed
+    false_positives: List[DetectedSwing]    # System found, user didn't mark
+    matches: List[Tuple[SwingAnnotation, DetectedSwing]]
+
+    @property
+    def match_rate(self) -> float:
+        """matches / (matches + FN + FP)"""
+```
+
+**Key Class**: `ComparisonAnalyzer`
+
+```python
+analyzer = ComparisonAnalyzer(tolerance_pct=0.1)  # 10% tolerance
+
+# Compare single scale
+result = analyzer.compare_scale(user_annotations, system_swings, scale="M")
+
+# Compare entire session (runs system detection automatically)
+results = analyzer.compare_session(session, bars, scales=["XL", "L", "M", "S"])
+
+# Generate report
+report = analyzer.generate_report(results)
+# Returns: {summary: {...}, by_scale: {...}, false_negatives: [...], false_positives: [...]}
+```
+
+**Matching Logic**:
+
+A user annotation matches a system-detected swing when:
+1. Direction matches (both bull or both bear)
+2. Start indices within tolerance: `abs(user.start - system.start) <= tolerance_bars`
+3. End indices within tolerance: `abs(user.end - system.end) <= tolerance_bars`
+
+Tolerance is calculated as: `max(5, int(duration * tolerance_pct))`
+
+**API Endpoints**:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/compare` | POST | Run comparison, returns summary |
+| `/api/compare/report` | GET | Get full report with FN/FP lists |
+| `/api/compare/export` | GET | Export as JSON or CSV |
+
 ---
 
 ### Lightweight Swing Validator
@@ -1122,7 +1188,9 @@ tests/
 ├── test_event_logger.py               # Logging and export
 ├── test_ohlc_loader.py                # Data loading
 ├── test_ground_truth_foundation.py    # Annotation models and storage (38 tests)
-├── test_ground_truth_annotator_api.py # Annotator API endpoints (19 tests)
+├── test_ground_truth_annotator_api.py # Annotator API endpoints (44 tests)
+├── test_comparison_analyzer.py        # Comparison logic (23 tests)
+├── test_cascade_controller.py         # Cascade workflow (29 tests)
 ├── test_lightweight_swing_validator.py # Validator API and sampler
 └── conftest.py                        # Shared fixtures
 ```

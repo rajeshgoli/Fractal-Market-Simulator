@@ -130,6 +130,55 @@ Annotation sessions are saved to `annotation_sessions/{session_id}.json` contain
 - All annotations with bar indices and prices
 - Scale completion status
 
+## Comparison Analysis
+
+After annotating swings, compare your annotations against the system's automatic detection to identify:
+- **False Negatives**: Swings you marked that the system missed
+- **False Positives**: Swings the system detected that you didn't mark
+- **Matches**: Swings both you and the system identified
+
+### Running Comparison
+
+Use the API endpoints to run comparison analysis:
+
+```bash
+# Run comparison (POST)
+curl -X POST http://127.0.0.1:8000/api/compare
+
+# Get detailed report (GET)
+curl http://127.0.0.1:8000/api/compare/report
+
+# Export as CSV (GET)
+curl http://127.0.0.1:8000/api/compare/export?format=csv > report.csv
+```
+
+### Understanding the Report
+
+The comparison report includes:
+
+| Field | Description |
+|-------|-------------|
+| `overall_match_rate` | Percentage of swings that matched (0.0 to 1.0) |
+| `total_false_negatives` | Swings you marked that system missed |
+| `total_false_positives` | Swings system found that you didn't mark |
+| `by_scale` | Per-scale breakdown (XL, L, M, S) |
+
+### Matching Logic
+
+A user annotation matches a system-detected swing when:
+1. **Direction matches**: Both are bull or both are bear
+2. **Start index within tolerance**: User's start is within 10% of swing duration from system's start
+3. **End index within tolerance**: User's end is within 10% of swing duration from system's end
+4. **Minimum tolerance**: At least 5 bars tolerance for short swings
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/compare` | POST | Run comparison, returns summary |
+| `/api/compare/report` | GET | Get full report with FN/FP lists |
+| `/api/compare/export` | GET | Export as JSON or CSV |
+
 ---
 
 # Lightweight Swing Validator
