@@ -4,6 +4,7 @@ Main entry point for the lightweight swing validator.
 Usage:
     python -m src.lightweight_swing_validator.main --data test_data/test.csv
     python -m src.lightweight_swing_validator.main --data test_data/es-1m.csv --port 8080
+    python -m src.lightweight_swing_validator.main --data es-5m.csv --resolution 5m --window 50000
 """
 
 import argparse
@@ -16,6 +17,7 @@ import uvicorn
 from .api import app, init_app
 from ..data.ohlc_loader import get_file_metrics
 from .progressive_loader import LARGE_FILE_THRESHOLD
+from ..swing_analysis.resolution import SUPPORTED_RESOLUTIONS, parse_resolution
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,8 +71,28 @@ def main():
         action="store_true",
         help="Enable auto-reload for development"
     )
+    parser.add_argument(
+        "--resolution",
+        type=str,
+        default="1m",
+        choices=SUPPORTED_RESOLUTIONS,
+        help=f"Source data resolution (default: 1m). Supported: {', '.join(SUPPORTED_RESOLUTIONS)}"
+    )
+    parser.add_argument(
+        "--window",
+        type=int,
+        default=None,
+        help="Calibration window size in bars (default: auto based on resolution)"
+    )
 
     args = parser.parse_args()
+
+    # Parse resolution
+    try:
+        resolution_minutes = parse_resolution(args.resolution)
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
 
     # Quick file metrics first
     print(f"\n{'='*60}")
@@ -81,10 +103,13 @@ def main():
         metrics = get_file_metrics(args.data)
         is_large = metrics.total_bars > LARGE_FILE_THRESHOLD
 
-        print(f"Data file:  {args.data}")
-        print(f"Total bars: {format_number(metrics.total_bars)}")
+        print(f"Data file:   {args.data}")
+        print(f"Resolution:  {args.resolution}")
+        print(f"Total bars:  {format_number(metrics.total_bars)}")
+        if args.window:
+            print(f"Cal window:  {format_number(args.window)} bars")
         if metrics.first_timestamp and metrics.last_timestamp:
-            print(f"Date range: {metrics.first_timestamp.strftime('%Y-%m-%d')} to {metrics.last_timestamp.strftime('%Y-%m-%d')}")
+            print(f"Date range:  {metrics.first_timestamp.strftime('%Y-%m-%d')} to {metrics.last_timestamp.strftime('%Y-%m-%d')}")
 
         if is_large:
             print(f"\nLarge dataset detected ({format_number(metrics.total_bars)} bars)")
@@ -104,7 +129,9 @@ def main():
         init_app(
             data_file=args.data,
             storage_dir=args.storage_dir,
-            seed=args.seed
+            seed=args.seed,
+            resolution_minutes=resolution_minutes,
+            calibration_window=args.window
         )
         init_time = time.time() - start_time
     except FileNotFoundError as e:

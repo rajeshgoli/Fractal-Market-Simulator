@@ -303,7 +303,13 @@ async def loading_status():
     }
 
 
-def init_app(data_file: str, storage_dir: str = "validation_results", seed: Optional[int] = None):
+def init_app(
+    data_file: str,
+    storage_dir: str = "validation_results",
+    seed: Optional[int] = None,
+    resolution_minutes: int = 1,
+    calibration_window: Optional[int] = None
+):
     """
     Initialize the application with data file.
 
@@ -313,13 +319,17 @@ def init_app(data_file: str, storage_dir: str = "validation_results", seed: Opti
         data_file: Path to OHLC CSV data file
         storage_dir: Directory for storing validation results
         seed: Random seed for reproducible sampling
+        resolution_minutes: Source data resolution in minutes (default: 1)
+        calibration_window: Calibration window size in bars (default: auto)
     """
     global sampler, storage, progressive_loader
 
     # Initialize progressive loader (will determine if file is large)
     progressive_loader = ProgressiveLoader(
         filepath=data_file,
-        seed=seed
+        seed=seed,
+        resolution_minutes=resolution_minutes,
+        calibration_window=calibration_window
     )
 
     # Load initial window (fast for large files)

@@ -93,6 +93,8 @@ class ProgressiveLoader:
 
     For datasets >100k bars, loads data in windows to enable fast startup
     while providing diverse market regime coverage.
+
+    Resolution-agnostic: supports any source data resolution.
     """
 
     def __init__(
@@ -101,7 +103,9 @@ class ProgressiveLoader:
         instrument: str = "ES",
         window_size: int = DEFAULT_WINDOW_SIZE,
         seed: Optional[int] = None,
-        on_window_ready: Optional[Callable[[DataWindow], None]] = None
+        on_window_ready: Optional[Callable[[DataWindow], None]] = None,
+        resolution_minutes: int = 1,
+        calibration_window: Optional[int] = None
     ):
         """
         Initialize the progressive loader.
@@ -112,12 +116,16 @@ class ProgressiveLoader:
             window_size: Number of bars per window.
             seed: Random seed for window selection.
             on_window_ready: Callback when a window finishes loading.
+            resolution_minutes: Source data resolution in minutes (default: 1).
+            calibration_window: Calibration window size in bars (default: auto).
         """
         self.filepath = filepath
         self.instrument = instrument
         self.window_size = window_size
         self.rng = random.Random(seed)
         self.on_window_ready = on_window_ready
+        self.resolution_minutes = resolution_minutes
+        self.calibration_window = calibration_window
 
         # Get file metrics first (fast operation)
         self.metrics: FileMetrics = get_file_metrics(filepath)
@@ -131,12 +139,15 @@ class ProgressiveLoader:
         self._background_thread: Optional[threading.Thread] = None
         self._stop_background = False
 
-        # Calibrator
-        self._calibrator = ScaleCalibrator()
+        # Calibrator (resolution-aware)
+        self._calibrator = ScaleCalibrator(
+            source_resolution_minutes=resolution_minutes
+        )
 
         logger.info(
             f"ProgressiveLoader: {self.metrics.total_bars} bars, "
-            f"large_file={self.is_large_file}, window_size={window_size}"
+            f"large_file={self.is_large_file}, window_size={window_size}, "
+            f"resolution={resolution_minutes}m"
         )
 
     def load_initial_window(self) -> DataWindow:

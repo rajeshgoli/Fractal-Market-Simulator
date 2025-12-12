@@ -212,11 +212,12 @@ def load_ohlc_window(
             raise ValueError(f"Too many invalid rows: {invalid_count}/{total_count}")
         df = df[valid_mask]
 
-    # Gap detection
+    # Gap detection (uses 1.5x expected interval as threshold)
     gaps = []
     if len(df) > 1:
         time_diff = df.index.to_series().diff()
-        gap_mask = time_diff > pd.Timedelta(minutes=1)
+        gap_threshold_minutes = 1.5  # Default for 1m data
+        gap_mask = time_diff > pd.Timedelta(minutes=gap_threshold_minutes)
         gap_indices = df.index[gap_mask]
 
         for end_time in gap_indices:
@@ -415,19 +416,17 @@ def load_ohlc(filepath: str) -> Tuple[pd.DataFrame, List[Tuple[pd.Timestamp, pd.
         df = df[valid_mask]
 
     # Gap Detection
-    # Gap > 1 minute
+    # Gap threshold is configurable based on source resolution
+    # Default: > 1 minute for 1m data (backwards compatible)
     gaps = []
     if len(df) > 1:
         time_diff = df.index.to_series().diff()
-        # Expected diff is 1 minute (60 seconds)
-        # Gap if diff > 1 minute + tolerance? Spec says "consecutive timestamps differ by more than 1 minute".
-        # So > 60 seconds? Or > 1 minute interval?
-        # "For 1-minute data, a gap is any period where consecutive timestamps differ by more than 1 minute."
-        # So if diff is 2 minutes, that's a 1 minute gap (one missing bar).
-        # Let's say threshold is > 65 seconds to be safe against minor jitter, or strict > 60s?
-        # Spec implies strict.
-        
-        gap_mask = time_diff > pd.Timedelta(minutes=1)
+        # Gap detection uses 1.5x the expected interval as threshold
+        # For 1m data: gap if diff > 1.5 minutes
+        # This can be overridden by passing resolution_minutes to load_ohlc_with_resolution()
+        gap_threshold_minutes = 1.5  # Default for 1m data
+
+        gap_mask = time_diff > pd.Timedelta(minutes=gap_threshold_minutes)
         gap_indices = df.index[gap_mask]
         
         for end_time in gap_indices:

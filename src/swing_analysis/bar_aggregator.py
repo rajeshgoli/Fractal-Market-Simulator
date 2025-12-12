@@ -1,17 +1,16 @@
 """
 Bar Aggregator Module
 
-Converts 1-minute OHLC bars into aggregated timeframes for multi-scale visualization.
+Converts source OHLC bars into aggregated timeframes for multi-scale visualization.
 Pre-computes all aggregations during initialization for fast retrieval during playback.
 
 Key Features:
-- Pre-computation of all standard timeframes (1, 5, 15, 30, 60, 240 minutes)
+- Resolution-agnostic: supports any source resolution (1m, 5m, 15m, etc.)
+- Pre-computation of all available timeframes >= source resolution
 - Natural boundary alignment for aggregated bars
 - Efficient O(1) retrieval for synchronized playback
 - Distinction between closed and incomplete bars for Fibonacci calculations
 - Bidirectional index mapping between source and aggregated bars
-
-Author: Generated for Market Simulator Project
 """
 
 import bisect
@@ -36,46 +35,64 @@ class AggregatedBars:
 
 class BarAggregator:
     """Pre-computes and provides efficient access to aggregated OHLC bars."""
-    
-    STANDARD_TIMEFRAMES = [1, 5, 15, 30, 60, 240]  # minutes
-    
-    def __init__(self, source_bars: List[Bar]):
+
+    # All possible standard timeframes (minutes)
+    ALL_STANDARD_TIMEFRAMES = [1, 5, 15, 30, 60, 240, 1440]
+
+    # Class-level default for backwards compatibility
+    STANDARD_TIMEFRAMES = [1, 5, 15, 30, 60, 240]  # Will be overridden per-instance
+
+    def __init__(self, source_bars: List[Bar], source_resolution_minutes: int = 1):
         """
-        Initialize with 1-minute source bars and pre-compute all aggregations.
-        
+        Initialize with source bars and pre-compute all aggregations.
+
         Args:
-            source_bars: List of 1-minute OHLC bars in chronological order
+            source_bars: List of OHLC bars in chronological order
+            source_resolution_minutes: Resolution of source bars in minutes (default: 1)
+                                       Only timeframes >= this value will be available.
         """
         if not source_bars:
             raise ValueError("Source bars cannot be empty")
-            
+
+        # Store source resolution
+        self._source_resolution = source_resolution_minutes
+
+        # Compute available timeframes (only >= source resolution)
+        self._available_timeframes = [
+            tf for tf in self.ALL_STANDARD_TIMEFRAMES
+            if tf >= source_resolution_minutes
+        ]
+
+        # Override instance-level STANDARD_TIMEFRAMES for backwards compatibility
+        self.STANDARD_TIMEFRAMES = self._available_timeframes
+
         # Store source bars
         self._source_bars = source_bars.copy()
-        
+
         # Verify chronological order
         for i in range(1, len(self._source_bars)):
             if self._source_bars[i].timestamp <= self._source_bars[i-1].timestamp:
                 raise ValueError(f"Source bars must be in chronological order. "
                                f"Bar {i} timestamp {self._source_bars[i].timestamp} <= "
                                f"Bar {i-1} timestamp {self._source_bars[i-1].timestamp}")
-        
+
         # Pre-compute all aggregations
         self._aggregations: Dict[int, AggregatedBars] = {}
         self._source_to_agg_mapping: Dict[int, Dict[int, int]] = {}
-        
-        for timeframe in self.STANDARD_TIMEFRAMES:
+
+        for timeframe in self._available_timeframes:
             self._aggregate_timeframe(timeframe)
     
     def _aggregate_timeframe(self, timeframe_minutes: int) -> None:
         """Pre-compute aggregation for a specific timeframe."""
-        if timeframe_minutes == 1:
-            # 1-minute is just the source bars
-            self._aggregations[1] = AggregatedBars(
-                timeframe_minutes=1, 
+        if timeframe_minutes == self._source_resolution:
+            # Source resolution is just the source bars (no aggregation needed)
+            self._aggregations[timeframe_minutes] = AggregatedBars(
+                timeframe_minutes=timeframe_minutes,
                 bars=self._source_bars.copy()
             )
-            # Simple 1:1 mapping for 1-minute
-            self._source_to_agg_mapping[1] = {i: i for i in range(len(self._source_bars))}
+            # Simple 1:1 mapping for source resolution
+            self._source_to_agg_mapping[timeframe_minutes] = {i: i for i in range(len(self._source_bars))}
             return
         
         aggregated_bars = []
@@ -142,37 +159,29 @@ class BarAggregator:
     def _get_period_start(self, timestamp: int, timeframe_minutes: int) -> int:
         """
         Calculate the aligned period start timestamp for natural boundaries.
-        
+
         Examples:
         - 5-minute bars align to :00, :05, :10, etc.
         - 15-minute bars align to :00, :15, :30, :45
         - 60-minute bars align to the hour
         - 240-minute bars align to 4-hour boundaries
+        - 1440-minute bars (1 day) align to midnight UTC
         """
         dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        
-        if timeframe_minutes == 5:
-            # Align to 5-minute boundaries
-            aligned_minute = (dt.minute // 5) * 5
+
+        if timeframe_minutes < 60:
+            # Sub-hourly: align to minute boundaries
+            aligned_minute = (dt.minute // timeframe_minutes) * timeframe_minutes
             aligned_dt = dt.replace(minute=aligned_minute, second=0, microsecond=0)
-        elif timeframe_minutes == 15:
-            # Align to 15-minute boundaries
-            aligned_minute = (dt.minute // 15) * 15
-            aligned_dt = dt.replace(minute=aligned_minute, second=0, microsecond=0)
-        elif timeframe_minutes == 30:
-            # Align to 30-minute boundaries
-            aligned_minute = (dt.minute // 30) * 30
-            aligned_dt = dt.replace(minute=aligned_minute, second=0, microsecond=0)
-        elif timeframe_minutes == 60:
-            # Align to hourly boundaries
-            aligned_dt = dt.replace(minute=0, second=0, microsecond=0)
-        elif timeframe_minutes == 240:
-            # Align to 4-hour boundaries (00:00, 04:00, 08:00, 12:00, 16:00, 20:00)
-            aligned_hour = (dt.hour // 4) * 4
+        elif timeframe_minutes < 1440:
+            # Sub-daily: align to hour boundaries
+            hours = timeframe_minutes // 60
+            aligned_hour = (dt.hour // hours) * hours
             aligned_dt = dt.replace(hour=aligned_hour, minute=0, second=0, microsecond=0)
         else:
-            raise ValueError(f"Unsupported timeframe: {timeframe_minutes} minutes")
-        
+            # Daily or longer: align to midnight UTC
+            aligned_dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
         return int(aligned_dt.timestamp())
     
     def _create_aggregated_bar(self, period_bars: List[Bar], agg_index: int) -> Bar:
@@ -286,8 +295,8 @@ class BarAggregator:
         if source_bar_idx < 0 or source_bar_idx >= len(self._source_bars):
             return None
         
-        # For 1-minute timeframe, previous bar is always closed
-        if timeframe_minutes == 1:
+        # For source resolution timeframe, previous bar is always closed
+        if timeframe_minutes == self._source_resolution:
             if source_bar_idx > 0:
                 return self._source_bars[source_bar_idx - 1]
             else:
@@ -317,6 +326,16 @@ class BarAggregator:
     def source_bar_count(self) -> int:
         """Number of source bars loaded."""
         return len(self._source_bars)
+
+    @property
+    def source_resolution(self) -> int:
+        """Source data resolution in minutes."""
+        return self._source_resolution
+
+    @property
+    def available_timeframes(self) -> List[int]:
+        """List of available aggregation timeframes (minutes)."""
+        return self._available_timeframes.copy()
     
     def aggregated_bar_count(self, timeframe_minutes: int) -> int:
         """Number of aggregated bars for a specific timeframe."""
@@ -366,10 +385,10 @@ class BarAggregator:
     
     def _update_aggregation_with_new_bar(self, timeframe_minutes: int, new_bar: Bar) -> None:
         """Update a specific timeframe aggregation with a new source bar."""
-        if timeframe_minutes == 1:
-            # 1-minute is direct mapping
-            self._aggregations[1].bars.append(new_bar)
-            self._source_to_agg_mapping[1][new_bar.index] = new_bar.index
+        if timeframe_minutes == self._source_resolution:
+            # Source resolution is direct mapping (no aggregation)
+            self._aggregations[timeframe_minutes].bars.append(new_bar)
+            self._source_to_agg_mapping[timeframe_minutes][new_bar.index] = new_bar.index
             return
         
         aggregation = self._aggregations[timeframe_minutes]

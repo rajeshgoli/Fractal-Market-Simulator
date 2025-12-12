@@ -6,6 +6,8 @@ for four structural scales (S, M, L, XL) used in swing detection visualization.
 
 The module uses quartile analysis of detected swing sizes to create adaptive
 boundaries that reflect the actual market structure of the instrument and timeframe.
+
+Resolution-agnostic: supports any source data resolution.
 """
 
 import logging
@@ -19,6 +21,11 @@ import pandas as pd
 
 from .bull_reference_detector import Bar
 from .swing_detector import detect_swings
+from .resolution import (
+    get_default_aggregations,
+    get_allowed_aggregations,
+    parse_resolution,
+)
 
 
 @dataclass
@@ -44,50 +51,65 @@ class ScaleConfig:
 class ScaleCalibrator:
     """
     Calibrates structural scale boundaries and aggregation settings from historical data.
-    
+
     Uses quartile analysis of swing sizes to create four scales (S, M, L, XL) with
     appropriate time aggregations for visualization.
+
+    Resolution-agnostic: supports any source data resolution.
     """
-    
+
     # Default thresholds for known instruments
     DEFAULT_BOUNDARIES = {
         "ES": {
             "S": (0, 15),
-            "M": (15, 40), 
+            "M": (15, 40),
             "L": (40, 100),
             "XL": (100, float('inf'))
         }
     }
-    
-    # Default aggregations (minutes)
-    DEFAULT_AGGREGATIONS = {
+
+    # Default aggregations for 1m source data (minutes)
+    # These are dynamically adjusted based on source_resolution_minutes
+    DEFAULT_AGGREGATIONS_1M = {
         "S": 1,
         "M": 15,
         "L": 60,
         "XL": 240
     }
-    
-    # Default median durations (bars)
+
+    # Default median durations (bars) - resolution-independent reference
     DEFAULT_DURATIONS = {
         "S": 18,
         "M": 45,
         "L": 120,
         "XL": 300
     }
-    
-    # Allowed aggregation values (minutes)
-    ALLOWED_AGGREGATIONS = [1, 5, 15, 30, 60, 240]
-    
-    def __init__(self, instrument_defaults: Optional[Dict] = None):
+
+    # Base allowed aggregation values (minutes)
+    # Filtered based on source_resolution_minutes
+    BASE_ALLOWED_AGGREGATIONS = [1, 5, 15, 30, 60, 240, 1440]
+
+    def __init__(
+        self,
+        instrument_defaults: Optional[Dict] = None,
+        source_resolution_minutes: int = 1
+    ):
         """
         Initialize with optional custom instrument defaults.
-        
+
         Args:
             instrument_defaults: Dict of custom defaults keyed by instrument.
                 Example: {"ES": {"S": 15, "M": 40, "L": 100, "XL": float("inf")}}
+            source_resolution_minutes: Resolution of source data in minutes (default: 1).
+                Determines which aggregation timeframes are available.
         """
         self.logger = logging.getLogger(__name__)
         self.instrument_defaults = instrument_defaults or {}
+        self.source_resolution_minutes = source_resolution_minutes
+
+        # Derive resolution-appropriate settings
+        self.ALLOWED_AGGREGATIONS = get_allowed_aggregations(source_resolution_minutes)
+        self.DEFAULT_AGGREGATIONS = get_default_aggregations(source_resolution_minutes)
         
     def calibrate(self, bars: List[Bar], instrument: str = "ES") -> ScaleConfig:
         """
@@ -275,12 +297,13 @@ class ScaleCalibrator:
                 if durations:
                     median_duration = statistics.median(durations)
                     median_durations[scale] = int(median_duration)
-                    
-                    # Target aggregation: median_duration / 20 (for 10-30 bars display)
-                    target_agg = median_duration / 20
-                    
+
+                    # Target aggregation in minutes:
+                    # median_duration (bars) * source_resolution (min/bar) / 20 (target bar count)
+                    target_agg_minutes = (median_duration * self.source_resolution_minutes) / 20
+
                     # Snap to nearest allowed value
-                    aggregation = self._snap_to_allowed_aggregation(target_agg)
+                    aggregation = self._snap_to_allowed_aggregation(target_agg_minutes)
                     aggregations[scale] = aggregation
                 else:
                     # No valid durations, use defaults
@@ -288,7 +311,7 @@ class ScaleCalibrator:
                     aggregations[scale] = self.DEFAULT_AGGREGATIONS[scale]
             else:
                 # No swings in this scale, use defaults
-                median_durations[scale] = self.DEFAULT_DURATIONS[scale] 
+                median_durations[scale] = self.DEFAULT_DURATIONS[scale]
                 aggregations[scale] = self.DEFAULT_AGGREGATIONS[scale]
         
         return aggregations, median_durations
