@@ -48,12 +48,41 @@ Open http://127.0.0.1:8000 in your browser.
 | `--host HOST` | Server host (default: 127.0.0.1) |
 | `--storage-dir DIR` | Directory for validation results |
 | `--seed N` | Random seed for reproducible sampling |
+| `--resolution RES` | Source data resolution (default: 1m). Options: 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1mo |
+| `--window N` | Calibration window size in bars (default: auto) |
 
-### Example with Large Dataset
+### Examples
 
 ```bash
+# Basic usage with 1m data (default)
 python -m src.lightweight_swing_validator.main --data test_data/es-1m.csv --port 8080
+
+# Using 5m resolution data with custom calibration window
+python -m src.lightweight_swing_validator.main --data data/es-5m.csv --resolution 5m --window 50000
+
+# Daily data
+python -m src.lightweight_swing_validator.main --data data/es-daily.csv --resolution 1d
 ```
+
+### Resolution Parameter
+
+The `--resolution` parameter tells the system what resolution your source data is in. This affects:
+
+- **Available timeframes**: Only aggregations >= source resolution are available
+- **Scale calibration**: Default aggregations are adjusted (e.g., S=5m for 5m data instead of S=1m)
+- **Gap detection**: Thresholds scale with resolution
+
+| Resolution | Minutes | Typical Use Case |
+|------------|---------|------------------|
+| 1m | 1 | Intraday micro-structure |
+| 5m | 5 | Intraday with reduced noise |
+| 15m | 15 | Swing trading |
+| 30m | 30 | Position trading |
+| 1h | 60 | Daily patterns |
+| 4h | 240 | Multi-day swings |
+| 1d | 1440 | Long-term trends |
+| 1w | 10080 | Weekly analysis |
+| 1mo | 43200 | Monthly/yearly trends |
 
 ## Progressive Loading for Large Datasets
 
@@ -73,9 +102,10 @@ On startup with a large file, you'll see:
 ============================================================
 Lightweight Swing Validator
 ============================================================
-Data file:  data/es-1m-6years.csv
-Total bars: 6.2M
-Date range: 2018-01-02 to 2024-12-01
+Data file:   data/es-1m-6years.csv
+Resolution:  1m
+Total bars:  6.2M
+Date range:  2018-01-02 to 2024-12-01
 
 Large dataset detected (6.2M bars)
 Using progressive loading for fast startup...
