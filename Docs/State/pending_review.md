@@ -16,6 +16,8 @@
   - `src/ground_truth_annotator/api.py` - Comparison API endpoints
   - `tests/test_comparison_analyzer.py` - 23 unit tests
   - `tests/test_ground_truth_annotator_api.py` - 13 API integration tests
+  - `Docs/Reference/user_guide.md` - Comparison analysis section
+  - `Docs/Reference/developer_guide.md` - ComparisonAnalyzer documentation
 
 ### 2025-12-12 - Cascade Workflow (XL→L→M→S)
 - **Issue:** #29
