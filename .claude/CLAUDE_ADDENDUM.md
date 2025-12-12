@@ -44,21 +44,33 @@ Docs/
 
 ## Handoff Protocol
 
-Every task ends with explicit handoff:
-1. State what was completed
-2. Declare next step owner
-3. Update the appropriate artifact
-4. Include instruction for next agent
+Every task ends with explicit handoff. Two-phase process:
+
+**Phase 1: Document everything** (before handoff)
+- Write all context, decisions, and details to the appropriate artifact
+- If Engineer: update GitHub issue with implementation notes
+- If Architect: update `architect_notes.md` or create GitHub issue
+- If Product: update `product_direction.md` or `questions.md`
+
+**Phase 2: Output handoff sentence** (use `/handoff` command)
 
 ## /handoff
 
-When you've completed your work and written everything the next agent needs into a doc, output:
+Outputs ONE sentence. No paragraphs. No explanations.
 
+**Format:**
 ```
-As [next role], read [doc you just authored] and [action you identified].
+As [role], read [artifact] and [action].
 ```
 
-The next agent should be able to start immediately from that instruction with no additional context.
+**Examples:**
+```
+As engineer, read GitHub issue #31 and implement the two-click annotation.
+As architect, read Docs/State/pending_review.md and review accumulated changes.
+As product, read Docs/Comms/questions.md and clarify the scope question.
+```
+
+**Rule:** If you need to explain something, you haven't finished Phase 1. Write it to a doc first.
 
 ## Change Tracking
 

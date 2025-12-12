@@ -151,3 +151,30 @@ Revision history for workflow system changes.
 - **User**: Sees explicit checkpoint triggers in product artifacts
 
 **Open Thread:** MCP server for Product direct tool access—delegated to Product for assessment.
+
+---
+
+## 2025-12-12: Handoff Sentence Enforcement
+
+**Triggered by:** User feedback that `/handoff` produces paragraphs instead of single sentences. Handoffs were verbose explanations rather than crisp commands.
+
+**Root Cause:** No mechanism enforced the single-sentence format. Without explicit constraint, Claude defaults to helpful verbosity.
+
+**Changes Made:**
+
+1. **Created `.claude/commands/handoff.md`:**
+   - Explicit instruction: "Output ONLY a single sentence"
+   - Format template: `As [role], read [artifact] and [action].`
+   - Pre-flight checklist: verify docs are complete before handoff
+   - Rule: "If you need to explain something, you haven't finished writing to docs"
+
+2. **Updated `CLAUDE_ADDENDUM.md` Handoff Protocol:**
+   - Introduced two-phase model:
+     - Phase 1: Document everything (before handoff)
+     - Phase 2: Output handoff sentence (via `/handoff`)
+   - Added concrete examples
+   - Reinforced: no paragraphs, no explanations
+
+**Design Principle:** All context belongs in docs/issues. The handoff is just a pointer. If the sentence isn't self-sufficient, the preceding documentation work is incomplete.
+
+**Impact:** `/handoff` command now produces copy-pasteable single sentence that the user can paste directly to invoke the next role.
