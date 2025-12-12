@@ -192,7 +192,8 @@
 
         .reference-chart {
             width: 100%;
-            height: 200px;
+            max-height: 200px;
+            aspect-ratio: 3 / 1;
         }
 
         .main-chart {
@@ -627,7 +628,9 @@
                 mainChart.applyOptions({ width: container.clientWidth });
                 if (referenceChart) {
                     const refContainer = document.getElementById('reference-chart');
-                    referenceChart.applyOptions({ width: refContainer.clientWidth });
+                    const width = refContainer.clientWidth;
+                    const height = Math.min(200, Math.floor(width / 3));  // 3:1 aspect ratio, max 200px
+                    referenceChart.applyOptions({ width, height });
                 }
             });
         }
@@ -635,7 +638,13 @@
         // Initialize reference chart (for cascade mode)
         function initReferenceChart() {
             const container = document.getElementById('reference-chart');
+            // Calculate height based on 3:1 aspect ratio, capped at 200px
+            const width = container.clientWidth;
+            const height = Math.min(200, Math.floor(width / 3));
+
             referenceChart = LightweightCharts.createChart(container, {
+                width: width,
+                height: height,
                 layout: {
                     background: { type: 'solid', color: '#16213e' },
                     textColor: '#a0a0a0',
