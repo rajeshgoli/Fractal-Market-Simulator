@@ -110,34 +110,43 @@ def test_case_three_multiple_lows():
     Test 3: Multiple lows pairing with same high.
     High 200 (bar 20). Low 150 (bar 40). Low 140 (bar 60). Current 170.
     Lookback 5.
+
+    IMPORTANT: The base price level must be above all intended swing lows (>150)
+    to avoid creating unintended swing lows that would invalidate references.
     """
-    prices = [0.0] * 71
-    # Use trends
-    # 0-15: Trend up to 190
-    for i in range(15): prices[i] = 180 + i*0.5 # Wait, 180 is base.
-    # Let's just set the specific regions and leave the rest as a trend that doesn't interfere.
-    # Base prices: linear trend 170 to 170? No, flat causes swings.
-    # Linear trend 100 to 170.
-    prices = [100 + i for i in range(71)]
-    
+    # Base price at 170 (above all intended lows)
+    prices = [170.0] * 71
+
     # High 200 at 20
     prices[20] = 200
-    # Neighbors
-    prices[15]=190; prices[16]=192; prices[17]=194; prices[18]=196; prices[19]=198
-    prices[21]=198; prices[22]=196; prices[23]=194; prices[24]=192; prices[25]=190
-    
+    # Neighbors - smooth transition from base to peak and back
+    prices[15]=180; prices[16]=185; prices[17]=190; prices[18]=194; prices[19]=197
+    prices[21]=197; prices[22]=194; prices[23]=190; prices[24]=185; prices[25]=180
+
+    # Transition zone from high back to base (bars 26-34)
+    # Smooth transition to avoid creating swing lows
+    prices[26]=175; prices[27]=172; prices[28]=170; prices[29]=168; prices[30]=166
+    prices[31]=164; prices[32]=162; prices[33]=160; prices[34]=158
+
     # Low 150 at 40
     prices[40] = 150
     # Neighbors (must be > 150)
     prices[35]=160; prices[36]=158; prices[37]=156; prices[38]=154; prices[39]=152
     prices[41]=152; prices[42]=154; prices[43]=156; prices[44]=158; prices[45]=160
-    
+
+    # Transition zone between lows (bars 46-54)
+    prices[46]=162; prices[47]=164; prices[48]=166; prices[49]=164; prices[50]=162
+    prices[51]=160; prices[52]=158; prices[53]=156; prices[54]=154
+
     # Low 140 at 60
     prices[60] = 140
     # Neighbors
     prices[55]=150; prices[56]=148; prices[57]=146; prices[58]=144; prices[59]=142
     prices[61]=142; prices[62]=144; prices[63]=146; prices[64]=148; prices[65]=150
-    
+
+    # Transition back to current price
+    prices[66]=155; prices[67]=160; prices[68]=165; prices[69]=168
+
     # Current 170
     prices[-1] = 170
     
@@ -357,40 +366,52 @@ def test_case_eleven_redundant_filtering():
     """
     Test 11: Redundant swing filtering.
     Multiple swing highs clustered near the same price level, all pairing with the same swing low.
-    Verify that only one reference survives per structural band.
+    Verify that references in the same Fibonacci band are filtered as redundant.
+
+    Band assignments for anchor 200-100 (size 100):
+      - 0.9 level = 190.00
+      - 1.0 level = 200.00
+
+    Results:
+      - H:200 -> band 1.0 (anchor, kept)
+      - H:198 -> band 1.0 (same as anchor, filtered as redundant)
+      - H:195 -> band 0.9 (different band, kept as structurally distinct)
     """
     # Highs at 10, 20, 30. Low at 50.
     # Highs at 200, 198, 195.
-    
+
     prices = [150 + i*0.01 for i in range(60)]
-    
+
     # Highs
-    prices[10] = 200 # Anchor
-    prices[20] = 198 # Redundant
-    prices[30] = 195 # Redundant
-    
+    prices[10] = 200  # Anchor (band 1.0)
+    prices[20] = 198  # Redundant (band 1.0, same as anchor)
+    prices[30] = 195  # Distinct (band 0.9, different from anchor)
+
     # Low
     prices[50] = 100
-    
+
     # Ensure they are peaks/valleys
     for idx in [10, 20, 30]:
         prices[idx-1] = prices[idx]-5
         prices[idx+1] = prices[idx]-5
-        
+
     prices[49] = 105; prices[51] = 105
-        
+
     # Current price must be valid (> low + 0.382*size)
     # Size 100. 0.382 level = 138.2.
     # Set current to 150.
-    prices[-1] = 150 
-    
+    prices[-1] = 150
+
     df = create_df(prices)
     result = detect_swings(df, lookback=3, filter_redundant=True)
-    
-    # Should only have 1 bull reference (the 200 one) among the large swings
+
+    # 200->100 (band 1.0) and 195->100 (band 0.9) are both kept
+    # 198->100 is filtered as redundant with 200->100 (both in band 1.0)
     large_refs = [r for r in result["bull_references"] if r["size"] > 90]
-    assert len(large_refs) == 1
-    assert large_refs[0]["high_price"] == 200.0
+    assert len(large_refs) == 2
+    high_prices = {r["high_price"] for r in large_refs}
+    assert 200.0 in high_prices  # Anchor (band 1.0)
+    assert 195.0 in high_prices  # Structurally distinct (band 0.9)
 
 def test_case_twelve_multi_tier_filtering():
     """
@@ -466,44 +487,52 @@ def test_case_thirteen_filter_disabled():
 
 def test_case_fourteen_structurally_distinct():
     """
-    Test 14: Structurally distinct swings preserved.
-    Highs at different structural levels of the anchor.
-    Anchor: 200-100 (Size 100).
-    Candidate: 220-120 (Size 100).
-    Distinct bands.
+    Test 14: Structurally distinct swings preserved with structural validity.
+
+    Setup:
+      - High 200 (bar 10) -> Low 100 (bar 50): Size 100
+      - High 220 (bar 30) -> Low 120 (bar 70): Size 100
+
+    Expected valid references:
+      - 220->100 (size 120): Valid - no lower low between bar 30 and bar 50
+      - 200->100 (size 100): Valid - no lower low between bar 10 and bar 50
+
+    220->120 is INVALID because:
+      - The low at bar 50 (price 100) is between bar 30 (high 220) and bar 70 (low 120)
+      - 100 < 120, so structural validity fails (the low must be the lowest point)
     """
     prices = [150 + i*0.01 for i in range(100)]
-    
+
     # Ref 1: High 200 (10) -> Low 100 (50)
     prices[10] = 200
     prices[50] = 100
-    
+
     # Ref 2: High 220 (30) -> Low 120 (70)
+    # Note: 220->120 is structurally invalid because low 100 at bar 50 is between them
     prices[30] = 220
     prices[70] = 120
-    
+
     # Peaks/Valleys
     prices[9]=190; prices[11]=190
     prices[49]=105; prices[51]=105
-    
+
     prices[29]=210; prices[31]=210
     prices[69]=125; prices[71]=125
-    
+
     # Valid price
     # Ref 1: 200-100 (100). 0.382=138.2.
     # Ref 2: 220-120 (100). 0.382=158.2.
     # Current 180 > 158.2. OK.
     prices[-1] = 180
-    
+
     df = create_df(prices)
     result = detect_swings(df, lookback=3, filter_redundant=True)
-    
-    # Should keep both intended swings.
-    # Note: 220->100 is also a valid distinct swing (Size 120).
+
+    # Only 2 valid large refs: 220->100 and 200->100
+    # 220->120 is structurally invalid (lower low at 100 between them)
     large_refs = [r for r in result["bull_references"] if r["size"] > 90]
-    # Expect 3: 220->100, 200->100, 220->120.
-    assert len(large_refs) == 3
-    
+    assert len(large_refs) == 2
+
     pairs = [(r["high_price"], r["low_price"]) for r in large_refs]
     assert (200.0, 100.0) in pairs
-    assert (220.0, 120.0) in pairs
+    assert (220.0, 100.0) in pairs  # Cross-pairing that IS structurally valid
