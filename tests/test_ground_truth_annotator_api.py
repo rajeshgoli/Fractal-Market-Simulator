@@ -620,3 +620,483 @@ class TestComparisonWithCascade:
 
         # Should have counted both annotations
         assert data["summary"]["total_user_annotations"] >= 2
+
+
+# ============================================================================
+# Review Mode API Tests
+# ============================================================================
+
+class TestReviewStartEndpoint:
+    """Tests for POST /api/review/start endpoint."""
+
+    def test_start_review_creates_session(self, cascade_client):
+        """POST /api/review/start creates ReviewSession."""
+        response = cascade_client.post("/api/review/start")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "review_id" in data
+        assert "session_id" in data
+        assert data["phase"] == "matches"
+        assert "progress" in data
+        assert "completed" in data["progress"]
+        assert "total" in data["progress"]
+        assert data["is_complete"] is False
+
+    def test_start_review_idempotent(self, cascade_client):
+        """Starting review twice returns same session."""
+        response1 = cascade_client.post("/api/review/start")
+        data1 = response1.json()
+
+        response2 = cascade_client.post("/api/review/start")
+        data2 = response2.json()
+
+        assert data1["review_id"] == data2["review_id"]
+        assert data1["session_id"] == data2["session_id"]
+
+    def test_start_review_runs_comparison(self, cascade_client):
+        """Starting review runs comparison automatically."""
+        # Add an annotation first
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 0,
+            "end_bar_index": 5
+        })
+
+        response = cascade_client.post("/api/review/start")
+        assert response.status_code == 200
+
+        # Comparison report should now be available
+        report_response = cascade_client.get("/api/compare/report")
+        assert report_response.status_code == 200
+
+
+class TestReviewStateEndpoint:
+    """Tests for GET /api/review/state endpoint."""
+
+    def test_get_review_state(self, cascade_client):
+        """GET /api/review/state returns current phase."""
+        # Start review first
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/state")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "phase" in data
+        assert data["phase"] == "matches"
+        assert "progress" in data
+
+    def test_get_review_state_404_without_start(self, cascade_client):
+        """Should return 404 if review not started."""
+        response = cascade_client.get("/api/review/state")
+        assert response.status_code == 404
+        assert "No review session" in response.json()["detail"]
+
+
+class TestReviewMatchesEndpoint:
+    """Tests for GET /api/review/matches endpoint."""
+
+    def test_get_matches(self, cascade_client):
+        """Returns matched swings with annotation data."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/matches")
+        assert response.status_code == 200
+        matches = response.json()
+        assert isinstance(matches, list)
+
+    def test_matches_structure(self, cascade_client):
+        """Matches have correct structure."""
+        # Add annotation that might match
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 0,
+            "end_bar_index": 5
+        })
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/matches")
+        matches = response.json()
+
+        # If there are matches, verify structure
+        if matches:
+            m = matches[0]
+            assert "annotation_id" in m
+            assert "scale" in m
+            assert "direction" in m
+            assert "start_index" in m
+            assert "end_index" in m
+            assert "system_start" in m
+            assert "system_end" in m
+            assert "feedback" in m
+
+
+class TestReviewFPSampleEndpoint:
+    """Tests for GET /api/review/fp-sample endpoint."""
+
+    def test_get_fp_sample(self, cascade_client):
+        """Returns stratified FP sample."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/fp-sample")
+        assert response.status_code == 200
+        fps = response.json()
+        assert isinstance(fps, list)
+
+    def test_fp_sample_structure(self, cascade_client):
+        """FP sample has correct structure."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/fp-sample")
+        fps = response.json()
+
+        # If there are FPs, verify structure
+        if fps:
+            fp = fps[0]
+            assert "fp_index" in fp
+            assert "scale" in fp
+            assert "direction" in fp
+            assert "start_index" in fp
+            assert "end_index" in fp
+            assert "high_price" in fp
+            assert "low_price" in fp
+            assert "size" in fp
+            assert "rank" in fp
+            assert "feedback" in fp
+
+    def test_fp_sample_limited(self, cascade_client):
+        """FP sample should be capped at 20."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/fp-sample")
+        fps = response.json()
+
+        # Should not exceed sample limit
+        assert len(fps) <= 20
+
+
+class TestReviewFNListEndpoint:
+    """Tests for GET /api/review/fn-list endpoint."""
+
+    def test_get_fn_list(self, cascade_client):
+        """Returns all false negatives."""
+        # Create annotation that system likely missed
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 10,
+            "end_bar_index": 12
+        })
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/fn-list")
+        assert response.status_code == 200
+        fns = response.json()
+        assert isinstance(fns, list)
+
+    def test_fn_list_structure(self, cascade_client):
+        """FN list has correct structure."""
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 10,
+            "end_bar_index": 12
+        })
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/fn-list")
+        fns = response.json()
+
+        # If there are FNs, verify structure
+        if fns:
+            fn = fns[0]
+            assert "annotation_id" in fn
+            assert "scale" in fn
+            assert "direction" in fn
+            assert "start_index" in fn
+            assert "end_index" in fn
+            assert "start_price" in fn
+            assert "end_price" in fn
+            assert "feedback" in fn
+
+
+class TestReviewFeedbackEndpoint:
+    """Tests for POST /api/review/feedback endpoint."""
+
+    def test_submit_match_feedback(self, cascade_client):
+        """Accept/reject match."""
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 0,
+            "end_bar_index": 5
+        })
+        cascade_client.post("/api/review/start")
+
+        matches = cascade_client.get("/api/review/matches").json()
+        if matches:
+            response = cascade_client.post("/api/review/feedback", json={
+                "swing_type": "match",
+                "swing_reference": {"annotation_id": matches[0]["annotation_id"]},
+                "verdict": "correct"
+            })
+            assert response.status_code == 200
+            assert "feedback_id" in response.json()
+
+    def test_submit_fp_feedback_noise(self, cascade_client):
+        """Mark FP as noise."""
+        cascade_client.post("/api/review/start")
+
+        fps = cascade_client.get("/api/review/fp-sample").json()
+        if fps:
+            response = cascade_client.post("/api/review/feedback", json={
+                "swing_type": "false_positive",
+                "swing_reference": {"sample_index": fps[0]["fp_index"]},
+                "verdict": "noise"
+            })
+            assert response.status_code == 200
+
+    def test_submit_fp_feedback_valid(self, cascade_client):
+        """Mark FP as actually valid."""
+        cascade_client.post("/api/review/start")
+
+        fps = cascade_client.get("/api/review/fp-sample").json()
+        if fps:
+            response = cascade_client.post("/api/review/feedback", json={
+                "swing_type": "false_positive",
+                "swing_reference": {"sample_index": fps[0]["fp_index"]},
+                "verdict": "valid_missed",
+                "category": "too_small"
+            })
+            assert response.status_code == 200
+
+    def test_submit_fn_feedback_requires_comment(self, cascade_client):
+        """400 error if no comment for FN."""
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 10,
+            "end_bar_index": 12
+        })
+        cascade_client.post("/api/review/start")
+
+        fns = cascade_client.get("/api/review/fn-list").json()
+        if fns:
+            response = cascade_client.post("/api/review/feedback", json={
+                "swing_type": "false_negative",
+                "swing_reference": {"annotation_id": fns[0]["annotation_id"]},
+                "verdict": "explained"
+                # No comment - should fail
+            })
+            assert response.status_code == 400
+            assert "comment" in response.json()["detail"].lower()
+
+    def test_submit_fn_feedback_with_comment(self, cascade_client):
+        """Success with comment for FN."""
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 10,
+            "end_bar_index": 12
+        })
+        cascade_client.post("/api/review/start")
+
+        fns = cascade_client.get("/api/review/fn-list").json()
+        if fns:
+            response = cascade_client.post("/api/review/feedback", json={
+                "swing_type": "false_negative",
+                "swing_reference": {"annotation_id": fns[0]["annotation_id"]},
+                "verdict": "explained",
+                "comment": "This is a valid swing that the system missed because..."
+            })
+            assert response.status_code == 200
+
+
+class TestReviewAdvanceEndpoint:
+    """Tests for POST /api/review/advance endpoint."""
+
+    def test_advance_from_matches(self, cascade_client):
+        """Advances to fp_sample."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.post("/api/review/advance")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["phase"] == "fp_sample"
+
+    def test_advance_from_fp_sample(self, cascade_client):
+        """Advances to fn_feedback."""
+        cascade_client.post("/api/review/start")
+        cascade_client.post("/api/review/advance")  # matches -> fp_sample
+
+        response = cascade_client.post("/api/review/advance")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["phase"] == "fn_feedback"
+
+    def test_advance_from_fn_requires_all_feedback(self, cascade_client):
+        """400 if FNs missing comments."""
+        # Create annotation that will be FN
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 10,
+            "end_bar_index": 12
+        })
+        cascade_client.post("/api/review/start")
+
+        # Advance to fn_feedback phase
+        cascade_client.post("/api/review/advance")  # matches -> fp_sample
+        cascade_client.post("/api/review/advance")  # fp_sample -> fn_feedback
+
+        # Check if there are FNs
+        fns = cascade_client.get("/api/review/fn-list").json()
+        if fns:
+            # Try to advance without feedback - should fail
+            response = cascade_client.post("/api/review/advance")
+            assert response.status_code == 400
+            assert "feedback" in response.json()["detail"].lower()
+
+    def test_advance_to_complete(self, cascade_client):
+        """Final phase transition."""
+        cascade_client.post("/api/review/start")
+
+        # Advance through all phases (no FNs in this case)
+        cascade_client.post("/api/review/advance")  # matches -> fp_sample
+        cascade_client.post("/api/review/advance")  # fp_sample -> fn_feedback
+        response = cascade_client.post("/api/review/advance")  # fn_feedback -> complete
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["phase"] == "complete"
+        assert data["is_complete"] is True
+
+
+class TestReviewSummaryEndpoint:
+    """Tests for GET /api/review/summary endpoint."""
+
+    def test_get_summary(self, cascade_client):
+        """Returns summary with all statistics."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/summary")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "session_id" in data
+        assert "review_id" in data
+        assert "phase" in data
+        assert "matches" in data
+        assert "false_positives" in data
+        assert "false_negatives" in data
+        assert "started_at" in data
+
+    def test_summary_match_counts(self, cascade_client):
+        """Summary has correct count structure."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/summary")
+        data = response.json()
+
+        assert "total" in data["matches"]
+        assert "reviewed" in data["matches"]
+        assert "correct" in data["matches"]
+        assert "incorrect" in data["matches"]
+
+        assert "sampled" in data["false_positives"]
+        assert "reviewed" in data["false_positives"]
+        assert "noise" in data["false_positives"]
+        assert "valid" in data["false_positives"]
+
+        assert "total" in data["false_negatives"]
+        assert "explained" in data["false_negatives"]
+
+
+class TestReviewExportEndpoint:
+    """Tests for GET /api/review/export endpoint."""
+
+    def test_export_json(self, cascade_client):
+        """Returns structured JSON."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/export?format=json")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "session_id" in data
+        assert "review_id" in data
+        assert "data_file" in data
+        assert "summary" in data
+        assert "matches" in data
+        assert "false_positives" in data
+        assert "false_negatives" in data
+
+    def test_export_csv(self, cascade_client):
+        """Returns CSV format."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/export?format=csv")
+        assert response.status_code == 200
+        assert "text/csv" in response.headers["content-type"]
+
+        # Check CSV header
+        content = response.text
+        assert "type,annotation_id,scale,direction,start,end,verdict,category,comment" in content
+
+    def test_export_invalid_format(self, cascade_client):
+        """400 for invalid format."""
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.get("/api/review/export?format=xml")
+        assert response.status_code == 400
+
+
+class TestReviewFlowIntegration:
+    """Integration tests for complete review workflow."""
+
+    def test_complete_review_flow(self, cascade_client):
+        """Test complete review flow from start to finish."""
+        # Start review
+        start_response = cascade_client.post("/api/review/start")
+        assert start_response.status_code == 200
+        assert start_response.json()["phase"] == "matches"
+
+        # Get matches and submit feedback for first one if any
+        matches = cascade_client.get("/api/review/matches").json()
+        if matches:
+            cascade_client.post("/api/review/feedback", json={
+                "swing_type": "match",
+                "swing_reference": {"annotation_id": matches[0]["annotation_id"]},
+                "verdict": "correct"
+            })
+
+        # Advance to FP phase
+        cascade_client.post("/api/review/advance")
+        state = cascade_client.get("/api/review/state").json()
+        assert state["phase"] == "fp_sample"
+
+        # Get FPs and submit feedback for first one if any
+        fps = cascade_client.get("/api/review/fp-sample").json()
+        if fps:
+            cascade_client.post("/api/review/feedback", json={
+                "swing_type": "false_positive",
+                "swing_reference": {"sample_index": fps[0]["fp_index"]},
+                "verdict": "noise"
+            })
+
+        # Advance to FN phase
+        cascade_client.post("/api/review/advance")
+        state = cascade_client.get("/api/review/state").json()
+        assert state["phase"] == "fn_feedback"
+
+        # Submit feedback for all FNs (required for advancement)
+        fns = cascade_client.get("/api/review/fn-list").json()
+        for fn in fns:
+            cascade_client.post("/api/review/feedback", json={
+                "swing_type": "false_negative",
+                "swing_reference": {"annotation_id": fn["annotation_id"]},
+                "verdict": "explained",
+                "comment": "Test explanation"
+            })
+
+        # Advance to complete
+        cascade_client.post("/api/review/advance")
+        state = cascade_client.get("/api/review/state").json()
+        assert state["phase"] == "complete"
+        assert state["is_complete"] is True
+
+        # Get final summary
+        summary = cascade_client.get("/api/review/summary").json()
+        assert summary["phase"] == "complete"
+        assert summary["completed_at"] is not None
+
+        # Export should work
+        export = cascade_client.get("/api/review/export?format=json").json()
+        assert "summary" in export

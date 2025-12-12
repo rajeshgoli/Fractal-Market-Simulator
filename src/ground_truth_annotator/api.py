@@ -23,7 +23,8 @@ from pydantic import BaseModel
 from .cascade_controller import CascadeController
 from .comparison_analyzer import ComparisonAnalyzer, ComparisonResult
 from .models import AnnotationSession, SwingAnnotation
-from .storage import AnnotationStorage
+from .review_controller import ReviewController
+from .storage import AnnotationStorage, ReviewStorage
 from ..data.ohlc_loader import load_ohlc
 from ..swing_analysis.bar_aggregator import BarAggregator
 from ..swing_analysis.bull_reference_detector import Bar
@@ -160,6 +161,77 @@ class ComparisonRunResponse(BaseModel):
     message: str
 
 
+# Review Mode API Models
+class ReviewStateResponse(BaseModel):
+    """Current review session state."""
+    review_id: str
+    session_id: str
+    phase: str  # "matches" | "fp_sample" | "fn_feedback" | "complete"
+    progress: dict  # {"completed": int, "total": int}
+    is_complete: bool
+
+
+class MatchItem(BaseModel):
+    """A matched swing for review."""
+    annotation_id: str
+    scale: str
+    direction: str
+    start_index: int
+    end_index: int
+    start_price: str
+    end_price: str
+    system_start: int
+    system_end: int
+    feedback: Optional[dict]  # Existing feedback if any
+
+
+class FPSampleItem(BaseModel):
+    """A sampled false positive for review."""
+    fp_index: int  # Index in the sample (for reference)
+    scale: str
+    direction: str
+    start_index: int
+    end_index: int
+    high_price: float
+    low_price: float
+    size: float
+    rank: int
+    feedback: Optional[dict]
+
+
+class FNItem(BaseModel):
+    """A false negative for review."""
+    annotation_id: str
+    scale: str
+    direction: str
+    start_index: int
+    end_index: int
+    start_price: str
+    end_price: str
+    feedback: Optional[dict]
+
+
+class FeedbackSubmit(BaseModel):
+    """Request to submit feedback."""
+    swing_type: str  # "match" | "false_positive" | "false_negative"
+    swing_reference: dict  # {"annotation_id": str} or {"sample_index": int}
+    verdict: str  # "correct" | "incorrect" | "noise" | "valid_missed" | "explained"
+    comment: Optional[str] = None
+    category: Optional[str] = None
+
+
+class ReviewSummaryResponse(BaseModel):
+    """Final review summary."""
+    session_id: str
+    review_id: str
+    phase: str
+    matches: dict  # {"total": int, "reviewed": int, "correct": int, "incorrect": int}
+    false_positives: dict  # {"sampled": int, "reviewed": int, "noise": int, "valid": int}
+    false_negatives: dict  # {"total": int, "explained": int}
+    started_at: str
+    completed_at: Optional[str]
+
+
 @dataclass
 class AppState:
     """Application state."""
@@ -173,6 +245,9 @@ class AppState:
     cascade_controller: Optional[CascadeController] = None
     aggregator: Optional[BarAggregator] = None
     comparison_report: Optional[dict] = None  # Latest comparison report
+    review_storage: Optional[ReviewStorage] = None
+    review_controller: Optional[ReviewController] = None
+    comparison_results: Optional[Dict[str, ComparisonResult]] = None  # Cached comparison
 
 
 # Global state
@@ -674,6 +749,351 @@ async def export_comparison(format: str = Query("json", description="Export form
         )
 
 
+# ============================================================================
+# Review Mode Endpoints
+# ============================================================================
+
+def _ensure_comparison_run(s: AppState) -> Dict[str, ComparisonResult]:
+    """Ensure comparison has been run and cached."""
+    if s.comparison_results is None:
+        analyzer = ComparisonAnalyzer(tolerance_pct=0.1)
+        s.comparison_results = analyzer.compare_session(s.session, s.source_bars)
+        # Also update the comparison report
+        s.comparison_report = analyzer.generate_report(s.comparison_results)
+    return s.comparison_results
+
+
+def _get_review_controller(s: AppState) -> ReviewController:
+    """Get or create the review controller."""
+    if s.review_controller is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No review session. Start review with POST /api/review/start first."
+        )
+    return s.review_controller
+
+
+@app.post("/api/review/start", response_model=ReviewStateResponse)
+async def start_review():
+    """
+    Initialize Review Mode for current session.
+
+    - Runs comparison if not already done
+    - Creates ReviewSession
+    - Samples false positives
+    - Returns initial state
+    """
+    s = get_state()
+
+    if s.review_storage is None:
+        raise HTTPException(status_code=500, detail="Review storage not initialized")
+
+    # Run comparison if needed
+    comparison_results = _ensure_comparison_run(s)
+
+    # Create or get review controller
+    if s.review_controller is None:
+        s.review_controller = ReviewController(
+            session_id=s.session.session_id,
+            annotation_storage=s.storage,
+            review_storage=s.review_storage,
+            comparison_results=comparison_results
+        )
+
+    # Get initial state
+    review = s.review_controller.get_or_create_review()
+    completed, total = s.review_controller.get_phase_progress()
+
+    return ReviewStateResponse(
+        review_id=review.review_id,
+        session_id=review.session_id,
+        phase=review.phase,
+        progress={"completed": completed, "total": total},
+        is_complete=s.review_controller.is_complete()
+    )
+
+
+@app.get("/api/review/state", response_model=ReviewStateResponse)
+async def get_review_state():
+    """Get current review session state and progress."""
+    s = get_state()
+    controller = _get_review_controller(s)
+
+    review = controller.get_or_create_review()
+    completed, total = controller.get_phase_progress()
+
+    return ReviewStateResponse(
+        review_id=review.review_id,
+        session_id=review.session_id,
+        phase=review.phase,
+        progress={"completed": completed, "total": total},
+        is_complete=controller.is_complete()
+    )
+
+
+@app.get("/api/review/matches", response_model=List[MatchItem])
+async def get_matches():
+    """
+    Get matched swings for Phase 1 review.
+
+    Returns all swings where user annotation matched system detection.
+    """
+    s = get_state()
+    controller = _get_review_controller(s)
+
+    matches = controller.get_matches()
+
+    return [
+        MatchItem(
+            annotation_id=m["annotation"]["annotation_id"],
+            scale=m["scale"],
+            direction=m["annotation"]["direction"],
+            start_index=m["annotation"]["start_source_index"],
+            end_index=m["annotation"]["end_source_index"],
+            start_price=m["annotation"]["start_price"],
+            end_price=m["annotation"]["end_price"],
+            system_start=m["system_swing"]["start_index"],
+            system_end=m["system_swing"]["end_index"],
+            feedback=m["feedback"]
+        )
+        for m in matches
+    ]
+
+
+@app.get("/api/review/fp-sample", response_model=List[FPSampleItem])
+async def get_fp_sample():
+    """
+    Get sampled false positives for Phase 2 review.
+
+    Returns 10-20 system detections that user didn't mark,
+    stratified by scale.
+    """
+    s = get_state()
+    controller = _get_review_controller(s)
+
+    fps = controller.get_fp_sample()
+
+    return [
+        FPSampleItem(
+            fp_index=fp["sample_index"],
+            scale=fp["scale"],
+            direction=fp["system_swing"]["direction"],
+            start_index=fp["system_swing"]["start_index"],
+            end_index=fp["system_swing"]["end_index"],
+            high_price=fp["system_swing"]["high_price"],
+            low_price=fp["system_swing"]["low_price"],
+            size=fp["system_swing"]["size"],
+            rank=fp["system_swing"]["rank"],
+            feedback=fp["feedback"]
+        )
+        for fp in fps
+    ]
+
+
+@app.get("/api/review/fn-list", response_model=List[FNItem])
+async def get_fn_list():
+    """
+    Get all false negatives for Phase 3 review.
+
+    Returns all swings user marked that system missed.
+    """
+    s = get_state()
+    controller = _get_review_controller(s)
+
+    fns = controller.get_false_negatives()
+
+    return [
+        FNItem(
+            annotation_id=fn["annotation"]["annotation_id"],
+            scale=fn["scale"],
+            direction=fn["annotation"]["direction"],
+            start_index=fn["annotation"]["start_source_index"],
+            end_index=fn["annotation"]["end_source_index"],
+            start_price=fn["annotation"]["start_price"],
+            end_price=fn["annotation"]["end_price"],
+            feedback=fn["feedback"]
+        )
+        for fn in fns
+    ]
+
+
+@app.post("/api/review/feedback")
+async def submit_feedback(request: FeedbackSubmit):
+    """
+    Submit feedback on a swing.
+
+    - For matches: verdict = "correct" or "incorrect"
+    - For FPs: verdict = "noise" or "valid_missed", optional category
+    - For FNs: verdict = "explained", comment REQUIRED
+
+    Returns {"status": "ok", "feedback_id": str}
+    """
+    s = get_state()
+    controller = _get_review_controller(s)
+
+    try:
+        feedback = controller.submit_feedback(
+            swing_type=request.swing_type,
+            swing_reference=request.swing_reference,
+            verdict=request.verdict,
+            comment=request.comment,
+            category=request.category
+        )
+        return {"status": "ok", "feedback_id": feedback.feedback_id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/review/advance", response_model=ReviewStateResponse)
+async def advance_review_phase():
+    """
+    Mark current phase complete and advance to next.
+
+    Validates:
+    - Phase 3 (FN): All FNs must have feedback with comment
+
+    Returns updated state.
+    """
+    s = get_state()
+    controller = _get_review_controller(s)
+
+    # Check if we can advance (FN phase requires all feedback)
+    if controller.get_current_phase() == "fn_feedback":
+        fns = controller.get_false_negatives()
+        for fn in fns:
+            if fn["feedback"] is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="All false negatives must have feedback before advancing"
+                )
+
+    success = controller.advance_phase()
+
+    if not success and controller.is_complete():
+        # Already complete is not an error
+        pass
+
+    review = controller.get_or_create_review()
+    completed, total = controller.get_phase_progress()
+
+    return ReviewStateResponse(
+        review_id=review.review_id,
+        session_id=review.session_id,
+        phase=review.phase,
+        progress={"completed": completed, "total": total},
+        is_complete=controller.is_complete()
+    )
+
+
+@app.get("/api/review/summary", response_model=ReviewSummaryResponse)
+async def get_review_summary():
+    """Get final review summary with all statistics."""
+    s = get_state()
+    controller = _get_review_controller(s)
+
+    summary = controller.get_summary()
+
+    return ReviewSummaryResponse(
+        session_id=summary["session_id"],
+        review_id=summary["review_id"],
+        phase=summary["phase"],
+        matches=summary["matches"],
+        false_positives=summary["false_positives"],
+        false_negatives=summary["false_negatives"],
+        started_at=summary["started_at"],
+        completed_at=summary["completed_at"]
+    )
+
+
+@app.get("/api/review/export")
+async def export_review(format: str = Query("json")):
+    """
+    Export review feedback as JSON or CSV.
+
+    JSON structure:
+    {
+        "session_id": str,
+        "review_id": str,
+        "data_file": str,
+        "summary": {...},
+        "matches": [...],
+        "false_positives": [...],
+        "false_negatives": [...]
+    }
+    """
+    s = get_state()
+    controller = _get_review_controller(s)
+
+    summary = controller.get_summary()
+    matches = controller.get_matches()
+    fps = controller.get_fp_sample()
+    fns = controller.get_false_negatives()
+
+    if format == "json":
+        return {
+            "session_id": s.session.session_id,
+            "review_id": summary["review_id"],
+            "data_file": s.session.data_file,
+            "summary": summary,
+            "matches": matches,
+            "false_positives": fps,
+            "false_negatives": fns
+        }
+
+    elif format == "csv":
+        # Build CSV content
+        lines = []
+        lines.append("type,annotation_id,scale,direction,start,end,verdict,category,comment")
+
+        # Matches
+        for m in matches:
+            fb = m.get("feedback") or {}
+            comment = (fb.get("comment") or "").replace(",", ";").replace("\n", " ")
+            lines.append(
+                f"match,{m['annotation']['annotation_id']},{m['scale']},"
+                f"{m['annotation']['direction']},{m['annotation']['start_source_index']},"
+                f"{m['annotation']['end_source_index']},{fb.get('verdict', '')},"
+                f"{fb.get('category', '')},{comment}"
+            )
+
+        # False positives
+        for fp in fps:
+            fb = fp.get("feedback") or {}
+            comment = (fb.get("comment") or "").replace(",", ";").replace("\n", " ")
+            lines.append(
+                f"false_positive,fp_{fp['sample_index']},{fp['scale']},"
+                f"{fp['system_swing']['direction']},{fp['system_swing']['start_index']},"
+                f"{fp['system_swing']['end_index']},{fb.get('verdict', '')},"
+                f"{fb.get('category', '')},{comment}"
+            )
+
+        # False negatives
+        for fn in fns:
+            fb = fn.get("feedback") or {}
+            comment = (fb.get("comment") or "").replace(",", ";").replace("\n", " ")
+            lines.append(
+                f"false_negative,{fn['annotation']['annotation_id']},{fn['scale']},"
+                f"{fn['annotation']['direction']},{fn['annotation']['start_source_index']},"
+                f"{fn['annotation']['end_source_index']},{fb.get('verdict', '')},"
+                f"{fb.get('category', '')},{comment}"
+            )
+
+        csv_content = "\n".join(lines)
+
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=review_export.csv"}
+        )
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format: {format}. Use 'json' or 'csv'."
+        )
+
+
 def init_app(
     data_file: str,
     storage_dir: str = "annotation_sessions",
@@ -768,6 +1188,9 @@ def init_app(
             for i in range(len(source_bars)):
                 aggregation_map[i] = (i, i)
 
+    # Initialize review storage (controller created lazily on /api/review/start)
+    review_storage = ReviewStorage(storage_dir)
+
     state = AppState(
         source_bars=source_bars,
         aggregated_bars=aggregated_bars,
@@ -777,7 +1200,8 @@ def init_app(
         scale=scale,
         target_bars=target_bars,
         cascade_controller=cascade_controller,
-        aggregator=aggregator
+        aggregator=aggregator,
+        review_storage=review_storage
     )
 
     logger.info(f"Initialized annotator with {len(source_bars)} bars, scale={scale}")
