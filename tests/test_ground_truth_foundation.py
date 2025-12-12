@@ -16,8 +16,10 @@ import pytest
 
 from src.swing_analysis.bar_aggregator import BarAggregator
 from src.swing_analysis.bull_reference_detector import Bar
-from src.ground_truth_annotator.models import SwingAnnotation, AnnotationSession
-from src.ground_truth_annotator.storage import AnnotationStorage
+from src.ground_truth_annotator.models import (
+    SwingAnnotation, AnnotationSession, SwingFeedback, ReviewSession, REVIEW_PHASES
+)
+from src.ground_truth_annotator.storage import AnnotationStorage, ReviewStorage
 
 
 # ============================================================================
@@ -534,3 +536,376 @@ class TestAnnotationStorage:
         """Test getting annotations from nonexistent session raises error."""
         with pytest.raises(ValueError):
             storage.get_annotations("nonexistent-id")
+
+
+# ============================================================================
+# SwingFeedback Model Tests
+# ============================================================================
+
+@pytest.fixture
+def sample_feedback():
+    """Create a sample SwingFeedback for testing."""
+    return SwingFeedback.create(
+        swing_type="match",
+        swing_reference={"annotation_id": "test-ann-123"},
+        verdict="correct",
+        comment="Properly detected swing",
+        category=None
+    )
+
+
+@pytest.fixture
+def sample_fp_feedback():
+    """Create a sample false positive feedback for testing."""
+    return SwingFeedback.create(
+        swing_type="false_positive",
+        swing_reference={"start_index": 100, "end_index": 150, "direction": "bull"},
+        verdict="noise",
+        comment="Too small to be significant",
+        category="too_small"
+    )
+
+
+@pytest.fixture
+def sample_fn_feedback():
+    """Create a sample false negative feedback for testing."""
+    return SwingFeedback.create(
+        swing_type="false_negative",
+        swing_reference={"annotation_id": "missed-ann-456"},
+        verdict="valid_missed",
+        comment="Clear swing that should have been detected",
+        category="pattern"
+    )
+
+
+class TestSwingFeedback:
+    """Tests for SwingFeedback dataclass."""
+
+    def test_create_feedback(self, sample_feedback):
+        """Test feedback creation with factory method."""
+        assert sample_feedback.swing_type == "match"
+        assert sample_feedback.swing_reference == {"annotation_id": "test-ann-123"}
+        assert sample_feedback.verdict == "correct"
+        assert sample_feedback.comment == "Properly detected swing"
+        assert sample_feedback.category is None
+        assert sample_feedback.feedback_id  # UUID generated
+        assert sample_feedback.created_at  # Timestamp generated
+
+    def test_create_feedback_with_category(self, sample_fp_feedback):
+        """Test feedback creation with optional category."""
+        assert sample_fp_feedback.swing_type == "false_positive"
+        assert sample_fp_feedback.verdict == "noise"
+        assert sample_fp_feedback.category == "too_small"
+
+    def test_to_dict_serialization(self, sample_feedback):
+        """Test serialization to dictionary."""
+        data = sample_feedback.to_dict()
+
+        assert data['swing_type'] == "match"
+        assert data['verdict'] == "correct"
+        assert data['swing_reference'] == {"annotation_id": "test-ann-123"}
+        assert 'feedback_id' in data
+        assert 'created_at' in data
+
+    def test_from_dict_deserialization(self, sample_feedback):
+        """Test deserialization from dictionary."""
+        data = sample_feedback.to_dict()
+        restored = SwingFeedback.from_dict(data)
+
+        assert restored.swing_type == sample_feedback.swing_type
+        assert restored.verdict == sample_feedback.verdict
+        assert restored.swing_reference == sample_feedback.swing_reference
+        assert restored.feedback_id == sample_feedback.feedback_id
+
+    def test_roundtrip_serialization(self, sample_fp_feedback):
+        """Test that to_dict -> from_dict preserves all fields."""
+        data = sample_fp_feedback.to_dict()
+        restored = SwingFeedback.from_dict(data)
+
+        assert restored.feedback_id == sample_fp_feedback.feedback_id
+        assert restored.swing_type == sample_fp_feedback.swing_type
+        assert restored.verdict == sample_fp_feedback.verdict
+        assert restored.comment == sample_fp_feedback.comment
+        assert restored.category == sample_fp_feedback.category
+
+    def test_optional_fields_serialization(self):
+        """Test that None values for optional fields are handled correctly."""
+        feedback = SwingFeedback.create(
+            swing_type="match",
+            swing_reference={"id": "x"},
+            verdict="correct"
+        )
+        data = feedback.to_dict()
+        restored = SwingFeedback.from_dict(data)
+
+        assert restored.comment is None
+        assert restored.category is None
+
+
+# ============================================================================
+# ReviewSession Model Tests
+# ============================================================================
+
+@pytest.fixture
+def review_session():
+    """Create a sample ReviewSession for testing."""
+    return ReviewSession.create(session_id="test-session-123")
+
+
+class TestReviewSession:
+    """Tests for ReviewSession dataclass."""
+
+    def test_create_session(self, review_session):
+        """Test session creation with factory method."""
+        assert review_session.session_id == "test-session-123"
+        assert review_session.phase == "matches"
+        assert review_session.match_feedback == []
+        assert review_session.fp_feedback == []
+        assert review_session.fn_feedback == []
+        assert review_session.fp_sample_indices == []
+        assert review_session.review_id  # UUID generated
+        assert review_session.started_at  # Timestamp generated
+        assert review_session.completed_at is None
+
+    def test_add_match_feedback(self, review_session, sample_feedback):
+        """Test adding match feedback."""
+        review_session.add_feedback(sample_feedback)
+
+        assert len(review_session.match_feedback) == 1
+        assert review_session.match_feedback[0] == sample_feedback
+        assert len(review_session.fp_feedback) == 0
+        assert len(review_session.fn_feedback) == 0
+
+    def test_add_fp_feedback(self, review_session, sample_fp_feedback):
+        """Test adding false positive feedback."""
+        review_session.add_feedback(sample_fp_feedback)
+
+        assert len(review_session.match_feedback) == 0
+        assert len(review_session.fp_feedback) == 1
+        assert review_session.fp_feedback[0] == sample_fp_feedback
+        assert len(review_session.fn_feedback) == 0
+
+    def test_add_fn_feedback(self, review_session, sample_fn_feedback):
+        """Test adding false negative feedback."""
+        review_session.add_feedback(sample_fn_feedback)
+
+        assert len(review_session.match_feedback) == 0
+        assert len(review_session.fp_feedback) == 0
+        assert len(review_session.fn_feedback) == 1
+        assert review_session.fn_feedback[0] == sample_fn_feedback
+
+    def test_add_multiple_feedback(self, review_session, sample_feedback, sample_fp_feedback, sample_fn_feedback):
+        """Test adding multiple types of feedback."""
+        review_session.add_feedback(sample_feedback)
+        review_session.add_feedback(sample_fp_feedback)
+        review_session.add_feedback(sample_fn_feedback)
+
+        assert len(review_session.match_feedback) == 1
+        assert len(review_session.fp_feedback) == 1
+        assert len(review_session.fn_feedback) == 1
+
+    def test_advance_phase_matches_to_fp(self, review_session):
+        """Test advancing from matches to fp_sample phase."""
+        assert review_session.phase == "matches"
+
+        result = review_session.advance_phase()
+
+        assert result is True
+        assert review_session.phase == "fp_sample"
+        assert review_session.completed_at is None
+
+    def test_advance_phase_full_sequence(self, review_session):
+        """Test advancing through all phases."""
+        phases_seen = [review_session.phase]
+
+        while review_session.advance_phase():
+            phases_seen.append(review_session.phase)
+
+        assert phases_seen == REVIEW_PHASES
+        assert review_session.completed_at is not None
+
+    def test_advance_phase_when_complete(self, review_session):
+        """Test that advance_phase returns False when already complete."""
+        # Advance to complete
+        while review_session.phase != "complete":
+            review_session.advance_phase()
+
+        result = review_session.advance_phase()
+
+        assert result is False
+        assert review_session.phase == "complete"
+
+    def test_to_dict_serialization(self, review_session, sample_feedback):
+        """Test serialization to dictionary."""
+        review_session.add_feedback(sample_feedback)
+        review_session.fp_sample_indices = [0, 5, 10]
+
+        data = review_session.to_dict()
+
+        assert data['session_id'] == "test-session-123"
+        assert data['phase'] == "matches"
+        assert len(data['match_feedback']) == 1
+        assert data['fp_sample_indices'] == [0, 5, 10]
+        assert 'review_id' in data
+        assert 'started_at' in data
+
+    def test_from_dict_deserialization(self, review_session, sample_feedback):
+        """Test deserialization from dictionary."""
+        review_session.add_feedback(sample_feedback)
+        review_session.advance_phase()
+
+        data = review_session.to_dict()
+        restored = ReviewSession.from_dict(data)
+
+        assert restored.review_id == review_session.review_id
+        assert restored.session_id == review_session.session_id
+        assert restored.phase == "fp_sample"
+        assert len(restored.match_feedback) == 1
+
+    def test_roundtrip_with_completed_at(self, review_session):
+        """Test roundtrip serialization preserves completed_at."""
+        # Advance to complete
+        while review_session.phase != "complete":
+            review_session.advance_phase()
+
+        data = review_session.to_dict()
+        restored = ReviewSession.from_dict(data)
+
+        assert restored.completed_at is not None
+        assert restored.phase == "complete"
+
+    def test_empty_feedback_lists_serialization(self, review_session):
+        """Test serialization with empty feedback lists."""
+        data = review_session.to_dict()
+        restored = ReviewSession.from_dict(data)
+
+        assert restored.match_feedback == []
+        assert restored.fp_feedback == []
+        assert restored.fn_feedback == []
+
+
+# ============================================================================
+# ReviewStorage Tests
+# ============================================================================
+
+@pytest.fixture
+def review_storage(storage_dir):
+    """Create a ReviewStorage instance with temp directory."""
+    return ReviewStorage(storage_dir)
+
+
+class TestReviewStorage:
+    """Tests for ReviewStorage class."""
+
+    def test_create_review(self, review_storage):
+        """Test creating a new review session through storage."""
+        review = review_storage.create_review(session_id="test-session-123")
+
+        assert review.session_id == "test-session-123"
+        assert review.review_id
+        assert review.phase == "matches"
+
+        # Verify persisted
+        loaded = review_storage.get_review("test-session-123")
+        assert loaded is not None
+        assert loaded.session_id == "test-session-123"
+
+    def test_get_nonexistent_review(self, review_storage):
+        """Test getting a review that doesn't exist returns None."""
+        result = review_storage.get_review("nonexistent-session-id")
+        assert result is None
+
+    def test_save_and_retrieve_review(self, review_storage, sample_feedback):
+        """Test saving and retrieving reviews with feedback."""
+        review = review_storage.create_review("test-session-456")
+        review.add_feedback(sample_feedback)
+        review_storage.save_review(review)
+
+        loaded = review_storage.get_review("test-session-456")
+        assert len(loaded.match_feedback) == 1
+        assert loaded.match_feedback[0].verdict == "correct"
+
+    def test_review_path_format(self, review_storage):
+        """Test that review file path follows {session_id}_review.json format."""
+        path = review_storage._review_path("my-session-id")
+        assert path.name == "my-session-id_review.json"
+
+    def test_delete_review(self, review_storage):
+        """Test deleting a review session."""
+        review = review_storage.create_review("test-session-789")
+        session_id = review.session_id
+
+        result = review_storage.delete_review(session_id)
+
+        assert result is True
+        assert review_storage.get_review(session_id) is None
+
+    def test_delete_nonexistent_review(self, review_storage):
+        """Test deleting review that doesn't exist returns False."""
+        result = review_storage.delete_review("nonexistent-id")
+        assert result is False
+
+    def test_persistence_across_restarts(self, storage_dir, sample_feedback, sample_fp_feedback):
+        """Test that data persists when storage is recreated."""
+        # Create first storage instance and add data
+        storage1 = ReviewStorage(storage_dir)
+        review = storage1.create_review("persist-test-session")
+        review.add_feedback(sample_feedback)
+        review.add_feedback(sample_fp_feedback)
+        review.advance_phase()
+        storage1.save_review(review)
+
+        # Create new storage instance (simulating restart)
+        storage2 = ReviewStorage(storage_dir)
+
+        # Verify data persisted
+        loaded = storage2.get_review("persist-test-session")
+        assert loaded is not None
+        assert loaded.phase == "fp_sample"
+        assert len(loaded.match_feedback) == 1
+        assert len(loaded.fp_feedback) == 1
+
+    def test_export_json(self, review_storage, sample_feedback):
+        """Test exporting review as JSON."""
+        review = review_storage.create_review("export-test")
+        review.add_feedback(sample_feedback)
+        review_storage.save_review(review)
+
+        exported = review_storage.export_review("export-test", format="json")
+
+        data = json.loads(exported)
+        assert data['session_id'] == "export-test"
+        assert len(data['match_feedback']) == 1
+
+    def test_export_csv(self, review_storage, sample_feedback, sample_fp_feedback):
+        """Test exporting review as CSV."""
+        review = review_storage.create_review("csv-export-test")
+        review.add_feedback(sample_feedback)
+        review.add_feedback(sample_fp_feedback)
+        review_storage.save_review(review)
+
+        exported = review_storage.export_review("csv-export-test", format="csv")
+
+        lines = exported.strip().split("\n")
+        assert len(lines) == 3  # Header + 2 feedback entries
+        assert "feedback_id" in lines[0]
+        assert "swing_type" in lines[0]
+
+    def test_export_invalid_format(self, review_storage):
+        """Test exporting with invalid format raises error."""
+        review_storage.create_review("format-test")
+
+        with pytest.raises(ValueError):
+            review_storage.export_review("format-test", format="xml")
+
+    def test_export_nonexistent_review(self, review_storage):
+        """Test exporting nonexistent review raises error."""
+        with pytest.raises(ValueError):
+            review_storage.export_review("nonexistent-session")
+
+    def test_uses_same_directory_as_annotation_storage(self, storage_dir):
+        """Test ReviewStorage uses same default directory as AnnotationStorage."""
+        ann_storage = AnnotationStorage(storage_dir)
+        rev_storage = ReviewStorage(storage_dir)
+
+        assert ann_storage._storage_dir == rev_storage._storage_dir

@@ -2,14 +2,14 @@
 Data Models for Ground Truth Annotation
 
 Defines the core data structures for storing expert swing annotations
-and managing annotation sessions.
+and managing annotation sessions, including review feedback.
 """
 
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -178,3 +178,160 @@ class AnnotationSession:
             completed_scales=data.get('completed_scales', [])
         )
         return session
+
+
+@dataclass
+class SwingFeedback:
+    """
+    Feedback on a single swing (match, FP, or FN).
+
+    Used in Review Mode to capture expert feedback on comparison results
+    between annotations and detected swings.
+    """
+    feedback_id: str              # UUID
+    swing_type: str               # "match" | "false_positive" | "false_negative"
+    swing_reference: Dict[str, Any]  # annotation_id for user swings, or DetectedSwing data for system
+    verdict: str                  # "correct" | "incorrect" | "noise" | "valid_missed" | "explained"
+    comment: Optional[str]        # Free text explanation (required for FN, optional for FP)
+    category: Optional[str]       # "too_small" | "wrong_direction" | "pattern" | "context" | etc.
+    created_at: datetime
+
+    @classmethod
+    def create(
+        cls,
+        swing_type: str,
+        swing_reference: Dict[str, Any],
+        verdict: str,
+        comment: Optional[str] = None,
+        category: Optional[str] = None
+    ) -> 'SwingFeedback':
+        """Factory method with auto-generated ID and timestamp."""
+        return cls(
+            feedback_id=str(uuid.uuid4()),
+            swing_type=swing_type,
+            swing_reference=swing_reference,
+            verdict=verdict,
+            comment=comment,
+            category=category,
+            created_at=datetime.now(timezone.utc)
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary for JSON storage."""
+        return {
+            'feedback_id': self.feedback_id,
+            'swing_type': self.swing_type,
+            'swing_reference': self.swing_reference,
+            'verdict': self.verdict,
+            'comment': self.comment,
+            'category': self.category,
+            'created_at': self.created_at.isoformat()
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SwingFeedback':
+        """Deserialize from dictionary."""
+        return cls(
+            feedback_id=data['feedback_id'],
+            swing_type=data['swing_type'],
+            swing_reference=data['swing_reference'],
+            verdict=data['verdict'],
+            comment=data.get('comment'),
+            category=data.get('category'),
+            created_at=datetime.fromisoformat(data['created_at'])
+        )
+
+
+# Phase order for ReviewSession
+REVIEW_PHASES = ["matches", "fp_sample", "fn_feedback", "complete"]
+
+
+@dataclass
+class ReviewSession:
+    """
+    Review feedback for a single annotation session.
+
+    Tracks the three-phase review process: matches, false positive sample,
+    and false negative feedback.
+    """
+    review_id: str                        # UUID
+    session_id: str                       # Links to AnnotationSession
+    phase: str                            # "matches" | "fp_sample" | "fn_feedback" | "complete"
+    match_feedback: List[SwingFeedback] = field(default_factory=list)
+    fp_feedback: List[SwingFeedback] = field(default_factory=list)
+    fn_feedback: List[SwingFeedback] = field(default_factory=list)
+    fp_sample_indices: List[int] = field(default_factory=list)
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = None
+
+    @classmethod
+    def create(cls, session_id: str) -> 'ReviewSession':
+        """Factory method to create new review session."""
+        return cls(
+            review_id=str(uuid.uuid4()),
+            session_id=session_id,
+            phase="matches",
+            match_feedback=[],
+            fp_feedback=[],
+            fn_feedback=[],
+            fp_sample_indices=[],
+            started_at=datetime.now(timezone.utc),
+            completed_at=None
+        )
+
+    def add_feedback(self, feedback: SwingFeedback) -> None:
+        """Add feedback to appropriate list based on swing_type."""
+        if feedback.swing_type == "match":
+            self.match_feedback.append(feedback)
+        elif feedback.swing_type == "false_positive":
+            self.fp_feedback.append(feedback)
+        elif feedback.swing_type == "false_negative":
+            self.fn_feedback.append(feedback)
+
+    def advance_phase(self) -> bool:
+        """
+        Move to next phase. Returns False if already complete.
+
+        Phase order: matches -> fp_sample -> fn_feedback -> complete
+        """
+        if self.phase == "complete":
+            return False
+
+        current_index = REVIEW_PHASES.index(self.phase)
+        next_index = current_index + 1
+
+        if next_index < len(REVIEW_PHASES):
+            self.phase = REVIEW_PHASES[next_index]
+            if self.phase == "complete":
+                self.completed_at = datetime.now(timezone.utc)
+            return True
+        return False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary for JSON storage."""
+        return {
+            'review_id': self.review_id,
+            'session_id': self.session_id,
+            'phase': self.phase,
+            'match_feedback': [f.to_dict() for f in self.match_feedback],
+            'fp_feedback': [f.to_dict() for f in self.fp_feedback],
+            'fn_feedback': [f.to_dict() for f in self.fn_feedback],
+            'fp_sample_indices': self.fp_sample_indices,
+            'started_at': self.started_at.isoformat(),
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ReviewSession':
+        """Deserialize from dictionary."""
+        return cls(
+            review_id=data['review_id'],
+            session_id=data['session_id'],
+            phase=data['phase'],
+            match_feedback=[SwingFeedback.from_dict(f) for f in data.get('match_feedback', [])],
+            fp_feedback=[SwingFeedback.from_dict(f) for f in data.get('fp_feedback', [])],
+            fn_feedback=[SwingFeedback.from_dict(f) for f in data.get('fn_feedback', [])],
+            fp_sample_indices=data.get('fp_sample_indices', []),
+            started_at=datetime.fromisoformat(data['started_at']),
+            completed_at=datetime.fromisoformat(data['completed_at']) if data.get('completed_at') else None
+        )

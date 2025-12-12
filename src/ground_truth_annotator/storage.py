@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from .models import AnnotationSession, SwingAnnotation
+from .models import AnnotationSession, SwingAnnotation, ReviewSession, SwingFeedback
 
 
 class AnnotationStorage:
@@ -255,3 +255,132 @@ class AnnotationStorage:
         path = self._session_path(session.session_id)
         with open(path, 'w') as f:
             json.dump(session.to_dict(), f, indent=2)
+
+
+class ReviewStorage:
+    """
+    JSON-backed review feedback persistence.
+
+    Stores review sessions separately from annotation sessions using
+    a {session_id}_review.json naming convention.
+    """
+
+    def __init__(self, storage_dir: Optional[str] = None):
+        """
+        Initialize storage with a directory for review files.
+
+        Uses the same directory as AnnotationStorage by default.
+
+        Args:
+            storage_dir: Directory path for storing review files.
+                        Defaults to 'annotation_sessions' in current directory.
+        """
+        self._storage_dir = Path(storage_dir or AnnotationStorage.DEFAULT_STORAGE_DIR)
+        self._storage_dir.mkdir(parents=True, exist_ok=True)
+
+    def _review_path(self, session_id: str) -> Path:
+        """Get the file path for a review session."""
+        return self._storage_dir / f"{session_id}_review.json"
+
+    def create_review(self, session_id: str) -> ReviewSession:
+        """
+        Create a new review session for an annotation session.
+
+        Args:
+            session_id: UUID of the annotation session to review
+
+        Returns:
+            Newly created ReviewSession
+        """
+        review = ReviewSession.create(session_id)
+        self.save_review(review)
+        return review
+
+    def get_review(self, session_id: str) -> Optional[ReviewSession]:
+        """
+        Get review session by annotation session ID.
+
+        Args:
+            session_id: UUID of the annotation session
+
+        Returns:
+            ReviewSession if found, None otherwise
+        """
+        path = self._review_path(session_id)
+        if not path.exists():
+            return None
+
+        with open(path, 'r') as f:
+            data = json.load(f)
+            return ReviewSession.from_dict(data)
+
+    def save_review(self, review: ReviewSession) -> None:
+        """
+        Persist review session to disk.
+
+        Args:
+            review: ReviewSession to save
+        """
+        path = self._review_path(review.session_id)
+        with open(path, 'w') as f:
+            json.dump(review.to_dict(), f, indent=2)
+
+    def delete_review(self, session_id: str) -> bool:
+        """
+        Delete a review session.
+
+        Args:
+            session_id: UUID of the annotation session
+
+        Returns:
+            True if review was found and deleted, False otherwise
+        """
+        path = self._review_path(session_id)
+        if path.exists():
+            path.unlink()
+            return True
+        return False
+
+    def export_review(self, session_id: str, format: str = "json") -> str:
+        """
+        Export review as JSON or CSV string.
+
+        Args:
+            session_id: UUID of the annotation session
+            format: Export format ("json" or "csv")
+
+        Returns:
+            String representation of the review data
+
+        Raises:
+            ValueError: If review not found or unsupported format
+        """
+        review = self.get_review(session_id)
+        if review is None:
+            raise ValueError(f"Review not found for session: {session_id}")
+
+        if format == "json":
+            return json.dumps(review.to_dict(), indent=2)
+        elif format == "csv":
+            return self._export_csv(review)
+        else:
+            raise ValueError(f"Unsupported export format: {format}")
+
+    def _export_csv(self, review: ReviewSession) -> str:
+        """Export review feedback to CSV format."""
+        lines = [
+            "feedback_id,swing_type,verdict,category,comment,created_at"
+        ]
+
+        all_feedback = review.match_feedback + review.fp_feedback + review.fn_feedback
+
+        for fb in all_feedback:
+            # Escape commas in comment
+            comment = (fb.comment or "").replace(",", ";").replace("\n", " ")
+            line = (
+                f"{fb.feedback_id},{fb.swing_type},{fb.verdict},"
+                f"{fb.category or ''},{comment},{fb.created_at.isoformat()}"
+            )
+            lines.append(line)
+
+        return "\n".join(lines)
