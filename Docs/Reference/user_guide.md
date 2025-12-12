@@ -1,6 +1,92 @@
-# Swing Validation Harness - User Guide
+# Swing Validation Tools - User Guide
 
 ## Overview
+
+This project provides two validation tools for swing detection logic:
+
+1. **Lightweight Swing Validator** (recommended) - A web-based tool for fast, focused validation with voting interface
+2. **Swing Validation Harness** - A matplotlib-based tool for detailed 4-panel visualization
+
+---
+
+# Lightweight Swing Validator
+
+The Lightweight Swing Validator is a web-based tool for human-in-the-loop validation of swing detection. It presents random time intervals with detected swing candidates for quick review and voting.
+
+## Quick Start
+
+### Prerequisites
+- Python 3.8+ with virtual environment
+- OHLC data in CSV format (test data included in `test_data/`)
+
+### Launch the Validator
+
+```bash
+source venv/bin/activate
+python -m src.lightweight_swing_validator.main --data test_data/test.csv
+```
+
+Open http://127.0.0.1:8000 in your browser.
+
+### Command Line Options
+
+| Option | Description |
+|--------|-------------|
+| `--data FILE` | Path to OHLC CSV data file (required) |
+| `--port PORT` | Server port (default: 8000) |
+| `--host HOST` | Server host (default: 127.0.0.1) |
+| `--storage-dir DIR` | Directory for validation results |
+| `--seed N` | Random seed for reproducible sampling |
+
+### Example with Large Dataset
+
+```bash
+python -m src.lightweight_swing_validator.main --data test_data/es-1m.csv --port 8080
+```
+
+## The Validation Workflow
+
+1. **View Sample**: The tool displays a random time interval with OHLC chart
+2. **Review Swings**: Up to 3 detected swing candidates are shown with markers
+3. **Vote**: Click Valid/Invalid/Skip for each swing
+4. **Overall Assessment**: Answer "Did we find the right swings?"
+5. **Submit & Next**: Move to the next random interval
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `1`, `2`, `3` | Cycle vote for swing 1/2/3 |
+| `Y` | Overall vote: Yes |
+| `N` | Overall vote: No |
+| `Enter` | Submit and get next sample |
+| `Escape` | Skip current sample |
+
+## API Endpoints
+
+The validator exposes a REST API:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/sample` | GET | Get random validation sample |
+| `/api/sample?scale=M` | GET | Get sample for specific scale |
+| `/api/vote` | POST | Submit votes for a sample |
+| `/api/stats` | GET | Get session statistics |
+| `/api/data-summary` | GET | Get loaded data summary |
+| `/api/export/csv` | GET | Export results as CSV |
+| `/api/export/json` | GET | Export results as JSON |
+
+## Session Files
+
+Validation results are saved to `validation_results/session_{timestamp}.json` containing:
+- Session metadata
+- All votes and comments
+- Statistics by scale
+
+---
+
+# Swing Validation Harness
 
 The Swing Validation Harness is an interactive tool for validating swing detection logic across historical market data. It provides a 4-panel visualization showing swing activity at four structural scales (S, M, L, XL) with Fibonacci level overlays, enabling systematic expert review of detection accuracy.
 

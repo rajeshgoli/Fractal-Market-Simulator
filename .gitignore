@@ -77,3 +77,7 @@ test_data/es-1m.csv
 
 # Validation session files
 validation_sessions/
+validation_results/
+
+# Gemini Artifacts
+.gemini/
