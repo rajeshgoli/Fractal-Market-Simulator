@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .cascade_controller import CascadeController
+from .comparison_analyzer import ComparisonAnalyzer, ComparisonResult
 from .models import AnnotationSession, SwingAnnotation
 from .storage import AnnotationStorage
 from ..data.ohlc_loader import load_ohlc
@@ -105,6 +106,60 @@ class CascadeAdvanceResponse(BaseModel):
     is_complete: bool
 
 
+class ComparisonScaleResult(BaseModel):
+    """Comparison result for a single scale."""
+    user_annotations: int
+    system_detections: int
+    matches: int
+    false_negatives: int
+    false_positives: int
+    match_rate: float
+
+
+class ComparisonSummary(BaseModel):
+    """Summary statistics from comparison."""
+    total_user_annotations: int
+    total_system_detections: int
+    total_matches: int
+    total_false_negatives: int
+    total_false_positives: int
+    overall_match_rate: float
+
+
+class FalseNegativeItem(BaseModel):
+    """A false negative (user marked, system missed)."""
+    scale: str
+    start: int
+    end: int
+    direction: str
+    annotation_id: str
+
+
+class FalsePositiveItem(BaseModel):
+    """A false positive (system found, user didn't mark)."""
+    scale: str
+    start: int
+    end: int
+    direction: str
+    size: float
+    rank: int
+
+
+class ComparisonReportResponse(BaseModel):
+    """Full comparison report."""
+    summary: ComparisonSummary
+    by_scale: Dict[str, ComparisonScaleResult]
+    false_negatives: List[FalseNegativeItem]
+    false_positives: List[FalsePositiveItem]
+
+
+class ComparisonRunResponse(BaseModel):
+    """Response from running comparison."""
+    success: bool
+    summary: ComparisonSummary
+    message: str
+
+
 @dataclass
 class AppState:
     """Application state."""
@@ -117,6 +172,7 @@ class AppState:
     target_bars: int
     cascade_controller: Optional[CascadeController] = None
     aggregator: Optional[BarAggregator] = None
+    comparison_report: Optional[dict] = None  # Latest comparison report
 
 
 # Global state
@@ -465,6 +521,157 @@ async def get_reference_annotations():
         )
         for ann in annotations
     ]
+
+
+@app.post("/api/compare", response_model=ComparisonRunResponse)
+async def run_comparison():
+    """
+    Run comparison between user annotations and system detection.
+
+    Compares all annotations in the current session against system-detected
+    swings on the source bars. Results are stored for later retrieval.
+    """
+    s = get_state()
+
+    analyzer = ComparisonAnalyzer(tolerance_pct=0.1)
+
+    # Run comparison on all scales that have annotations
+    results = analyzer.compare_session(s.session, s.source_bars)
+
+    # Generate report
+    report = analyzer.generate_report(results)
+
+    # Store report in state
+    s.comparison_report = report
+
+    # Create summary response
+    summary = ComparisonSummary(
+        total_user_annotations=report['summary']['total_user_annotations'],
+        total_system_detections=report['summary']['total_system_detections'],
+        total_matches=report['summary']['total_matches'],
+        total_false_negatives=report['summary']['total_false_negatives'],
+        total_false_positives=report['summary']['total_false_positives'],
+        overall_match_rate=report['summary']['overall_match_rate'],
+    )
+
+    # Format message
+    match_pct = int(summary.overall_match_rate * 100)
+    message = (
+        f"Match rate: {match_pct}% | "
+        f"{summary.total_false_negatives} false negatives | "
+        f"{summary.total_false_positives} false positives"
+    )
+
+    return ComparisonRunResponse(
+        success=True,
+        summary=summary,
+        message=message,
+    )
+
+
+@app.get("/api/compare/report", response_model=ComparisonReportResponse)
+async def get_comparison_report():
+    """
+    Get the latest comparison report.
+
+    Returns the full report from the most recent comparison run.
+    Run POST /api/compare first to generate a report.
+    """
+    s = get_state()
+
+    if s.comparison_report is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No comparison report available. Run POST /api/compare first."
+        )
+
+    report = s.comparison_report
+
+    # Convert to response model
+    summary = ComparisonSummary(**report['summary'])
+
+    by_scale = {
+        scale: ComparisonScaleResult(**data)
+        for scale, data in report['by_scale'].items()
+    }
+
+    false_negatives = [
+        FalseNegativeItem(**item)
+        for item in report['false_negatives']
+    ]
+
+    false_positives = [
+        FalsePositiveItem(**item)
+        for item in report['false_positives']
+    ]
+
+    return ComparisonReportResponse(
+        summary=summary,
+        by_scale=by_scale,
+        false_negatives=false_negatives,
+        false_positives=false_positives,
+    )
+
+
+@app.get("/api/compare/export")
+async def export_comparison(format: str = Query("json", description="Export format: json or csv")):
+    """
+    Export comparison report as JSON or CSV.
+
+    Args:
+        format: Export format - "json" (default) or "csv"
+
+    Returns:
+        Report data in requested format
+    """
+    s = get_state()
+
+    if s.comparison_report is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No comparison report available. Run POST /api/compare first."
+        )
+
+    report = s.comparison_report
+
+    if format == "json":
+        return report
+
+    elif format == "csv":
+        # Build CSV content for false negatives and false positives
+        lines = []
+
+        # Header
+        lines.append("type,scale,start,end,direction,annotation_id,size,rank")
+
+        # False negatives
+        for item in report['false_negatives']:
+            lines.append(
+                f"false_negative,{item['scale']},{item['start']},{item['end']},"
+                f"{item['direction']},{item['annotation_id']},,"
+            )
+
+        # False positives
+        for item in report['false_positives']:
+            lines.append(
+                f"false_positive,{item['scale']},{item['start']},{item['end']},"
+                f"{item['direction']},,{item['size']},{item['rank']}"
+            )
+
+        csv_content = "\n".join(lines)
+
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=comparison_report.csv"}
+        )
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format: {format}. Use 'json' or 'csv'."
+        )
 
 
 def init_app(

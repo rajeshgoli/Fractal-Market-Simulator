@@ -444,3 +444,179 @@ class TestCascadeSessionEndpoint:
         cascade_client.post("/api/cascade/advance")
         response = cascade_client.get("/api/session")
         assert response.json()["scale"] == "L"
+
+
+# ============================================================================
+# Comparison Endpoint Tests
+# ============================================================================
+
+class TestComparisonRunEndpoint:
+    """Tests for POST /api/compare endpoint."""
+
+    def test_run_comparison_no_annotations(self, client):
+        """Should run comparison even with no annotations."""
+        response = client.post("/api/compare")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["success"] is True
+        assert "summary" in data
+        assert "message" in data
+
+    def test_run_comparison_returns_summary(self, client):
+        """Should return summary with expected fields."""
+        response = client.post("/api/compare")
+        data = response.json()
+        summary = data["summary"]
+
+        assert "total_user_annotations" in summary
+        assert "total_system_detections" in summary
+        assert "total_matches" in summary
+        assert "total_false_negatives" in summary
+        assert "total_false_positives" in summary
+        assert "overall_match_rate" in summary
+
+    def test_run_comparison_with_annotations(self, client):
+        """Should include annotations in comparison."""
+        # Create some annotations
+        client.post("/api/annotations", json={
+            "start_bar_index": 5,
+            "end_bar_index": 15
+        })
+        client.post("/api/annotations", json={
+            "start_bar_index": 20,
+            "end_bar_index": 30
+        })
+
+        response = client.post("/api/compare")
+        data = response.json()
+
+        assert data["summary"]["total_user_annotations"] >= 2
+
+    def test_run_comparison_message_format(self, client):
+        """Message should contain match rate and counts."""
+        response = client.post("/api/compare")
+        data = response.json()
+
+        assert "Match rate:" in data["message"]
+        assert "false negatives" in data["message"]
+        assert "false positives" in data["message"]
+
+
+class TestComparisonReportEndpoint:
+    """Tests for GET /api/compare/report endpoint."""
+
+    def test_report_404_without_prior_compare(self, client):
+        """Should return 404 if no comparison has been run."""
+        response = client.get("/api/compare/report")
+        assert response.status_code == 404
+        assert "Run POST /api/compare first" in response.json()["detail"]
+
+    def test_report_available_after_compare(self, client):
+        """Should return report after comparison is run."""
+        # Run comparison
+        client.post("/api/compare")
+
+        # Get report
+        response = client.get("/api/compare/report")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "summary" in data
+        assert "by_scale" in data
+        assert "false_negatives" in data
+        assert "false_positives" in data
+
+    def test_report_by_scale_structure(self, client):
+        """Report should have per-scale breakdown."""
+        client.post("/api/compare")
+        response = client.get("/api/compare/report")
+        data = response.json()
+
+        # Should have all four scales
+        for scale in ["XL", "L", "M", "S"]:
+            assert scale in data["by_scale"]
+            scale_data = data["by_scale"][scale]
+            assert "user_annotations" in scale_data
+            assert "system_detections" in scale_data
+            assert "matches" in scale_data
+            assert "match_rate" in scale_data
+
+
+class TestComparisonExportEndpoint:
+    """Tests for GET /api/compare/export endpoint."""
+
+    def test_export_404_without_prior_compare(self, client):
+        """Should return 404 if no comparison has been run."""
+        response = client.get("/api/compare/export")
+        assert response.status_code == 404
+
+    def test_export_json_format(self, client):
+        """Should export as JSON by default."""
+        client.post("/api/compare")
+        response = client.get("/api/compare/export?format=json")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "summary" in data
+        assert "by_scale" in data
+
+    def test_export_csv_format(self, client):
+        """Should export as CSV when requested."""
+        # Create annotation to have some data
+        client.post("/api/annotations", json={
+            "start_bar_index": 5,
+            "end_bar_index": 15
+        })
+        client.post("/api/compare")
+
+        response = client.get("/api/compare/export?format=csv")
+        assert response.status_code == 200
+        assert "text/csv" in response.headers["content-type"]
+
+        # Should contain CSV header
+        content = response.text
+        assert "type,scale,start,end,direction" in content
+
+    def test_export_invalid_format(self, client):
+        """Should return 400 for invalid format."""
+        client.post("/api/compare")
+        response = client.get("/api/compare/export?format=xml")
+        assert response.status_code == 400
+        assert "Unsupported format" in response.json()["detail"]
+
+
+class TestComparisonWithCascade:
+    """Tests for comparison in cascade mode."""
+
+    def test_cascade_comparison_all_scales(self, cascade_client):
+        """Comparison should work in cascade mode."""
+        response = cascade_client.post("/api/compare")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["success"] is True
+
+    def test_cascade_comparison_after_advancing(self, cascade_client):
+        """Comparison should include annotations from all scales."""
+        # Add XL annotation
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 0,
+            "end_bar_index": 5
+        })
+
+        # Advance to L
+        cascade_client.post("/api/cascade/advance")
+
+        # Add L annotation
+        cascade_client.post("/api/annotations", json={
+            "start_bar_index": 10,
+            "end_bar_index": 20
+        })
+
+        # Run comparison
+        response = cascade_client.post("/api/compare")
+        data = response.json()
+
+        # Should have counted both annotations
+        assert data["summary"]["total_user_annotations"] >= 2
