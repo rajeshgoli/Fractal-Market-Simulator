@@ -6,6 +6,7 @@ Provides REST API endpoints for:
 - Recording votes
 - Retrieving session statistics
 - Exporting results
+- Progressive loading window management
 """
 
 import logging
@@ -29,12 +30,14 @@ from .models import (
 )
 from .sampler import IntervalSampler
 from .storage import VoteStorage
+from .progressive_loader import ProgressiveLoader, DataWindow
 
 logger = logging.getLogger(__name__)
 
 # Global instances (initialized on startup)
 sampler: Optional[IntervalSampler] = None
 storage: Optional[VoteStorage] = None
+progressive_loader: Optional[ProgressiveLoader] = None
 
 app = FastAPI(
     title="Lightweight Swing Validator",
@@ -188,19 +191,165 @@ async def list_sessions():
     return VoteStorage.list_sessions()
 
 
+@app.get("/api/windows")
+async def list_windows():
+    """
+    List all data windows (for progressive loading).
+
+    Returns list of windows with their status and date ranges.
+    """
+    if progressive_loader is None:
+        return {"windows": [], "is_progressive": False}
+
+    return {
+        "windows": progressive_loader.list_windows(),
+        "is_progressive": progressive_loader.is_large_file,
+        "current_window_id": progressive_loader.current_window_id
+    }
+
+
+@app.get("/api/windows/{window_id}")
+async def switch_window(window_id: str):
+    """
+    Switch to a different data window.
+
+    Args:
+        window_id: ID of the window to activate.
+
+    Returns:
+        Updated data summary for the new window.
+    """
+    global sampler
+
+    if progressive_loader is None:
+        raise HTTPException(status_code=400, detail="Progressive loading not enabled")
+
+    if not progressive_loader.set_current_window(window_id):
+        raise HTTPException(status_code=404, detail=f"Window {window_id} not found or not ready")
+
+    # Create new sampler for the window
+    window = progressive_loader.get_current_window()
+    if window is None:
+        raise HTTPException(status_code=500, detail="Failed to get window")
+
+    config = SamplerConfig(data_file=progressive_loader.filepath)
+    sampler = IntervalSampler.from_bars(
+        bars=window.bars,
+        scale_config=window.scale_config,
+        config=config,
+        window_id=window.window_id,
+        window_start=window.start_timestamp,
+        window_end=window.end_timestamp
+    )
+
+    return {
+        "status": "ok",
+        "window_id": window_id,
+        "data_summary": sampler.get_data_summary()
+    }
+
+
+@app.post("/api/windows/next")
+async def next_window():
+    """
+    Switch to the next available data window.
+
+    Rotates through windows to cover diverse market regimes.
+    """
+    global sampler
+
+    if progressive_loader is None:
+        raise HTTPException(status_code=400, detail="Progressive loading not enabled")
+
+    window = progressive_loader.get_next_window()
+    if window is None:
+        raise HTTPException(status_code=404, detail="No more windows available")
+
+    config = SamplerConfig(data_file=progressive_loader.filepath)
+    sampler = IntervalSampler.from_bars(
+        bars=window.bars,
+        scale_config=window.scale_config,
+        config=config,
+        window_id=window.window_id,
+        window_start=window.start_timestamp,
+        window_end=window.end_timestamp
+    )
+
+    return {
+        "status": "ok",
+        "window_id": window.window_id,
+        "data_summary": sampler.get_data_summary()
+    }
+
+
+@app.get("/api/loading-status")
+async def loading_status():
+    """
+    Get current loading progress for progressive loading.
+
+    Returns progress information including loaded bars and windows.
+    """
+    if progressive_loader is None:
+        return {
+            "is_progressive": False,
+            "is_complete": True,
+            "percent_complete": 100
+        }
+
+    progress = progressive_loader.get_loading_progress()
+    return {
+        "is_progressive": progressive_loader.is_large_file,
+        **progress.to_dict()
+    }
+
+
 def init_app(data_file: str, storage_dir: str = "validation_results", seed: Optional[int] = None):
     """
     Initialize the application with data file.
+
+    For large files (>100k bars), uses progressive loading for fast startup.
 
     Args:
         data_file: Path to OHLC CSV data file
         storage_dir: Directory for storing validation results
         seed: Random seed for reproducible sampling
     """
-    global sampler, storage
+    global sampler, storage, progressive_loader
 
+    # Initialize progressive loader (will determine if file is large)
+    progressive_loader = ProgressiveLoader(
+        filepath=data_file,
+        seed=seed
+    )
+
+    # Load initial window (fast for large files)
+    window = progressive_loader.load_initial_window()
+
+    # Create sampler from the loaded window
     config = SamplerConfig(data_file=data_file)
-    sampler = IntervalSampler(config, seed=seed)
+
+    if progressive_loader.is_large_file:
+        # Use window-based sampler
+        sampler = IntervalSampler.from_bars(
+            bars=window.bars,
+            scale_config=window.scale_config,
+            config=config,
+            seed=seed,
+            window_id=window.window_id,
+            window_start=window.start_timestamp,
+            window_end=window.end_timestamp
+        )
+        # Start background loading of additional windows
+        progressive_loader.start_background_loading()
+    else:
+        # Small file - sampler has all data
+        sampler = IntervalSampler.from_bars(
+            bars=window.bars,
+            scale_config=window.scale_config,
+            config=config,
+            seed=seed
+        )
+
     storage = VoteStorage(storage_dir=storage_dir)
 
     logger.info(f"Initialized validator with data from {data_file}")

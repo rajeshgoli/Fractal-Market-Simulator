@@ -56,10 +56,59 @@ class IntervalSampler:
         # Track sampled intervals to avoid repeats
         self._sampled_intervals: Set[tuple] = set()
 
+        # Window information (for progressive loading)
+        self._window_id: Optional[str] = None
+        self._window_start_timestamp: Optional[datetime] = None
+        self._window_end_timestamp: Optional[datetime] = None
+
         logger.info(
             f"Initialized sampler with {len(self.bars)} bars, "
             f"scale config: {self.scale_config.boundaries}"
         )
+
+    @classmethod
+    def from_bars(
+        cls,
+        bars: List[Bar],
+        scale_config: ScaleConfig,
+        config: SamplerConfig,
+        seed: Optional[int] = None,
+        window_id: Optional[str] = None,
+        window_start: Optional[datetime] = None,
+        window_end: Optional[datetime] = None
+    ) -> "IntervalSampler":
+        """
+        Create a sampler from pre-loaded bars (for progressive loading).
+
+        Args:
+            bars: Pre-loaded Bar objects.
+            scale_config: Pre-computed scale configuration.
+            config: Sampler configuration.
+            seed: Random seed for reproducibility.
+            window_id: ID of the data window (for progressive loading).
+            window_start: Start timestamp of the window.
+            window_end: End timestamp of the window.
+
+        Returns:
+            Configured IntervalSampler instance.
+        """
+        instance = cls.__new__(cls)
+        instance.config = config
+        instance.rng = random.Random(seed)
+        instance.bars = bars
+        instance.scale_config = scale_config
+        instance.df = None  # Not needed when using pre-loaded bars
+        instance.gaps = []
+        instance._sampled_intervals = set()
+        instance._window_id = window_id
+        instance._window_start_timestamp = window_start
+        instance._window_end_timestamp = window_end
+
+        logger.info(
+            f"Initialized sampler from {len(bars)} pre-loaded bars, "
+            f"window={window_id}"
+        )
+        return instance
 
     def _df_to_bars(self) -> List[Bar]:
         """Convert DataFrame to list of Bar objects."""
@@ -266,7 +315,7 @@ class IntervalSampler:
                 for v in boundary
             ]
 
-        return {
+        summary = {
             "total_bars": len(self.bars),
             "start_time": datetime.fromtimestamp(self.bars[0].timestamp).isoformat() if self.bars else None,
             "end_time": datetime.fromtimestamp(self.bars[-1].timestamp).isoformat() if self.bars else None,
@@ -274,3 +323,13 @@ class IntervalSampler:
             "scale_boundaries": {k: sanitize_boundary(v) for k, v in self.scale_config.boundaries.items()},
             "samples_generated": len(self._sampled_intervals),
         }
+
+        # Add window information if available
+        if self._window_id:
+            summary["window"] = {
+                "window_id": self._window_id,
+                "start_timestamp": self._window_start_timestamp.isoformat() if self._window_start_timestamp else None,
+                "end_timestamp": self._window_end_timestamp.isoformat() if self._window_end_timestamp else None,
+            }
+
+        return summary

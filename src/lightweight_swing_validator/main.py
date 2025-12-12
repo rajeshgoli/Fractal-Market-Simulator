@@ -9,16 +9,28 @@ Usage:
 import argparse
 import logging
 import sys
+import time
 
 import uvicorn
 
 from .api import app, init_app
+from ..data.ohlc_loader import get_file_metrics
+from .progressive_loader import LARGE_FILE_THRESHOLD
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+def format_number(n: int) -> str:
+    """Format large numbers with K/M suffixes."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    elif n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
 
 
 def main():
@@ -60,27 +72,54 @@ def main():
 
     args = parser.parse_args()
 
+    # Quick file metrics first
+    print(f"\n{'='*60}")
+    print("Lightweight Swing Validator")
+    print(f"{'='*60}")
+
+    try:
+        metrics = get_file_metrics(args.data)
+        is_large = metrics.total_bars > LARGE_FILE_THRESHOLD
+
+        print(f"Data file:  {args.data}")
+        print(f"Total bars: {format_number(metrics.total_bars)}")
+        if metrics.first_timestamp and metrics.last_timestamp:
+            print(f"Date range: {metrics.first_timestamp.strftime('%Y-%m-%d')} to {metrics.last_timestamp.strftime('%Y-%m-%d')}")
+
+        if is_large:
+            print(f"\nLarge dataset detected ({format_number(metrics.total_bars)} bars)")
+            print("Using progressive loading for fast startup...")
+            print("(Additional time windows will load in background)")
+        print()
+    except FileNotFoundError:
+        logger.error(f"Data file not found: {args.data}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Failed to read file metrics: {e}")
+        sys.exit(1)
+
     # Initialize the application
+    start_time = time.time()
     try:
         init_app(
             data_file=args.data,
             storage_dir=args.storage_dir,
             seed=args.seed
         )
+        init_time = time.time() - start_time
     except FileNotFoundError as e:
         logger.error(f"Data file not found: {e}")
         sys.exit(1)
     except Exception as e:
         logger.error(f"Failed to initialize: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
     # Print startup message
-    print(f"\n{'='*60}")
-    print("Lightweight Swing Validator")
-    print(f"{'='*60}")
-    print(f"Data file: {args.data}")
-    print(f"Server:    http://{args.host}:{args.port}")
-    print(f"Storage:   {args.storage_dir}/")
+    print(f"Initialization: {init_time:.2f}s")
+    print(f"Server:         http://{args.host}:{args.port}")
+    print(f"Storage:        {args.storage_dir}/")
     print(f"{'='*60}")
     print("\nOpen the URL above in your browser to start validating.\n")
 

@@ -55,6 +55,54 @@ Open http://127.0.0.1:8000 in your browser.
 python -m src.lightweight_swing_validator.main --data test_data/es-1m.csv --port 8080
 ```
 
+## Progressive Loading for Large Datasets
+
+For datasets larger than 100,000 bars (e.g., multi-year 1-minute data), the validator uses **progressive loading** to ensure fast startup:
+
+### How It Works
+
+1. **Quick Start (<2 seconds)**: The validator loads a random 20K-bar window immediately
+2. **Background Loading**: Additional windows are loaded in the background while you work
+3. **Diverse Coverage**: Windows are distributed across the dataset for market regime diversity
+
+### User Experience
+
+On startup with a large file, you'll see:
+
+```
+============================================================
+Lightweight Swing Validator
+============================================================
+Data file:  data/es-1m-6years.csv
+Total bars: 6.2M
+Date range: 2018-01-02 to 2024-12-01
+
+Large dataset detected (6.2M bars)
+Using progressive loading for fast startup...
+(Additional time windows will load in background)
+
+Initialization: 1.43s
+Server:         http://127.0.0.1:8000
+============================================================
+```
+
+### Window Switching
+
+In the browser interface:
+- **Window Selector**: A dropdown in the header shows available time windows
+- **Loading Indicator**: Shows background loading progress (e.g., "Loading: 45%")
+- **Next Window Button (→)**: Click to rotate through different time periods
+- **Window Dates**: Each window shows its date range (e.g., "Jan 15, '24 - Feb 3, '24")
+
+As background loading completes, more windows become available in the dropdown.
+
+### Benefits
+
+- **Immediate validation**: Start validating within seconds, even with 6M+ bars
+- **Regime coverage**: Automatic sampling across different market conditions
+- **Random start**: Each session begins at a different window for variety
+- **Full access**: All windows eventually available for comprehensive validation
+
 ## The Validation Workflow
 
 1. **View Sample**: The tool displays a random time interval with OHLC chart
@@ -77,6 +125,8 @@ python -m src.lightweight_swing_validator.main --data test_data/es-1m.csv --port
 
 The validator exposes a REST API:
 
+### Core Endpoints
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
@@ -87,6 +137,15 @@ The validator exposes a REST API:
 | `/api/data-summary` | GET | Get loaded data summary |
 | `/api/export/csv` | GET | Export results as CSV |
 | `/api/export/json` | GET | Export results as JSON |
+
+### Progressive Loading Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/windows` | GET | List all data windows with status |
+| `/api/windows/{id}` | GET | Switch to specific window |
+| `/api/windows/next` | POST | Switch to next ready window |
+| `/api/loading-status` | GET | Get background loading progress |
 
 ## Session Files
 

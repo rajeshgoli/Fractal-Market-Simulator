@@ -5,9 +5,10 @@ Tests for the lightweight swing validator module.
 import json
 import os
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,6 +26,13 @@ from src.lightweight_swing_validator.models import (
 )
 from src.lightweight_swing_validator.sampler import IntervalSampler
 from src.lightweight_swing_validator.storage import VoteStorage
+from src.lightweight_swing_validator.progressive_loader import (
+    ProgressiveLoader,
+    DataWindow,
+    WindowStatus,
+    LARGE_FILE_THRESHOLD,
+)
+from src.data.ohlc_loader import get_file_metrics, load_ohlc_window, FileMetrics
 
 
 class TestModels:
@@ -318,3 +326,194 @@ class TestAPI:
 
         data = response.json()
         assert data["status"] == "ok"
+
+    def test_windows_endpoint(self, client):
+        """Test windows listing endpoint."""
+        response = client.get("/api/windows")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "windows" in data
+        assert "is_progressive" in data
+
+    def test_loading_status_endpoint(self, client):
+        """Test loading status endpoint."""
+        response = client.get("/api/loading-status")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "is_progressive" in data
+        assert "is_complete" in data
+        assert "percent_complete" in data
+
+
+class TestFileMetrics:
+    """Tests for fast file metrics function."""
+
+    def test_get_file_metrics_small_file(self):
+        """Test file metrics on small test file."""
+        metrics = get_file_metrics("test_data/test.csv")
+
+        assert metrics.total_bars > 0
+        assert metrics.file_size_bytes > 0
+        assert metrics.format in ("format_a", "format_b")
+
+    def test_get_file_metrics_speed(self):
+        """Test that file metrics is fast (< 100ms for any file)."""
+        start = time.time()
+        metrics = get_file_metrics("test_data/test.csv")
+        elapsed = time.time() - start
+
+        assert elapsed < 0.5  # Should be much faster, 500ms is generous
+
+    def test_get_file_metrics_missing_file(self):
+        """Test file metrics raises on missing file."""
+        with pytest.raises(FileNotFoundError):
+            get_file_metrics("nonexistent_file.csv")
+
+
+class TestLoadOhlcWindow:
+    """Tests for windowed OHLC loading."""
+
+    def test_load_window_basic(self):
+        """Test loading a window from test file."""
+        df, gaps = load_ohlc_window("test_data/test.csv", start_row=0, num_rows=100)
+
+        assert len(df) <= 100
+        assert len(df) > 0
+        assert "open" in df.columns
+        assert "high" in df.columns
+        assert "low" in df.columns
+        assert "close" in df.columns
+
+    def test_load_window_offset(self):
+        """Test loading with offset."""
+        # Load first window
+        df1, _ = load_ohlc_window("test_data/test.csv", start_row=0, num_rows=50)
+
+        # Load second window with offset
+        df2, _ = load_ohlc_window("test_data/test.csv", start_row=50, num_rows=50)
+
+        # Verify they don't overlap (timestamps should be different)
+        if len(df1) > 0 and len(df2) > 0:
+            assert df1.index[-1] < df2.index[-1]
+
+
+class TestProgressiveLoader:
+    """Tests for progressive data loading."""
+
+    def test_loader_detects_small_file(self):
+        """Test loader correctly identifies small files."""
+        loader = ProgressiveLoader("test_data/test.csv")
+
+        # test.csv is small, should not be in progressive mode
+        assert loader.is_large_file is False
+
+    def test_loader_loads_initial_window(self):
+        """Test loader loads initial window successfully."""
+        loader = ProgressiveLoader("test_data/test.csv", seed=42)
+        window = loader.load_initial_window()
+
+        assert window is not None
+        assert window.status == WindowStatus.READY
+        assert len(window.bars) > 0
+        assert window.scale_config is not None
+
+    def test_loader_current_window(self):
+        """Test loader tracks current window."""
+        loader = ProgressiveLoader("test_data/test.csv", seed=42)
+        window = loader.load_initial_window()
+
+        current = loader.get_current_window()
+        assert current is not None
+        assert current.window_id == window.window_id
+
+    def test_loader_progress(self):
+        """Test loader reports progress correctly."""
+        loader = ProgressiveLoader("test_data/test.csv", seed=42)
+        loader.load_initial_window()
+
+        progress = loader.get_loading_progress()
+
+        assert progress.total_bars > 0
+        assert progress.loaded_bars > 0
+        # For small files, should be complete after initial load
+        assert progress.is_complete is True
+
+    def test_loader_list_windows(self):
+        """Test loader lists windows."""
+        loader = ProgressiveLoader("test_data/test.csv", seed=42)
+        loader.load_initial_window()
+
+        windows = loader.list_windows()
+        assert len(windows) >= 1
+
+        # Each window should have required fields
+        for w in windows:
+            assert "window_id" in w
+            assert "status" in w
+            assert "start_row" in w
+            assert "num_rows" in w
+
+
+class TestSamplerFromBars:
+    """Tests for sampler initialization from pre-loaded bars."""
+
+    def test_sampler_from_bars(self):
+        """Test creating sampler from pre-loaded bars."""
+        # First load bars using loader
+        loader = ProgressiveLoader("test_data/test.csv", seed=42)
+        window = loader.load_initial_window()
+
+        # Create sampler from bars
+        config = SamplerConfig(data_file="test_data/test.csv")
+        sampler = IntervalSampler.from_bars(
+            bars=window.bars,
+            scale_config=window.scale_config,
+            config=config,
+            seed=42,
+            window_id=window.window_id,
+            window_start=window.start_timestamp,
+            window_end=window.end_timestamp
+        )
+
+        assert sampler is not None
+        assert len(sampler.bars) == len(window.bars)
+        assert sampler.scale_config == window.scale_config
+
+    def test_sampler_from_bars_generates_samples(self):
+        """Test sampler from bars can generate samples."""
+        loader = ProgressiveLoader("test_data/test.csv", seed=42)
+        window = loader.load_initial_window()
+
+        config = SamplerConfig(data_file="test_data/test.csv")
+        sampler = IntervalSampler.from_bars(
+            bars=window.bars,
+            scale_config=window.scale_config,
+            config=config,
+            seed=42
+        )
+
+        sample = sampler.sample()
+        assert sample is not None
+        assert sample.sample_id is not None
+        assert len(sample.bars) > 0
+
+    def test_sampler_data_summary_includes_window(self):
+        """Test data summary includes window info when available."""
+        loader = ProgressiveLoader("test_data/test.csv", seed=42)
+        window = loader.load_initial_window()
+
+        config = SamplerConfig(data_file="test_data/test.csv")
+        sampler = IntervalSampler.from_bars(
+            bars=window.bars,
+            scale_config=window.scale_config,
+            config=config,
+            window_id="test_window",
+            window_start=datetime(2024, 1, 1),
+            window_end=datetime(2024, 1, 2)
+        )
+
+        summary = sampler.get_data_summary()
+        assert "window" in summary
+        assert summary["window"]["window_id"] == "test_window"

@@ -323,6 +323,45 @@
             text-decoration: underline;
         }
 
+        .window-select {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .window-select:focus {
+            outline: 1px solid var(--accent-blue);
+        }
+
+        .btn-small {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-left: 4px;
+        }
+
+        .btn-small:hover {
+            background: var(--accent-blue);
+        }
+
+        #loading-indicator {
+            color: var(--accent-blue);
+        }
+
+        .window-info {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-left: 5px;
+        }
+
         @media (max-width: 1200px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -335,6 +374,17 @@
         <header>
             <h1>Lightweight Swing Validator</h1>
             <div class="stats-bar">
+                <div class="stat" id="window-indicator" style="display: none;">
+                    <span class="stat-label">Window:</span>
+                    <select id="window-select" class="window-select">
+                        <option value="">Loading...</option>
+                    </select>
+                    <button class="btn-small" onclick="nextWindow()" title="Next window">&#8594;</button>
+                </div>
+                <div class="stat" id="loading-indicator" style="display: none;">
+                    <span class="stat-label">Loading:</span>
+                    <span class="stat-value" id="loading-progress">0%</span>
+                </div>
                 <div class="stat">
                     <span class="stat-label">Validated:</span>
                     <span class="stat-value" id="stat-validated">0</span>
@@ -406,6 +456,132 @@
         let swingVotes = {};  // swing_id -> 'up' | 'down' | 'skip'
         let overallVote = null;
         let markers = [];
+        let isProgressiveLoading = false;
+        let loadingPollInterval = null;
+
+        // Format date for display
+        function formatDate(isoString) {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+        }
+
+        // Initialize window management
+        async function initWindows() {
+            try {
+                const response = await fetch('/api/windows');
+                const data = await response.json();
+
+                if (data.is_progressive && data.windows.length > 0) {
+                    isProgressiveLoading = true;
+                    document.getElementById('window-indicator').style.display = 'flex';
+
+                    updateWindowSelect(data.windows, data.current_window_id);
+
+                    // Setup change handler
+                    document.getElementById('window-select').addEventListener('change', async (e) => {
+                        if (e.target.value) {
+                            await switchWindow(e.target.value);
+                        }
+                    });
+
+                    // Start polling for loading status
+                    startLoadingPoll();
+                }
+            } catch (error) {
+                console.error('Error initializing windows:', error);
+            }
+        }
+
+        // Update window dropdown
+        function updateWindowSelect(windows, currentId) {
+            const select = document.getElementById('window-select');
+            select.innerHTML = windows.map(w => {
+                const label = w.start_timestamp
+                    ? `${formatDate(w.start_timestamp)} - ${formatDate(w.end_timestamp)}`
+                    : w.window_id;
+                const status = w.status !== 'ready' ? ` (${w.status})` : '';
+                const selected = w.window_id === currentId ? 'selected' : '';
+                const disabled = w.status !== 'ready' ? 'disabled' : '';
+                return `<option value="${w.window_id}" ${selected} ${disabled}>${label}${status}</option>`;
+            }).join('');
+        }
+
+        // Switch to a specific window
+        async function switchWindow(windowId) {
+            try {
+                const response = await fetch(`/api/windows/${windowId}`);
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+                // Clear sampled intervals for new window
+                await fetchSample();
+            } catch (error) {
+                console.error('Error switching window:', error);
+                alert('Failed to switch window: ' + error.message);
+            }
+        }
+
+        // Switch to next window
+        async function nextWindow() {
+            try {
+                const response = await fetch('/api/windows/next', { method: 'POST' });
+                if (!response.ok) {
+                    const text = await response.text();
+                    if (response.status === 404) {
+                        alert('No more windows available. All windows have been loaded.');
+                        return;
+                    }
+                    throw new Error(text);
+                }
+                const data = await response.json();
+
+                // Update select to new window
+                const select = document.getElementById('window-select');
+                select.value = data.window_id;
+
+                // Fetch new sample from new window
+                await fetchSample();
+            } catch (error) {
+                console.error('Error switching to next window:', error);
+            }
+        }
+
+        // Poll for loading status
+        function startLoadingPoll() {
+            updateLoadingStatus();
+            loadingPollInterval = setInterval(updateLoadingStatus, 2000);
+        }
+
+        async function updateLoadingStatus() {
+            try {
+                const response = await fetch('/api/loading-status');
+                const data = await response.json();
+
+                const indicator = document.getElementById('loading-indicator');
+                const progress = document.getElementById('loading-progress');
+
+                if (data.is_progressive && !data.is_complete) {
+                    indicator.style.display = 'flex';
+                    progress.textContent = `${Math.round(data.percent_complete)}%`;
+                } else {
+                    indicator.style.display = 'none';
+                    if (loadingPollInterval) {
+                        clearInterval(loadingPollInterval);
+                        loadingPollInterval = null;
+                    }
+                }
+
+                // Update windows list if new windows are ready
+                if (data.is_progressive) {
+                    const windowsResponse = await fetch('/api/windows');
+                    const windowsData = await windowsResponse.json();
+                    updateWindowSelect(windowsData.windows, windowsData.current_window_id);
+                }
+            } catch (error) {
+                console.error('Error updating loading status:', error);
+            }
+        }
 
         // Initialize chart
         function initChart() {
@@ -670,9 +846,10 @@
         });
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             initChart();
-            fetchSample();
+            await initWindows();
+            await fetchSample();
         });
     </script>
 </body>
