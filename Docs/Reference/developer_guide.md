@@ -980,6 +980,100 @@ Tolerance is calculated as: `max(5, int(duration * tolerance_pct))`
 | `/api/compare/report` | GET | Get full report with FN/FP lists |
 | `/api/compare/export` | GET | Export as JSON or CSV |
 
+#### `src/ground_truth_annotator/review_controller.py`
+
+**Purpose**: Manage Review Mode workflow phases (matches → FP sample → FN feedback → complete).
+
+**Key Class**: `ReviewController`
+
+```python
+from src.ground_truth_annotator.review_controller import ReviewController
+
+controller = ReviewController(
+    session_id="abc123",
+    annotation_storage=annotation_storage,
+    review_storage=review_storage,
+    comparison_results=comparison_results  # From ComparisonAnalyzer
+)
+
+# Get or create review session (samples FPs on first call)
+review = controller.get_or_create_review()
+
+# Phase 1: Review matches
+matches = controller.get_matches()
+for match in matches:
+    controller.submit_feedback(
+        swing_type="match",
+        swing_reference={"annotation_id": match["annotation"]["annotation_id"]},
+        verdict="correct"
+    )
+controller.advance_phase()
+
+# Phase 2: Review sampled FPs
+fp_sample = controller.get_fp_sample()
+for fp in fp_sample:
+    controller.submit_feedback(
+        swing_type="false_positive",
+        swing_reference={"sample_index": fp["sample_index"]},
+        verdict="noise",
+        category="too_small"
+    )
+controller.advance_phase()
+
+# Phase 3: Review FNs (comment required)
+fn_list = controller.get_false_negatives()
+for fn in fn_list:
+    controller.submit_feedback(
+        swing_type="false_negative",
+        swing_reference={"annotation_id": fn["annotation"]["annotation_id"]},
+        verdict="valid_missed",
+        comment="Pattern needs tuning"  # Required for FN
+    )
+controller.advance_phase()
+
+# Complete
+assert controller.is_complete()
+summary = controller.get_summary()
+```
+
+**Key Methods**:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_or_create_review()` | `ReviewSession` | Get existing or create new review, samples FPs |
+| `get_current_phase()` | `str` | Current phase name |
+| `get_phase_progress()` | `(int, int)` | (completed, total) for current phase |
+| `get_matches()` | `List[dict]` | Matched swings for Phase 1 |
+| `get_fp_sample()` | `List[dict]` | Sampled FPs for Phase 2 |
+| `get_false_negatives()` | `List[dict]` | All FNs for Phase 3 |
+| `submit_feedback()` | `SwingFeedback` | Submit verdict on a swing |
+| `advance_phase()` | `bool` | Move to next phase |
+| `is_complete()` | `bool` | True if all phases done |
+| `get_summary()` | `dict` | Review statistics |
+
+**FP Sampling Algorithm**:
+
+```python
+# Static method for stratified sampling
+sampled, indices = ReviewController.sample_false_positives(
+    fps_by_scale={"XL": [...], "L": [...], "M": [...], "S": [...]},
+    target=20
+)
+```
+
+1. If total FPs ≤ target, return all
+2. Otherwise, allocate proportionally with minimum 2 per scale
+3. Random sample within each scale's allocation
+4. Cap at target (default 20)
+
+**Verdict Types**:
+
+| Swing Type | Valid Verdicts |
+|------------|----------------|
+| `match` | `correct`, `incorrect` |
+| `false_positive` | `noise`, `valid` |
+| `false_negative` | `valid_missed`, `explained` |
+
 ---
 
 ### Lightweight Swing Validator
@@ -1262,6 +1356,8 @@ tests/
 ├── test_comparison_analyzer.py        # Comparison logic (23 tests)
 ├── test_cascade_controller.py         # Cascade workflow (29 tests)
 ├── test_lightweight_swing_validator.py # Validator API and sampler
+├── ground_truth_annotator/
+│   └── test_review_controller.py      # Review Mode controller (28 tests)
 └── conftest.py                        # Shared fixtures
 ```
 

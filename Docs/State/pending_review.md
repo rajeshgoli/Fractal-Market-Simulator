@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-12
 
 ---
 
 ## Pending Changes
+
+### 2025-12-12 - Review Mode Controller
+- **Issue:** #40
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/review_controller.py`, `tests/ground_truth_annotator/test_review_controller.py`
 
 ### 2025-12-12 - Review Mode Data Models
 - **Issue:** #39
