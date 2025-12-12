@@ -15,6 +15,8 @@ A comprehensive reference for developers working on the Fractal Market Simulator
    - [Swing Analysis](#swing-analysis)
    - [Visualization Harness](#visualization-harness)
    - [Validation Infrastructure](#validation-infrastructure)
+   - [Ground Truth Annotator](#ground-truth-annotator)
+   - [Lightweight Swing Validator](#lightweight-swing-validator)
 6. [Key Data Structures](#key-data-structures)
 7. [Configuration System](#configuration-system)
 8. [Extending the System](#extending-the-system)
@@ -46,6 +48,12 @@ python -m pytest tests/ -v
 ### Running the Application
 
 ```bash
+# Ground Truth Annotator (two-click swing annotation)
+python -m src.ground_truth_annotator.main --data test_data/test.csv --scale S
+
+# Lightweight Swing Validator (voting-based validation)
+python -m src.lightweight_swing_validator.main --data test_data/test.csv
+
 # Basic visualization harness
 python main.py --data test.csv
 
@@ -146,10 +154,24 @@ fractal-market-simulator/
 │   │   ├── layout_manager.py       # Dynamic panel layouts
 │   │   ├── pip_inset.py            # Picture-in-picture insets
 │   │   └── swing_visibility.py     # Swing display filtering
-│   └── validation/
-│       ├── session.py              # Validation session management
-│       └── issue_catalog.py        # Issue tracking
-├── tests/                          # Test suite (250+ tests)
+│   ├── validation/
+│   │   ├── session.py              # Validation session management
+│   │   └── issue_catalog.py        # Issue tracking
+│   ├── ground_truth_annotator/
+│   │   ├── main.py                 # CLI entry point
+│   │   ├── api.py                  # FastAPI endpoints
+│   │   ├── models.py               # SwingAnnotation, AnnotationSession
+│   │   ├── storage.py              # JSON-backed persistence
+│   │   └── static/index.html       # Two-click annotation UI
+│   └── lightweight_swing_validator/
+│       ├── main.py                 # CLI entry point
+│       ├── api.py                  # FastAPI endpoints
+│       ├── models.py               # Validation data models
+│       ├── sampler.py              # Random interval sampling
+│       ├── storage.py              # Vote storage
+│       ├── progressive_loader.py   # Large file handling
+│       └── static/index.html       # Validation UI
+├── tests/                          # Test suite (380+ tests)
 ├── Docs/                           # Documentation
 └── data/                           # Sample data files
 ```
@@ -707,6 +729,203 @@ session.export_findings("validation_report.json")
 
 ---
 
+### Ground Truth Annotator
+
+#### `src/ground_truth_annotator/models.py`
+
+**Purpose**: Data models for expert swing annotations.
+
+**Key Dataclasses**:
+
+```python
+@dataclass
+class SwingAnnotation:
+    annotation_id: str          # UUID
+    scale: str                  # "S", "M", "L", "XL"
+    direction: str              # "bull" or "bear"
+    start_bar_index: int        # Index in aggregated view
+    end_bar_index: int          # Index in aggregated view
+    start_source_index: int     # Index in source data
+    end_source_index: int       # Index in source data
+    start_price: Decimal
+    end_price: Decimal
+    created_at: datetime
+    window_id: str              # Session identifier
+
+@dataclass
+class AnnotationSession:
+    session_id: str
+    data_file: str              # Path to source data
+    resolution: str             # "1m", "5m", etc.
+    window_size: int            # Number of bars
+    created_at: datetime
+    annotations: List[SwingAnnotation]
+    completed_scales: List[str]
+```
+
+#### `src/ground_truth_annotator/storage.py`
+
+**Purpose**: JSON-backed persistence for annotation sessions.
+
+**Key Class**: `AnnotationStorage`
+
+```python
+storage = AnnotationStorage(storage_dir="annotation_sessions")
+
+# Create session
+session = storage.create_session(
+    data_file="test.csv",
+    resolution="1m",
+    window_size=50000
+)
+
+# Save annotation
+storage.save_annotation(session.session_id, annotation)
+
+# Query annotations
+annotations = storage.get_annotations(session.session_id, scale="S")
+
+# Delete annotation
+storage.delete_annotation(session.session_id, annotation_id)
+
+# Export
+csv_string = storage.export_session(session.session_id, format="csv")
+json_string = storage.export_session(session.session_id, format="json")
+```
+
+#### `src/ground_truth_annotator/api.py`
+
+**Purpose**: FastAPI backend for the annotation UI.
+
+**Key Endpoints**:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Serve annotation UI |
+| `/api/health` | GET | Health check |
+| `/api/bars` | GET | Get aggregated bars for chart display |
+| `/api/annotations` | GET | List annotations for current scale |
+| `/api/annotations` | POST | Create annotation with direction inference |
+| `/api/annotations/{id}` | DELETE | Delete annotation |
+| `/api/session` | GET | Get session state |
+
+**Direction Inference Logic**:
+
+```python
+# In POST /api/annotations
+if start_bar.high > end_bar.high:
+    # Price went down: bull reference (downswing)
+    direction = "bull"
+    start_price = start_bar.high
+    end_price = end_bar.low
+else:
+    # Price went up: bear reference (upswing)
+    direction = "bear"
+    start_price = start_bar.low
+    end_price = end_bar.high
+```
+
+#### `src/ground_truth_annotator/main.py`
+
+**Purpose**: CLI entry point for the annotator.
+
+```bash
+python -m src.ground_truth_annotator.main --data test.csv --scale S --target-bars 200
+```
+
+**CLI Options**:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--data` | (required) | OHLC CSV file path |
+| `--resolution` | 1m | Source data resolution |
+| `--window` | 50000 | Total bars to load |
+| `--scale` | S | Scale to annotate (S/M/L/XL) |
+| `--target-bars` | 200 | Bars to display in chart |
+| `--port` | 8000 | Server port |
+
+---
+
+### Lightweight Swing Validator
+
+#### `src/lightweight_swing_validator/sampler.py`
+
+**Purpose**: Random interval sampling for validation.
+
+**Key Class**: `IntervalSampler`
+
+```python
+sampler = IntervalSampler.from_bars(
+    bars=bars,
+    scale_config=scale_config,
+    config=SamplerConfig(data_file="test.csv"),
+    seed=42  # For reproducibility
+)
+
+# Get random sample
+sample = sampler.sample(scale=Scale.M)
+# Returns ValidationSample with bars, candidates, interval info
+```
+
+#### `src/lightweight_swing_validator/progressive_loader.py`
+
+**Purpose**: Fast startup for large datasets (>100K bars).
+
+**Key Class**: `ProgressiveLoader`
+
+```python
+loader = ProgressiveLoader(
+    filepath="large_data.csv",
+    window_size=20000,
+    resolution_minutes=1
+)
+
+# Load initial window quickly (<2s)
+window = loader.load_initial_window()
+
+# Start background loading
+loader.start_background_loading()
+
+# Switch windows
+loader.set_current_window("window_3")
+next_window = loader.get_next_window()
+
+# Check progress
+progress = loader.get_loading_progress()
+```
+
+**Progressive Loading Flow**:
+1. Load random 20K-bar window immediately
+2. Background thread loads remaining windows
+3. UI available within 2 seconds for 6M+ bar files
+
+#### `src/lightweight_swing_validator/storage.py`
+
+**Purpose**: Vote storage and session management.
+
+**Key Class**: `VoteStorage`
+
+```python
+storage = VoteStorage(storage_dir="validation_results")
+
+# Record vote
+result = storage.record_vote(
+    vote_request,
+    sample_scale=Scale.M,
+    interval_start=1000,
+    interval_end=1100
+)
+
+# Get statistics
+stats = storage.get_stats()
+
+# Export
+storage.export_csv("results.csv")
+storage.export_json("results.json")
+```
+
+---
+
 ## Key Data Structures
 
 ### Bar
@@ -764,6 +983,24 @@ class StructuralEvent:
 class ScaleConfig:
     boundaries: Dict[str, Tuple[float, float]]  # {'S': (0, 10.5), ...}
     aggregations: Dict[str, int]                 # {'S': 1, 'M': 5, ...}
+```
+
+### SwingAnnotation
+
+```python
+@dataclass
+class SwingAnnotation:
+    annotation_id: str          # UUID
+    scale: str                  # S, M, L, XL
+    direction: str              # "bull" or "bear"
+    start_bar_index: int        # Index in aggregated view
+    end_bar_index: int          # Index in aggregated view
+    start_source_index: int     # Index in source data
+    end_source_index: int       # Index in source data
+    start_price: Decimal
+    end_price: Decimal
+    created_at: datetime
+    window_id: str              # Session identifier
 ```
 
 ---
@@ -876,15 +1113,18 @@ python -m pytest tests/ --cov=src --cov-report=html
 
 ```
 tests/
-├── test_scale_calibrator.py      # Scale boundary calibration
-├── test_bar_aggregator.py        # Multi-timeframe aggregation
-├── test_swing_state_manager.py   # Swing tracking state machine
-├── test_event_detector.py        # Event detection logic
-├── test_visualization_renderer.py # Rendering and display
-├── test_playback_controller.py   # Playback state machine
-├── test_event_logger.py          # Logging and export
-├── test_ohlc_loader.py           # Data loading
-└── conftest.py                   # Shared fixtures
+├── test_scale_calibrator.py           # Scale boundary calibration
+├── test_bar_aggregator.py             # Multi-timeframe aggregation
+├── test_swing_state_manager.py        # Swing tracking state machine
+├── test_event_detector.py             # Event detection logic
+├── test_visualization_renderer.py     # Rendering and display
+├── test_playback_controller.py        # Playback state machine
+├── test_event_logger.py               # Logging and export
+├── test_ohlc_loader.py                # Data loading
+├── test_ground_truth_foundation.py    # Annotation models and storage (38 tests)
+├── test_ground_truth_annotator_api.py # Annotator API endpoints (19 tests)
+├── test_lightweight_swing_validator.py # Validator API and sampler
+└── conftest.py                        # Shared fixtures
 ```
 
 ### Key Test Patterns

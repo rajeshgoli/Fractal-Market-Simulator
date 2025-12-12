@@ -2,10 +2,133 @@
 
 ## Overview
 
-This project provides two validation tools for swing detection logic:
+This project provides three tools for swing detection validation and ground truth collection:
 
-1. **Lightweight Swing Validator** (recommended) - A web-based tool for fast, focused validation with voting interface
-2. **Swing Validation Harness** - A matplotlib-based tool for detailed 4-panel visualization
+1. **Ground Truth Annotator** - A web-based tool for expert swing annotation with two-click workflow
+2. **Lightweight Swing Validator** - A web-based tool for fast validation with voting interface
+3. **Swing Validation Harness** - A matplotlib-based tool for detailed 4-panel visualization
+
+---
+
+# Ground Truth Annotator
+
+The Ground Truth Annotator is a web-based tool for expert annotation of swing references. It provides a two-click workflow for marking swings on aggregated OHLC charts, with automatic direction inference.
+
+## Quick Start
+
+### Prerequisites
+- Python 3.8+ with virtual environment
+- OHLC data in CSV format (test data included in `test_data/`)
+
+### Installation
+
+```bash
+# Create virtual environment (if not exists)
+python3 -m venv venv
+
+# Activate and install dependencies
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Launch the Annotator
+
+```bash
+source venv/bin/activate
+python -m src.ground_truth_annotator.main --data test_data/test.csv --scale S
+```
+
+Open http://127.0.0.1:8000 in your browser.
+
+### Command Line Options
+
+| Option | Description |
+|--------|-------------|
+| `--data FILE` | Path to OHLC CSV data file (required) |
+| `--port PORT` | Server port (default: 8000) |
+| `--host HOST` | Server host (default: 127.0.0.1) |
+| `--storage-dir DIR` | Directory for annotation sessions |
+| `--resolution RES` | Source data resolution (default: 1m) |
+| `--window N` | Total bars to work with (default: 50000) |
+| `--scale SCALE` | Scale to annotate: S, M, L, XL (default: S) |
+| `--target-bars N` | Target bars to display in chart (default: 200) |
+
+### Examples
+
+```bash
+# Annotate small-scale swings on 1m data
+python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --scale S
+
+# Annotate medium-scale swings with more bars displayed
+python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --scale M --target-bars 300
+
+# Annotate on 5m data with custom port
+python -m src.ground_truth_annotator.main --data data/es-5m.csv --resolution 5m --scale L --port 8001
+```
+
+## The Two-Click Annotation Workflow
+
+1. **Click Start**: Click on the first candle of the swing. A "Start" marker appears.
+2. **Click End**: Click on the last candle of the swing. A confirmation dialog appears.
+3. **Confirm Direction**: The system infers the direction automatically:
+   - If start.high > end.high → **Bull Reference** (downswing)
+   - If start.low < end.low → **Bear Reference** (upswing)
+4. **Save or Cancel**: Click "Confirm" to save or "Cancel" to restart.
+
+### Direction Inference
+
+The annotator automatically determines swing direction based on price movement:
+
+| Price Movement | Direction | Meaning |
+|---------------|-----------|---------|
+| Start high > End high | Bull Reference | Downswing completed, now bullish |
+| Start high ≤ End high | Bear Reference | Upswing completed, now bearish |
+
+## User Interface
+
+### Chart Area
+- **OHLC Candlesticks**: Green (bullish) and red (bearish) candles
+- **Selection Markers**: Blue arrows show selected start/end points
+- **Annotation Markers**: Numbered circles show saved annotations
+
+### Sidebar
+- **Annotation List**: All saved annotations with direction and bar range
+- **Delete Button**: Click × to remove an annotation
+- **Keyboard Hints**: Quick reference for shortcuts
+
+### Header
+- **Scale Badge**: Shows current scale being annotated
+- **Bar Count**: Number of aggregated bars displayed
+- **Annotation Count**: Total annotations for this session
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Esc` | Cancel current selection |
+| `Enter` | Confirm annotation (when dialog open) |
+| `Delete` / `Backspace` | Delete last annotation |
+
+## API Endpoints
+
+The annotator exposes a REST API:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Serve annotation UI |
+| `/api/health` | GET | Health check |
+| `/api/bars` | GET | Get aggregated bars for chart |
+| `/api/annotations` | GET | List annotations for current scale |
+| `/api/annotations` | POST | Create new annotation |
+| `/api/annotations/{id}` | DELETE | Delete annotation |
+| `/api/session` | GET | Get session state |
+
+## Session Files
+
+Annotation sessions are saved to `annotation_sessions/{session_id}.json` containing:
+- Session metadata (data file, resolution, window size)
+- All annotations with bar indices and prices
+- Scale completion status
 
 ---
 
