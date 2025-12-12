@@ -68,8 +68,8 @@ python -m src.ground_truth_annotator.main --data data/es-5m.csv --resolution 5m 
 
 ## The Two-Click Annotation Workflow
 
-1. **Click Start**: Click near the first candle of the swing. The system **automatically snaps** to the best extrema (highest high or lowest low) within a tolerance radius. A "Start" marker appears on the snapped candle.
-2. **Click End**: Click near the last candle. The system snaps to the opposite extrema (if start was a high, snaps to lowest low; if start was a low, snaps to highest high). A confirmation panel appears in the sidebar.
+1. **Click Start**: Click on the price level of the swing start. The system uses your click's Y-position to determine intent (high vs low) and **automatically snaps** to the bar with the closest matching extremum within a tolerance radius. A "Start" marker appears on the snapped candle.
+2. **Click End**: Click on the price level of the swing end. The system snaps to the bar with the closest matching extremum. A confirmation panel appears in the sidebar.
 3. **Confirm Direction**: The system infers the direction automatically:
    - If start.high > end.high → **Bull Reference** (downswing)
    - If start.low < end.low → **Bear Reference** (upswing)
@@ -77,7 +77,12 @@ python -m src.ground_truth_annotator.main --data data/es-5m.csv --resolution 5m 
 
 ### Snap-to-Extrema
 
-Clicks automatically snap to the best extrema within a scale-aware tolerance radius. This means you don't need pixel-perfect clicking—the system finds the optimal candle for you.
+Clicks automatically snap to the best matching extremum based on where you click:
+
+- **Click above candle midpoint**: System looks for HIGHs, finds the bar with high closest to your click price
+- **Click below candle midpoint**: System looks for LOWs, finds the bar with low closest to your click price
+
+This allows precise selection of **intermediate structure** (e.g., lower highs, higher lows) without forcing snaps to the most extreme values in range. Click on what you see—the system finds it.
 
 | Scale | Snap Radius (bars) |
 |-------|-------------------|

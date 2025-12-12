@@ -1,12 +1,22 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-12
 
 ---
 
 ## Pending Changes
+
+### 2025-12-12 - Snap-to-extrema uses click price proximity
+- **Issue:** #37
+- **Type:** Bug Fix
+- **Files:** `src/ground_truth_annotator/static/index.html`, `Docs/Reference/user_guide.md`
+
+### 2025-12-12 - Inline confirmation panel with A/R/N hotkeys
+- **Issue:** #35
+- **Type:** Enhancement
+- **Files:** `src/ground_truth_annotator/static/index.html`, `Docs/Reference/user_guide.md`
 
 ### 2025-12-12 - Fibonacci preview lines on pending annotation
 - **Issue:** #33

@@ -586,19 +586,21 @@
         // Snap-to-extrema tolerance (bars) by scale
         const SNAP_TOLERANCE = { XL: 5, L: 10, M: 20, S: 30 };
 
-        // Find the bar with best extrema within tolerance radius
-        // lookingForHigh: true = find highest high, false = find lowest low
-        function findBestExtrema(clickedIndex, tolerance, lookingForHigh) {
+        // Find the bar with extremum closest to target price within tolerance radius
+        // lookingForHigh: true = compare .high values, false = compare .low values
+        // targetPrice: the price level to match (from click position)
+        function findBestExtrema(clickedIndex, tolerance, lookingForHigh, targetPrice) {
             const startIdx = Math.max(0, clickedIndex - tolerance);
             const endIdx = Math.min(bars.length - 1, clickedIndex + tolerance);
 
             let bestIndex = clickedIndex;
-            let bestValue = lookingForHigh ? bars[clickedIndex].high : bars[clickedIndex].low;
+            let bestDistance = Infinity;
 
             for (let i = startIdx; i <= endIdx; i++) {
                 const value = lookingForHigh ? bars[i].high : bars[i].low;
-                if (lookingForHigh ? value > bestValue : value < bestValue) {
-                    bestValue = value;
+                const distance = Math.abs(value - targetPrice);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
                     bestIndex = i;
                 }
             }
@@ -694,7 +696,9 @@
                 if (!param.time) return;
                 const clickedBar = bars.find(b => b.timestamp === param.time);
                 if (!clickedBar) return;
-                handleBarClick(clickedBar);
+                // Convert Y pixel coordinate to price for intent detection
+                const clickPrice = mainCandleSeries.coordinateToPrice(param.point.y);
+                handleBarClick(clickedBar, clickPrice);
             });
 
             // Handle resize
@@ -752,19 +756,17 @@
         }
 
         // Handle click on a bar
-        function handleBarClick(bar) {
+        // clickPrice: the price level where the user clicked (from Y coordinate)
+        function handleBarClick(bar, clickPrice) {
             const tolerance = getSnapTolerance();
 
             if (selectionState === 'idle') {
-                // First click: find best extrema (either highest high or lowest low)
-                const highIdx = findBestExtrema(bar.index, tolerance, true);
-                const lowIdx = findBestExtrema(bar.index, tolerance, false);
+                // First click: determine intent from click position relative to candle midpoint
+                const candleMidpoint = (bar.high + bar.low) / 2;
+                const lookingForHigh = clickPrice >= candleMidpoint;
 
-                // Pick whichever extrema is more prominent (further from clicked bar)
-                const highDelta = Math.abs(bars[highIdx].high - bar.high);
-                const lowDelta = Math.abs(bars[lowIdx].low - bar.low);
-
-                startBarIndex = highDelta >= lowDelta ? highIdx : lowIdx;
+                // Find bar with extremum closest to click price
+                startBarIndex = findBestExtrema(bar.index, tolerance, lookingForHigh, clickPrice);
                 selectionState = 'selecting_end';
                 updateInstruction();
                 updateMarkers();
@@ -774,14 +776,12 @@
                     return;
                 }
 
-                // Second click: snap to opposite extrema based on start bar
-                const startBar = bars[startBarIndex];
-                // If start is at a local high, we're marking a downswing (bull ref) -> find lowest low
-                // If start is at a local low, we're marking an upswing (bear ref) -> find highest high
-                const startIsHigh = startBar.high >= bars[bar.index].high;
-                const lookingForHigh = !startIsHigh;
+                // Second click: determine intent from click position relative to candle midpoint
+                const candleMidpoint = (bar.high + bar.low) / 2;
+                const lookingForHigh = clickPrice >= candleMidpoint;
 
-                endBarIndex = findBestExtrema(bar.index, tolerance, lookingForHigh);
+                // Find bar with extremum closest to click price
+                endBarIndex = findBestExtrema(bar.index, tolerance, lookingForHigh, clickPrice);
                 selectionState = 'confirming';
                 showConfirmation();
             }
