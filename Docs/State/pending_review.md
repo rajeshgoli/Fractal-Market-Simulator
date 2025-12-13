@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-12
 
@@ -8,7 +8,10 @@
 
 ## Pending Changes
 
-(None)
+### 2025-12-12 - Fix inverted Fibonacci reference level labels
+- **Issue:** #46
+- **Type:** Bug Fix
+- **Files:** `src/ground_truth_annotator/static/index.html`
 
 ---
 
