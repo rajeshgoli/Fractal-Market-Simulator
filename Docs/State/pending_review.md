@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-12
 
@@ -8,30 +8,10 @@
 
 ## Pending Changes
 
-### 2025-12-12 - Session Flow (Random Window Selection)
-- **Issue:** #43
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/main.py`, `src/ground_truth_annotator/models.py`, `src/ground_truth_annotator/storage.py`, `src/ground_truth_annotator/api.py`, `src/ground_truth_annotator/static/index.html`, `src/ground_truth_annotator/static/review.html`, `tests/test_ground_truth_foundation.py`
-
-### 2025-12-12 - Review Mode Frontend
-- **Issue:** #42
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/static/review.html`, `src/ground_truth_annotator/api.py`, `src/ground_truth_annotator/static/index.html`
-
-### 2025-12-12 - Review Mode API Endpoints
-- **Issue:** #41
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/api.py`, `tests/test_ground_truth_annotator_api.py`
-
-### 2025-12-12 - Review Mode Controller
-- **Issue:** #40
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/review_controller.py`, `tests/ground_truth_annotator/test_review_controller.py`
-
-### 2025-12-12 - Review Mode Data Models
-- **Issue:** #39
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/models.py`, `src/ground_truth_annotator/storage.py`, `tests/test_ground_truth_foundation.py`
+### 2025-12-12 - Remove deprecated modules
+- **Issue:** #44
+- **Type:** Cleanup
+- **Files:** Deleted 35 files (src/lightweight_swing_validator/, src/visualization_harness/, main.py, example scripts, related tests); Updated CLAUDE.md, user_guide.md
 
 ---
 
@@ -39,6 +19,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 12 | Review Mode epic (#38) - #39, #40, #41, #42, #43 | All Accepted, epic closed |
 | Dec 12 | #32, #33, #34, #35, #37 - UX polish batch | All Accepted |
 | Dec 12 | #27, #28, #29, #30 - Ground truth annotation tool MVP | All Accepted |
 | Dec 12 | Ground truth annotation design question | Approved - ready for engineering |
