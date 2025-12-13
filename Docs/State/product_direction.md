@@ -1,15 +1,15 @@
 # Product Direction
 
-**Last Updated:** December 13, 2025
+**Last Updated:** December 12, 2025
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Fix P1 UX blockers, then collect ground truth data.**
+**Collect ground truth data.**
 
-First real annotation session surfaced UX issues that block quality data collection. Fix these before running more sessions. See "P1: Blocking UX Issues" section below.
+P1 UX blockers are resolved. The annotation tool is ready for quality data collection sessions.
 
 ---
 
@@ -18,23 +18,16 @@ First real annotation session surfaced UX issues that block quality data collect
 The detector is miscalibrated (250x more detections than human expert). We have:
 - Two-click annotation workflow
 - Cascading scale progression (XL → L → M → S)
-- Review Mode with FP/FN feedback collection (UI complete)
+- Review Mode with FP/FN feedback collection
 - Random window selection for dataset diversity
 - Structured export for rule iteration
+- Session quality control (keep/discard)
 
-**The tool is ready. The bottleneck is now data collection.** Multiple annotation sessions across different market regimes will reveal patterns in detection errors.
+**The tool is production-ready. The bottleneck is now data collection.** Multiple annotation sessions across different market regimes will reveal patterns in detection errors.
 
 ---
 
 ## Immediate Next Steps
-
-### 0. Fix P1 UX Issues (BLOCKING)
-
-The first real annotation session surfaced blocking UX issues. Fix before collecting more data:
-1. Fix reference level label orientation
-2. Make FN explanation optional with preset categories
-3. Clarify export/save workflow
-4. Add session quality control (keep/discard)
 
 ### 1. Run Annotation Sessions
 
@@ -119,6 +112,10 @@ Repeat
 | Review Mode (matches, FP sample, FN feedback) | Complete |
 | Structured export for rule iteration | Complete |
 | Session continuation with random windows | Complete |
+| Reference level label orientation | Complete |
+| FN explanation with preset categories | Complete |
+| Clear export/save workflow | Complete |
+| Session quality control (keep/discard) | Complete |
 
 **All success criteria met. Tool is production-ready.**
 
@@ -138,19 +135,6 @@ Repeat
 | #35 | Non-blocking confirmation | Done |
 | #33 | Fibonacci preview lines | Done |
 | #32 | Snap-to-extrema | Done |
-
----
-
-## P1: Blocking UX Issues (From First Real Session)
-
-| Issue | Problem | Impact |
-|-------|---------|--------|
-| Reference level labels inverted | Bull shows 0 at top, 2 below low | Can't validate reference range correctness |
-| FN explanation too slow | Must explain every FN | Session friction, fewer sessions completed |
-| Unclear CTA | Export JSON vs auto-saved? | User doesn't know if work is persisted |
-| Session quality control | No keep/discard option | Can't distinguish practice from real data |
-
-**Note:** These came from first real annotation session. Should fix before collecting more data.
 
 ---
 
@@ -182,12 +166,11 @@ Repeat
 
 ## Session Context
 
-**Where we are:** First real annotation session completed. User feedback surfaced 4 P1 UX issues blocking quality data collection.
+**Where we are:** P1 UX blockers resolved. Annotation tool is production-ready.
 
 **What's next:**
-1. Fix P1 UX blockers (reference labels, FN presets, export clarity, session quality)
-2. Run 5-10 quality annotation sessions across different market regimes
-3. Analyze feedback patterns (FP categories, FN clusters)
-4. Iterate detection rules based on patterns
+1. Run 5-10 quality annotation sessions across different market regimes
+2. Analyze feedback patterns (FP categories, FN clusters)
+3. Iterate detection rules based on patterns
 
-**Key insight:** Tool works, but first real session revealed friction. Fix before collecting data at scale.
+**Key insight:** Tool friction eliminated. Ready to collect data at scale.
