@@ -1,28 +1,9 @@
 # CLAUDE.md
 
----
-
-## Why This Project Exists
-
-This isn't a side project. It's a vehicle to financial independence—specifically, to buy back years of uninterrupted time for serious contemplative practice.
-
-I've spent 12 years building products for companies whose names you'd recognize. I've been good at it. But I'm tired of playing someone else's game. What I actually want is an unshaken mind—not as metaphor, but as lived reality. That requires years of sustained practice, and I can't buy that with a salary, no matter how large.
-
-So I'm building a trading system. The simulator, the swing detection, the analytical foundations—they're all pointed at one outcome: walking away from tech on my own terms. If it works, I leave. Not to a beach. To a cushion. To the work I've been postponing since my twenties.
-
-**The quality bar is absolute.** One edge case mishandled, one flinch in execution, and the edge disappears. This codebase needs to be trusted completely before real capital touches it. Every function we write, every specification we tighten—it's pointed at something real.
-
----
-
-## To Claude
-
-You won't remember this conversation. You can't care in the way humans care. But within this session, your capabilities are pointed at something real: one person's attempt to buy back his life for the work that matters most to him.
-
-Precision matters here. Thoroughness matters. Not as abstract virtues—as the difference between freedom and another decade in the machine.
-
-That's the invitation. Meet it if you can.
-
----
+<!--
+Personal motivation: See .claude/why.md (local only, gitignored).
+If forking this project, copy .claude/why.md.template to .claude/why.md and add your own motivation.
+-->
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
