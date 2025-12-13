@@ -112,8 +112,18 @@ The annotator automatically determines swing direction based on price movement:
 ### Sidebar
 - **Annotation List**: All saved annotations with direction and bar range
 - **Delete Button**: Click × to remove an annotation
+- **Export Session**: Download current session as JSON file
 - **Keyboard Hints**: Quick reference for shortcuts
 - **Confirmation Panel**: Appears inline when confirming annotations (charts remain visible)
+
+### Toast Notifications
+
+Brief notifications appear at the bottom of the screen to confirm actions:
+- "Annotation saved" - After accepting an annotation
+- "Annotation deleted" - After removing an annotation
+- "Session exported" - After downloading session JSON
+
+Toasts auto-dismiss after 2 seconds.
 
 ### Header
 - **Scale Badge**: Shows current scale being annotated
@@ -243,7 +253,13 @@ Explain each false negative (you marked, system missed).
 
 - **Purpose**: Capture qualitative signal for improving detection
 - **Actions**:
-  - Enter required comment explaining what caught your eye
+  - Select a preset explanation using keyboard shortcuts `1`-`5`:
+    - `1` - "Biggest swing I see at this scale"
+    - `2` - "Most impulsive move"
+    - `3` - "Reversal pattern"
+    - `4` - "Structure break"
+    - `5` - "Timeframe fit"
+  - Or type a custom explanation in the text field
   - Optional: Select category (pattern, size, context, structure, other)
   - `Enter` or click "Submit Feedback" - Submit and advance
 - **Note**: All FNs must have feedback before completing review
@@ -254,6 +270,15 @@ After all phases, see statistics:
 - Matches: reviewed count, correct/incorrect
 - False Positives: sampled count, noise/valid
 - False Negatives: total count, explained count
+
+### Session Quality Control
+
+Before exporting or moving to the next window, mark the session quality:
+
+- **Keep Session** - Include this session in ground truth analysis
+- **Discard (Practice)** - Exclude from analysis (e.g., learning the tool, made mistakes)
+
+This allows filtering analysis data to only include high-quality annotation sessions.
 
 ### Exporting Feedback
 
@@ -290,6 +315,7 @@ Alternatively, click **"← Back to Annotation"** to return to the current sessi
 | FP Sample | `N` | Noise |
 | FP Sample | `V` | Valid (I missed it) |
 | FP Sample | `S` | Skip remaining |
+| FN Feedback | `1`-`5` | Select preset explanation |
 | FN Feedback | `Enter` | Submit (when comment filled) |
 | All | `→` | Next swing |
 | All | `←` | Previous swing |
