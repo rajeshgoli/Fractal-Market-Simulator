@@ -383,6 +383,43 @@
             display: block;
         }
 
+        /* Preset buttons for FN feedback */
+        .preset-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .preset-btn {
+            padding: 6px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .preset-btn:hover {
+            background: var(--accent-purple);
+            border-color: var(--accent-purple);
+        }
+
+        .preset-btn.selected {
+            background: var(--accent-purple);
+            border-color: var(--accent-purple);
+        }
+
+        .preset-btn kbd {
+            background: rgba(255,255,255,0.15);
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 0.7rem;
+            margin-right: 3px;
+        }
+
         /* Summary view */
         .summary-section {
             margin-bottom: 20px;
@@ -604,9 +641,16 @@
                             <span class="swing-detail-value" id="fn-price">-</span>
                         </div>
                     </div>
-                    <label class="required-label">* Required: Explain what caught your eye</label>
+                    <label class="required-label">* Required: Select a preset or explain what caught your eye</label>
+                    <div class="preset-buttons">
+                        <button class="preset-btn" data-preset="Biggest swing I see at this scale"><kbd>1</kbd>Biggest swing</button>
+                        <button class="preset-btn" data-preset="Most impulsive move"><kbd>2</kbd>Most impulsive</button>
+                        <button class="preset-btn" data-preset="Clear reversal pattern"><kbd>3</kbd>Reversal pattern</button>
+                        <button class="preset-btn" data-preset="Structure break"><kbd>4</kbd>Structure break</button>
+                        <button class="preset-btn" data-preset="Fits timeframe context"><kbd>5</kbd>Timeframe fit</button>
+                    </div>
                     <textarea class="feedback-input" id="fn-comment"
-                        placeholder="What made you notice this swing? (e.g., clear reversal pattern, significant size, fits timeframe context...)"></textarea>
+                        placeholder="Or type a custom explanation..."></textarea>
                     <select class="category-select" id="fn-category">
                         <option value="">Category (optional)</option>
                         <option value="pattern">Pattern recognition</option>
@@ -621,7 +665,8 @@
                         </button>
                     </div>
                     <div class="keyboard-hints">
-                        <div class="hint-row"><kbd>Enter</kbd> Submit (when comment filled)</div>
+                        <div class="hint-row"><kbd>1</kbd>-<kbd>5</kbd> Select preset</div>
+                        <div class="hint-row"><kbd>Enter</kbd> Submit (when filled)</div>
                         <div class="hint-row"><kbd>&rarr;</kbd> Next swing (after submit)</div>
                     </div>
                     <div class="nav-buttons">
@@ -1072,9 +1117,12 @@
             document.getElementById('fn-bars').textContent = `${fn.start_index} → ${fn.end_index}`;
             document.getElementById('fn-price').textContent = `${fn.start_price} → ${fn.end_price}`;
 
-            // Reset inputs
+            // Reset inputs and preset selection
             const commentEl = document.getElementById('fn-comment');
             const categoryEl = document.getElementById('fn-category');
+
+            // Clear preset selection
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('selected'));
 
             if (fn.feedback) {
                 commentEl.value = fn.feedback.comment || '';
@@ -1431,13 +1479,42 @@
                         }
                     } else if (e.key === 'ArrowLeft') {
                         previousSwing();
+                    } else if (e.key >= '1' && e.key <= '5') {
+                        selectPreset(parseInt(e.key) - 1);
                     }
                     break;
             }
         });
 
-        // Enable/disable FN submit based on comment
-        document.getElementById('fn-comment').addEventListener('input', updateFNSubmitState);
+        // Enable/disable FN submit based on comment and clear preset selection on manual typing
+        document.getElementById('fn-comment').addEventListener('input', () => {
+            // Clear preset selection when user types manually
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('selected'));
+            updateFNSubmitState();
+        });
+
+        // Select preset by index (0-4)
+        function selectPreset(index) {
+            const presetBtns = document.querySelectorAll('.preset-btn');
+            if (index >= 0 && index < presetBtns.length) {
+                const btn = presetBtns[index];
+                const preset = btn.dataset.preset;
+                document.getElementById('fn-comment').value = preset;
+
+                // Update visual selection state
+                presetBtns.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+
+                updateFNSubmitState();
+            }
+        }
+
+        // Preset button click handlers
+        document.querySelectorAll('.preset-btn').forEach((btn, index) => {
+            btn.addEventListener('click', () => {
+                selectPreset(index);
+            });
+        });
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
