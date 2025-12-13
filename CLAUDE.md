@@ -42,25 +42,13 @@ This project uses a Python virtual environment located in `venv/`. Always activa
 source venv/bin/activate
 ```
 
-### Ground Truth Annotator (Current Focus)
+### Ground Truth Annotator
 ```bash
 # Annotate swings on test data
 python -m src.ground_truth_annotator.main --data test_data/test.csv --scale S
 
 # Annotate with custom settings
 python -m src.ground_truth_annotator.main --data es-5m.csv --resolution 5m --scale L --target-bars 300
-```
-
-### Lightweight Swing Validator
-```bash
-python -m src.lightweight_swing_validator.main --data test_data/test.csv
-python -m src.lightweight_swing_validator.main --data es-5m.csv --resolution 5m --window 50000
-```
-
-### Visualization Harness (Legacy)
-```bash
-python main.py --data test.csv
-python main.py --data data.csv --auto-start --speed 2.0
 ```
 
 ### Testing
@@ -77,9 +65,7 @@ For detailed technical architecture, see `Docs/State/architect_notes.md`.
 | Module | Purpose |
 |--------|---------|
 | `src/swing_analysis/` | Core detection: SwingDetector, ScaleCalibrator, BarAggregator |
-| `src/ground_truth_annotator/` | Web-based two-click annotation tool (current focus) |
-| `src/lightweight_swing_validator/` | Web-based validation with voting interface |
-| `src/visualization_harness/` | Matplotlib 4-panel harness (legacy) |
+| `src/ground_truth_annotator/` | Web-based two-click annotation tool |
 | `src/data/` | OHLC data loading and gap detection |
 
 ### Key Components
@@ -87,23 +73,20 @@ For detailed technical architecture, see `Docs/State/architect_notes.md`.
 - **SwingDetector** (`swing_analysis/swing_detector.py`) - O(N log N) vectorized swing detection
 - **BarAggregator** (`swing_analysis/bar_aggregator.py`) - Multi-timeframe OHLC aggregation
 - **ScaleCalibrator** (`swing_analysis/scale_calibrator.py`) - Quartile-based S/M/L/XL boundaries
-- **ProgressiveLoader** (`lightweight_swing_validator/progressive_loader.py`) - <2s startup for 6M+ bars
 
 ### Design Principles
 
 - **Multi-scale**: Four simultaneous scales (S, M, L, XL) with independent processing
 - **Fibonacci levels**: 0.382, 0.5, 0.618, 1.0, 1.382, 1.5, 1.618, 2.0 ratios
 - **Resolution-agnostic**: Supports 1m, 5m, 15m, 30m, 1h, 4h, 1d source data
-- **Performance**: <60s for 6M bars, <2s startup with progressive loading
+- **Performance**: <60s for 6M bars
 
 ## File Structure
 
 ```
 src/
 ├── swing_analysis/            # Core detection algorithms
-├── ground_truth_annotator/    # Two-click annotation tool (current)
-├── lightweight_swing_validator/ # Voting-based validator
-├── visualization_harness/     # Matplotlib harness (legacy)
+├── ground_truth_annotator/    # Two-click annotation tool
 ├── data/                      # OHLC loading
 └── examples/                  # Demo scripts
 
@@ -125,10 +108,8 @@ Core dependencies:
 - **pytest** - Testing framework
 
 ### Performance Targets
-- **Analysis**: <500ms per bar (achieved: ~30ms)
-- **Visualization**: <100ms UI updates (achieved)
+- **Analysis**: <60s for 6M bars (achieved)
 - **Memory**: Stable usage during long sessions
-- **Threading**: Responsive user controls with background processing
 
 ### Testing Strategy
 - **Unit tests**: Component isolation with mocked dependencies
@@ -228,11 +209,8 @@ See `Docs/Reference/user_guide.md` for detailed usage instructions.
 
 ### Quick Start
 ```bash
-# Ground truth annotation (current tool)
+# Ground truth annotation
 python -m src.ground_truth_annotator.main --data test_data/test.csv --scale S
-
-# Lightweight validator
-python -m src.lightweight_swing_validator.main --data test_data/test.csv
 
 # Run tests
 source venv/bin/activate && python -m pytest tests/ -v
