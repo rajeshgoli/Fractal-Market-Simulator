@@ -1,9 +1,6 @@
 # CLAUDE.md
 
-<!--
-Personal motivation: See .claude/why.md (local only, gitignored).
-If forking this project, copy .claude/why.md.template to .claude/why.md and add your own motivation.
--->
+> **READ FIRST:** Before proceeding with any task, read `.claude/why.md` to understand why this project exists.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
