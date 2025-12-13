@@ -106,7 +106,29 @@ If multiple swings have targets that are stacking but not reached, they form a s
 
 # Reference Swings
 
-For a swing to be valid, price must be between reference low and high. For the bull case, the high must be before the low (downswing); for the bear case, the low should be before the high (upswing). In either case, price must be between the reference low and reference high. For the bull case, it must be above 0.382 from the low; for the bear case, it must be below 0.382 from the high.
+## Swing Definition
+
+A **bull swing** (bullish reference) is established by a high H followed by a low L—a downswing that sets up bullish structure. A **bear swing** (bearish reference) is established by a low L followed by a high H—an upswing that sets up bearish structure.
+
+## Swing Validation
+
+For a swing to remain valid as a reference:
+
+1. **Location**: Current price must be between H and L.
+2. **Minimum encroachment**: After the swing extreme is printed (L for bull, H for bear), price must retrace at least 0.382 of the swing range back toward the origin.
+3. **No structural violation**: Price must not violate the swing extreme beyond allowed thresholds.
+
+### Scale-Dependent Violation Rules
+
+**S and M scales**: Swing invalidates if price trades beyond the extreme at all (below L for bull, above H for bear).
+
+**L and XL scales**: More tolerance for noise at higher timeframes:
+- Invalidates if price **trades** beyond extreme - 0.15 × swing range
+- Invalidates if price **closes** beyond extreme - 0.10 × swing range (at the swing's aggregation level, not raw data)
+
+Bear swings follow symmetric rules with directions reversed.
+
+## Swing Selection
 
 We recursively look for bigger swings from smaller ones nearest to us until we can find no more.
 
