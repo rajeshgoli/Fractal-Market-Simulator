@@ -1,51 +1,38 @@
 # Product Direction
 
-**Last Updated:** December 12, 2025
+**Last Updated:** December 13, 2025
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Collect ground truth data through annotation sessions.**
+**Complete Review Mode UI, then run first validation session with historical data.**
 
-The tooling is complete. Review Mode, session flow, and codebase cleanup are done. Now it's time to use the tool to build a ground truth dataset and collect qualitative feedback on detection quality.
+The ground truth annotation tool backend is complete. Review Mode (3-phase feedback workflow) is implemented but has no frontend. Once UI is complete, we can conduct the first real validation session.
 
 ---
 
 ## Why This Is Highest Leverage
 
-The detector is miscalibrated (250x more detections than human expert). We have:
-- Two-click annotation workflow
-- Cascading scale progression (XL → L → M → S)
-- Review Mode with FP/FN feedback collection
-- Random window selection for dataset diversity
-- Structured export for rule iteration
+The swing detection algorithm is the foundation of everything that follows (behavioral modeling, data generation). Validation must be rigorous:
 
-**The tool is ready. The bottleneck is now data collection.** Multiple annotation sessions across different market regimes will reveal patterns in detection errors that inform rule refinement.
+1. **Annotation** captures expert ground truth (what swings *should* be detected)
+2. **Comparison** measures algorithm accuracy (matches, false positives, false negatives)
+3. **Review Mode** collects structured feedback (why misses happen, patterns in errors)
+
+Without Review Mode UI, we can annotate but can't complete the feedback loop. The algorithm improvement cycle is broken.
 
 ---
 
-## Immediate Next Steps
+## Success Criteria
 
-### 1. Run Annotation Sessions
-
-```bash
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --cascade --offset random
-```
-
-**Target:** 5-10 complete sessions (XL → S + Review Mode) to build initial ground truth corpus.
-
-### 2. Review Feedback Patterns
-
-After sessions, analyze exported JSON for:
-- Common FP categories (noise patterns)
-- FN explanations (what the system misses)
-- Match confirmation rate
-
-### 3. Iterate Detection Rules
-
-Use feedback to refine `swing_detector.py` parameters or logic.
+| Metric | Target | Current |
+|--------|--------|---------|
+| Annotation workflow | Functional | Achieved |
+| Comparison analysis | Functional | Achieved |
+| Review Mode workflow | All 3 phases usable | Backend complete, no UI |
+| First validation session | Complete with feedback | Pending |
 
 ---
 
@@ -55,100 +42,49 @@ Use feedback to refine `swing_detector.py` parameters or logic.
 
 **Problem:** Snap is finicky at S-scale. May need horizontal (time) and vertical (price) zoom plus pan.
 
-**Status:** Deferred until annotation sessions reveal if this is blocking.
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Ground Truth MVP | Complete | Two-click annotation, cascading scales |
+| UX Polish | Complete | Snap-to-extrema, keybindings, export |
+| Review Mode Backend | Complete | Models, storage, controller, API endpoints |
+| **Review Mode UI** | In Progress | Frontend for 3-phase workflow |
+| First Validation Session | Pending | After UI complete |
+| Algorithm Iteration | Pending | Based on validation feedback |
 
-### Snap at Chart Edges
+---
 
-**Problem:** Snap finicky when swing is at chart edge. Snap radius may extend beyond visible data.
+## Usability Criteria
 
-**Status:** Deferred until annotation sessions reveal if this is blocking.
+The annotation + review tool should be:
+- **Efficient:** Annotate a window in <5 minutes
+- **Accurate:** Two-click annotation snaps to extrema precisely
+- **Complete:** Full loop from annotation through structured feedback
+- **Exportable:** Raw data and analysis available for algorithm tuning
 
 ---
 
 ## Delivered (This Cycle)
 
-### Ground Truth Annotation Tool (Complete)
-
-- Two-click swing marking with direction inference
-- Cascading scale progression (XL → L → M → S)
-- Snap-to-extrema with price proximity
-- Fibonacci preview lines
-- Non-blocking inline confirmation with hotkeys
-- Comparison analysis (FP/FN detection)
-
-### Review Mode (Complete)
-
-- Phase 1: Match review with correct/incorrect feedback
-- Phase 2: Stratified FP sample with noise/valid labels
-- Phase 3: FN feedback with required explanations
-- Session summary with statistics
-- JSON/CSV export for rule iteration
-
-### Session Flow (Complete)
-
-- Random window selection (`--offset random`)
-- "Load Next Window" for continuous sessions
-- Auto-redirect to Review Mode after cascade
-
-### Codebase Cleanup (Complete)
-
-- Removed deprecated `lightweight_swing_validator/` (~8 files)
-- Removed deprecated `visualization_harness/` (~15 files)
-- ~14,500 lines of dead code eliminated
-- Single focused tool: ground truth annotator
-
----
-
-## Completed Issues
-
-| Issue | Description | Result |
-|-------|-------------|--------|
-| #44 | Remove deprecated modules | Done |
-| #43 | Session flow (random offset, next window) | Done |
-| #42 | Review Mode frontend | Done |
-| #41 | Review Mode API endpoints | Done |
-| #40 | Review controller | Done |
-| #39 | Review Mode data models | Done |
-| #37 | Snap-to-extrema price proximity | Done |
-| #35 | Non-blocking confirmation | Done |
-| #33 | Fibonacci preview lines | Done |
-| #32 | Snap-to-extrema | Done |
-| #24 | Resolution-agnostic design | Done |
-| #22 | Full dataset loading | Done |
-
----
-
-## Success Criteria (This Phase)
-
-1. ~~User can mark swings via two-click annotation~~ ✓
-2. ~~Cascading scale workflow operational (XL → L → M → S)~~ ✓
-3. ~~Annotations stored and comparable against system output~~ ✓
-4. ~~Analysis report surfaces false negatives, false positives~~ ✓
-5. ~~Snap-to-extrema removes pixel-hunting friction~~ ✓
-6. ~~Fib preview enables visual validation before confirm~~ ✓
-7. ~~Non-blocking confirmation with hotkeys for flow~~ ✓
-8. ~~Review Mode: matches, FP sample, FN review with feedback~~ ✓
-9. ~~Structured export for rule iteration~~ ✓
-10. ~~Session continuation with random windows~~ ✓
-
-**All success criteria met. Tool is production-ready for annotation sessions.**
+**Invoke Product when:**
+- Review Mode UI is complete
+- First validation session is ready to begin
+- Validation reveals significant algorithm issues requiring direction change
 
 ---
 
 ## Deferred
 
-- Generator work — pending validated swing detection and ground truth data
-- Zoom/pan UX — deferred until blocking in practice
-- Edge snap fixes — deferred until blocking in practice
+### Assumptions
+1. Review Mode UI is straightforward (standard web forms, no complex interactions)
+2. Comparison matching tolerance (10%) is reasonable starting point
+3. User available for validation once tooling is complete
 
----
-
-## Checkpoint Trigger
-
-**When to invoke Product:**
-- After 5+ annotation sessions reveal feedback patterns
-- When ready to translate feedback into detection rule changes
-- If P2 UX issues prove blocking during annotation
+### Risks
+| Risk | Likelihood | Mitigation |
+|------|------------|------------|
+| Algorithm needs significant rework | Medium | Validation will reveal patterns |
+| UI takes longer than expected | Low | Backend API is clean |
+| Review workflow too tedious | Low | Can skip phases if not useful |
 
 ---
 
@@ -162,4 +98,7 @@ Use feedback to refine `swing_detector.py` parameters or logic.
 3. Use patterns to refine detection rules
 4. Iterate: better rules → cleaner detections → validate at scale
 
-**Key insight:** The tool-building phase is done. Now entering the data collection phase.
+After validation establishes confidence in detection foundations:
+- Reverse analytical process to generate realistic price data
+- Simulate swing formation according to validated rules
+- Validated detection = trusted generator inputs
