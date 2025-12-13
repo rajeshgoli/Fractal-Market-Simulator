@@ -1,16 +1,4 @@
-# Swing Validation Tools - User Guide
-
-## Overview
-
-This project provides three tools for swing detection validation and ground truth collection:
-
-1. **Ground Truth Annotator** - A web-based tool for expert swing annotation with two-click workflow
-2. **Lightweight Swing Validator** - A web-based tool for fast validation with voting interface
-3. **Swing Validation Harness** - A matplotlib-based tool for detailed 4-panel visualization
-
----
-
-# Ground Truth Annotator
+# Ground Truth Annotator - User Guide
 
 The Ground Truth Annotator is a web-based tool for expert annotation of swing references. It provides a two-click workflow for marking swings on aggregated OHLC charts, with automatic direction inference.
 
@@ -52,6 +40,8 @@ Open http://127.0.0.1:8000 in your browser.
 | `--window N` | Total bars to work with (default: 50000) |
 | `--scale SCALE` | Scale to annotate: S, M, L, XL (default: S) |
 | `--target-bars N` | Target bars to display in chart (default: 200) |
+| `--cascade` | Enable XL → L → M → S cascade workflow |
+| `--offset N` | Start offset in bars. Use 'random' for random position (default: 0) |
 
 ### Examples
 
@@ -64,6 +54,15 @@ python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --scale M -
 
 # Annotate on 5m data with custom port
 python -m src.ground_truth_annotator.main --data data/es-5m.csv --resolution 5m --scale L --port 8001
+
+# Cascade mode (XL → L → M → S) with automatic Review Mode transition
+python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --cascade
+
+# Random window selection for sampling different market regions
+python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --cascade --offset random
+
+# Fixed offset to start at specific bar
+python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --cascade --offset 100000
 ```
 
 ## The Two-Click Annotation Workflow
@@ -202,527 +201,110 @@ A user annotation matches a system-detected swing when:
 | `/api/compare/report` | GET | Get full report with FN/FP lists |
 | `/api/compare/export` | GET | Export as JSON or CSV |
 
----
+## Review Mode
 
-# Lightweight Swing Validator
+After completing annotation (all 4 scales in cascade mode), use Review Mode to provide qualitative feedback on detection quality.
 
-The Lightweight Swing Validator is a web-based tool for human-in-the-loop validation of swing detection. It presents random time intervals with detected swing candidates for quick review and voting.
+### Starting Review Mode
 
-## Quick Start
+1. Complete all scales in the cascade workflow (XL → L → M → S)
+2. Click "Start Review Mode →" button in the sidebar
+3. Or navigate directly to `/review`
 
-### Prerequisites
-- Python 3.8+ with virtual environment
-- OHLC data in CSV format (test data included in `test_data/`)
+### Three-Phase Review Process
 
-### Installation
+Review Mode guides you through three phases:
 
-```bash
-# Create virtual environment (if not exists)
-python3 -m venv venv
+#### Phase 1: Matches Review
 
-# Activate and install dependencies
-source venv/bin/activate
-pip install -r requirements.txt
-```
+Review swings where your annotation matched system detection.
 
-### Launch the Validator
+- **Purpose**: Confirm detections are actually correct
+- **Actions**:
+  - `G` or click "Looks Good" - Confirm match is correct
+  - `W` or click "Actually Wrong" - Flag match as incorrect
+  - `→` - Next swing
+  - `S` - Skip all matches (advance to Phase 2)
 
-```bash
-source venv/bin/activate
-python -m src.lightweight_swing_validator.main --data test_data/test.csv
-```
+#### Phase 2: FP Sample Review
 
-Open http://127.0.0.1:8000 in your browser.
+Review a sample of false positives (system detected, you didn't mark).
 
-### Command Line Options
+- **Purpose**: Understand why system detects swings you didn't mark
+- **Actions**:
+  - `N` or click "Noise" - Mark as noise (not a real swing)
+  - `V` or click "Actually Valid" - Admit you missed this swing
+  - Optional: Select reason from dropdown (too_small, wrong_direction, not_a_swing, other)
+  - `S` - Skip remaining FPs (advance to Phase 3)
 
-| Option | Description |
-|--------|-------------|
-| `--data FILE` | Path to OHLC CSV data file (required) |
-| `--port PORT` | Server port (default: 8000) |
-| `--host HOST` | Server host (default: 127.0.0.1) |
-| `--storage-dir DIR` | Directory for validation results |
-| `--seed N` | Random seed for reproducible sampling |
-| `--resolution RES` | Source data resolution (default: 1m). Options: 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1mo |
-| `--window N` | Calibration window size in bars (default: auto) |
+#### Phase 3: FN Feedback
 
-### Examples
+Explain each false negative (you marked, system missed).
 
-```bash
-# Basic usage with 1m data (default)
-python -m src.lightweight_swing_validator.main --data test_data/es-1m.csv --port 8080
+- **Purpose**: Capture qualitative signal for improving detection
+- **Actions**:
+  - Enter required comment explaining what caught your eye
+  - Optional: Select category (pattern, size, context, structure, other)
+  - `Enter` or click "Submit Feedback" - Submit and advance
+- **Note**: All FNs must have feedback before completing review
 
-# Using 5m resolution data with custom calibration window
-python -m src.lightweight_swing_validator.main --data data/es-5m.csv --resolution 5m --window 50000
+### Summary View
 
-# Daily data
-python -m src.lightweight_swing_validator.main --data data/es-daily.csv --resolution 1d
-```
+After all phases, see statistics:
+- Matches: reviewed count, correct/incorrect
+- False Positives: sampled count, noise/valid
+- False Negatives: total count, explained count
 
-### Resolution Parameter
+### Exporting Feedback
 
-The `--resolution` parameter tells the system what resolution your source data is in. This affects:
+Click "Export Feedback (JSON)" to download structured feedback for rule iteration.
 
-- **Available timeframes**: Only aggregations >= source resolution are available
-- **Scale calibration**: Default aggregations are adjusted (e.g., S=5m for 5m data instead of S=1m)
-- **Gap detection**: Thresholds scale with resolution
+### Session Flow (Cascade Mode)
 
-| Resolution | Minutes | Typical Use Case |
-|------------|---------|------------------|
-| 1m | 1 | Intraday micro-structure |
-| 5m | 5 | Intraday with reduced noise |
-| 15m | 15 | Swing trading |
-| 30m | 30 | Position trading |
-| 1h | 60 | Daily patterns |
-| 4h | 240 | Multi-day swings |
-| 1d | 1440 | Long-term trends |
-| 1w | 10080 | Weekly analysis |
-| 1mo | 43200 | Monthly/yearly trends |
+When using `--cascade` mode, the session follows this flow:
 
-## Progressive Loading for Large Datasets
+1. **Annotation Phase**: Progress through XL → L → M → S scales
+2. **Completion**: After completing S scale, automatically redirect to Review Mode
+3. **Review Phase**: Provide qualitative feedback on detection quality
+4. **Next Window**: Click "Load Next Window (Random)" to start a new session at a random offset
 
-For datasets larger than 100,000 bars (e.g., multi-year 1-minute data), the validator uses **progressive loading** to ensure fast startup:
+This flow enables efficient sampling across different market regions, building a diverse ground truth dataset.
 
-### How It Works
+### Load Next Window
 
-1. **Quick Start (<2 seconds)**: The validator loads a random 20K-bar window immediately
-2. **Background Loading**: Additional windows are loaded in the background while you work
-3. **Diverse Coverage**: Windows are distributed across the dataset for market regime diversity
+After completing review, click **"Load Next Window (Random)"** to:
+- Create a new annotation session
+- Select a random offset into the data file
+- Preserve all current settings (cascade mode, resolution, window size)
+- Start fresh annotation at a different market region
 
-### User Experience
+Alternatively, click **"← Back to Annotation"** to return to the current session's annotation view.
 
-On startup with a large file, you'll see:
+### Keyboard Shortcuts
 
-```
-============================================================
-Lightweight Swing Validator
-============================================================
-Data file:   data/es-1m-6years.csv
-Resolution:  1m
-Total bars:  6.2M
-Date range:  2018-01-02 to 2024-12-01
+| Phase | Key | Action |
+|-------|-----|--------|
+| Matches | `G` | Good (correct) |
+| Matches | `W` | Wrong (incorrect) |
+| Matches | `S` | Skip all |
+| FP Sample | `N` | Noise |
+| FP Sample | `V` | Valid (I missed it) |
+| FP Sample | `S` | Skip remaining |
+| FN Feedback | `Enter` | Submit (when comment filled) |
+| All | `→` | Next swing |
+| All | `←` | Previous swing |
 
-Large dataset detected (6.2M bars)
-Using progressive loading for fast startup...
-(Additional time windows will load in background)
-
-Initialization: 1.43s
-Server:         http://127.0.0.1:8000
-============================================================
-```
-
-### Window Switching
-
-In the browser interface:
-- **Window Selector**: A dropdown in the header shows available time windows
-- **Loading Indicator**: Shows background loading progress (e.g., "Loading: 45%")
-- **Next Window Button (→)**: Click to rotate through different time periods
-- **Window Dates**: Each window shows its date range (e.g., "Jan 15, '24 - Feb 3, '24")
-
-As background loading completes, more windows become available in the dropdown.
-
-### Benefits
-
-- **Immediate validation**: Start validating within seconds, even with 6M+ bars
-- **Regime coverage**: Automatic sampling across different market conditions
-- **Random start**: Each session begins at a different window for variety
-- **Full access**: All windows eventually available for comprehensive validation
-
-## The Validation Workflow
-
-1. **View Sample**: The tool displays a random time interval with OHLC chart
-2. **Review Swings**: Up to 3 detected swing candidates are shown with markers
-3. **Vote**: Click Valid/Invalid/Skip for each swing
-4. **Overall Assessment**: Answer "Did we find the right swings?"
-5. **Submit & Next**: Move to the next random interval
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `1`, `2`, `3` | Cycle vote for swing 1/2/3 |
-| `Y` | Overall vote: Yes |
-| `N` | Overall vote: No |
-| `Enter` | Submit and get next sample |
-| `Escape` | Skip current sample |
-
-## API Endpoints
-
-The validator exposes a REST API:
-
-### Core Endpoints
+### Review Mode API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/sample` | GET | Get random validation sample |
-| `/api/sample?scale=M` | GET | Get sample for specific scale |
-| `/api/vote` | POST | Submit votes for a sample |
-| `/api/stats` | GET | Get session statistics |
-| `/api/data-summary` | GET | Get loaded data summary |
-| `/api/export/csv` | GET | Export results as CSV |
-| `/api/export/json` | GET | Export results as JSON |
+| `/api/review/start` | POST | Initialize review session |
+| `/api/review/state` | GET | Get current review state |
+| `/api/review/matches` | GET | Get matched swings for Phase 1 |
+| `/api/review/fp-sample` | GET | Get sampled FPs for Phase 2 |
+| `/api/review/fn-list` | GET | Get all FNs for Phase 3 |
+| `/api/review/feedback` | POST | Submit feedback on a swing |
+| `/api/review/advance` | POST | Advance to next phase |
+| `/api/review/summary` | GET | Get final review summary |
+| `/api/review/export` | GET | Export feedback (JSON or CSV) |
 
-### Progressive Loading Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/windows` | GET | List all data windows with status |
-| `/api/windows/{id}` | GET | Switch to specific window |
-| `/api/windows/next` | POST | Switch to next ready window |
-| `/api/loading-status` | GET | Get background loading progress |
-
-## Session Files
-
-Validation results are saved to `validation_results/session_{timestamp}.json` containing:
-- Session metadata
-- All votes and comments
-- Statistics by scale
-
----
-
-# Swing Validation Harness
-
-The Swing Validation Harness is an interactive tool for validating swing detection logic across historical market data. It provides a 4-panel visualization showing swing activity at four structural scales (S, M, L, XL) with Fibonacci level overlays, enabling systematic expert review of detection accuracy.
-
-## Quick Start
-
-### Prerequisites
-- Python 3.8+ with virtual environment
-- Matplotlib with TkAgg backend
-- Historical OHLC data in `Data/Historical/` directory
-
-### Activate Environment
-```bash
-cd /path/to/fractal-market-simulator
-source venv/bin/activate
-```
-
-### Discover Available Data
-```bash
-# See what data is available
-python3 -m src.visualization_harness.main list-data --symbol ES
-
-# Get detailed file information
-python3 -m src.visualization_harness.main list-data --symbol ES --resolution 1m --verbose
-```
-
-### Launch Validation Session
-```bash
-python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
-  --start 2024-01-01 --end 2024-01-31
-```
-
-## What You'll See
-
-### Terminal Output
-After initialization, you'll see:
-1. Data loading summary (files loaded, bar count, date range)
-2. Scale calibration results (S, M, L, XL point boundaries)
-3. Session startup banner with quick-start instructions
-4. The `validation>` prompt for interactive commands
-
-### Visualization Window
-A matplotlib window appears with four panels in a 2x2 grid:
-- **Top-left (S)**: Small-scale swings (short timeframe)
-- **Top-right (M)**: Medium-scale swings
-- **Bottom-left (L)**: Large-scale swings
-- **Bottom-right (XL)**: Extra-large swings (long timeframe)
-
-Each panel displays:
-- OHLC candlesticks for price action
-- Horizontal Fibonacci level lines from active swings
-- A swing body indicator on the left margin
-- Event markers for completions/invalidations
-
-## CLI Commands
-
-### Playback Control
-
-| Command | Action |
-|---------|--------|
-| `play` | Start auto-playback (pauses on major events) |
-| `play fast` | Fast playback (skips minor events) |
-| `pause` | Pause playback |
-| `step` | Advance one step |
-| `step N` | Advance N steps |
-| `jump <idx>` | Jump to bar index |
-| `speed <mult>` | Set speed multiplier (e.g., 2.0) |
-| `status` | Show current position and state |
-
-### Validation Actions
-
-| Command | Action |
-|---------|--------|
-| `log accuracy` | Log swing identification issue |
-| `log level` | Log Fibonacci level problem |
-| `log event` | Log completion/invalidation issue |
-| `log consistency` | Log multi-scale relationship problem |
-| `log <type> <desc>` | Log issue with inline description |
-
-### Session Management
-
-| Command | Action |
-|---------|--------|
-| `help` / `h` / `?` | Show command reference |
-| `quit` / `q` | End session and save findings |
-
-## Keyboard Shortcuts
-
-Click on the matplotlib window to give it focus, then use:
-
-### Playback
-| Key | Action |
-|-----|--------|
-| SPACE | Toggle play/pause |
-| RIGHT | Step forward one bar |
-| F | Step forward 1 hour (60 bars) |
-| G | Step forward 4 hours (240 bars) |
-| D | Step forward 1 day (1440 bars) |
-| UP | Double playback speed |
-| DOWN | Halve playback speed |
-| R | Reset to beginning |
-| H | Show keyboard help in terminal |
-
-### Layout
-| Key | Action |
-|-----|--------|
-| 1 | Expand S-scale panel |
-| 2 | Expand M-scale panel |
-| 3 | Expand L-scale panel |
-| 4 | Expand XL-scale panel |
-| 0 or ESC | Return to quad layout |
-| Click panel | Toggle expand/collapse |
-
-### Swing Visibility
-| Key | Action |
-|-----|--------|
-| V | Cycle visibility mode (All -> Single -> Recent -> All) |
-| [ | Previous swing (in Single mode) |
-| ] | Next swing (in Single mode) |
-| A | Toggle show all swings (bypass 5-swing cap) |
-
-## Advanced Usage
-
-### Reference Period for Pre-Calibration
-
-Use `--playback-start` to specify when playback begins. Data between `--start` and `--playback-start` is used to calibrate swing state before you start watching:
-
-```bash
-# Use Jan-Mar 2020 as reference, start playback from April
-python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
-  --start 2020-01-01 --end 2020-05-01 \
-  --playback-start 2020-04-01
-```
-
-This is useful when you want to observe "mature" swing behavior without waiting through initialization.
-
-### Timeframe-Based Stepping
-
-Use `--step-timeframe` to advance by larger time chunks instead of 1-minute bars:
-
-```bash
-# Step by 60 minutes (1 hour) at a time
-python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
-  --start 2024-01-01 --end 2024-01-31 \
-  --step-timeframe 60
-```
-
-Options: 1, 5, 15, 30, 60, 240 minutes.
-
-### Verbose Mode
-
-Add `--verbose` for detailed progress logging:
-
-```bash
-python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
-  --start 2024-01-01 --end 2024-01-31 --verbose
-```
-
-Shows:
-- Which data files were loaded
-- Periodic progress reports during playback
-- Major event notifications
-
-### Combined Example
-
-```bash
-# Full-featured validation session
-python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
-  --start 2020-01-01 --end 2020-06-01 \
-  --playback-start 2020-04-01 \
-  --step-timeframe 60 \
-  --verbose
-```
-
-## Typical Workflows
-
-### Manual Step-by-Step Review
-
-Best for detailed examination of specific periods:
-
-```
-validation> jump 1000       # Go to bar 1000
-validation> step            # Advance one bar
-validation> step            # Watch swing updates
-validation> log accuracy Swing high detected too early at bar 1002
-validation> step 10         # Skip ahead 10 bars
-```
-
-### Auto-Play with Event Pauses
-
-Best for scanning for interesting patterns:
-
-```
-validation> play            # Start auto-advance
-[system pauses on major events]
-validation> log level 1.618 extension looks incorrect
-validation> play            # Resume
-```
-
-### Quick Scan Mode
-
-Best for rapid overview of extended periods:
-
-```
-validation> play fast       # Fast forward
-[watch visualization for obvious issues]
-validation> pause           # Stop at interesting point
-validation> step            # Fine-grained review
-```
-
-## Understanding the Visualization
-
-### Panel Layout
-
-Each panel shows one scale (S, M, L, XL) with its own timeframe aggregation:
-- **S (Small)**: Fastest timeframe, shows micro-structure
-- **M (Medium)**: Intermediate swings
-- **L (Large)**: Major structural moves
-- **XL (Extra Large)**: Macro market structure
-
-### Swing Body Indicator
-
-On the left margin of each panel:
-- Vertical colored bar represents the swing's price range (high to low)
-- Green = Bull swing (upward)
-- Red = Bear swing (downward)
-- "H" label at swing high, "L" label at swing low
-
-### Fibonacci Levels
-
-Horizontal lines show key price levels relative to the reference swing:
-- **0**: Swing low (bull) or swing high (bear)
-- **0.382, 0.5, 0.618**: Retracement levels
-- **1.0**: Swing high (bull) or swing low (bear)
-- **1.382, 1.5, 1.618**: Extension levels
-- **2.0**: Completion level (swing is "done")
-
-### Picture-in-Picture (PiP)
-
-When the swing body scrolls off the left edge of the panel, a small inset appears in the upper-left corner showing:
-- Schematic swing body with direction
-- Key levels (0, 0.5, 1.0, 1.618, 2.0)
-- High and low price labels
-
-## Scale-Specific Validation Rules
-
-The system uses different invalidation rules for different scales:
-
-### S/M Scales (Strict)
-- Bull swing: Invalid if price ever trades below swing low
-- Bear swing: Invalid if price ever trades above swing high
-
-### L/XL Scales (Soft)
-- More tolerance for noise and wicks
-- Deep threshold: 15% of swing size beyond the boundary
-- Soft threshold: 10% on close price
-
-This reflects market reality where larger structures can absorb more volatility.
-
-## Session Files
-
-Validation sessions are automatically saved to `validation_sessions/` directory:
-- `{session_id}.json` contains session metadata and logged issues
-- Sessions can be resumed if the application restarts
-
-## Troubleshooting
-
-### No matplotlib window appears
-1. Ensure matplotlib is installed: `pip install matplotlib`
-2. Verify TkAgg backend: Add `matplotlib.use('TkAgg')` before any pyplot imports
-3. Check you're not in a headless/SSH environment
-
-### Date range errors
-```bash
-# Check what dates are available
-python3 -m src.visualization_harness.main list-data --symbol ES --resolution 1m --verbose
-```
-Adjust `--start` and `--end` to overlap with available data.
-
-### Initialization hangs
-- Large datasets (100K+ bars) take time to calibrate
-- Use `--verbose` to monitor progress
-- Consider smaller date ranges or using `--playback-start` for pre-calibration
-
-### Keyboard shortcuts not working
-- Click on the matplotlib window to give it focus
-- The terminal must not be blocking input
-
-## Issue Types Reference
-
-When logging issues, use these types:
-
-| Type | Use For |
-|------|---------|
-| `accuracy` | Swing highs/lows identified incorrectly |
-| `level` | Fibonacci level computation errors |
-| `event` | Completion/invalidation timing issues |
-| `consistency` | Multi-scale relationship problems |
-| `performance` | Response time or memory issues |
-
-## Example Session
-
-```bash
-$ python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m \
-    --start 2024-01-15 --end 2024-01-20 --verbose
-
-Loading ES 1m data from 2024-01-15 to 2024-01-20...
-Loaded 3,450 bars from 2 files
-
-Scale calibration complete:
-  S: 0-25 points (1m resolution)
-  M: 25-45 points (5m resolution)
-  L: 45-90 points (15m resolution)
-  XL: 90+ points (60m resolution)
-
-╔════════════════════════════════════════════════════════════╗
-║           VALIDATION SESSION STARTED                       ║
-║                                                            ║
-║  Type 'help' for commands, 'quit' to exit                 ║
-║  Click matplotlib window and use keyboard shortcuts        ║
-╚════════════════════════════════════════════════════════════╝
-
-validation> step 100
-Stepped to bar 300
-
-validation> play
-Playing... (press SPACE in window to pause)
-
-[Auto-paused: MAJOR event - L scale completion at bar 423]
-
-validation> log level The 1.618 extension seems off by ~2 points
-
-validation> play
-Playing...
-
-validation> quit
-Session saved to validation_sessions/abc123.json
-Logged 1 issue(s)
-```
-
-## Next Steps
-
-After validation, review logged issues in the session JSON files. Issues are categorized by type and severity, making it easy to prioritize fixes to the swing detection logic.
-
-The goal is to establish expert confidence in the detection foundation before proceeding to the market data generator phase.

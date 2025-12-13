@@ -109,13 +109,15 @@ class AnnotationSession:
     created_at: datetime
     annotations: List[SwingAnnotation] = field(default_factory=list)
     completed_scales: List[str] = field(default_factory=list)
+    window_offset: int = 0      # Offset into source data (for random window selection)
 
     @classmethod
     def create(
         cls,
         data_file: str,
         resolution: str,
-        window_size: int
+        window_size: int,
+        window_offset: int = 0
     ) -> 'AnnotationSession':
         """Factory method to create a new session with auto-generated ID and timestamp."""
         return cls(
@@ -125,7 +127,8 @@ class AnnotationSession:
             window_size=window_size,
             created_at=datetime.now(timezone.utc),
             annotations=[],
-            completed_scales=[]
+            completed_scales=[],
+            window_offset=window_offset
         )
 
     def add_annotation(self, annotation: SwingAnnotation) -> None:
@@ -160,6 +163,7 @@ class AnnotationSession:
             'data_file': self.data_file,
             'resolution': self.resolution,
             'window_size': self.window_size,
+            'window_offset': self.window_offset,
             'created_at': self.created_at.isoformat(),
             'annotations': [a.to_dict() for a in self.annotations],
             'completed_scales': self.completed_scales
@@ -175,7 +179,8 @@ class AnnotationSession:
             window_size=data['window_size'],
             created_at=datetime.fromisoformat(data['created_at']),
             annotations=[SwingAnnotation.from_dict(a) for a in data.get('annotations', [])],
-            completed_scales=data.get('completed_scales', [])
+            completed_scales=data.get('completed_scales', []),
+            window_offset=data.get('window_offset', 0)
         )
         return session
 

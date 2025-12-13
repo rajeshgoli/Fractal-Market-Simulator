@@ -20,6 +20,7 @@ from src.ground_truth_annotator.models import (
     SwingAnnotation, AnnotationSession, SwingFeedback, ReviewSession, REVIEW_PHASES
 )
 from src.ground_truth_annotator.storage import AnnotationStorage, ReviewStorage
+from src.ground_truth_annotator.main import parse_offset
 
 
 # ============================================================================
@@ -909,3 +910,170 @@ class TestReviewStorage:
         rev_storage = ReviewStorage(storage_dir)
 
         assert ann_storage._storage_dir == rev_storage._storage_dir
+
+
+# ============================================================================
+# parse_offset Tests
+# ============================================================================
+
+class TestParseOffset:
+    """Tests for the parse_offset function in main.py."""
+
+    def test_parse_offset_random_returns_valid_range(self):
+        """Test 'random' returns value in valid range."""
+        # Run multiple times to verify random behavior stays in bounds
+        for _ in range(100):
+            offset = parse_offset("random", total_bars=10000, window_size=5000)
+            # max_offset = 10000 - 5000 = 5000
+            assert 0 <= offset <= 5000
+
+    def test_parse_offset_random_case_insensitive(self):
+        """Test 'random' is case insensitive."""
+        for variant in ["random", "Random", "RANDOM", "RaNdOm"]:
+            offset = parse_offset(variant, total_bars=1000, window_size=100)
+            assert 0 <= offset <= 900
+
+    def test_parse_offset_integer_returns_that_integer(self):
+        """Test integer string returns that integer."""
+        assert parse_offset("0", total_bars=1000, window_size=100) == 0
+        assert parse_offset("500", total_bars=1000, window_size=100) == 500
+        assert parse_offset("1234", total_bars=2000, window_size=100) == 1234
+
+    def test_parse_offset_zero_default(self):
+        """Test default value is 0."""
+        # When using explicit "0"
+        assert parse_offset("0", total_bars=1000, window_size=100) == 0
+
+    def test_parse_offset_random_with_small_window(self):
+        """Test random with window_size >= total_bars returns 0."""
+        # When window_size equals total_bars, max_offset = 0
+        offset = parse_offset("random", total_bars=100, window_size=100)
+        assert offset == 0
+
+        # When window_size > total_bars, max_offset = 0
+        offset = parse_offset("random", total_bars=100, window_size=200)
+        assert offset == 0
+
+    def test_parse_offset_random_produces_variety(self):
+        """Test random actually produces different values."""
+        offsets = set()
+        for _ in range(100):
+            offset = parse_offset("random", total_bars=100000, window_size=1000)
+            offsets.add(offset)
+
+        # Should produce multiple different values (very likely with large range)
+        assert len(offsets) > 1
+
+
+# ============================================================================
+# AnnotationSession window_offset Tests
+# ============================================================================
+
+class TestAnnotationSessionWindowOffset:
+    """Tests for AnnotationSession window_offset field."""
+
+    def test_create_session_with_window_offset(self):
+        """Test session creation with window_offset parameter."""
+        session = AnnotationSession.create(
+            data_file="test_data.csv",
+            resolution="1m",
+            window_size=200,
+            window_offset=5000
+        )
+
+        assert session.window_offset == 5000
+
+    def test_create_session_default_window_offset(self):
+        """Test session creation with default window_offset (0)."""
+        session = AnnotationSession.create(
+            data_file="test_data.csv",
+            resolution="1m",
+            window_size=200
+        )
+
+        assert session.window_offset == 0
+
+    def test_session_serialization_includes_window_offset(self):
+        """Test window_offset is included in to_dict."""
+        session = AnnotationSession.create(
+            data_file="test.csv",
+            resolution="1m",
+            window_size=200,
+            window_offset=1234
+        )
+
+        data = session.to_dict()
+
+        assert 'window_offset' in data
+        assert data['window_offset'] == 1234
+
+    def test_session_deserialization_restores_window_offset(self):
+        """Test window_offset is restored from from_dict."""
+        session = AnnotationSession.create(
+            data_file="test.csv",
+            resolution="1m",
+            window_size=200,
+            window_offset=5678
+        )
+
+        data = session.to_dict()
+        restored = AnnotationSession.from_dict(data)
+
+        assert restored.window_offset == 5678
+
+    def test_session_deserialization_handles_missing_window_offset(self):
+        """Test from_dict handles legacy data without window_offset."""
+        # Simulate legacy data without window_offset field
+        data = {
+            'session_id': 'test-session-id',
+            'data_file': 'test.csv',
+            'resolution': '1m',
+            'window_size': 200,
+            'created_at': '2025-01-01T00:00:00+00:00',
+            'annotations': [],
+            'completed_scales': []
+            # No window_offset field
+        }
+
+        session = AnnotationSession.from_dict(data)
+
+        assert session.window_offset == 0  # Default value
+
+
+class TestAnnotationStorageWindowOffset:
+    """Tests for AnnotationStorage with window_offset."""
+
+    def test_create_session_with_window_offset(self, storage):
+        """Test creating session with window_offset through storage."""
+        session = storage.create_session(
+            data_file="test_data.csv",
+            resolution="1m",
+            window_size=200,
+            window_offset=10000
+        )
+
+        assert session.window_offset == 10000
+
+        # Verify persisted
+        loaded = storage.get_session(session.session_id)
+        assert loaded.window_offset == 10000
+
+    def test_persistence_with_window_offset(self, storage_dir):
+        """Test window_offset persists across storage restarts."""
+        # Create first storage instance and add data
+        storage1 = AnnotationStorage(storage_dir)
+        session = storage1.create_session(
+            data_file="test.csv",
+            resolution="1m",
+            window_size=200,
+            window_offset=7890
+        )
+        session_id = session.session_id
+
+        # Create new storage instance (simulating restart)
+        storage2 = AnnotationStorage(storage_dir)
+
+        # Verify data persisted
+        loaded_session = storage2.get_session(session_id)
+        assert loaded_session is not None
+        assert loaded_session.window_offset == 7890

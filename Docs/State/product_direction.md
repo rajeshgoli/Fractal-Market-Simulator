@@ -36,7 +36,11 @@ Without Review Mode UI, we can annotate but can't complete the feedback loop. Th
 
 ---
 
-## Implementation Sequence
+## P2: Annotation UX (Deferred)
+
+### Zoom/Pan for S-Scale
+
+**Problem:** Snap is finicky at S-scale. May need horizontal (time) and vertical (price) zoom plus pan.
 
 | Phase | Status | Notes |
 |-------|--------|-------|
@@ -59,7 +63,7 @@ The annotation + review tool should be:
 
 ---
 
-## Checkpoint Trigger
+## Delivered (This Cycle)
 
 **Invoke Product when:**
 - Review Mode UI is complete
@@ -68,7 +72,7 @@ The annotation + review tool should be:
 
 ---
 
-## Assumptions and Risks
+## Deferred
 
 ### Assumptions
 1. Review Mode UI is straightforward (standard web forms, no complex interactions)
@@ -84,7 +88,15 @@ The annotation + review tool should be:
 
 ---
 
-## Future: Generator Phase
+## Session Context (for next conversation)
+
+**Where we are:** Tooling complete. Ground truth annotator with Review Mode and session flow is production-ready. Codebase cleaned up (~14,500 lines removed).
+
+**What's next:**
+1. Run annotation sessions to collect ground truth data
+2. Analyze Review Mode feedback for patterns
+3. Use patterns to refine detection rules
+4. Iterate: better rules → cleaner detections → validate at scale
 
 After validation establishes confidence in detection foundations:
 - Reverse analytical process to generate realistic price data

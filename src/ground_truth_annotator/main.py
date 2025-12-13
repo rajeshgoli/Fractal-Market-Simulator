@@ -11,6 +11,7 @@ Cascade mode (XL → L → M → S progression):
 
 import argparse
 import logging
+import random
 import sys
 import time
 
@@ -34,6 +35,24 @@ def format_number(n: int) -> str:
     elif n >= 1_000:
         return f"{n / 1_000:.1f}K"
     return str(n)
+
+
+def parse_offset(offset_str: str, total_bars: int, window_size: int) -> int:
+    """
+    Parse offset argument, handling 'random' keyword.
+
+    Args:
+        offset_str: The offset value - either 'random' or an integer string
+        total_bars: Total number of bars in the data file
+        window_size: Number of bars in the window
+
+    Returns:
+        Integer offset into the data
+    """
+    if offset_str.lower() == 'random':
+        max_offset = max(0, total_bars - window_size)
+        return random.randint(0, max_offset) if max_offset > 0 else 0
+    return int(offset_str)
 
 
 def main():
@@ -97,6 +116,12 @@ def main():
         action="store_true",
         help="Enable XL → L → M → S cascade workflow (overrides --scale and --target-bars)"
     )
+    parser.add_argument(
+        "--offset",
+        type=str,
+        default="0",
+        help="Start offset in bars. Use 'random' for random position, or integer for fixed offset (default: 0)"
+    )
 
     args = parser.parse_args()
 
@@ -112,13 +137,18 @@ def main():
     print("Ground Truth Annotator")
     print(f"{'='*60}")
 
+    offset = 0  # Default offset
     try:
         metrics = get_file_metrics(args.data)
+
+        # Calculate offset
+        offset = parse_offset(args.offset, metrics.total_bars, args.window)
 
         print(f"Data file:   {args.data}")
         print(f"Resolution:  {args.resolution}")
         print(f"Total bars:  {format_number(metrics.total_bars)}")
         print(f"Window:      {format_number(args.window)} bars")
+        print(f"Offset:      {format_number(offset)} {'(random)' if args.offset.lower() == 'random' else ''}")
         if args.cascade:
             print(f"Mode:        CASCADE (XL → L → M → S)")
         else:
@@ -144,7 +174,8 @@ def main():
             window_size=args.window,
             scale=args.scale,
             target_bars=args.target_bars,
-            cascade=args.cascade
+            cascade=args.cascade,
+            window_offset=offset
         )
         init_time = time.time() - start_time
     except FileNotFoundError as e:

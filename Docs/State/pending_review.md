@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2025-12-12
 
@@ -8,15 +8,7 @@
 
 ## Pending Changes
 
-### 2025-12-12 - Review Mode Controller
-- **Issue:** #40
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/review_controller.py`, `tests/ground_truth_annotator/test_review_controller.py`
-
-### 2025-12-12 - Review Mode Data Models
-- **Issue:** #39
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/models.py`, `src/ground_truth_annotator/storage.py`, `tests/test_ground_truth_foundation.py`
+(None)
 
 ---
 
@@ -24,6 +16,8 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 12 | #44 - Deprecated module removal | Accepted |
+| Dec 12 | Review Mode epic (#38) - #39, #40, #41, #42, #43 | All Accepted, epic closed |
 | Dec 12 | #32, #33, #34, #35, #37 - UX polish batch | All Accepted |
 | Dec 12 | #27, #28, #29, #30 - Ground truth annotation tool MVP | All Accepted |
 | Dec 12 | Ground truth annotation design question | Approved - ready for engineering |

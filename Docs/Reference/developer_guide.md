@@ -13,15 +13,11 @@ A comprehensive reference for developers working on the Fractal Market Simulator
 5. [Module Reference](#module-reference)
    - [Data Layer](#data-layer)
    - [Swing Analysis](#swing-analysis)
-   - [Visualization Harness](#visualization-harness)
-   - [Validation Infrastructure](#validation-infrastructure)
    - [Ground Truth Annotator](#ground-truth-annotator)
-   - [Lightweight Swing Validator](#lightweight-swing-validator)
 6. [Key Data Structures](#key-data-structures)
-7. [Configuration System](#configuration-system)
-8. [Extending the System](#extending-the-system)
-9. [Testing](#testing)
-10. [Troubleshooting](#troubleshooting)
+7. [Extending the System](#extending-the-system)
+8. [Testing](#testing)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -51,23 +47,11 @@ python -m pytest tests/ -v
 # Ground Truth Annotator (two-click swing annotation)
 python -m src.ground_truth_annotator.main --data test_data/test.csv --scale S
 
-# Lightweight Swing Validator (voting-based validation)
-python -m src.lightweight_swing_validator.main --data test_data/test.csv
+# Cascade mode (XL → L → M → S workflow)
+python -m src.ground_truth_annotator.main --data test_data/test.csv --cascade
 
-# Basic visualization harness
-python main.py --data test.csv
-
-# With auto-start and custom speed
-python main.py --data market_data.csv --auto-start --speed 2.0
-
-# Show available options
-python main.py --help
-
-# Discover available historical data
-python3 -m src.visualization_harness.main list-data --symbol ES --verbose
-
-# Run historical validation
-python3 -m src.visualization_harness.main validate --symbol ES --resolution 1m --start 2024-10-10 --end 2024-10-11
+# Random window selection
+python -m src.ground_truth_annotator.main --data test_data/test.csv --cascade --offset random
 ```
 
 ### Git Conventions
@@ -97,29 +81,29 @@ The system follows a pipeline architecture with clear separation of concerns:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        SWING ANALYSIS                                    │
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐    │
-│  │   Scale      │────▶│    Bar       │────▶│   Swing State        │    │
-│  │ Calibrator   │     │ Aggregator   │     │   Manager            │    │
+│  │   Scale      │────▶│    Bar       │────▶│   Swing Detector     │    │
+│  │ Calibrator   │     │ Aggregator   │     │   (O(N log N))       │    │
 │  └──────────────┘     └──────────────┘     └──────────────────────┘    │
 │         │                    │                       │                  │
 │         ▼                    ▼                       ▼                  │
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐    │
-│  │ Boundaries   │     │ Multi-TF     │     │   Event Detector     │    │
-│  │ (S,M,L,XL)   │     │ OHLC Cache   │     │ (cross/complete/inv) │    │
+│  │ Boundaries   │     │ Multi-TF     │     │ Comparison Analyzer  │    │
+│  │ (S,M,L,XL)   │     │ OHLC Cache   │     │   (FN/FP detection)  │    │
 │  └──────────────┘     └──────────────┘     └──────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
                                    │
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                      VISUALIZATION HARNESS                               │
+│                    GROUND TRUTH ANNOTATOR                                │
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐    │
-│  │  Renderer    │◀───▶│  Playback    │◀───▶│   Event Logger       │    │
-│  │ (4-panel)    │     │ Controller   │     │  (search/export)     │    │
+│  │  FastAPI     │◀───▶│  Cascade     │◀───▶│   Review Controller  │    │
+│  │  (REST API)  │     │ Controller   │     │  (feedback phases)   │    │
 │  └──────────────┘     └──────────────┘     └──────────────────────┘    │
 │         │                    │                       │                  │
 │         ▼                    ▼                       ▼                  │
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐    │
-│  │ matplotlib   │     │ Thread-safe  │     │   CSV/JSON Export    │    │
-│  │ Candlesticks │     │ Auto-play    │     │   Full-text Search   │    │
+│  │ Web-based UI │     │ XL→L→M→S     │     │   JSON/CSV Export    │    │
+│  │ (Two-click)  │     │ Workflow     │     │   Feedback Storage   │    │
 │  └──────────────┘     └──────────────┘     └──────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -128,7 +112,6 @@ The system follows a pipeline architecture with clear separation of concerns:
 
 ```
 fractal-market-simulator/
-├── main.py                          # Application entry point
 ├── src/
 │   ├── data/
 │   │   ├── ohlc_loader.py          # CSV data loading
@@ -140,42 +123,19 @@ fractal-market-simulator/
 │   │   ├── bar_aggregator.py            # Multi-timeframe bar aggregation
 │   │   ├── swing_state_manager.py       # Active swing tracking
 │   │   ├── event_detector.py            # Structural event detection
-│   │   └── swing_detector.py            # Legacy swing detection (pandas)
-│   ├── visualization_harness/
-│   │   ├── harness.py              # Main CLI harness
-│   │   ├── main.py                 # Multi-command CLI entry
-│   │   ├── renderer.py             # 4-panel matplotlib visualization
-│   │   ├── render_config.py        # Styling and layout configuration
-│   │   ├── controller.py           # Playback control
-│   │   ├── playback_config.py      # Playback modes and states
-│   │   ├── event_logger.py         # Event logging with export
-│   │   ├── display.py              # Event formatting
-│   │   ├── filters.py              # Event filtering
-│   │   ├── layout_manager.py       # Dynamic panel layouts
-│   │   ├── pip_inset.py            # Picture-in-picture insets
-│   │   └── swing_visibility.py     # Swing display filtering
-│   ├── validation/
-│   │   ├── session.py              # Validation session management
-│   │   └── issue_catalog.py        # Issue tracking
-│   ├── ground_truth_annotator/
-│   │   ├── main.py                 # CLI entry point
-│   │   ├── api.py                  # FastAPI endpoints
-│   │   ├── models.py               # SwingAnnotation, AnnotationSession
-│   │   ├── storage.py              # JSON-backed persistence
-│   │   ├── comparison_analyzer.py  # Compare annotations vs system detection
-│   │   ├── cascade_controller.py   # XL→L→M→S scale progression
-│   │   └── static/index.html       # Two-click annotation UI
-│   └── lightweight_swing_validator/
+│   │   └── swing_detector.py            # O(N log N) vectorized swing detection
+│   └── ground_truth_annotator/
 │       ├── main.py                 # CLI entry point
 │       ├── api.py                  # FastAPI endpoints
-│       ├── models.py               # Validation data models
-│       ├── sampler.py              # Random interval sampling
-│       ├── storage.py              # Vote storage
-│       ├── progressive_loader.py   # Large file handling
-│       └── static/index.html       # Validation UI
-├── tests/                          # Test suite (489 tests)
+│       ├── models.py               # SwingAnnotation, AnnotationSession
+│       ├── storage.py              # JSON-backed persistence
+│       ├── comparison_analyzer.py  # Compare annotations vs system detection
+│       ├── cascade_controller.py   # XL→L→M→S scale progression
+│       ├── review_controller.py    # Review Mode workflow
+│       └── static/index.html       # Two-click annotation UI
+├── tests/                          # Test suite (388+ tests)
 ├── Docs/                           # Documentation
-└── data/                           # Sample data files
+└── test_data/                      # Sample data files
 ```
 
 ---
@@ -308,22 +268,11 @@ For each new bar at index N:
        │
        └─▶ Returns List[StructuralEvent]
 
-3. Log Events
-   └─▶ event_logger.log_events_batch(events, market_context)
-       └─▶ Generates auto-tags
-       └─▶ Updates indices for fast lookup
-
-4. Update Visualization
-   └─▶ renderer.update_display(bar_idx, active_swings, events)
-       │
-       ├─▶ For each panel (S, M, L, XL):
-       │   └─▶ Calculate view window in aggregated space
-       │   └─▶ Draw OHLC candlesticks
-       │   └─▶ Draw swing bodies (left margin schematic)
-       │   └─▶ Draw Fibonacci level lines
-       │   └─▶ Draw event markers
-       │
-       └─▶ Refresh matplotlib canvas
+3. Compare Against Ground Truth
+   └─▶ comparison_analyzer.compare_session(session, bars, scales)
+       └─▶ Identifies false negatives (user marked, system missed)
+       └─▶ Identifies false positives (system found, user didn't mark)
+       └─▶ Calculates match rate
 ```
 
 ---
@@ -531,203 +480,6 @@ events = detector.detect_events(current_bar, active_swings)
 **Key Function**: `detect_swings(df, lookback=5, filter_redundant=True)`
 
 Uses `SparseTable` for O(1) range minimum/maximum queries to validate swing structure efficiently.
-
----
-
-### Visualization Harness
-
-#### `src/visualization_harness/renderer.py`
-
-**Purpose**: 4-panel synchronized matplotlib display.
-
-**Key Class**: `VisualizationRenderer`
-
-```python
-renderer = VisualizationRenderer(scale_config, bar_aggregator)
-renderer.initialize_display()
-renderer.show_display()
-
-# Update with new state
-renderer.update_display(
-    current_bar_idx=100,
-    active_swings=swings,
-    recent_events=events
-)
-```
-
-**Visual Elements**:
-- 2x2 grid showing S/M/L/XL scales simultaneously
-- OHLC candlestick rendering with bullish/bearish coloring
-- Swing body schematic (left margin rectangle showing H/L)
-- Fibonacci level lines with labels
-- Event markers (triangles for crosses, stars for completions, X for invalidations)
-
-**Features**:
-- Frame skipping for high-speed playback
-- Dynamic timeframe selection (targets 40-60 candles)
-- Thread-safe state caching for layout transitions
-
-**Layout Modes**:
-
-```python
-# Expand a single panel to ~90%
-renderer.expand_panel(panel_idx=0)  # Expand S scale
-
-# Return to standard 2x2 grid
-renderer.restore_quad_layout()
-
-# Toggle expansion
-renderer.toggle_panel_expand(panel_idx=1)
-```
-
-#### `src/visualization_harness/controller.py`
-
-**Purpose**: Interactive playback control with auto-pause intelligence.
-
-**Key Class**: `PlaybackController`
-
-```python
-controller = PlaybackController(total_bars=5000)
-controller.set_event_callback(my_step_handler)
-
-# Start playback
-controller.start_playback(mode=PlaybackMode.AUTO)
-
-# Manual control
-controller.step_forward()
-controller.pause_playback(reason="Major event")
-controller.jump_to_bar(1000)
-
-# Get status
-status = controller.get_status()
-```
-
-**Playback Modes**:
-
-| Mode | Behavior |
-|------|----------|
-| `MANUAL` | Step-by-step, no auto-advance |
-| `AUTO` | Auto-advance with configured speed |
-| `FAST` | Rapid playback, minimal delays |
-
-**Playback States**:
-
-| State | Description |
-|-------|-------------|
-| `STOPPED` | Initial state or after stop |
-| `PLAYING` | Active playback |
-| `PAUSED` | Paused by user or event |
-| `FINISHED` | Reached end of data |
-
-**Auto-Pause Logic**: Automatically pauses on major events (completions, invalidations) when `pause_on_major_events=True`.
-
-#### `src/visualization_harness/event_logger.py`
-
-**Purpose**: Comprehensive event logging with search and export.
-
-**Key Class**: `EventLogger`
-
-```python
-logger = EventLogger(session_id="session_001")
-
-# Log events
-event_id = logger.log_event(structural_event, market_context)
-
-# Query events
-events = logger.get_events(
-    filter_criteria=LogFilter(scales=["M", "L"]),
-    limit=50
-)
-
-# Full-text search
-matches = logger.search_events("completion 0.618")
-
-# Export
-logger.export_to_csv("events.csv")
-logger.export_to_json("events.json")
-
-# Statistics
-stats = logger.get_event_statistics()
-```
-
-**Auto-Tagging**: Events are automatically tagged based on:
-- Severity: `severity-major`, `severity-minor`
-- Type: `type-completion`, `type-level_cross`
-- Scale: `scale-S`, `scale-M`, etc.
-- Level category: `critical-level`, `retracement`, `decision-zone`
-- Swing age: `new-swing`, `mature-swing`
-
-#### `src/visualization_harness/harness.py`
-
-**Purpose**: Unified CLI integrating all components.
-
-**Interactive Commands**:
-
-| Command | Description |
-|---------|-------------|
-| `help` | Show available commands |
-| `status` | Show current playback status |
-| `play` / `pause` | Control playback |
-| `step` | Step forward one bar |
-| `speed <N>` | Set playback speed multiplier |
-| `events <N>` | Show last N events |
-| `filter <criteria>` | Filter events |
-| `export csv <file>` | Export events to CSV |
-| `export json <file>` | Export events to JSON |
-| `quit` | Exit application |
-
----
-
-### Validation Infrastructure
-
-#### `src/validation/session.py`
-
-**Purpose**: Manage validation sessions for systematic expert review.
-
-**Key Class**: `ValidationSession`
-
-```python
-session = ValidationSession(
-    symbol="ES",
-    resolution="1m",
-    start_date=datetime(2024, 10, 10),
-    end_date=datetime(2024, 10, 11)
-)
-
-# Start session
-session.start_session("ES", (start_date, end_date))
-
-# Update progress
-session.update_progress(current_bar=100, total_bars=5000)
-
-# Log issues
-session.log_issue(
-    timestamp=datetime.now(),
-    issue_type="accuracy",
-    description="Missed swing low at bar 95",
-    severity="major",
-    suggested_fix="Adjust lookback parameter"
-)
-
-# Add expert notes
-session.add_expert_note("Market was unusually volatile here")
-
-# Save/load session
-session.save_session()
-session.load_session("abc123")
-
-# Export findings
-session.export_findings("validation_report.json")
-```
-
-**Issue Types**:
-- `accuracy`: Incorrect swing detection
-- `level`: Fibonacci calculation issues
-- `event`: Missing or false event triggers
-- `consistency`: Multi-scale relationship issues
-- `performance`: Processing speed issues
-
-**Session Persistence**: Sessions are saved to JSON files in `validation_sessions/` with automatic progress checkpointing.
 
 ---
 
@@ -980,6 +732,46 @@ Tolerance is calculated as: `max(5, int(duration * tolerance_pct))`
 | `/api/compare/report` | GET | Get full report with FN/FP lists |
 | `/api/compare/export` | GET | Export as JSON or CSV |
 
+#### Review Mode API (`/api/review/*`)
+
+**Purpose**: Structured feedback collection on comparison results through a phased workflow.
+
+**Endpoints**:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/review/start` | POST | Initialize review, run comparison if needed, sample FPs |
+| `/api/review/state` | GET | Get current phase and progress |
+| `/api/review/matches` | GET | Get matched swings for Phase 1 review |
+| `/api/review/fp-sample` | GET | Get stratified FP sample for Phase 2 |
+| `/api/review/fn-list` | GET | Get all false negatives for Phase 3 |
+| `/api/review/feedback` | POST | Submit feedback on a swing |
+| `/api/review/advance` | POST | Advance to next review phase |
+| `/api/review/summary` | GET | Get review statistics |
+| `/api/review/export` | GET | Export feedback as JSON or CSV |
+
+**Request/Response Models** (defined in `api.py`):
+
+```python
+class ReviewStateResponse(BaseModel):
+    review_id: str
+    session_id: str
+    phase: str  # "matches" | "fp_sample" | "fn_feedback" | "complete"
+    progress: dict  # {"completed": int, "total": int}
+    is_complete: bool
+
+class FeedbackSubmit(BaseModel):
+    swing_type: str  # "match" | "false_positive" | "false_negative"
+    swing_reference: dict  # {"annotation_id": str} or {"sample_index": int}
+    verdict: str  # "correct" | "incorrect" | "noise" | "valid_missed" | "explained"
+    comment: Optional[str] = None  # Required for false_negative
+    category: Optional[str] = None
+```
+
+**Phase Progression**:
+- `matches` → `fp_sample` → `fn_feedback` → `complete`
+- FN phase requires all false negatives to have feedback with comments before advancing
+
 #### `src/ground_truth_annotator/review_controller.py`
 
 **Purpose**: Manage Review Mode workflow phases (matches → FP sample → FN feedback → complete).
@@ -1076,86 +868,6 @@ sampled, indices = ReviewController.sample_false_positives(
 
 ---
 
-### Lightweight Swing Validator
-
-#### `src/lightweight_swing_validator/sampler.py`
-
-**Purpose**: Random interval sampling for validation.
-
-**Key Class**: `IntervalSampler`
-
-```python
-sampler = IntervalSampler.from_bars(
-    bars=bars,
-    scale_config=scale_config,
-    config=SamplerConfig(data_file="test.csv"),
-    seed=42  # For reproducibility
-)
-
-# Get random sample
-sample = sampler.sample(scale=Scale.M)
-# Returns ValidationSample with bars, candidates, interval info
-```
-
-#### `src/lightweight_swing_validator/progressive_loader.py`
-
-**Purpose**: Fast startup for large datasets (>100K bars).
-
-**Key Class**: `ProgressiveLoader`
-
-```python
-loader = ProgressiveLoader(
-    filepath="large_data.csv",
-    window_size=20000,
-    resolution_minutes=1
-)
-
-# Load initial window quickly (<2s)
-window = loader.load_initial_window()
-
-# Start background loading
-loader.start_background_loading()
-
-# Switch windows
-loader.set_current_window("window_3")
-next_window = loader.get_next_window()
-
-# Check progress
-progress = loader.get_loading_progress()
-```
-
-**Progressive Loading Flow**:
-1. Load random 20K-bar window immediately
-2. Background thread loads remaining windows
-3. UI available within 2 seconds for 6M+ bar files
-
-#### `src/lightweight_swing_validator/storage.py`
-
-**Purpose**: Vote storage and session management.
-
-**Key Class**: `VoteStorage`
-
-```python
-storage = VoteStorage(storage_dir="validation_results")
-
-# Record vote
-result = storage.record_vote(
-    vote_request,
-    sample_scale=Scale.M,
-    interval_start=1000,
-    interval_end=1100
-)
-
-# Get statistics
-stats = storage.get_stats()
-
-# Export
-storage.export_csv("results.csv")
-storage.export_json("results.json")
-```
-
----
-
 ## Key Data Structures
 
 ### Bar
@@ -1235,89 +947,24 @@ class SwingAnnotation:
 
 ---
 
-## Configuration System
-
-### RenderConfig
-
-Located in `src/visualization_harness/render_config.py`:
-
-```python
-@dataclass
-class RenderConfig:
-    # Display
-    figure_size: Tuple[int, int] = (16, 12)
-    max_visible_bars: int = 100
-
-    # Colors
-    background_color: str = "#1E1E1E"
-    text_color: str = "#E0E0E0"
-    grid_color: str = "#404040"
-
-    # Events
-    major_event_color: str = "#FF6B6B"
-    minor_event_color: str = "#4ECDC4"
-    event_marker_size: int = 100
-
-    # Levels
-    level_alpha: float = 0.6
-    level_line_width: float = 1.0
-
-    # Performance
-    enable_frame_skipping: bool = True
-    min_render_interval_ms: int = 50
-
-    # Swing display
-    max_swings_per_scale: int = 3
-    show_all_swings: bool = False
-```
-
-### PlaybackConfig
-
-Located in `src/visualization_harness/playback_config.py`:
-
-```python
-@dataclass
-class PlaybackConfig:
-    auto_speed_ms: int = 500        # Interval for AUTO mode
-    fast_speed_ms: int = 50         # Interval for FAST mode
-    max_playback_speed_hz: int = 60  # Max updates per second
-
-    # Auto-pause settings
-    pause_on_major_events: bool = True
-    pause_on_completion: bool = True
-    pause_on_invalidation: bool = True
-    pause_on_scale_filter: Optional[List[str]] = None
-```
-
----
-
 ## Extending the System
 
 ### Adding a New Scale
 
 1. Update `ScaleCalibrator.calibrate()` to compute additional boundaries
-2. Add scale to `PANEL_SCALE_MAPPING` in `render_config.py`
-3. Update `VisualizationRenderer` grid layout if more than 4 panels needed
+2. Add scale handling in `BarAggregator` for new timeframe if needed
+3. Update ground truth annotator UI to support the new scale
 
 ### Adding a New Event Type
 
 1. Add type to `EventType` enum in `event_detector.py`
 2. Implement detection logic in `EventDetector.detect_events()`
-3. Add marker style in `EVENT_MARKERS` dict in `render_config.py`
-4. Update auto-tagging in `EventLogger._generate_auto_tags()`
 
 ### Adding a New Data Source
 
 1. Add format handler in `OHLCLoader._detect_format()`
 2. Implement parsing in `OHLCLoader._parse_<format>()`
 3. Ensure output is `List[Bar]` with Decimal prices
-
-### Adding a New Visualization Element
-
-1. Add artist storage in `VisualizationRenderer.artists` dict
-2. Implement drawing method `draw_<element>()`
-3. Call from `render_panel()`
-4. Add cleanup in `_clear_panel_artists()`
 
 ---
 
@@ -1347,35 +994,19 @@ tests/
 ├── test_bar_aggregator.py             # Multi-timeframe aggregation
 ├── test_swing_state_manager.py        # Swing tracking state machine
 ├── test_event_detector.py             # Event detection logic
-├── test_visualization_renderer.py     # Rendering and display
-├── test_playback_controller.py        # Playback state machine
-├── test_event_logger.py               # Logging and export
 ├── test_ohlc_loader.py                # Data loading
+├── test_swing_detector.py             # Swing detection logic
+├── test_swing_detector_unit.py        # Swing detection unit tests
 ├── test_ground_truth_foundation.py    # Annotation models and storage (68 tests)
-├── test_ground_truth_annotator_api.py # Annotator API endpoints (44 tests)
+├── test_ground_truth_annotator_api.py # Annotator API endpoints (71 tests)
 ├── test_comparison_analyzer.py        # Comparison logic (23 tests)
 ├── test_cascade_controller.py         # Cascade workflow (29 tests)
-├── test_lightweight_swing_validator.py # Validator API and sampler
 ├── ground_truth_annotator/
 │   └── test_review_controller.py      # Review Mode controller (28 tests)
 └── conftest.py                        # Shared fixtures
 ```
 
 ### Key Test Patterns
-
-**State Machine Tests** (e.g., PlaybackController):
-
-```python
-def test_state_transitions():
-    controller = PlaybackController(total_bars=100)
-    assert controller.state == PlaybackState.STOPPED
-
-    controller.start_playback(PlaybackMode.AUTO)
-    assert controller.state == PlaybackState.PLAYING
-
-    controller.pause_playback()
-    assert controller.state == PlaybackState.PAUSED
-```
 
 **Event Detection Tests**:
 
@@ -1397,32 +1028,6 @@ def test_completion_detection():
 
 ### Common Issues
 
-#### "No data found for date range"
-
-```bash
-# Check what data is available
-python3 -m src.visualization_harness.main list-data --symbol ES --verbose
-
-# Adjust date range to match available data
-```
-
-#### matplotlib window not appearing
-
-Ensure a GUI backend is configured:
-
-```python
-import matplotlib
-matplotlib.use('TkAgg')  # or 'MacOSX' on macOS
-import matplotlib.pyplot as plt
-```
-
-#### Slow playback performance
-
-1. Enable frame skipping: `RenderConfig.enable_frame_skipping = True`
-2. Increase render interval: `RenderConfig.min_render_interval_ms = 100`
-3. Reduce visible bars: `RenderConfig.max_visible_bars = 50`
-4. Use FAST playback mode
-
 #### Virtual environment issues
 
 ```bash
@@ -1431,6 +1036,15 @@ rm -rf venv
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
+
+#### Port already in use
+
+If the annotator fails to start with a port conflict:
+
+```bash
+# Use a different port
+python -m src.ground_truth_annotator.main --data test_data/test.csv --port 8001
 ```
 
 ### Debug Logging
@@ -1443,9 +1057,9 @@ logging.basicConfig(level=logging.DEBUG)
 ```
 
 Key log sources:
-- `SwingStateManager`: Swing additions/removals
-- `EventDetector`: Event triggers
-- `VisualizationRenderer`: Display updates
+- `SwingDetector`: Swing detection
+- `ComparisonAnalyzer`: FN/FP comparison
+- `ReviewController`: Review Mode phases
 
 ---
 
@@ -1455,8 +1069,7 @@ Key log sources:
 |-----------|--------|----------|-------|
 | Scale calibration | <100ms | ~50ms | ~7,000 bars |
 | Bar aggregation | <100ms | ~50ms | 10K bars |
-| Per-bar analysis | <500ms | ~28ms | Full pipeline |
-| UI update | <100ms | ~50ms | 4-panel refresh |
+| Swing detection | <60s | ~30s | 6M bars |
 | Event detection | <10ms | <1ms | Per bar |
 
 ---
