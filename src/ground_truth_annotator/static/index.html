@@ -633,13 +633,14 @@
             const isBull = startBar.high > endBar.high;
             const startPrice = isBull ? startBar.high : startBar.low;
             const endPrice = isBull ? endBar.low : endBar.high;
-            const range = endPrice - startPrice;
-
+            // Fibonacci convention: 0 = end of move, 1.0 = start of move
+            // Extensions project beyond the start in the retracement direction
+            const fibRange = startPrice - endPrice;
             const levels = [
-                { level: 0, price: startPrice, label: '0' },
-                { level: 0.382, price: startPrice + range * 0.382, label: '0.382' },
-                { level: 1.0, price: endPrice, label: '1.0' },
-                { level: 2.0, price: startPrice + range * 2.0, label: '2.0' },
+                { level: 0, price: endPrice, label: '0' },
+                { level: 0.382, price: endPrice + fibRange * 0.382, label: '0.382' },
+                { level: 1.0, price: startPrice, label: '1.0' },
+                { level: 2.0, price: endPrice + fibRange * 2.0, label: '2.0' },
             ];
 
             levels.forEach(({ price, label }) => {
