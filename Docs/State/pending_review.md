@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-12
 
 ---
 
 ## Pending Changes
+
+### 2025-12-12 - Add preset buttons for FN explanations
+- **Issue:** #47
+- **Type:** Enhancement
+- **Files:** `src/ground_truth_annotator/static/review.html`
 
 ### 2025-12-12 - Fix inverted Fibonacci reference level labels
 - **Issue:** #46
