@@ -1176,7 +1176,10 @@
                     if (reviewBtn) reviewBtn.style.display = 'none';
                     const nextIndex = cascadeState.current_scale_index + 1;
                     const scales = ['XL', 'L', 'M', 'S'];
-                    if (nextIndex < scales.length) {
+                    if (cascadeState.current_scale === 'S') {
+                        // Final scale - will redirect to Review Mode
+                        nextBtn.textContent = 'Complete S → Start Review';
+                    } else if (nextIndex < scales.length) {
                         nextBtn.textContent = `Complete ${cascadeState.current_scale} → Start ${scales[nextIndex]}`;
                     } else {
                         nextBtn.textContent = `Complete ${cascadeState.current_scale}`;
@@ -1230,6 +1233,12 @@
                 }
 
                 const result = await response.json();
+
+                // Check if cascade is complete - redirect to Review Mode
+                if (result.is_complete) {
+                    window.location.href = '/review';
+                    return;
+                }
 
                 // Reload cascade state and UI
                 await loadCascadeState();

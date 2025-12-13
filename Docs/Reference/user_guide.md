@@ -52,6 +52,8 @@ Open http://127.0.0.1:8000 in your browser.
 | `--window N` | Total bars to work with (default: 50000) |
 | `--scale SCALE` | Scale to annotate: S, M, L, XL (default: S) |
 | `--target-bars N` | Target bars to display in chart (default: 200) |
+| `--cascade` | Enable XL → L → M → S cascade workflow |
+| `--offset N` | Start offset in bars. Use 'random' for random position (default: 0) |
 
 ### Examples
 
@@ -64,6 +66,15 @@ python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --scale M -
 
 # Annotate on 5m data with custom port
 python -m src.ground_truth_annotator.main --data data/es-5m.csv --resolution 5m --scale L --port 8001
+
+# Cascade mode (XL → L → M → S) with automatic Review Mode transition
+python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --cascade
+
+# Random window selection for sampling different market regions
+python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --cascade --offset random
+
+# Fixed offset to start at specific bar
+python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --cascade --offset 100000
 ```
 
 ## The Two-Click Annotation Workflow
@@ -259,6 +270,27 @@ After all phases, see statistics:
 ### Exporting Feedback
 
 Click "Export Feedback (JSON)" to download structured feedback for rule iteration.
+
+### Session Flow (Cascade Mode)
+
+When using `--cascade` mode, the session follows this flow:
+
+1. **Annotation Phase**: Progress through XL → L → M → S scales
+2. **Completion**: After completing S scale, automatically redirect to Review Mode
+3. **Review Phase**: Provide qualitative feedback on detection quality
+4. **Next Window**: Click "Load Next Window (Random)" to start a new session at a random offset
+
+This flow enables efficient sampling across different market regions, building a diverse ground truth dataset.
+
+### Load Next Window
+
+After completing review, click **"Load Next Window (Random)"** to:
+- Create a new annotation session
+- Select a random offset into the data file
+- Preserve all current settings (cascade mode, resolution, window size)
+- Start fresh annotation at a different market region
+
+Alternatively, click **"← Back to Annotation"** to return to the current session's annotation view.
 
 ### Keyboard Shortcuts
 

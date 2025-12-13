@@ -680,8 +680,11 @@
                         <button class="btn btn-primary" onclick="exportFeedback()">
                             Export Feedback (JSON)
                         </button>
+                        <button class="btn btn-success" onclick="loadNextWindow()">
+                            Load Next Window (Random)
+                        </button>
                         <button class="btn btn-secondary" onclick="goToAnnotator()">
-                            Back to Annotator
+                            ← Back to Annotation
                         </button>
                     </div>
                 </div>
@@ -1363,6 +1366,21 @@
         // Go back to annotator
         function goToAnnotator() {
             window.location.href = '/';
+        }
+
+        // Load next window with random offset
+        async function loadNextWindow() {
+            try {
+                const response = await fetch('/api/session/next', { method: 'POST' });
+                if (!response.ok) throw new Error(await response.text());
+
+                const result = await response.json();
+                window.location.href = result.redirect_url;
+
+            } catch (error) {
+                console.error('Error loading next window:', error);
+                alert('Failed to load next window: ' + error.message);
+            }
         }
 
         // Keyboard shortcuts

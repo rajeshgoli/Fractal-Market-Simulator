@@ -9,6 +9,7 @@ Provides REST API endpoints for:
 """
 
 import logging
+import random
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -232,6 +233,13 @@ class ReviewSummaryResponse(BaseModel):
     completed_at: Optional[str]
 
 
+class NextSessionResponse(BaseModel):
+    """Response from creating a new session with random offset."""
+    session_id: str
+    offset: int
+    redirect_url: str
+
+
 @dataclass
 class AppState:
     """Application state."""
@@ -248,6 +256,12 @@ class AppState:
     review_storage: Optional[ReviewStorage] = None
     review_controller: Optional[ReviewController] = None
     comparison_results: Optional[Dict[str, ComparisonResult]] = None  # Cached comparison
+    # Fields for session/next endpoint
+    data_file: Optional[str] = None
+    storage_dir: Optional[str] = None
+    resolution_minutes: int = 1
+    total_source_bars: int = 0  # Total bars in file (before offset/windowing)
+    cascade_enabled: bool = False
 
 
 # Global state
@@ -1110,6 +1124,48 @@ async def export_review(format: str = Query("json")):
         )
 
 
+# ============================================================================
+# Session Flow Endpoints
+# ============================================================================
+
+@app.post("/api/session/next", response_model=NextSessionResponse)
+async def start_next_session():
+    """
+    Create new annotation session with random window offset.
+
+    Preserves current data file and settings, randomizes offset.
+    Reinitializes the application state with the new session.
+    Returns new session_id for redirect.
+    """
+    s = get_state()
+
+    # Calculate random offset
+    window_size = s.session.window_size
+    max_offset = max(0, s.total_source_bars - window_size)
+    new_offset = random.randint(0, max_offset) if max_offset > 0 else 0
+
+    # Reinitialize app with new random offset
+    init_app(
+        data_file=s.data_file,
+        storage_dir=s.storage_dir,
+        resolution_minutes=s.resolution_minutes,
+        window_size=window_size,
+        scale=s.scale,
+        target_bars=s.target_bars,
+        cascade=s.cascade_enabled,
+        window_offset=new_offset
+    )
+
+    # Get the new session from updated state
+    new_state = get_state()
+
+    return NextSessionResponse(
+        session_id=new_state.session.session_id,
+        offset=new_offset,
+        redirect_url="/"
+    )
+
+
 def init_app(
     data_file: str,
     storage_dir: str = "annotation_sessions",
@@ -1117,7 +1173,8 @@ def init_app(
     window_size: int = 50000,
     scale: str = "S",
     target_bars: int = 200,
-    cascade: bool = False
+    cascade: bool = False,
+    window_offset: int = 0
 ):
     """
     Initialize the application with data file.
@@ -1130,6 +1187,7 @@ def init_app(
         scale: Scale to annotate (S, M, L, XL) - ignored if cascade=True
         target_bars: Target number of bars to display - ignored if cascade=True
         cascade: Enable XL → L → M → S cascade workflow
+        window_offset: Offset into source data (for random window selection)
     """
     global state
 
@@ -1138,7 +1196,14 @@ def init_app(
     # Load source data
     df, gaps = load_ohlc(data_file)
 
-    # Limit to window size
+    # Store total bars before any slicing (for session/next random offset)
+    total_source_bars = len(df)
+
+    # Apply offset and limit to window size
+    if window_offset > 0:
+        df = df.iloc[window_offset:]
+        logger.info(f"Applied offset of {window_offset} bars")
+
     if len(df) > window_size:
         df = df.head(window_size)
         logger.info(f"Limited to {window_size} bars")
@@ -1169,7 +1234,8 @@ def init_app(
     session = storage.create_session(
         data_file=data_file,
         resolution=resolution_str,
-        window_size=len(source_bars)
+        window_size=len(source_bars),
+        window_offset=window_offset
     )
     logger.info(f"Created session {session.session_id}")
 
@@ -1217,7 +1283,13 @@ def init_app(
         target_bars=target_bars,
         cascade_controller=cascade_controller,
         aggregator=aggregator,
-        review_storage=review_storage
+        review_storage=review_storage,
+        # Fields for session/next endpoint
+        data_file=data_file,
+        storage_dir=storage_dir,
+        resolution_minutes=resolution_minutes,
+        total_source_bars=total_source_bars,
+        cascade_enabled=cascade
     )
 
     logger.info(f"Initialized annotator with {len(source_bars)} bars, scale={scale}")

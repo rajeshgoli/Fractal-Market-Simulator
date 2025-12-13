@@ -44,7 +44,8 @@ class AnnotationStorage:
         self,
         data_file: str,
         resolution: str,
-        window_size: int
+        window_size: int,
+        window_offset: int = 0
     ) -> AnnotationSession:
         """
         Create a new annotation session.
@@ -53,6 +54,7 @@ class AnnotationStorage:
             data_file: Path or identifier for the source data
             resolution: Source data resolution (e.g., "1m", "5m")
             window_size: Number of bars per annotation window
+            window_offset: Offset into the source data (for random window selection)
 
         Returns:
             Newly created AnnotationSession
@@ -60,7 +62,8 @@ class AnnotationStorage:
         session = AnnotationSession.create(
             data_file=data_file,
             resolution=resolution,
-            window_size=window_size
+            window_size=window_size,
+            window_offset=window_offset
         )
         self._save_session(session)
         return session

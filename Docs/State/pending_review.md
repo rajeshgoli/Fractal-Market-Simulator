@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-12
 
 ---
 
 ## Pending Changes
+
+### 2025-12-12 - Session Flow (Random Window Selection)
+- **Issue:** #43
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/main.py`, `src/ground_truth_annotator/models.py`, `src/ground_truth_annotator/storage.py`, `src/ground_truth_annotator/api.py`, `src/ground_truth_annotator/static/index.html`, `src/ground_truth_annotator/static/review.html`, `tests/test_ground_truth_foundation.py`
 
 ### 2025-12-12 - Review Mode Frontend
 - **Issue:** #42
