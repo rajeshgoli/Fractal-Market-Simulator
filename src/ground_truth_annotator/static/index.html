@@ -455,6 +455,38 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--accent-bull);
+            animation: toastFadeIn 0.2s ease-out;
+        }
+
+        .toast.error {
+            border-color: var(--accent-bear);
+        }
+
+        @keyframes toastFadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
     </style>
 </head>
 <body>
@@ -530,6 +562,9 @@
                         <button class="btn btn-primary" id="start-review-btn" onclick="startReview()" style="display: none; margin-top: 10px;">
                             Start Review Mode →
                         </button>
+                        <button class="btn btn-secondary" onclick="exportSession()" style="margin-top: 10px;">
+                            Export Session
+                        </button>
                     </div>
                 </div>
 
@@ -588,6 +623,20 @@
 
         // Snap-to-extrema tolerance (bars) by scale
         const SNAP_TOLERANCE = { XL: 5, L: 10, M: 20, S: 30 };
+
+        // Show toast notification
+        function showToast(message, isError = false) {
+            // Remove any existing toast
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = 'toast' + (isError ? ' error' : '');
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 2000);
+        }
 
         // Find the bar with extremum closest to target price within tolerance radius
         // lookingForHigh: true = compare .high values, false = compare .low values
@@ -957,10 +1006,11 @@
                 renderAnnotationList();
                 updateMarkers();
                 updateCounts();
+                showToast('Annotation saved');
 
             } catch (error) {
                 console.error('Error creating annotation:', error);
-                alert('Failed to create annotation: ' + error.message);
+                showToast('Failed to save annotation', true);
                 cancelSelection();
             }
         }
@@ -980,10 +1030,11 @@
                 renderAnnotationList();
                 updateMarkers();
                 updateCounts();
+                showToast('Annotation deleted');
 
             } catch (error) {
                 console.error('Error deleting annotation:', error);
-                alert('Failed to delete annotation: ' + error.message);
+                showToast('Failed to delete annotation', true);
             }
         }
 
@@ -1254,6 +1305,45 @@
         // Navigate to Review Mode
         function startReview() {
             window.location.href = '/review';
+        }
+
+        // Export session data as JSON
+        async function exportSession() {
+            try {
+                const [sessionRes, annotationsRes] = await Promise.all([
+                    fetch('/api/session'),
+                    fetch('/api/annotations')
+                ]);
+
+                if (!sessionRes.ok || !annotationsRes.ok) {
+                    throw new Error('Failed to fetch session data');
+                }
+
+                const session = await sessionRes.json();
+                const exportAnnotations = await annotationsRes.json();
+
+                const exportData = {
+                    session: session,
+                    annotations: exportAnnotations,
+                    exported_at: new Date().toISOString()
+                };
+
+                // Create and download file
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `session_${session.session_id}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                showToast('Session exported');
+            } catch (error) {
+                console.error('Error exporting session:', error);
+                showToast('Failed to export session', true);
+            }
         }
 
         // Keyboard shortcuts
