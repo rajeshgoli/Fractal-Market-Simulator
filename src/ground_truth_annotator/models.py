@@ -110,6 +110,7 @@ class AnnotationSession:
     annotations: List[SwingAnnotation] = field(default_factory=list)
     completed_scales: List[str] = field(default_factory=list)
     window_offset: int = 0      # Offset into source data (for random window selection)
+    status: str = "in_progress" # "in_progress" | "keep" | "discard"
 
     @classmethod
     def create(
@@ -166,7 +167,8 @@ class AnnotationSession:
             'window_offset': self.window_offset,
             'created_at': self.created_at.isoformat(),
             'annotations': [a.to_dict() for a in self.annotations],
-            'completed_scales': self.completed_scales
+            'completed_scales': self.completed_scales,
+            'status': self.status
         }
 
     @classmethod
@@ -180,7 +182,8 @@ class AnnotationSession:
             created_at=datetime.fromisoformat(data['created_at']),
             annotations=[SwingAnnotation.from_dict(a) for a in data.get('annotations', [])],
             completed_scales=data.get('completed_scales', []),
-            window_offset=data.get('window_offset', 0)
+            window_offset=data.get('window_offset', 0),
+            status=data.get('status', 'in_progress')
         )
         return session
 

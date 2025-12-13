@@ -77,6 +77,12 @@ class SessionResponse(BaseModel):
     created_at: str
     annotation_count: int
     completed_scales: List[str]
+    status: str
+
+
+class SessionStatusUpdate(BaseModel):
+    """Request to update session status."""
+    status: str  # "keep" or "discard"
 
 
 class ScaleInfo(BaseModel):
@@ -529,8 +535,31 @@ async def get_session():
         scale=current_scale,
         created_at=s.session.created_at.isoformat(),
         annotation_count=len(s.session.annotations),
-        completed_scales=s.session.completed_scales
+        completed_scales=s.session.completed_scales,
+        status=s.session.status
     )
+
+
+@app.patch("/api/session/status")
+async def update_session_status(request: SessionStatusUpdate):
+    """
+    Update the session status (keep/discard).
+
+    Used to mark sessions as high-quality ("keep") or practice runs ("discard")
+    at the end of annotation or review.
+    """
+    s = get_state()
+
+    if request.status not in ("keep", "discard"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid status. Must be 'keep' or 'discard'."
+        )
+
+    s.session.status = request.status
+    s.storage.update_session(s.session)
+
+    return {"status": "ok", "new_status": request.status}
 
 
 @app.get("/api/cascade/state", response_model=CascadeStateResponse)

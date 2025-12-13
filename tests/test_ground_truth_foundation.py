@@ -1077,3 +1077,139 @@ class TestAnnotationStorageWindowOffset:
         loaded_session = storage2.get_session(session_id)
         assert loaded_session is not None
         assert loaded_session.window_offset == 7890
+
+
+# ============================================================================
+# AnnotationSession status Tests
+# ============================================================================
+
+class TestAnnotationSessionStatus:
+    """Tests for AnnotationSession status field."""
+
+    def test_create_session_has_default_status(self):
+        """Test session creation has default 'in_progress' status."""
+        session = AnnotationSession.create(
+            data_file="test_data.csv",
+            resolution="1m",
+            window_size=200
+        )
+
+        assert session.status == "in_progress"
+
+    def test_session_status_can_be_changed(self):
+        """Test session status can be updated to keep or discard."""
+        session = AnnotationSession.create(
+            data_file="test.csv",
+            resolution="1m",
+            window_size=200
+        )
+
+        session.status = "keep"
+        assert session.status == "keep"
+
+        session.status = "discard"
+        assert session.status == "discard"
+
+    def test_session_serialization_includes_status(self):
+        """Test status is included in to_dict."""
+        session = AnnotationSession.create(
+            data_file="test.csv",
+            resolution="1m",
+            window_size=200
+        )
+        session.status = "keep"
+
+        data = session.to_dict()
+
+        assert 'status' in data
+        assert data['status'] == "keep"
+
+    def test_session_deserialization_restores_status(self):
+        """Test status is restored from from_dict."""
+        session = AnnotationSession.create(
+            data_file="test.csv",
+            resolution="1m",
+            window_size=200
+        )
+        session.status = "discard"
+
+        data = session.to_dict()
+        restored = AnnotationSession.from_dict(data)
+
+        assert restored.status == "discard"
+
+    def test_session_deserialization_handles_missing_status(self):
+        """Test from_dict handles legacy data without status field."""
+        # Simulate legacy data without status field
+        data = {
+            'session_id': 'test-session-id',
+            'data_file': 'test.csv',
+            'resolution': '1m',
+            'window_size': 200,
+            'created_at': '2025-01-01T00:00:00+00:00',
+            'annotations': [],
+            'completed_scales': [],
+            'window_offset': 0
+            # No status field
+        }
+
+        session = AnnotationSession.from_dict(data)
+
+        assert session.status == "in_progress"  # Default value
+
+
+class TestAnnotationStorageStatus:
+    """Tests for AnnotationStorage with status field."""
+
+    def test_session_status_persistence(self, storage):
+        """Test that status persists when updating session."""
+        session = storage.create_session(
+            data_file="test_data.csv",
+            resolution="1m",
+            window_size=200
+        )
+
+        # Update status
+        session.status = "keep"
+        storage.update_session(session)
+
+        # Reload and verify
+        loaded = storage.get_session(session.session_id)
+        assert loaded.status == "keep"
+
+    def test_status_persistence_across_restarts(self, storage_dir):
+        """Test status persists across storage restarts."""
+        # Create first storage instance and add data
+        storage1 = AnnotationStorage(storage_dir)
+        session = storage1.create_session(
+            data_file="test.csv",
+            resolution="1m",
+            window_size=200
+        )
+        session.status = "discard"
+        storage1.update_session(session)
+        session_id = session.session_id
+
+        # Create new storage instance (simulating restart)
+        storage2 = AnnotationStorage(storage_dir)
+
+        # Verify data persisted
+        loaded_session = storage2.get_session(session_id)
+        assert loaded_session is not None
+        assert loaded_session.status == "discard"
+
+    def test_export_json_includes_status(self, storage):
+        """Test exported JSON includes status field."""
+        session = storage.create_session(
+            data_file="test.csv",
+            resolution="1m",
+            window_size=200
+        )
+        session.status = "keep"
+        storage.update_session(session)
+
+        exported = storage.export_session(session.session_id, format="json")
+        data = json.loads(exported)
+
+        assert 'status' in data
+        assert data['status'] == "keep"

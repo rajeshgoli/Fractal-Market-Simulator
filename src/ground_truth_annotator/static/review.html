@@ -721,6 +721,18 @@
                             </div>
                         </div>
                     </div>
+                    <div class="summary-section">
+                        <div class="summary-title">Session Quality</div>
+                        <div class="action-row" style="margin-top: 10px;">
+                            <button class="btn btn-success" onclick="markSession('keep')" id="keep-btn">
+                                Keep Session
+                            </button>
+                            <button class="btn btn-secondary" onclick="markSession('discard')" id="discard-btn">
+                                Discard (Practice)
+                            </button>
+                        </div>
+                        <div id="session-status-msg" style="margin-top: 10px; text-align: center; display: none;"></div>
+                    </div>
                     <div class="action-buttons" style="margin-top: 20px;">
                         <button class="btn btn-primary" onclick="exportFeedback()">
                             Export Feedback (JSON)
@@ -1414,6 +1426,42 @@
         // Go back to annotator
         function goToAnnotator() {
             window.location.href = '/';
+        }
+
+        // Mark session as keep or discard
+        async function markSession(status) {
+            try {
+                const response = await fetch('/api/session/status', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: status })
+                });
+
+                if (!response.ok) throw new Error(await response.text());
+
+                // Update UI to show confirmation
+                const msgEl = document.getElementById('session-status-msg');
+                const keepBtn = document.getElementById('keep-btn');
+                const discardBtn = document.getElementById('discard-btn');
+
+                if (status === 'keep') {
+                    msgEl.innerHTML = '<span style="color: var(--accent-bull);">Session marked as KEEP</span>';
+                    keepBtn.disabled = true;
+                    keepBtn.style.opacity = '1';
+                    discardBtn.style.opacity = '0.5';
+                } else {
+                    msgEl.innerHTML = '<span style="color: var(--text-secondary);">Session marked as DISCARD (practice)</span>';
+                    discardBtn.disabled = true;
+                    discardBtn.style.opacity = '1';
+                    keepBtn.style.opacity = '0.5';
+                }
+
+                msgEl.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error updating session status:', error);
+                alert('Failed to update session status: ' + error.message);
+            }
         }
 
         // Load next window with random offset
