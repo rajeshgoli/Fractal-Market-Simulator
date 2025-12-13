@@ -4,6 +4,345 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 12, 2025 - First Full Annotation Session UX Feedback
+
+**Context:** User completed first real annotation session using the ground truth annotator. This is actionable UX feedback from actual usage.
+
+### Bug: Reference Range Level Indicators Inverted
+
+Bull reference shows levels incorrectly:
+- Currently: 0 at top, 1 at bottom → level 2 appears *below* the low
+- Should be: 0 at bottom, 2 at top → level 2 at `L + 2*(H-L)`, above the high
+
+This makes it hard to assess whether current price is below/above the 2 level. Same issue inverted for bear reference.
+
+**Impact:** User can't quickly validate if they noted the reference range correctly.
+
+### Friction: FN Explanation is Too Slow
+
+Current workflow requires explaining every FN. With multiple FNs per session, this creates significant friction.
+
+**User request:** Make explanation optional, or provide pre-set options:
+- "Biggest swing I see"
+- "Most impulsive I see"
+- Other common categories
+
+### UX Gap: Unclear CTA
+
+User asked: "What's my CTA? Should I export JSON or is this stored by backend by default?"
+
+Need to clarify:
+1. Is data auto-saved to backend?
+2. If export is required, make button prominent
+3. If auto-saved, show confirmation
+
+### Feature Request: Session Quality Control
+
+No way to distinguish:
+- "This was a good session, keep this feedback"
+- "I was just playing with the tool, delete this"
+
+**Request:** Add button at end of session to mark quality (keep/discard).
+
+### Positive Feedback
+
+> "Overall this is awesome tool, I like it!! Much better than visualization harness. Gives me so many ideas for next steps."
+
+### Planning Question
+
+> "How many feedback sessions do we need before we can look at how to improve our swing detection logic? What's the plan there?"
+
+**Action:** Clarify data collection plan and iteration roadmap.
+
+---
+
+## December 12, 2025 - First Complete Annotation Session
+
+**Context:** User completed first full annotation session after UX polish (snap-to-extrema, fib preview, non-blocking confirm). Attempting to review comparison results and continue annotating.
+
+### UX Polish Assessment
+
+Snap-to-extrema and fib preview are complete and "look good." Snap is "delightful" when it works. Edge cases:
+- Finicky when swing is at chart edge (all the way to the right)
+- Finicky at S-scale — would need zoom (horizontal time, vertical price) and pan to annotate accurately
+
+### Comparison Results (First Session)
+
+```
+User annotations:     9
+System detections:    2,216
+Matches:              5
+False negatives:      4  (user found, system missed)
+False positives:      2,211  (system found, user didn't mark)
+Match rate:           0.2%
+```
+
+**Key insight:** System detects ~250x more swings than human expert considers meaningful. Even accounting for incomplete S-scale annotation, user estimates they'd mark 10-15, not 2,500. Detector is miscalibrated.
+
+### Workflow Pivot Decision
+
+User posed the question: What's more useful?
+- **Option A:** Fewer annotations with rich metadata on FPs/FNs (review and explain why)
+- **Option B:** More annotations without metadata (current workflow, repeat across windows)
+
+**Decision: Option A (Rich metadata)**
+
+Reasoning from user: "My sense is the former may be more useful to refine rules and iterate with the newer swing detection rules."
+
+With 2,500 FPs, you can't annotate them all. But sampling with qualitative feedback explains *why* the system is wrong — actionable signal for rule refinement.
+
+### Agreed Workflow (Review Mode)
+
+```
+1. ANNOTATE
+   Mark swings (current 2-click workflow)
+
+2. REVIEW MATCHES (light touch)
+   Quick scroll through agreements
+   Skip button if obvious
+
+3. REVIEW FP SAMPLE (10-20 from system's detections)
+   - "Noise" (default)
+   - "Actually valid — I missed this"
+   - Optional: why it's noise
+
+4. REVIEW ALL FNs (the gold)
+   - Required: "What caught my eye" (free text)
+   - Optional: category
+
+5. SESSION SUMMARY
+   Stats + export for rule iteration
+```
+
+### Gaps Discovered
+
+**1. No comparison UI**
+
+User completed annotations and wanted to see what they caught vs what detector found. Comparison exists via API (`/api/compare`, `/api/compare/report`) but no UI button to trigger or view it. User has to use curl or browser directly to API endpoints.
+
+**2. Session completion is a dead end**
+
+After completing cascade (XL→L→M→S), CTA button fades to "Session Complete!" and disables. No option to load a new window. User expected `--window 50000` to offer continuous annotation of different 50k samples.
+
+**3. Window selection is deterministic**
+
+`--window 50000` always loads the *first* 50k bars (`df.head()`). Running the tool multiple times shows the same window. No randomization, no offset parameter.
+
+### Impact
+
+User can't:
+- See their work vs detector output without API knowledge
+- Continue annotating beyond one cascade
+- Sample different parts of the dataset
+
+### Mismatch with Stated Design
+
+Product direction (line 85) states "Window complete → next random window" — this flow **does not exist** in implementation.
+
+### Key Quote
+
+"Shouldn't it reset to a fresh 50k sample if I started with --window 50000?"
+
+---
+
+## December 12, 2025 - Ground Truth Annotator Dogfood Feedback
+
+**Context:** First dogfood of annotation tool MVP. User tested cascade workflow.
+
+### Overall Assessment
+
+"The UX is beautiful." Tool is working well — feedback is polish, not fundamentals.
+
+### UX Refinements Requested
+
+**1. Snap-to-extrema (both clicks)**
+
+When clicking to mark a swing point, auto-select the candle with the best extrema (highest high or lowest low) within a tolerance radius. Intent is clear — user is marking structure, not pixel-hunting.
+
+Scale-aware tolerance:
+| Scale | Snap Radius |
+|-------|-------------|
+| XL | 4-5 bars |
+| L | 5-10 bars |
+| M | ~20 bars |
+| S | ~30 bars |
+
+Only prompt for re-click if truly ambiguous.
+
+**2. Fibonacci preview before confirm**
+
+Before confirming annotation, show horizontal lines at key levels (0, 0.382, 1, 2) so user can visually verify current price relationship to the swing range. Currently eyeballing reference ranges.
+
+**3. XL reference panel aspect ratio**
+
+When XL panel shrinks to reference size, it stretches horizontally. Should maintain aspect ratio so price levels visually anchor correctly.
+
+**4. Non-blocking confirmation**
+
+Current confirmation modal blocks entire screen and fades background charts. User loses visual context.
+
+Better: Show confirmation in side panel (right side has space). Add hotkeys for quick accept/reject/next so user can stay in flow without mouse.
+
+### Notes
+
+- First annotation session data is incorrect (user learning the tool). Can be deleted.
+
+### Key Quote
+
+"Other than these it appears to be a great tool!!"
+
+---
+
+## December 12, 2025 - Ground Truth Annotation Workflow
+
+**Context:** UX feedback after P0 blockers resolved (#22 full dataset loading, #24 resolution-agnostic design). Validator working on large datasets.
+
+### Core Insight
+
+Current validation paradigm (system shows swings → user validates) has a fundamental limitation: **can't catch false negatives**. User can only react to what system shows, not surface what system missed.
+
+### Proposed Paradigm Shift
+
+**Invert control:** User marks swings blind → compare against system output → systematic analysis.
+
+This captures:
+- False negatives (user marked, system missed) — *previously invisible*
+- False positives (system detected, user didn't mark)
+- Ranking gaps (both found it, different priority)
+
+### Annotation Workflow
+
+**Two-click swing marking:**
+1. Click candle A, click candle B
+2. System infers direction from price relationship:
+   - First high > second high → bull reference (downswing) → green line
+   - First low < second low → bear reference (upswing) → red line
+3. Visual feedback: colored line connecting the points
+4. Confirm or click elsewhere to start new annotation
+5. "Next" advances to next scale/window
+
+**Cascading scale progression:**
+```
+XL (full window) → mark all XL swings
+    ↓
+XL (reference) + L (main) → mark all L swings
+    ↓
+L (reference) + M (main) → mark all M swings
+    ↓
+M (reference) + S (main) → mark all S swings
+    ↓
+Window complete → next random window
+```
+
+Each completed scale becomes a reference panel while marking the next smaller scale.
+
+### Window Parameter Clarification
+
+`--window 50000` should show all 50K bars at XL level (aggregated), then cascade down through scales. Window defines data scope; XL shows full scope.
+
+### Decision: Replace, Not Supplement
+
+Ground truth annotation replaces current thumbs-up/down validator. The annotation approach is strictly more signal per interaction. Current validator is subset of what we learn from ground truth comparison. Git history preserves old approach if needed.
+
+### Web UX Validation
+
+User confirms web-based validator is "much more responsive and clean looking" than matplotlib harness. Pivot to HTML validated.
+
+### Looking Ahead
+
+User optimistic about trajectory: fix remaining swing detection issues → gather clean swing data → move to heuristics and rule learning phase.
+
+### Key Quote
+
+"Right now it's hard for me to give you full feedback. There are many scenarios — I see a swing but you didn't identify it, you show me a swing but I don't think it's real, you show me a swing that's good but not the best. How do we differentiate between them?"
+
+---
+
+## December 12, 2025 - Lightweight Validator First Test
+
+**Context:** First dogfood of new lightweight HTML validator on small dataset, attempted large dataset (es-1m.csv, 6M bars)
+
+### What Worked
+
+- UX looks polished and professional
+- Snappy and easy to test on small datasets
+- Voting workflow functional
+- 6 samples validated in session (5 approved, 2 marked "found_right_swings: false" with comments)
+
+### Blockers
+
+1. **Load time on large datasets:** 6M bar file took 7+ minutes before user interrupted. Traced to `scale_calibrator.py` still using legacy O(N²) `BullReferenceDetector` instead of new O(N log N) `swing_detector.py`.
+
+2. **Integration gap:** The O(N log N) rewrite (signed off Dec 11) was never wired into the scale calibrator path.
+
+### Feature Requests (pending performance fix)
+
+- **P0:** "No reference swings in this range" option - sometimes detected swings are technically correct but don't feel right. Need to capture these for heuristic refinement.
+- **P1:** Progressive loading with diverse windows - load 100k, start UX, rotate through different time windows for regime diversity.
+- **P1:** Scale ordering XL→L→M→S - larger scale context helps evaluate smaller scale swings.
+- **TBD:** Additional features pending large dataset testing.
+
+### User Direction
+
+Stage the work: fix performance first, then separate interview for features once large datasets are testable.
+
+### Key Quote
+
+"The O(N² issue is something we should fix anyway because wouldn't generator depend on it as well? The north star of the project would be in jeopardy if we didn't fix that."
+
+---
+
+## December 11, 2025 - Comprehensive Dogfooding Results
+
+**Context:** Systematic dogfooding of visualization harness using test plan (docs/product/dog_food_wishlist.md)
+
+### Coverage
+
+| Category | Status | Notes |
+|----------|--------|-------|
+| 1. Startup & Init | Partial Pass | Auto-start broken, speed flag ignored |
+| 2. CLI Playback | Blocked | CLI loses focus to Matplotlib |
+| 3. Keyboard Shortcuts | Partial | Logged but no visible effect |
+| 4. Panel Layout | Pass | Expansion/collapse works |
+| 5. Swing Visibility | Partial | Cycling works, brackets don't update view |
+| 6. Visualization Quality | Issues | Clutter, overlap, poor scale differentiation |
+| 7-11 | Not Tested | Blocked by playback issues |
+
+### Critical Blockers
+
+1. **Playback appears frozen.** Auto-pause fires constantly (S-level events), no visible progress even at 32x speed.
+2. **Timestamp errors.** Console shows: `new bar timestamp must be greater than last bar timestamp`
+3. **Scale calibration clusters.** S/M close together, L/XL close together. Not four distinct regimes.
+4. **Visual clutter.** 50+ lines when showing all swings. Overlapping labels.
+
+### What Works
+
+- Basic startup and help
+- Panel expansion/collapse (1-4, 0, ESC)
+- Candlestick rendering
+- Fibonacci level positions
+- Window resizing
+
+### User's Pivot Proposal
+
+User suggests considering a **lightweight HTML-based validation tool** instead of fixing the Matplotlib harness:
+
+- Random sample time intervals at each scale
+- Present top 3 candidate swings one at a time
+- Thumbs-up/thumbs-down voting per swing
+- "Did we find the right top 3?" final question
+- Build structured validation dataset
+
+**Rationale:** "The visualization is a means to validate and refine the detection logic, not the end product."
+
+**Framing:** "Strong opinion, weakly held. Explicitly for product/architect to think through."
+
+### Key Quote
+
+"The harness demonstrates that the swing detection logic is doing 'something non-trivial.' However, the current Matplotlib-based visualization harness has a large number of usability, performance, and visual clarity issues."
+
+---
+
 ## December 11, 2025 - Validation Experience Feedback
 
 **Context:** Post-usage feedback after ~1 day of hands-on validation testing
