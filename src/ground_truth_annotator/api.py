@@ -15,6 +15,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -268,6 +269,8 @@ class AppState:
     resolution_minutes: int = 1
     total_source_bars: int = 0  # Total bars in file (before offset/windowing)
     cascade_enabled: bool = False
+    # Cached DataFrame to avoid re-reading file on next window
+    cached_dataframe: Optional[pd.DataFrame] = None
 
 
 # Global state
@@ -1173,7 +1176,7 @@ async def start_next_session():
     max_offset = max(0, s.total_source_bars - window_size)
     new_offset = random.randint(0, max_offset) if max_offset > 0 else 0
 
-    # Reinitialize app with new random offset
+    # Reinitialize app with new random offset (reuse cached DataFrame to avoid disk I/O)
     init_app(
         data_file=s.data_file,
         storage_dir=s.storage_dir,
@@ -1182,7 +1185,8 @@ async def start_next_session():
         scale=s.scale,
         target_bars=s.target_bars,
         cascade=s.cascade_enabled,
-        window_offset=new_offset
+        window_offset=new_offset,
+        cached_df=s.cached_dataframe
     )
 
     # Get the new session from updated state
@@ -1203,7 +1207,8 @@ def init_app(
     scale: str = "S",
     target_bars: int = 200,
     cascade: bool = False,
-    window_offset: int = 0
+    window_offset: int = 0,
+    cached_df: Optional[pd.DataFrame] = None
 ):
     """
     Initialize the application with data file.
@@ -1217,16 +1222,23 @@ def init_app(
         target_bars: Target number of bars to display - ignored if cascade=True
         cascade: Enable XL → L → M → S cascade workflow
         window_offset: Offset into source data (for random window selection)
+        cached_df: Optional cached DataFrame to avoid re-reading file from disk
     """
     global state
 
-    logger.info(f"Loading data from {data_file}...")
-
-    # Load source data
-    df, gaps = load_ohlc(data_file)
+    # Load source data (use cache if available)
+    if cached_df is not None:
+        logger.info(f"Using cached DataFrame ({len(cached_df)} bars)")
+        df = cached_df
+    else:
+        logger.info(f"Loading data from {data_file}...")
+        df, gaps = load_ohlc(data_file)
 
     # Store total bars before any slicing (for session/next random offset)
     total_source_bars = len(df)
+
+    # Keep a reference to the full DataFrame for caching
+    full_df = df
 
     # Apply offset and limit to window size
     if window_offset > 0:
@@ -1318,7 +1330,9 @@ def init_app(
         storage_dir=storage_dir,
         resolution_minutes=resolution_minutes,
         total_source_bars=total_source_bars,
-        cascade_enabled=cascade
+        cascade_enabled=cascade,
+        # Cache full DataFrame to avoid re-reading on next window
+        cached_dataframe=full_df
     )
 
     logger.info(f"Initialized annotator with {len(source_bars)} bars, scale={scale}")
