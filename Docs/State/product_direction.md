@@ -1,36 +1,38 @@
 # Product Direction
 
-**Last Updated:** December 11, 2025
+**Last Updated:** December 13, 2025
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Complete Phase 2 stability fixes, then run user validation sessions.**
+**Complete Review Mode UI, then run first validation session with historical data.**
 
-The visualization harness is functionally complete. Detection logic is validated as correct. Remaining work is stability polish before expert validation.
+The ground truth annotation tool backend is complete. Review Mode (3-phase feedback workflow) is implemented but has no frontend. Once UI is complete, we can conduct the first real validation session.
+
+---
+
+## Why This Is Highest Leverage
+
+The swing detection algorithm is the foundation of everything that follows (behavioral modeling, data generation). Validation must be rigorous:
+
+1. **Annotation** captures expert ground truth (what swings *should* be detected)
+2. **Comparison** measures algorithm accuracy (matches, false positives, false negatives)
+3. **Review Mode** collects structured feedback (why misses happen, patterns in errors)
+
+Without Review Mode UI, we can annotate but can't complete the feedback loop. The algorithm improvement cycle is broken.
 
 ---
 
 ## Success Criteria
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| Init time (150K bars) | <10s | Achieved |
-| Algorithm complexity | O(N log N) | Achieved |
-| Event skip latency | TBD | <100ms |
-| Traversal speed | TBD | Month in <10 min |
-
----
-
-## Usability Criteria
-
-The tool should be:
-- **Fast:** Traverse a month's events in <10 minutes
-- **Clear:** 40-60 candles per quadrant, structure visible
-- **Reliable:** No state bugs on zoom, pause, layout transitions
-- **Responsive:** Skip to next event feels instant (<100ms)
+| Metric | Target | Current |
+|--------|--------|---------|
+| Annotation workflow | Functional | Achieved |
+| Comparison analysis | Functional | Achieved |
+| Review Mode workflow | All 3 phases usable | Backend complete, no UI |
+| First validation session | Complete with feedback | Pending |
 
 ---
 
@@ -38,34 +40,47 @@ The tool should be:
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| Phase 0: Algorithm rewrite | Complete | O(N log N) achieved |
-| Phase 1: Visualization | Complete | Swing cap, dynamic aggregation |
-| **Phase 2: Stability** | In Progress | Thread safety done, needs review |
-| Phase 3: Validation | Pending | After stability complete |
+| Ground Truth MVP | Complete | Two-click annotation, cascading scales |
+| UX Polish | Complete | Snap-to-extrema, keybindings, export |
+| Review Mode Backend | Complete | Models, storage, controller, API endpoints |
+| **Review Mode UI** | In Progress | Frontend for 3-phase workflow |
+| First Validation Session | Pending | After UI complete |
+| Algorithm Iteration | Pending | Based on validation feedback |
+
+---
+
+## Usability Criteria
+
+The annotation + review tool should be:
+- **Efficient:** Annotate a window in <5 minutes
+- **Accurate:** Two-click annotation snaps to extrema precisely
+- **Complete:** Full loop from annotation through structured feedback
+- **Exportable:** Raw data and analysis available for algorithm tuning
 
 ---
 
 ## Checkpoint Trigger
 
-**When to invoke Product:**
-- After Phase 2 complete
-- Before user validation sessions
-- After first complete session with historical data
+**Invoke Product when:**
+- Review Mode UI is complete
+- First validation session is ready to begin
+- Validation reveals significant algorithm issues requiring direction change
 
 ---
 
 ## Assumptions and Risks
 
 ### Assumptions
-1. Thread safety fixes resolve observed state bugs
-2. Event-skip mode is straightforward with pre-computed swings
-3. User will validate after stability fixes
+1. Review Mode UI is straightforward (standard web forms, no complex interactions)
+2. Comparison matching tolerance (10%) is reasonable starting point
+3. User available for validation once tooling is complete
 
 ### Risks
 | Risk | Likelihood | Mitigation |
 |------|------------|------------|
-| More stability issues surface | Medium | Thorough testing |
-| Event-skip harder than expected | Low | Architecture supports it |
+| Algorithm needs significant rework | Medium | Validation will reveal patterns |
+| UI takes longer than expected | Low | Backend API is clean |
+| Review workflow too tedious | Low | Can skip phases if not useful |
 
 ---
 
@@ -74,4 +89,4 @@ The tool should be:
 After validation establishes confidence in detection foundations:
 - Reverse analytical process to generate realistic price data
 - Simulate swing formation according to validated rules
-- Algorithm rewrite already complete, ready for runtime detection
+- Validated detection = trusted generator inputs
