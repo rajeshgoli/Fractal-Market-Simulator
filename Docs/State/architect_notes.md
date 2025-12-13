@@ -1,220 +1,92 @@
 # Architect Notes
 
-## Current Phase: Ground Truth Annotation Tool
+## Current Phase: Ground Truth Collection
 
-**Status:** Design approved, ready for engineering
-**Owner:** Engineering
+**Status:** Codebase cleanup complete, ready for annotation sessions
+**Owner:** Product (next direction) / User (annotation sessions)
 **Blocker:** None
 
 ---
 
 ## System State
 
-The lightweight swing validator is production-ready. Product has requested a paradigm shift from thumbs-up/down validation to ground truth annotation.
-
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Swing Detector | Healthy | O(N log N), vectorized, production-ready |
-| Bar Aggregator | Healthy | Resolution-agnostic, all standard timeframes |
-| Progressive Loader | Healthy | <2s startup for 6M+ datasets |
-| Scale Calibrator | Healthy | Resolution-aware quartile boundaries |
-| Current Validator | Deprecated | Being replaced by annotation tool |
+| Ground Truth Annotator | Healthy | Two-click annotation + Review Mode complete |
+| Review Mode | Healthy | 3-phase feedback workflow operational |
+| Comparison Analyzer | Healthy | FP/FN detection with matching |
+| Bar Aggregator | Healthy | Multi-scale aggregation |
+| Scale Calibrator | Healthy | Quartile-based S/M/L/XL boundaries |
+
+**Removed Components (Issue #44):**
+- `lightweight_swing_validator/` - superseded by ground truth annotator
+- `visualization_harness/` - replaced by web-based annotation tool
+- ~14,500 lines of deprecated code removed
 
 ---
 
-## Ground Truth Annotation Tool - Technical Design
+## Codebase Summary
 
-### 1. Cascading Scale Implementation
+```
+src/
+├── swing_analysis/            # Core detection algorithms (6 files)
+├── ground_truth_annotator/    # Web-based annotation tool (8 files)
+├── data/                      # OHLC loading (2 files)
+└── examples/                  # Demo scripts
 
-**Aggregation Levels per Scale:**
-
-Given a `--window N` parameter (bars in source resolution):
-
-| Scale | Purpose | Aggregation Calculation |
-|-------|---------|-------------------------|
-| XL | Full window overview | `target_bars = 50`, aggregation = N / 50 |
-| L | Medium-term context | aggregation = N / 200 |
-| M | Short-term structure | aggregation = N / 800 |
-| S | Fine-grained detail | source resolution (no aggregation) |
-
-**Panel Layout (vertical split):**
-- Reference panel: 25% height (shows completed larger-scale annotations)
-- Main panel: 75% height (active annotation area)
-- Both panels share horizontal time axis (main zooms into subset)
-
-**Dynamic Aggregation:**
-Extend `BarAggregator` with a new method:
-
-```python
-def aggregate_to_target_bars(self, source_bars: List[Bar], target_count: int) -> List[Bar]:
-    """Aggregate source bars to approximately target_count output bars."""
-    if len(source_bars) <= target_count:
-        return source_bars
-
-    bars_per_candle = len(source_bars) // target_count
-    # Group and aggregate using existing _create_aggregated_bar logic
+tests/                         # 388 tests
 ```
 
-This is a straightforward extension of existing aggregation logic.
-
-### 2. Annotation Data Model
-
-**Annotation Record:**
-```python
-@dataclass
-class SwingAnnotation:
-    annotation_id: str          # UUID
-    scale: str                  # "S", "M", "L", "XL"
-    direction: str              # "bull" or "bear"
-    start_bar_index: int        # Index in aggregated view
-    end_bar_index: int          # Index in aggregated view
-    start_source_index: int     # Index in source data
-    end_source_index: int       # Index in source data
-    start_price: Decimal        # High/low at start
-    end_price: Decimal          # High/low at end
-    created_at: datetime        # For audit trail
-    window_id: str              # Links to data window
-```
-
-**Matching for Comparison:**
-
-System swings and user annotations match when:
-1. **Direction matches** (bull/bear)
-2. **Scale matches** (same scale level)
-3. **Position overlaps** within tolerance:
-   - Overlap threshold: annotations covering ≥50% same bars = match
-   - Alternative: start/end within ±5% of swing duration
-
-```python
-def swings_match(user_ann: SwingAnnotation, system_swing: DetectedSwing, tolerance_pct: float = 0.1) -> bool:
-    """Check if user annotation matches system-detected swing."""
-    if user_ann.direction != system_swing.direction:
-        return False
-
-    duration = abs(user_ann.end_source_index - user_ann.start_source_index)
-    tolerance_bars = max(5, int(duration * tolerance_pct))
-
-    start_match = abs(user_ann.start_source_index - system_swing.start_index) <= tolerance_bars
-    end_match = abs(user_ann.end_source_index - system_swing.end_index) <= tolerance_bars
-
-    return start_match and end_match
-```
-
-### 3. Integration Approach
-
-**Recommendation: Build parallel, then swap.**
-
-Rationale:
-- Current validator is functional and may be useful for quick checks
-- Ground truth tool is a different paradigm, not incremental enhancement
-- Git history preserves both approaches
-- Clean separation reduces risk
-
-**Reusable Components:**
-| Component | Reuse Strategy |
-|-----------|----------------|
-| `ProgressiveLoader` | Reuse directly - handles large datasets |
-| `BarAggregator` | Extend with dynamic aggregation method |
-| `ScaleCalibrator` | Reuse for system swing detection |
-| `swing_detector.py` | Reuse for comparison baseline |
-| FastAPI structure | Copy and modify endpoints |
-| Static file serving | Reuse pattern |
-
-**New Components Needed:**
-| Component | Purpose |
-|-----------|---------|
-| `AnnotationStorage` | SQLite-backed annotation persistence |
-| `ComparisonAnalyzer` | Match user vs system, generate reports |
-| `CascadeController` | Manage XL→L→M→S workflow state |
-| New HTML/JS UI | Canvas-based two-click annotation |
-
-### 4. Window Parameter Behavior
-
-**Current State:**
-- `--window` sets calibration window size (bars for scale calibration)
-- `BarAggregator` pre-computes standard timeframes (1, 5, 15, 30, 60, 240, 1440 minutes)
-- Does NOT support arbitrary aggregation levels
-
-**Required Enhancement:**
-User expectation: `--window 50000` shows all 50K bars at XL, aggregated to ~50 candles.
-
-**Implementation:**
-1. Interpret `--window` as "total bars to work with" for annotation
-2. Add `aggregate_to_target_bars()` method to `BarAggregator`
-3. XL scale: aggregate to ~50 bars (each candle = 1000 source bars for 50K window)
-4. Cascading scales use progressively less aggregation
-
-**No changes needed to existing BarAggregator API** - add new method alongside existing timeframe-based methods.
-
-### 5. Feasibility Assessment
-
-**Low Risk:**
-- Dynamic aggregation: straightforward extension
-- Two-click annotation: standard UI pattern
-- Data storage: simple JSON/SQLite
-- Comparison analysis: data transformation
-
-**Medium Risk:**
-- Canvas annotation UX at scale (zooming/panning while annotating)
-  - Mitigation: fixed aggregation per scale, no zoom during annotation
-- Matching tolerance calibration may need iteration
-  - Mitigation: start with 10% tolerance, expose as parameter
-
-**No Blockers Identified.**
+**Key Metrics:**
+- Test count: 388 passed, 2 skipped
+- Ground truth annotator tests: 180
+- Lines removed in cleanup: ~14,500
 
 ---
 
-## Architecture Reference
+## Annotation Workflow (Ready for Use)
 
+```bash
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --cascade --offset random
 ```
-                    ┌─────────────────────────────────────┐
-                    │         CLI Entry Point             │
-                    │   --window --resolution             │
-                    └────────────────┬────────────────────┘
-                                     │
-                    ┌────────────────▼────────────────────┐
-                    │    Ground Truth Annotation Tool     │
-                    │ - FastAPI + Canvas UI               │
-                    │ - Cascading scale workflow          │
-                    │ - Two-click annotation              │
-                    └────────────────┬────────────────────┘
-                                     │
-              ┌──────────────────────┼──────────────────────┐
-              │                      │                      │
-   ┌──────────▼──────────┐ ┌────────▼────────┐ ┌──────────▼──────────┐
-   │  CascadeController  │ │AnnotationStorage│ │ ComparisonAnalyzer  │
-   │ - Scale progression │ │ - SQLite/JSON   │ │ - Match logic       │
-   │ - Window management │ │ - Export        │ │ - Report generation │
-   └──────────┬──────────┘ └────────┬────────┘ └──────────┬──────────┘
-              │                      │                      │
-              └──────────────────────┼──────────────────────┘
-                                     │
-                    ┌────────────────▼────────────────────┐
-                    │        Analysis Pipeline            │
-                    │ - BarAggregator (extended)         │
-                    │ - SwingDetector (for comparison)    │
-                    │ - ProgressiveLoader (reused)        │
-                    └─────────────────────────────────────┘
-```
+
+1. Cascade through XL → L → M → S scales
+2. Auto-redirect to Review Mode after S completes
+3. Review matches, FP sample, FN feedback
+4. Export feedback JSON
+5. Load next window (random offset) to continue
 
 ---
 
-## Next Step
+## Pending Decisions (Product)
 
-**Engineering to create GitHub issue for Ground Truth Annotation Tool MVP.**
+| Question | Context |
+|----------|---------|
+| Annotation targets | How many sessions needed for statistically significant ground truth? |
+| Rule iteration | How to translate Review Mode feedback into detector improvements? |
+| P2 UX items | Worth addressing zoom/pan and edge snap before more sessions? |
 
-Issue should include:
-1. New module: `src/ground_truth_annotator/`
-2. Extend `BarAggregator` with `aggregate_to_target_bars()`
-3. Implement `CascadeController`, `AnnotationStorage`, `ComparisonAnalyzer`
-4. Canvas-based two-click annotation UI
-5. Comparison report endpoint
+---
 
-Success criteria from Product:
-- [ ] User can mark swings via two-click annotation
-- [ ] Cascading scale workflow operational (XL → L → M → S)
-- [ ] Annotations stored and comparable against system output
-- [ ] Analysis report surfaces false negatives, false positives, ranking gaps
+## Documentation Status
+
+| Document | Status |
+|----------|--------|
+| `Docs/Reference/user_guide.md` | Current (deprecated sections removed) |
+| `Docs/Reference/developer_guide.md` | Current (updated for cleanup) |
+| `CLAUDE.md` | Current (deprecated references removed) |
+| `Docs/State/architect_notes.md` | Current (this file) |
+
+---
+
+## Architecture Principles
+
+- **Multi-scale:** Four simultaneous scales (S, M, L, XL)
+- **Fibonacci levels:** 0.382, 0.5, 0.618, 1.0, 1.382, 1.5, 1.618, 2.0
+- **Resolution-agnostic:** 1m to 1mo source data supported
+- **Performance:** <60s for 6M bars
+- **Lean codebase:** Single tool (ground truth annotator) for validation workflow
 
 ---
 
@@ -222,6 +94,7 @@ Success criteria from Product:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
-| Dec 12 | Ground truth annotation design review | Approved - ready for engineering |
-| Dec 12 | #22, #24 - Full dataset loading, resolution-agnostic | Accepted |
-| Dec 12 | #16, #17, #19, #20, #21 | All accepted - P0 performance gate cleared |
+| Dec 12 | #44 - Deprecated module removal | Accepted |
+| Dec 12 | Review Mode epic (#38) - 5 issues | All accepted |
+| Dec 12 | #32, #33, #34, #35, #37 - UX polish batch | All accepted |
+| Dec 12 | #27-#30 - Ground truth annotation tool MVP | All accepted |

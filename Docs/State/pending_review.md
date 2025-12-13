@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2025-12-12
 
@@ -8,10 +8,7 @@
 
 ## Pending Changes
 
-### 2025-12-12 - Remove deprecated modules
-- **Issue:** #44
-- **Type:** Cleanup
-- **Files:** Deleted 35 files (src/lightweight_swing_validator/, src/visualization_harness/, main.py, example scripts, related tests); Updated CLAUDE.md, user_guide.md
+(None)
 
 ---
 
@@ -19,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 12 | #44 - Deprecated module removal | Accepted |
 | Dec 12 | Review Mode epic (#38) - #39, #40, #41, #42, #43 | All Accepted, epic closed |
 | Dec 12 | #32, #33, #34, #35, #37 - UX polish batch | All Accepted |
 | Dec 12 | #27, #28, #29, #30 - Ground truth annotation tool MVP | All Accepted |
