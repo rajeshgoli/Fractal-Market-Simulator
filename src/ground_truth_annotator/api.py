@@ -295,6 +295,22 @@ async def root():
         return HTMLResponse(content=f.read())
 
 
+@app.get("/review", response_class=HTMLResponse)
+async def review_page():
+    """Serve the Review Mode UI."""
+    module_dir = Path(__file__).parent
+    review_path = module_dir / "static" / "review.html"
+
+    if not review_path.exists():
+        return HTMLResponse(
+            content="<h1>Review Mode</h1><p>review.html not found. Place review.html in static/</p>",
+            status_code=200
+        )
+
+    with open(review_path, 'r') as f:
+        return HTMLResponse(content=f.read())
+
+
 @app.get("/api/health")
 async def health():
     """Health check endpoint."""

@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Mode</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #0f3460;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent-bull: #26a69a;
+            --accent-bear: #ef5350;
+            --accent-blue: #2196f3;
+            --accent-purple: #9c27b0;
+            --accent-orange: #ff9800;
+            --border-color: #333;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+
+        .session-info {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+            align-items: center;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+        }
+
+        .info-value {
+            font-weight: 600;
+        }
+
+        .phase-badge {
+            background: var(--accent-blue);
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .phase-badge.matches { background: var(--accent-bull); }
+        .phase-badge.fp_sample { background: var(--accent-orange); }
+        .phase-badge.fn_feedback { background: var(--accent-purple); }
+        .phase-badge.complete { background: var(--accent-blue); }
+
+        .phase-progress {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .progress-step {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            border: 2px solid var(--border-color);
+        }
+
+        .progress-step.completed {
+            background: var(--accent-bull);
+            color: white;
+            border-color: var(--accent-bull);
+        }
+
+        .progress-step.current {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+        }
+
+        .progress-arrow {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 20px;
+        }
+
+        .chart-area {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .chart-container {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .chart-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-title h3 {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .scale-badge {
+            background: var(--accent-blue);
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .main-chart {
+            width: 100%;
+            height: 450px;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .swing-details {
+            margin-bottom: 15px;
+        }
+
+        .swing-detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .swing-detail-label {
+            color: var(--text-secondary);
+        }
+
+        .swing-detail-value {
+            font-weight: 500;
+        }
+
+        .direction-indicator {
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .direction-indicator.bull {
+            background: rgba(38, 166, 154, 0.2);
+            color: var(--accent-bull);
+        }
+
+        .direction-indicator.bear {
+            background: rgba(239, 83, 80, 0.2);
+            color: var(--accent-bear);
+        }
+
+        .btn {
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .btn-success {
+            background: var(--accent-bull);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--accent-orange);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--accent-bear);
+            color: white;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn kbd {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-row .btn {
+            flex: 1;
+        }
+
+        .keyboard-hints {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .hint-row {
+            margin-bottom: 6px;
+        }
+
+        .hint-row kbd {
+            background: var(--bg-card);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+            margin-right: 4px;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .nav-buttons .btn {
+            flex: 1;
+        }
+
+        /* Dropdown select */
+        .category-select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+
+        .category-select option {
+            background: var(--bg-card);
+        }
+
+        /* Text input for FN feedback */
+        .feedback-input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            resize: vertical;
+            min-height: 80px;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }
+
+        .feedback-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .feedback-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .required-label {
+            color: var(--accent-bear);
+            font-size: 0.75rem;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        /* Summary view */
+        .summary-section {
+            margin-bottom: 20px;
+        }
+
+        .summary-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--text-primary);
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: var(--text-primary);
+        }
+
+        /* Loading state */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: var(--text-secondary);
+        }
+
+        /* Hidden elements */
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Review Mode</h1>
+            <div class="session-info">
+                <div class="phase-progress" id="phase-progress">
+                    <!-- Populated dynamically -->
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Phase:</span>
+                    <span class="phase-badge" id="phase-badge">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Progress:</span>
+                    <span class="info-value" id="progress-text">-</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="chart-area">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <h3>Swing Review</h3>
+                            <span class="scale-badge" id="scale-badge">-</span>
+                        </div>
+                        <span class="info-value" id="swing-counter">Swing 0 of 0</span>
+                    </div>
+                    <div class="main-chart" id="chart"></div>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <!-- Phase 1: Matches Review Panel -->
+                <div class="card" id="matches-panel">
+                    <div class="card-title">Review Match</div>
+                    <div class="direction-indicator" id="match-direction">-</div>
+                    <div class="swing-details">
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Scale</span>
+                            <span class="swing-detail-value" id="match-scale">-</span>
+                        </div>
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Bar Range</span>
+                            <span class="swing-detail-value" id="match-bars">-</span>
+                        </div>
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Price</span>
+                            <span class="swing-detail-value" id="match-price">-</span>
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-success" onclick="submitMatchFeedback('correct')">
+                            <kbd>G</kbd> Looks Good
+                        </button>
+                        <button class="btn btn-danger" onclick="submitMatchFeedback('incorrect')">
+                            <kbd>W</kbd> Actually Wrong
+                        </button>
+                    </div>
+                    <div class="keyboard-hints">
+                        <div class="hint-row"><kbd>G</kbd> Good (Correct)</div>
+                        <div class="hint-row"><kbd>W</kbd> Wrong (Incorrect)</div>
+                        <div class="hint-row"><kbd>&rarr;</kbd> Next swing</div>
+                        <div class="hint-row"><kbd>S</kbd> Skip all matches</div>
+                    </div>
+                    <div class="nav-buttons">
+                        <button class="btn btn-secondary" onclick="previousSwing()" id="prev-btn">
+                            &larr; Previous
+                        </button>
+                        <button class="btn btn-primary" onclick="nextSwing()" id="next-btn">
+                            Next &rarr;
+                        </button>
+                    </div>
+                    <button class="btn btn-warning" onclick="skipAllMatches()" style="margin-top: 10px;">
+                        <kbd>S</kbd> Skip All Matches
+                    </button>
+                </div>
+
+                <!-- Phase 2: FP Sample Review Panel -->
+                <div class="card hidden" id="fp-panel">
+                    <div class="card-title">Review False Positive</div>
+                    <div class="direction-indicator" id="fp-direction">-</div>
+                    <div class="swing-details">
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Scale</span>
+                            <span class="swing-detail-value" id="fp-scale">-</span>
+                        </div>
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Bar Range</span>
+                            <span class="swing-detail-value" id="fp-bars">-</span>
+                        </div>
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Size</span>
+                            <span class="swing-detail-value" id="fp-size">-</span>
+                        </div>
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Rank</span>
+                            <span class="swing-detail-value" id="fp-rank">-</span>
+                        </div>
+                    </div>
+                    <select class="category-select" id="fp-category">
+                        <option value="">Why is this noise? (optional)</option>
+                        <option value="too_small">Too small to be significant</option>
+                        <option value="wrong_direction">Direction seems off</option>
+                        <option value="not_a_swing">Not really a swing</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <div class="action-buttons">
+                        <button class="btn btn-warning" onclick="submitFPFeedback('noise')">
+                            <kbd>N</kbd> Noise
+                        </button>
+                        <button class="btn btn-success" onclick="submitFPFeedback('valid_missed')">
+                            <kbd>V</kbd> Actually Valid
+                        </button>
+                    </div>
+                    <div class="keyboard-hints">
+                        <div class="hint-row"><kbd>N</kbd> Mark as noise</div>
+                        <div class="hint-row"><kbd>V</kbd> Actually valid (I missed it)</div>
+                        <div class="hint-row"><kbd>&rarr;</kbd> Next swing</div>
+                        <div class="hint-row"><kbd>S</kbd> Skip remaining FPs</div>
+                    </div>
+                    <div class="nav-buttons">
+                        <button class="btn btn-secondary" onclick="previousSwing()" id="fp-prev-btn">
+                            &larr; Previous
+                        </button>
+                        <button class="btn btn-primary" onclick="nextSwing()" id="fp-next-btn">
+                            Next &rarr;
+                        </button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="skipRemainingFPs()" style="margin-top: 10px;">
+                        <kbd>S</kbd> Skip Remaining
+                    </button>
+                </div>
+
+                <!-- Phase 3: FN Feedback Panel -->
+                <div class="card hidden" id="fn-panel">
+                    <div class="card-title">Explain False Negative</div>
+                    <div class="direction-indicator" id="fn-direction">-</div>
+                    <div class="swing-details">
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Scale</span>
+                            <span class="swing-detail-value" id="fn-scale">-</span>
+                        </div>
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Bar Range</span>
+                            <span class="swing-detail-value" id="fn-bars">-</span>
+                        </div>
+                        <div class="swing-detail-row">
+                            <span class="swing-detail-label">Price</span>
+                            <span class="swing-detail-value" id="fn-price">-</span>
+                        </div>
+                    </div>
+                    <label class="required-label">* Required: Explain what caught your eye</label>
+                    <textarea class="feedback-input" id="fn-comment"
+                        placeholder="What made you notice this swing? (e.g., clear reversal pattern, significant size, fits timeframe context...)"></textarea>
+                    <select class="category-select" id="fn-category">
+                        <option value="">Category (optional)</option>
+                        <option value="pattern">Pattern recognition</option>
+                        <option value="size">Significant size/range</option>
+                        <option value="context">Timeframe context</option>
+                        <option value="structure">Market structure</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <div class="action-buttons">
+                        <button class="btn btn-success" onclick="submitFNFeedback()" id="fn-submit-btn" disabled>
+                            <kbd>Enter</kbd> Submit Feedback
+                        </button>
+                    </div>
+                    <div class="keyboard-hints">
+                        <div class="hint-row"><kbd>Enter</kbd> Submit (when comment filled)</div>
+                        <div class="hint-row"><kbd>&rarr;</kbd> Next swing (after submit)</div>
+                    </div>
+                    <div class="nav-buttons">
+                        <button class="btn btn-secondary" onclick="previousSwing()" id="fn-prev-btn">
+                            &larr; Previous
+                        </button>
+                        <button class="btn btn-primary" onclick="nextSwing()" id="fn-next-btn" disabled>
+                            Next &rarr;
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Summary Panel -->
+                <div class="card hidden" id="summary-panel">
+                    <div class="card-title">Review Complete!</div>
+                    <div class="summary-section">
+                        <div class="summary-title">Matches</div>
+                        <div class="summary-stats">
+                            <div class="stat-card">
+                                <div class="stat-value" id="summary-matches-reviewed">0</div>
+                                <div class="stat-label">Reviewed</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="summary-matches-correct">0</div>
+                                <div class="stat-label">Correct</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="summary-section">
+                        <div class="summary-title">False Positives</div>
+                        <div class="summary-stats">
+                            <div class="stat-card">
+                                <div class="stat-value" id="summary-fp-reviewed">0</div>
+                                <div class="stat-label">Reviewed</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="summary-fp-noise">0</div>
+                                <div class="stat-label">Noise</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="summary-section">
+                        <div class="summary-title">False Negatives</div>
+                        <div class="summary-stats">
+                            <div class="stat-card">
+                                <div class="stat-value" id="summary-fn-total">0</div>
+                                <div class="stat-label">Total</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="summary-fn-explained">0</div>
+                                <div class="stat-label">Explained</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="action-buttons" style="margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="exportFeedback()">
+                            Export Feedback (JSON)
+                        </button>
+                        <button class="btn btn-secondary" onclick="goToAnnotator()">
+                            Back to Annotator
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Empty state when no swings to review -->
+                <div class="card hidden" id="empty-panel">
+                    <div class="empty-state">
+                        <h3>No Items to Review</h3>
+                        <p>This phase has no items. Click Next to continue.</p>
+                        <button class="btn btn-primary" onclick="advancePhase()" style="margin-top: 20px;">
+                            Continue to Next Phase
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let chart = null;
+        let candleSeries = null;
+        let bars = [];
+
+        // Review data
+        let reviewState = null;
+        let matches = [];
+        let fpSample = [];
+        let fnList = [];
+
+        // Current indices
+        let currentIndex = 0;
+        let currentPhase = 'matches';
+
+        // Get session_id from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session_id');
+
+        // Initialize chart
+        function initChart() {
+            const container = document.getElementById('chart');
+            chart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { type: 'solid', color: '#16213e' },
+                    textColor: '#a0a0a0',
+                },
+                grid: {
+                    vertLines: { color: '#333' },
+                    horzLines: { color: '#333' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#333',
+                },
+                timeScale: {
+                    borderColor: '#333',
+                    timeVisible: true,
+                },
+            });
+
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+            });
+
+            window.addEventListener('resize', () => {
+                chart.applyOptions({ width: container.clientWidth });
+            });
+        }
+
+        // Load bars for a scale
+        async function loadBars(scale) {
+            try {
+                const url = scale ? `/api/bars?scale=${scale}` : '/api/bars';
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(await response.text());
+
+                bars = await response.json();
+
+                const chartData = bars.map(bar => ({
+                    time: bar.timestamp,
+                    open: bar.open,
+                    high: bar.high,
+                    low: bar.low,
+                    close: bar.close,
+                }));
+
+                candleSeries.setData(chartData);
+            } catch (error) {
+                console.error('Error loading bars:', error);
+            }
+        }
+
+        // Show swing on chart
+        function showSwingOnChart(startIndex, endIndex, direction, scale) {
+            // Clear existing markers
+            candleSeries.setMarkers([]);
+
+            // Find bars by source index
+            const startBar = bars.find(b => b.source_start_index <= startIndex && b.source_end_index >= startIndex);
+            const endBar = bars.find(b => b.source_start_index <= endIndex && b.source_end_index >= endIndex);
+
+            if (!startBar || !endBar) {
+                console.warn('Could not find bars for indices:', startIndex, endIndex);
+                return;
+            }
+
+            const color = direction === 'bull' ? '#26a69a' : '#ef5350';
+
+            const markers = [
+                {
+                    time: startBar.timestamp,
+                    position: direction === 'bull' ? 'aboveBar' : 'belowBar',
+                    color: color,
+                    shape: 'arrowDown',
+                    text: 'Start',
+                },
+                {
+                    time: endBar.timestamp,
+                    position: direction === 'bull' ? 'belowBar' : 'aboveBar',
+                    color: color,
+                    shape: 'arrowUp',
+                    text: 'End',
+                }
+            ];
+
+            candleSeries.setMarkers(markers);
+
+            // Center chart on swing
+            chart.timeScale().setVisibleRange({
+                from: bars[Math.max(0, startBar.index - 20)].timestamp,
+                to: bars[Math.min(bars.length - 1, endBar.index + 20)].timestamp
+            });
+
+            // Update scale badge
+            document.getElementById('scale-badge').textContent = scale;
+        }
+
+        // Start review
+        async function startReview() {
+            try {
+                const response = await fetch('/api/review/start', { method: 'POST' });
+                if (!response.ok) throw new Error(await response.text());
+
+                reviewState = await response.json();
+                currentPhase = reviewState.phase;
+
+                // Load all phase data
+                await loadPhaseData();
+
+                // Update UI
+                updatePhaseUI();
+                updatePhaseProgress();
+
+            } catch (error) {
+                console.error('Error starting review:', error);
+                alert('Failed to start review: ' + error.message);
+            }
+        }
+
+        // Load data for all phases
+        async function loadPhaseData() {
+            try {
+                const [matchesRes, fpRes, fnRes] = await Promise.all([
+                    fetch('/api/review/matches'),
+                    fetch('/api/review/fp-sample'),
+                    fetch('/api/review/fn-list')
+                ]);
+
+                matches = await matchesRes.json();
+                fpSample = await fpRes.json();
+                fnList = await fnRes.json();
+
+            } catch (error) {
+                console.error('Error loading phase data:', error);
+            }
+        }
+
+        // Update phase progress indicator
+        function updatePhaseProgress() {
+            const container = document.getElementById('phase-progress');
+            const phases = [
+                { key: 'matches', label: '1' },
+                { key: 'fp_sample', label: '2' },
+                { key: 'fn_feedback', label: '3' },
+                { key: 'complete', label: '4' }
+            ];
+
+            let html = '';
+            const phaseOrder = ['matches', 'fp_sample', 'fn_feedback', 'complete'];
+            const currentIdx = phaseOrder.indexOf(currentPhase);
+
+            phases.forEach((phase, idx) => {
+                if (idx > 0) {
+                    html += '<span class="progress-arrow">&rarr;</span>';
+                }
+
+                let className = 'progress-step';
+                if (idx < currentIdx) {
+                    className += ' completed';
+                } else if (phase.key === currentPhase) {
+                    className += ' current';
+                }
+
+                html += `<div class="${className}">${phase.label}</div>`;
+            });
+
+            container.innerHTML = html;
+
+            // Update phase badge
+            const badge = document.getElementById('phase-badge');
+            badge.className = 'phase-badge ' + currentPhase;
+            const phaseNames = {
+                'matches': 'Matches',
+                'fp_sample': 'FP Sample',
+                'fn_feedback': 'FN Feedback',
+                'complete': 'Complete'
+            };
+            badge.textContent = phaseNames[currentPhase] || currentPhase;
+        }
+
+        // Update UI for current phase
+        function updatePhaseUI() {
+            // Hide all panels
+            document.getElementById('matches-panel').classList.add('hidden');
+            document.getElementById('fp-panel').classList.add('hidden');
+            document.getElementById('fn-panel').classList.add('hidden');
+            document.getElementById('summary-panel').classList.add('hidden');
+            document.getElementById('empty-panel').classList.add('hidden');
+
+            currentIndex = 0;
+
+            switch (currentPhase) {
+                case 'matches':
+                    if (matches.length === 0) {
+                        document.getElementById('empty-panel').classList.remove('hidden');
+                    } else {
+                        document.getElementById('matches-panel').classList.remove('hidden');
+                        showCurrentMatch();
+                    }
+                    break;
+
+                case 'fp_sample':
+                    if (fpSample.length === 0) {
+                        document.getElementById('empty-panel').classList.remove('hidden');
+                    } else {
+                        document.getElementById('fp-panel').classList.remove('hidden');
+                        showCurrentFP();
+                    }
+                    break;
+
+                case 'fn_feedback':
+                    if (fnList.length === 0) {
+                        document.getElementById('empty-panel').classList.remove('hidden');
+                    } else {
+                        document.getElementById('fn-panel').classList.remove('hidden');
+                        showCurrentFN();
+                    }
+                    break;
+
+                case 'complete':
+                    document.getElementById('summary-panel').classList.remove('hidden');
+                    loadSummary();
+                    break;
+            }
+
+            updateProgress();
+        }
+
+        // Update progress text
+        function updateProgress() {
+            let total, current;
+
+            switch (currentPhase) {
+                case 'matches':
+                    total = matches.length;
+                    current = currentIndex + 1;
+                    break;
+                case 'fp_sample':
+                    total = fpSample.length;
+                    current = currentIndex + 1;
+                    break;
+                case 'fn_feedback':
+                    total = fnList.length;
+                    current = currentIndex + 1;
+                    break;
+                default:
+                    total = 0;
+                    current = 0;
+            }
+
+            document.getElementById('progress-text').textContent =
+                total > 0 ? `${current}/${total}` : '-';
+            document.getElementById('swing-counter').textContent =
+                total > 0 ? `Swing ${current} of ${total}` : '-';
+        }
+
+        // Show current match
+        async function showCurrentMatch() {
+            if (currentIndex >= matches.length) {
+                advancePhase();
+                return;
+            }
+
+            const match = matches[currentIndex];
+
+            // Load bars for scale
+            await loadBars(match.scale);
+
+            // Show on chart
+            showSwingOnChart(match.start_index, match.end_index, match.direction, match.scale);
+
+            // Update panel
+            const dirEl = document.getElementById('match-direction');
+            dirEl.className = 'direction-indicator ' + match.direction;
+            dirEl.textContent = match.direction === 'bull' ? 'Bull Reference (Downswing)' : 'Bear Reference (Upswing)';
+
+            document.getElementById('match-scale').textContent = match.scale;
+            document.getElementById('match-bars').textContent = `${match.start_index} → ${match.end_index}`;
+            document.getElementById('match-price').textContent = `${match.start_price} → ${match.end_price}`;
+
+            updateProgress();
+            updateNavButtons('matches');
+        }
+
+        // Show current FP
+        async function showCurrentFP() {
+            if (currentIndex >= fpSample.length) {
+                advancePhase();
+                return;
+            }
+
+            const fp = fpSample[currentIndex];
+
+            // Load bars for scale
+            await loadBars(fp.scale);
+
+            // Show on chart
+            showSwingOnChart(fp.start_index, fp.end_index, fp.direction, fp.scale);
+
+            // Update panel
+            const dirEl = document.getElementById('fp-direction');
+            dirEl.className = 'direction-indicator ' + fp.direction;
+            dirEl.textContent = fp.direction === 'bull' ? 'Bull Reference (Downswing)' : 'Bear Reference (Upswing)';
+
+            document.getElementById('fp-scale').textContent = fp.scale;
+            document.getElementById('fp-bars').textContent = `${fp.start_index} → ${fp.end_index}`;
+            document.getElementById('fp-size').textContent = fp.size.toFixed(2);
+            document.getElementById('fp-rank').textContent = `#${fp.rank}`;
+
+            // Reset category dropdown
+            document.getElementById('fp-category').value = '';
+
+            updateProgress();
+            updateNavButtons('fp');
+        }
+
+        // Show current FN
+        async function showCurrentFN() {
+            if (currentIndex >= fnList.length) {
+                advancePhase();
+                return;
+            }
+
+            const fn = fnList[currentIndex];
+
+            // Load bars for scale
+            await loadBars(fn.scale);
+
+            // Show on chart
+            showSwingOnChart(fn.start_index, fn.end_index, fn.direction, fn.scale);
+
+            // Update panel
+            const dirEl = document.getElementById('fn-direction');
+            dirEl.className = 'direction-indicator ' + fn.direction;
+            dirEl.textContent = fn.direction === 'bull' ? 'Bull Reference (Downswing)' : 'Bear Reference (Upswing)';
+
+            document.getElementById('fn-scale').textContent = fn.scale;
+            document.getElementById('fn-bars').textContent = `${fn.start_index} → ${fn.end_index}`;
+            document.getElementById('fn-price').textContent = `${fn.start_price} → ${fn.end_price}`;
+
+            // Reset inputs
+            const commentEl = document.getElementById('fn-comment');
+            const categoryEl = document.getElementById('fn-category');
+
+            if (fn.feedback) {
+                commentEl.value = fn.feedback.comment || '';
+                categoryEl.value = fn.feedback.category || '';
+            } else {
+                commentEl.value = '';
+                categoryEl.value = '';
+            }
+
+            updateFNSubmitState();
+            updateProgress();
+            updateNavButtons('fn');
+        }
+
+        // Update nav button states
+        function updateNavButtons(phase) {
+            let list, prevBtnId, nextBtnId;
+
+            switch (phase) {
+                case 'matches':
+                    list = matches;
+                    prevBtnId = 'prev-btn';
+                    nextBtnId = 'next-btn';
+                    break;
+                case 'fp':
+                    list = fpSample;
+                    prevBtnId = 'fp-prev-btn';
+                    nextBtnId = 'fp-next-btn';
+                    break;
+                case 'fn':
+                    list = fnList;
+                    prevBtnId = 'fn-prev-btn';
+                    nextBtnId = 'fn-next-btn';
+                    break;
+            }
+
+            document.getElementById(prevBtnId).disabled = currentIndex === 0;
+
+            // For FN, next is disabled until feedback submitted
+            if (phase === 'fn') {
+                const fn = fnList[currentIndex];
+                const hasComment = document.getElementById('fn-comment').value.trim().length > 0;
+                const hasExistingFeedback = fn && fn.feedback;
+                document.getElementById(nextBtnId).disabled = !hasExistingFeedback && !hasComment;
+            } else {
+                document.getElementById(nextBtnId).disabled = currentIndex >= list.length - 1;
+            }
+        }
+
+        // Update FN submit button state
+        function updateFNSubmitState() {
+            const comment = document.getElementById('fn-comment').value.trim();
+            const submitBtn = document.getElementById('fn-submit-btn');
+            const nextBtn = document.getElementById('fn-next-btn');
+
+            submitBtn.disabled = comment.length === 0;
+
+            // Also enable next if feedback already exists
+            const fn = fnList[currentIndex];
+            if (fn && fn.feedback) {
+                nextBtn.disabled = false;
+            } else {
+                nextBtn.disabled = comment.length === 0;
+            }
+        }
+
+        // Submit match feedback
+        async function submitMatchFeedback(verdict) {
+            const match = matches[currentIndex];
+
+            try {
+                await fetch('/api/review/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        swing_type: 'match',
+                        swing_reference: { annotation_id: match.annotation_id },
+                        verdict: verdict
+                    })
+                });
+
+                // Update local state
+                match.feedback = { verdict };
+
+                // Move to next
+                nextSwing();
+
+            } catch (error) {
+                console.error('Error submitting feedback:', error);
+                alert('Failed to submit feedback');
+            }
+        }
+
+        // Submit FP feedback
+        async function submitFPFeedback(verdict) {
+            const fp = fpSample[currentIndex];
+            const category = document.getElementById('fp-category').value || null;
+
+            try {
+                await fetch('/api/review/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        swing_type: 'false_positive',
+                        swing_reference: { sample_index: fp.fp_index },
+                        verdict: verdict,
+                        category: category
+                    })
+                });
+
+                // Update local state
+                fp.feedback = { verdict, category };
+
+                // Move to next
+                nextSwing();
+
+            } catch (error) {
+                console.error('Error submitting feedback:', error);
+                alert('Failed to submit feedback');
+            }
+        }
+
+        // Submit FN feedback
+        async function submitFNFeedback() {
+            const fn = fnList[currentIndex];
+            const comment = document.getElementById('fn-comment').value.trim();
+            const category = document.getElementById('fn-category').value || null;
+
+            if (!comment) {
+                alert('Please provide a comment explaining what caught your eye');
+                return;
+            }
+
+            try {
+                await fetch('/api/review/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        swing_type: 'false_negative',
+                        swing_reference: { annotation_id: fn.annotation_id },
+                        verdict: 'explained',
+                        comment: comment,
+                        category: category
+                    })
+                });
+
+                // Update local state
+                fn.feedback = { verdict: 'explained', comment, category };
+
+                // Enable next button
+                document.getElementById('fn-next-btn').disabled = false;
+
+                // Auto-advance if not last
+                if (currentIndex < fnList.length - 1) {
+                    nextSwing();
+                } else {
+                    // Check if all FNs have feedback before advancing
+                    const allExplained = fnList.every(fn => fn.feedback);
+                    if (allExplained) {
+                        advancePhase();
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error submitting feedback:', error);
+                alert('Failed to submit feedback');
+            }
+        }
+
+        // Navigation
+        function previousSwing() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                showCurrentItem();
+            }
+        }
+
+        function nextSwing() {
+            let list;
+            switch (currentPhase) {
+                case 'matches': list = matches; break;
+                case 'fp_sample': list = fpSample; break;
+                case 'fn_feedback': list = fnList; break;
+                default: return;
+            }
+
+            if (currentIndex < list.length - 1) {
+                currentIndex++;
+                showCurrentItem();
+            } else {
+                // End of current phase
+                advancePhase();
+            }
+        }
+
+        function showCurrentItem() {
+            switch (currentPhase) {
+                case 'matches': showCurrentMatch(); break;
+                case 'fp_sample': showCurrentFP(); break;
+                case 'fn_feedback': showCurrentFN(); break;
+            }
+        }
+
+        // Skip all matches
+        async function skipAllMatches() {
+            await advancePhase();
+        }
+
+        // Skip remaining FPs
+        async function skipRemainingFPs() {
+            await advancePhase();
+        }
+
+        // Advance to next phase
+        async function advancePhase() {
+            try {
+                const response = await fetch('/api/review/advance', { method: 'POST' });
+                if (!response.ok) {
+                    const error = await response.text();
+                    if (error.includes('false negatives must have feedback')) {
+                        alert('All false negatives must have explanations before continuing.');
+                        return;
+                    }
+                    throw new Error(error);
+                }
+
+                reviewState = await response.json();
+                currentPhase = reviewState.phase;
+                currentIndex = 0;
+
+                updatePhaseProgress();
+                updatePhaseUI();
+
+            } catch (error) {
+                console.error('Error advancing phase:', error);
+                alert('Failed to advance: ' + error.message);
+            }
+        }
+
+        // Load summary
+        async function loadSummary() {
+            try {
+                const response = await fetch('/api/review/summary');
+                if (!response.ok) throw new Error(await response.text());
+
+                const summary = await response.json();
+
+                // Update stats
+                document.getElementById('summary-matches-reviewed').textContent = summary.matches.reviewed;
+                document.getElementById('summary-matches-correct').textContent = summary.matches.correct;
+                document.getElementById('summary-fp-reviewed').textContent = summary.false_positives.reviewed;
+                document.getElementById('summary-fp-noise').textContent = summary.false_positives.noise;
+                document.getElementById('summary-fn-total').textContent = summary.false_negatives.total;
+                document.getElementById('summary-fn-explained').textContent = summary.false_negatives.explained;
+
+                // Clear chart
+                candleSeries.setMarkers([]);
+
+            } catch (error) {
+                console.error('Error loading summary:', error);
+            }
+        }
+
+        // Export feedback
+        async function exportFeedback() {
+            try {
+                const response = await fetch('/api/review/export?format=json');
+                if (!response.ok) throw new Error(await response.text());
+
+                const data = await response.json();
+
+                // Download as file
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `review_feedback_${data.session_id}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+            } catch (error) {
+                console.error('Error exporting:', error);
+                alert('Failed to export feedback');
+            }
+        }
+
+        // Go back to annotator
+        function goToAnnotator() {
+            window.location.href = '/';
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ignore if typing in textarea
+            if (e.target.tagName === 'TEXTAREA') {
+                if (e.key === 'Enter' && !e.shiftKey && currentPhase === 'fn_feedback') {
+                    e.preventDefault();
+                    submitFNFeedback();
+                }
+                return;
+            }
+
+            switch (currentPhase) {
+                case 'matches':
+                    if (e.key.toLowerCase() === 'g') {
+                        submitMatchFeedback('correct');
+                    } else if (e.key.toLowerCase() === 'w') {
+                        submitMatchFeedback('incorrect');
+                    } else if (e.key === 'ArrowRight') {
+                        nextSwing();
+                    } else if (e.key === 'ArrowLeft') {
+                        previousSwing();
+                    } else if (e.key.toLowerCase() === 's') {
+                        skipAllMatches();
+                    }
+                    break;
+
+                case 'fp_sample':
+                    if (e.key.toLowerCase() === 'n') {
+                        submitFPFeedback('noise');
+                    } else if (e.key.toLowerCase() === 'v') {
+                        submitFPFeedback('valid_missed');
+                    } else if (e.key === 'ArrowRight') {
+                        nextSwing();
+                    } else if (e.key === 'ArrowLeft') {
+                        previousSwing();
+                    } else if (e.key.toLowerCase() === 's') {
+                        skipRemainingFPs();
+                    }
+                    break;
+
+                case 'fn_feedback':
+                    if (e.key === 'ArrowRight') {
+                        const fn = fnList[currentIndex];
+                        if (fn && fn.feedback) {
+                            nextSwing();
+                        }
+                    } else if (e.key === 'ArrowLeft') {
+                        previousSwing();
+                    }
+                    break;
+            }
+        });
+
+        // Enable/disable FN submit based on comment
+        document.getElementById('fn-comment').addEventListener('input', updateFNSubmitState);
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            initChart();
+            await startReview();
+        });
+    </script>
+</body>
+</html>

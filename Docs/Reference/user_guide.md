@@ -202,6 +202,92 @@ A user annotation matches a system-detected swing when:
 | `/api/compare/report` | GET | Get full report with FN/FP lists |
 | `/api/compare/export` | GET | Export as JSON or CSV |
 
+## Review Mode
+
+After completing annotation (all 4 scales in cascade mode), use Review Mode to provide qualitative feedback on detection quality.
+
+### Starting Review Mode
+
+1. Complete all scales in the cascade workflow (XL → L → M → S)
+2. Click "Start Review Mode →" button in the sidebar
+3. Or navigate directly to `/review`
+
+### Three-Phase Review Process
+
+Review Mode guides you through three phases:
+
+#### Phase 1: Matches Review
+
+Review swings where your annotation matched system detection.
+
+- **Purpose**: Confirm detections are actually correct
+- **Actions**:
+  - `G` or click "Looks Good" - Confirm match is correct
+  - `W` or click "Actually Wrong" - Flag match as incorrect
+  - `→` - Next swing
+  - `S` - Skip all matches (advance to Phase 2)
+
+#### Phase 2: FP Sample Review
+
+Review a sample of false positives (system detected, you didn't mark).
+
+- **Purpose**: Understand why system detects swings you didn't mark
+- **Actions**:
+  - `N` or click "Noise" - Mark as noise (not a real swing)
+  - `V` or click "Actually Valid" - Admit you missed this swing
+  - Optional: Select reason from dropdown (too_small, wrong_direction, not_a_swing, other)
+  - `S` - Skip remaining FPs (advance to Phase 3)
+
+#### Phase 3: FN Feedback
+
+Explain each false negative (you marked, system missed).
+
+- **Purpose**: Capture qualitative signal for improving detection
+- **Actions**:
+  - Enter required comment explaining what caught your eye
+  - Optional: Select category (pattern, size, context, structure, other)
+  - `Enter` or click "Submit Feedback" - Submit and advance
+- **Note**: All FNs must have feedback before completing review
+
+### Summary View
+
+After all phases, see statistics:
+- Matches: reviewed count, correct/incorrect
+- False Positives: sampled count, noise/valid
+- False Negatives: total count, explained count
+
+### Exporting Feedback
+
+Click "Export Feedback (JSON)" to download structured feedback for rule iteration.
+
+### Keyboard Shortcuts
+
+| Phase | Key | Action |
+|-------|-----|--------|
+| Matches | `G` | Good (correct) |
+| Matches | `W` | Wrong (incorrect) |
+| Matches | `S` | Skip all |
+| FP Sample | `N` | Noise |
+| FP Sample | `V` | Valid (I missed it) |
+| FP Sample | `S` | Skip remaining |
+| FN Feedback | `Enter` | Submit (when comment filled) |
+| All | `→` | Next swing |
+| All | `←` | Previous swing |
+
+### Review Mode API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/review/start` | POST | Initialize review session |
+| `/api/review/state` | GET | Get current review state |
+| `/api/review/matches` | GET | Get matched swings for Phase 1 |
+| `/api/review/fp-sample` | GET | Get sampled FPs for Phase 2 |
+| `/api/review/fn-list` | GET | Get all FNs for Phase 3 |
+| `/api/review/feedback` | POST | Submit feedback on a swing |
+| `/api/review/advance` | POST | Advance to next phase |
+| `/api/review/summary` | GET | Get final review summary |
+| `/api/review/export` | GET | Export feedback (JSON or CSV) |
+
 ---
 
 # Lightweight Swing Validator

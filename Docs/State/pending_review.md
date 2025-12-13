@@ -1,12 +1,22 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-12
 
 ---
 
 ## Pending Changes
+
+### 2025-12-12 - Review Mode Frontend
+- **Issue:** #42
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/static/review.html`, `src/ground_truth_annotator/api.py`, `src/ground_truth_annotator/static/index.html`
+
+### 2025-12-12 - Review Mode API Endpoints
+- **Issue:** #41
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/api.py`, `tests/test_ground_truth_annotator_api.py`
 
 ### 2025-12-12 - Review Mode Controller
 - **Issue:** #40

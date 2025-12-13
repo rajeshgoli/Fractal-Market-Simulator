@@ -527,6 +527,9 @@
                         <button class="btn btn-success" id="next-scale-btn" onclick="advanceToNextScale()">
                             Next Scale →
                         </button>
+                        <button class="btn btn-primary" id="start-review-btn" onclick="startReview()" style="display: none; margin-top: 10px;">
+                            Start Review Mode →
+                        </button>
                     </div>
                 </div>
 
@@ -1162,10 +1165,15 @@
 
                 // Update next button
                 const nextBtn = document.getElementById('next-scale-btn');
+                const reviewBtn = document.getElementById('start-review-btn');
                 if (cascadeState.is_complete) {
                     nextBtn.textContent = 'Session Complete!';
                     nextBtn.disabled = true;
+                    // Show review button
+                    if (reviewBtn) reviewBtn.style.display = 'block';
                 } else {
+                    // Hide review button until complete
+                    if (reviewBtn) reviewBtn.style.display = 'none';
                     const nextIndex = cascadeState.current_scale_index + 1;
                     const scales = ['XL', 'L', 'M', 'S'];
                     if (nextIndex < scales.length) {
@@ -1231,6 +1239,11 @@
                 console.error('Error advancing scale:', error);
                 alert('Failed to advance: ' + error.message);
             }
+        }
+
+        // Navigate to Review Mode
+        function startReview() {
+            window.location.href = '/review';
         }
 
         // Keyboard shortcuts
