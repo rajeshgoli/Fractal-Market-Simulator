@@ -1,10 +1,24 @@
 # Architect Notes
 
-## Current Phase: Ground Truth Collection
+## Current Phase: Ground Truth Collection - UX Fixes
 
-**Status:** Codebase cleanup complete, ready for annotation sessions
-**Owner:** Product (next direction) / User (annotation sessions)
-**Blocker:** None
+**Status:** 4 P1 UX issues scoped from first annotation session
+**Owner:** Engineering (implement #46-#49)
+**Blocker:** None - issues ready for implementation
+
+---
+
+## Immediate Next Steps
+
+| Issue | Title | Owner | Parallelism |
+|-------|-------|-------|-------------|
+| #46 | Fix inverted Fibonacci reference level labels | Engineering | Can parallelize |
+| #47 | Add preset options for FN explanations | Engineering | Can parallelize |
+| #48 | Add save confirmation and export button | Engineering | Can parallelize |
+| #49 | Add session quality control (keep/discard) | Engineering | Sequential (has backend) |
+| #50 | Preload next annotation window | Engineering | Sequential (has backend) |
+
+**Recommendation:** Implement #46, #47, #48 in parallel (all frontend-only), then #49 and #50 (both have backend changes).
 
 ---
 
@@ -65,7 +79,6 @@ python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --cascade -
 |----------|---------|
 | Annotation targets | How many sessions needed for statistically significant ground truth? |
 | Rule iteration | How to translate Review Mode feedback into detector improvements? |
-| P2 UX items | Worth addressing zoom/pan and edge snap before more sessions? |
 
 ---
 
@@ -94,6 +107,7 @@ python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --cascade -
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 12 | #46-#50 - P1 UX fixes from annotation session | Scoped |
 | Dec 12 | #44 - Deprecated module removal | Accepted |
 | Dec 12 | Review Mode epic (#38) - 5 issues | All accepted |
 | Dec 12 | #32, #33, #34, #35, #37 - UX polish batch | All accepted |

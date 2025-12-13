@@ -2,6 +2,141 @@
 
 ---
 
+## Q-2025-12-12-4: P1 UX Fixes for Ground Truth Annotator
+
+**From:** Product
+**To:** Architect
+**Status:** Resolved
+**Date:** December 12, 2025
+
+**Context:** First real annotation session surfaced 4 UX issues blocking quality data collection.
+
+**Questions Asked:**
+1. Reference level labels inverted (bull reference shows 0 at top, should be at bottom)
+2. FN explanation too slow (requires typing for every FN)
+3. Unclear export/save workflow (no feedback on save)
+4. Session quality control (no way to mark session as keep vs discard)
+
+**Resolution (Architect):**
+
+All 4 issues scoped and GitHub issues created:
+
+| Issue | Title | Scope | Files |
+|-------|-------|-------|-------|
+| #46 | Fix inverted Fibonacci reference level labels | Frontend only | `index.html` |
+| #47 | Add preset options for FN explanations in Review Mode | Frontend only | `review.html` |
+| #48 | Add save confirmation and export button to Annotation UI | Frontend only | `index.html` |
+| #49 | Add session quality control (keep/discard) at session end | Backend + Frontend | `models.py`, `api.py`, `review.html` |
+| #50 | Preload next annotation window to eliminate 30-40s wait | Backend | `api.py` |
+
+**Complexity Assessment:**
+- #46, #48: Small (~20 lines each)
+- #47: Small-Medium (~40 lines)
+- #49: Medium (~50 lines across 3 files)
+- #50: Medium (caching + optional preload threading)
+
+**Root Cause of #50:** `init_app()` re-reads entire CSV on every "Load Next Window" call. Fix: cache DataFrame in memory, optionally preload next window in background thread when user enters Review Mode.
+
+**Parallelism:** Issues #46, #47, #48 can run in parallel (all frontend-only). Issues #49 and #50 require backend changes.
+
+**Next Step:** Engineering to implement #46-#48 in parallel, then #49 and #50.
+
+---
+
+## Q-2025-12-12-3: Review Mode Implementation
+
+**From:** Product
+**To:** Architect
+**Status:** Resolved
+**Date:** December 12, 2025
+
+**Context:** First annotation session showed 2,216 system detections vs 9 user annotations. Pivoting from "volume annotation" to "rule feedback" approach.
+
+**Questions Asked:**
+1. Implementation approach: New screen vs extending existing UI?
+2. FP sampling strategy: Random 10-20 or stratified by scale/confidence?
+3. Feedback schema: How to extend annotation storage for comments/categories?
+4. Export format: JSON? CSV? What structure is most useful?
+
+**Resolution (Architect):**
+
+**Q1: Implementation approach**
+**Answer:** Separate `review.html` page.
+- `index.html` is already 1,279 lines with complex state management
+- Review Mode has distinct workflow (linear progression, not free-form annotation)
+- Easier to test and maintain independently
+- Navigation: `/review?session_id=X` after cascade completes
+
+**Q2: FP sampling strategy**
+**Answer:** Stratified by scale, 2-5 samples per scale, capped at 20 total.
+- Ensures coverage across all scales where miscalibration may differ
+- Prevents S-scale domination of sample (where most FPs live)
+- Still manageable review time (~5 min)
+
+**Q3: Feedback schema**
+**Answer:** New `SwingFeedback` and `ReviewSession` dataclasses.
+- Stored in separate `{session_id}_review.json` files
+- Keeps annotation data clean (no schema changes to existing models)
+- Enables re-review without affecting annotations
+
+**Q4: Export format**
+**Answer:** JSON primary with nested structure. CSV optional for spreadsheet analysis.
+- JSON preserves relationships for programmatic analysis
+- Includes summary stats + per-swing detail
+- CSV export available for quick viewing
+
+**Full design:** See `Docs/State/architect_notes.md` for complete design including:
+- 3-phase workflow (matches → FP sample → FN feedback)
+- Data model extensions
+- API endpoints
+- Implementation order
+- P1 session flow improvements (random windows, continuation)
+
+**Next Step:** Engineering to create GitHub issues and implement per the design.
+
+---
+
+## Q-2025-12-12-2: Ground Truth Annotator UX Polish
+
+**From:** Product
+**To:** Architect
+**Status:** Resolved
+**Date:** December 12, 2025
+
+**Context:** MVP delivered and validated. "UX is beautiful" per dogfood. Four refinements identified before heavy annotation sessions.
+
+**Questions Asked:**
+1. Snap-to-extrema - Both clicks auto-select best high/low within scale-aware tolerance
+2. Fib preview - Show 0, 0.382, 1, 2 horizontal lines on pending annotation
+3. XL aspect ratio - Maintain aspect ratio when reference panel shrinks
+4. Non-blocking confirmation - Move modal to side panel, add hotkeys, keep charts visible
+
+**Resolution (Architect):**
+
+**Architecture Decision:** All four refinements are **frontend-only** changes. No backend API modifications required.
+
+**Rationale:**
+- Scale information already available via `/api/cascade/state`
+- Bar data already available via `/api/bars`
+- All calculations (snapping, fib levels) are simple client-side arithmetic
+- No new data persistence requirements
+
+**Module Design:**
+
+| Issue | Purpose | Complexity | File |
+|-------|---------|------------|------|
+| #32 | Snap-to-extrema | Medium | index.html |
+| #33 | Fib preview lines | Small | index.html |
+| #34 | XL aspect ratio | Small | index.html |
+| #35 | Non-blocking confirmation | Medium | index.html |
+| #36 | Housekeeping (clear data) | Trivial | CLI |
+
+All 4 implementation issues can be worked **in parallel** by separate engineer agents.
+
+**Next Step:** Engineering to implement #32-#35 in parallel. Then housekeeping (#36), then heavy annotation.
+
+---
+
 ## Q-2025-12-12-1: Ground Truth Annotation Tool Design
 
 **From:** Product
