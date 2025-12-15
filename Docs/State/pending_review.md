@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-15
 
@@ -9,6 +9,8 @@
 ## Pending Changes
 
 - **#59** - Fix snap-to-extrema annotation failures and direction inference
+- **#60** - Fix XL Context chart rendering on review screen
+- **#61** - Filename version reflects schema version, not file iteration
 
 ---
 
