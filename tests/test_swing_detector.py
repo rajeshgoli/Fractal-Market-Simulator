@@ -712,5 +712,188 @@ class TestSwingPointProtection(unittest.TestCase):
             "Pre-formation protection should filter violated low references")
 
 
+class TestSizeFilter(unittest.TestCase):
+    """Test suite for min_candle_ratio and min_range_pct size filters."""
+
+    def test_size_filter_backward_compatibility(self):
+        """Default None values should not filter any swings."""
+        # Create data with small swings
+        prices = [100, 105, 110, 115, 120, 115, 110, 105, 100, 105, 110]
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 2 for p in prices],
+            'low': [p - 2 for p in prices],
+            'close': prices
+        })
+
+        # Without size filter (default)
+        result_default = detect_swings(df, lookback=2, filter_redundant=False)
+
+        # Explicitly passing None should be the same
+        result_none = detect_swings(df, lookback=2, filter_redundant=False,
+                                    min_candle_ratio=None, min_range_pct=None)
+
+        self.assertEqual(len(result_default['bull_references']), len(result_none['bull_references']))
+        self.assertEqual(len(result_default['bear_references']), len(result_none['bear_references']))
+
+    def test_size_filter_filters_small_swings(self):
+        """Swings below both thresholds should be filtered."""
+        # Test directly on the helper function for precise control
+        from src.swing_analysis.swing_detector import _apply_size_filter
+
+        # Setup: median_candle = 2, price_range = 100
+        references = [
+            {"size": 5.0, "high_bar_index": 10, "low_bar_index": 0},   # 2.5x candle, 5% range - should filter (fails both)
+            {"size": 15.0, "high_bar_index": 30, "low_bar_index": 20},  # 7.5x candle, 15% range - should keep (passes candle)
+            {"size": 3.0, "high_bar_index": 50, "low_bar_index": 45},   # 1.5x candle, 3% range - should keep (passes range)
+        ]
+
+        # min_candle_ratio=5.0 (needs size >= 10), min_range_pct=10.0 (needs size >= 10)
+        filtered = _apply_size_filter(references, median_candle=2.0, price_range=100.0,
+                                      min_candle_ratio=5.0, min_range_pct=10.0)
+
+        # First swing (size=5) fails both: 2.5x < 5x and 5% < 10%
+        # Second swing (size=15) passes: 7.5x >= 5x
+        # Third swing (size=3) fails: 1.5x < 5x and 3% < 10%
+        self.assertEqual(len(filtered), 1, "Only swings passing at least one threshold should be kept")
+        self.assertEqual(filtered[0]["size"], 15.0)
+
+    def test_size_filter_or_logic_candle_ratio_passes(self):
+        """Swing should be kept if candle_ratio passes, even if range_pct fails."""
+        from src.swing_analysis.swing_detector import _apply_size_filter
+
+        # Swing size = 12, median_candle = 2 (6x), price_range = 1000 (1.2% - fails)
+        references = [
+            {"size": 12.0, "high_bar_index": 20, "low_bar_index": 10},
+        ]
+
+        # 6x candle passes (>= 5x), 1.2% range fails (< 10%)
+        filtered = _apply_size_filter(references, median_candle=2.0, price_range=1000.0,
+                                      min_candle_ratio=5.0, min_range_pct=10.0)
+
+        self.assertEqual(len(filtered), 1, "Swing passing candle_ratio should be kept")
+
+    def test_size_filter_or_logic_range_pct_passes(self):
+        """Swing should be kept if range_pct passes, even if candle_ratio fails."""
+        from src.swing_analysis.swing_detector import _apply_size_filter
+
+        # Swing size = 15, median_candle = 10 (1.5x - fails), price_range = 50 (30% - passes)
+        references = [
+            {"size": 15.0, "high_bar_index": 20, "low_bar_index": 10},
+        ]
+
+        # 1.5x candle fails (< 5x), 30% range passes (>= 10%)
+        filtered = _apply_size_filter(references, median_candle=10.0, price_range=50.0,
+                                      min_candle_ratio=5.0, min_range_pct=10.0)
+
+        self.assertEqual(len(filtered), 1, "Swing passing range_pct should be kept")
+
+    def test_high_volatility_exception_keeps_short_large_swings(self):
+        """1-2 bar swings with 3x+ median candle should be kept."""
+        from src.swing_analysis.swing_detector import _apply_size_filter
+
+        # Swing spans 2 bars (bar 10 to 11), size = 8, median_candle = 2 (4x)
+        # Fails candle_ratio (4x < 5x), fails range_pct (8% < 10%)
+        # BUT passes high volatility exception (span=2, 4x >= 3x)
+        references = [
+            {"size": 8.0, "high_bar_index": 11, "low_bar_index": 10},  # 2-bar swing
+        ]
+
+        filtered = _apply_size_filter(references, median_candle=2.0, price_range=100.0,
+                                      min_candle_ratio=5.0, min_range_pct=10.0)
+
+        self.assertEqual(len(filtered), 1, "Short high-volatility swing should be kept")
+
+    def test_high_volatility_exception_not_applied_to_long_swings(self):
+        """Swings > 2 bars should not benefit from high volatility exception."""
+        from src.swing_analysis.swing_detector import _apply_size_filter
+
+        # Swing spans 10 bars, size = 8, median_candle = 2 (4x)
+        # Fails both thresholds and doesn't qualify for high volatility exception
+        references = [
+            {"size": 8.0, "high_bar_index": 20, "low_bar_index": 10},  # 11-bar swing
+        ]
+
+        filtered = _apply_size_filter(references, median_candle=2.0, price_range=100.0,
+                                      min_candle_ratio=5.0, min_range_pct=10.0)
+
+        self.assertEqual(len(filtered), 0, "Long swing not qualifying should be filtered")
+
+    def test_size_filter_with_only_candle_ratio(self):
+        """Setting only min_candle_ratio should filter by candle ratio only."""
+        prices = [100, 105, 110, 120, 130, 125, 115, 105, 100, 102, 105]
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # Only candle ratio filter
+        result = detect_swings(df, lookback=2, filter_redundant=False,
+                               min_candle_ratio=5.0, min_range_pct=None)
+
+        # Should work without error
+        self.assertIn('bull_references', result)
+        self.assertIn('bear_references', result)
+
+    def test_size_filter_with_only_range_pct(self):
+        """Setting only min_range_pct should filter by range percentage only."""
+        prices = [100, 105, 110, 120, 130, 125, 115, 105, 100, 102, 105]
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # Only range pct filter
+        result = detect_swings(df, lookback=2, filter_redundant=False,
+                               min_candle_ratio=None, min_range_pct=2.0)
+
+        # Should work without error
+        self.assertIn('bull_references', result)
+        self.assertIn('bear_references', result)
+
+    def test_size_filter_empty_dataframe(self):
+        """Size filter should handle empty DataFrame gracefully."""
+        df = pd.DataFrame(columns=['open', 'high', 'low', 'close'])
+
+        result = detect_swings(df, lookback=2, filter_redundant=False,
+                               min_candle_ratio=5.0, min_range_pct=2.0)
+
+        self.assertEqual(result['bull_references'], [])
+        self.assertEqual(result['bear_references'], [])
+
+    def test_size_filter_integration_with_other_filters(self):
+        """Size filter should work correctly with redundancy and max_rank filters."""
+        prices = (
+            [100, 105, 110, 120, 130, 140, 135, 125, 115, 105, 100] +
+            [102, 106, 112, 120, 130, 145, 155, 150, 140, 125, 110, 100] +
+            [105, 110, 115, 120]
+        )
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # All filters enabled
+        result = detect_swings(df, lookback=2, filter_redundant=True,
+                               min_candle_ratio=3.0, min_range_pct=1.0,
+                               max_rank=5)
+
+        # Should return valid results with all filters applied
+        self.assertIn('bull_references', result)
+        self.assertIn('bear_references', result)
+
+        # Ranks should be sequential
+        for i, ref in enumerate(result['bull_references']):
+            self.assertEqual(ref['rank'], i + 1)
+        for i, ref in enumerate(result['bear_references']):
+            self.assertEqual(ref['rank'], i + 1)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

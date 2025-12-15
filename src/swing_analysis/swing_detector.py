@@ -267,9 +267,69 @@ def filter_swings(references: List[Dict[str, Any]], direction: str, quantization
         
     return kept_references
 
+
+def _apply_size_filter(references: List[Dict[str, Any]], median_candle: float,
+                       price_range: float, min_candle_ratio: Optional[float],
+                       min_range_pct: Optional[float],
+                       high_volatility_ratio: float = 3.0) -> List[Dict[str, Any]]:
+    """
+    Filter swings that are too small relative to context.
+
+    A swing is kept if it passes ANY of these conditions (OR logic):
+    - candle_ratio >= min_candle_ratio
+    - range_pct >= min_range_pct
+    - High volatility exception: span <= 2 bars AND size >= high_volatility_ratio * median_candle
+
+    A swing is filtered only if it fails ALL conditions.
+
+    Args:
+        references: List of reference swing dictionaries with 'size' key
+        median_candle: Median candle height in the window
+        price_range: Total price range of the window (max - min)
+        min_candle_ratio: Minimum size as multiple of median candle (or None to skip)
+        min_range_pct: Minimum size as percentage of price range (or None to skip)
+        high_volatility_ratio: Multiplier for high-volatility exception (default 3.0)
+
+    Returns:
+        Filtered list of references
+    """
+    # If neither filter is set, return unchanged
+    if min_candle_ratio is None and min_range_pct is None:
+        return references
+
+    # Avoid division by zero
+    if median_candle <= 0 or price_range <= 0:
+        return references
+
+    filtered = []
+    for ref in references:
+        size = ref["size"]
+
+        # Calculate metrics
+        candle_ratio = size / median_candle
+        range_pct = (size / price_range) * 100
+
+        # Calculate span in bars
+        span = abs(ref["high_bar_index"] - ref["low_bar_index"]) + 1
+
+        # OR logic: keep if any condition passes
+        passes_candle = min_candle_ratio is None or candle_ratio >= min_candle_ratio
+        passes_range = min_range_pct is None or range_pct >= min_range_pct
+
+        # High volatility exception: 1-2 bar swings with large candles are significant
+        passes_high_volatility = span <= 2 and candle_ratio >= high_volatility_ratio
+
+        if passes_candle or passes_range or passes_high_volatility:
+            filtered.append(ref)
+
+    return filtered
+
+
 def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = True,
                   quantization: float = 0.25, max_pair_distance: Optional[int] = None,
-                  protection_tolerance: float = 0.1, max_rank: Optional[int] = None) -> Dict[str, Any]:
+                  protection_tolerance: float = 0.1, max_rank: Optional[int] = None,
+                  min_candle_ratio: Optional[float] = None,
+                  min_range_pct: Optional[float] = None) -> Dict[str, Any]:
     """
     Identifies swing highs and lows and pairs them to find valid reference swings.
 
@@ -285,6 +345,10 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             before the reference is invalidated. Default 0.1 (10%). Set to None to disable.
         max_rank: If set, only return top N swings per direction (bull and bear).
             Reduces noise from secondary structures. Default None returns all swings.
+        min_candle_ratio: Minimum swing size as multiple of median candle height.
+            Swings smaller than this are filtered. Uses OR logic with min_range_pct.
+        min_range_pct: Minimum swing size as percentage of window price range.
+            Swings smaller than this are filtered. Uses OR logic with min_candle_ratio.
 
     Returns:
         A dictionary containing current price, detected swing points, and valid reference swings.
@@ -312,6 +376,11 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     # These check if swing points were violated by subsequent price action
     all_lows_min_table = SparseTable(lows.tolist(), mode='min') if protection_tolerance is not None else None
     all_highs_max_table = SparseTable(highs.tolist(), mode='max') if protection_tolerance is not None else None
+
+    # Calculate context metrics for size filtering
+    candle_heights = highs - lows
+    median_candle = float(np.median(candle_heights)) if len(candle_heights) > 0 else 0.0
+    price_range = float(np.max(highs) - np.min(lows)) if len(highs) > 0 else 0.0
 
     # Convert to list of dicts format
     swing_highs = [{"price": float(highs[i]), "bar_index": int(i)} for i in swing_high_indices]
@@ -472,13 +541,22 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                 "rank": 0  # Placeholder
             })
 
-    # 3. Filter Redundant Swings (Optional)
+    # 3. Apply Size Filter (after protection, before redundancy)
+    if min_candle_ratio is not None or min_range_pct is not None:
+        bull_references = _apply_size_filter(
+            bull_references, median_candle, price_range, min_candle_ratio, min_range_pct
+        )
+        bear_references = _apply_size_filter(
+            bear_references, median_candle, price_range, min_candle_ratio, min_range_pct
+        )
+
+    # 4. Filter Redundant Swings (Optional)
     if filter_redundant:
         quant_dec = Decimal(str(quantization))
         bull_references = filter_swings(bull_references, "bullish", quant_dec)
         bear_references = filter_swings(bear_references, "bearish", quant_dec)
 
-    # 4. Sort and Rank
+    # 5. Sort and Rank
     # Sort by size descending
     bull_references.sort(key=lambda x: x["size"], reverse=True)
     for idx, ref in enumerate(bull_references):
@@ -488,7 +566,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     for idx, ref in enumerate(bear_references):
         ref["rank"] = idx + 1
 
-    # 5. Filter by max_rank (optional)
+    # 6. Filter by max_rank (optional)
     if max_rank is not None:
         bull_references = bull_references[:max_rank]
         bear_references = bear_references[:max_rank]
