@@ -2,6 +2,69 @@
 
 ---
 
+## Q-2025-12-15-1: Trend-Aware Reference Detection
+
+**From:** Product
+**To:** Architect
+**Status:** Resolved
+**Date:** December 15, 2025
+
+**Context:** User feedback identifies consistent FP pattern — detector emits reference ranges against the prevailing trend direction. At XL and L scales, counter-trend swings are technically valid but contextually noise.
+
+**Questions Asked:**
+1. What's the best approach to add trend awareness to the swing detector?
+2. Options considered: Trend filter, directional weighting, user-specified bias, scale cascade
+
+**Resolution (Architect):**
+
+**Recommended Approach: Hybrid (Options 1 + 3)**
+
+Add `trend_context` parameter to `detect_swings()`:
+```python
+def detect_swings(..., trend_context: Literal["auto", "bullish", "bearish", "neutral"] = "neutral"):
+```
+
+| Mode | Behavior |
+|------|----------|
+| `"neutral"` | Current behavior (default), no filtering |
+| `"bullish"` | Suppress bear_references |
+| `"bearish"` | Suppress bull_references |
+| `"auto"` | Calculate trend from price data, apply appropriate filter |
+
+**Trend Calculation (for auto mode):**
+- Simple linear regression slope over the window
+- Alternative: Compare first-third vs last-third price averages
+- O(N) computation, doesn't affect O(N log N) overall
+
+**Implementation Strategy:**
+- Apply as post-filter after standard detection
+- Don't modify core swing detection or Fibonacci logic
+- Optional enhancement: demote rather than remove (multiply size by 0.3)
+
+**Why This Approach:**
+1. Minimal invasion: Core algorithm unchanged, filter is additive
+2. User control: `neutral` preserves current behavior; users can override
+3. Simple trend math: Linear regression is O(N) and statistically robust
+4. Testable: New parameter = easy to test both modes
+5. Reversible: If trend awareness causes issues, just use `neutral`
+
+**What NOT to Do:**
+- Don't add ML-based trend detection (too heavy, hard to debug)
+- Don't modify swing point detection logic (risk regression)
+- Don't implement scale cascade yet (adds cross-scale coupling; defer)
+
+**Files Affected:**
+| File | Change |
+|------|--------|
+| `src/swing_analysis/swing_detector.py` | Add `trend_context` param, trend calc, post-filter |
+| `tests/test_swing_detector.py` | Add trend context tests |
+
+**Alternative Considered:** Directional weighting (counter-trend refs get `size *= 0.3`) - more nuanced but adds complexity. Recommend starting with suppression, can add weighting later if needed.
+
+**Next Step:** Product to confirm approach. If approved, Engineering creates GitHub issue.
+
+---
+
 ## Q-2025-12-12-4: P1 UX Fixes for Ground Truth Annotator
 
 **From:** Product

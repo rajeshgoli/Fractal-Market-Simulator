@@ -88,6 +88,7 @@ tests/                         # 402 tests passing
 |----------|---------|
 | Annotation targets | How many sessions needed for statistically significant ground truth? |
 | Rule iteration | How to translate Review Mode feedback into detector improvements? |
+| **Trend-aware detection** | Recommend hybrid approach: `trend_context` param with auto/bullish/bearish/neutral modes. See `Docs/Comms/archive.md` Q-2025-12-15-1. Awaiting Product confirmation. |
 
 ---
 
