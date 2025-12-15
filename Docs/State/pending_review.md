@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-15
 
 ---
 
 ## Pending Changes
+
+### 2025-12-15 - Quota-based Swing Filtering
+- **Issue:** #66
+- **Type:** Feature
+- **Files:** `src/swing_analysis/swing_detector.py`, `src/ground_truth_annotator/comparison_analyzer.py`, `tests/test_swing_detector.py`, `Docs/Reference/developer_guide.md`
 
 ### 2025-12-15 - Best Extrema Adjustment
 - **Issue:** #65
