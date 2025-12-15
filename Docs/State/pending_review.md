@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-15
 
@@ -11,6 +11,8 @@
 - **#59** - Fix snap-to-extrema annotation failures and direction inference
 - **#60** - Fix XL Context chart rendering on review screen
 - **#61** - Filename version reflects schema version, not file iteration
+- **#62** - Too Small filter: min_candle_ratio and min_range_pct parameters
+- **#63** - Prominence filter: min_prominence parameter for 'stands out' heuristic
 
 ---
 
@@ -18,6 +20,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 15 | Q-2025-12-15-6: Too small + subsumed filter design | Designed → #62, #63 created |
 | Dec 15 | #54, #55, #56, #57, #58 - Protection validation, data collection, detection quality, UX batches | All Accepted |
 | Dec 15 | Protection validation design (Q-2025-12-15-2) | Approved → #54 created |
 | Dec 15 | Counter-trend FP category | Accepted |
