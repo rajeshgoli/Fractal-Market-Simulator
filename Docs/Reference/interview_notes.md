@@ -4,6 +4,44 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 15, 2025 - Reference Swing Validation Broken
+
+**Context:** User observation during annotation session. Reference swings shown that violate basic definition.
+
+### Problem
+
+Bull reference displayed: 1496→1369 (downswing)
+But price subsequently traded to 1261, violating the swing low by 108 points.
+
+**This violates the fundamental definition of a reference swing:** the swing point (low for bull refs, high for bear refs) must remain protected. Once violated, the swing is invalidated.
+
+### Root Cause
+
+`swing_detector.py` (used by annotator) validates:
+1. Geometric validity (size > 0)
+2. Current price in 0.382-2x retracement zone
+3. Swing point is extreme *during* formation
+
+**Missing:** Post-completion protection check. No validation that the swing point hasn't been violated by subsequent price action.
+
+Note: `bull_reference_detector.py` has this check (`_check_low_protection`, lines 841-854), but the annotator doesn't use it.
+
+### User Direction
+
+"The point is to show me what you think are the right references. If the current implementation fails basic definition then no point continuing to use it."
+
+### Required Fix
+
+Add swing point protection validation to reference detection. Either:
+1. Integrate `bull_reference_detector.py` logic into annotator flow, OR
+2. Add post-completion violation check to `swing_detector.py`
+
+### Priority
+
+**P0 - Blocking.** Without this, reference swing detection is fundamentally broken.
+
+---
+
 ## December 15, 2025 - Directional Mismatch in Reference Detection
 
 **Context:** User feedback during annotation sessions. Consistent FP pattern observed.

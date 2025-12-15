@@ -583,11 +583,7 @@
                             <span class="swing-detail-value" id="match-scale">-</span>
                         </div>
                         <div class="swing-detail-row">
-                            <span class="swing-detail-label">Bar Range</span>
-                            <span class="swing-detail-value" id="match-bars">-</span>
-                        </div>
-                        <div class="swing-detail-row">
-                            <span class="swing-detail-label">Price</span>
+                            <span class="swing-detail-label">Price Range</span>
                             <span class="swing-detail-value" id="match-price">-</span>
                         </div>
                     </div>
@@ -628,8 +624,8 @@
                             <span class="swing-detail-value" id="fp-scale">-</span>
                         </div>
                         <div class="swing-detail-row">
-                            <span class="swing-detail-label">Bar Range</span>
-                            <span class="swing-detail-value" id="fp-bars">-</span>
+                            <span class="swing-detail-label">Price Range</span>
+                            <span class="swing-detail-value" id="fp-price">-</span>
                         </div>
                         <div class="swing-detail-row">
                             <span class="swing-detail-label">Size</span>
@@ -678,11 +674,7 @@
                             <span class="swing-detail-value" id="fn-scale">-</span>
                         </div>
                         <div class="swing-detail-row">
-                            <span class="swing-detail-label">Bar Range</span>
-                            <span class="swing-detail-value" id="fn-bars">-</span>
-                        </div>
-                        <div class="swing-detail-row">
-                            <span class="swing-detail-label">Price</span>
+                            <span class="swing-detail-label">Price Range</span>
                             <span class="swing-detail-value" id="fn-price">-</span>
                         </div>
                     </div>
@@ -1119,7 +1111,6 @@
             dirEl.textContent = match.direction === 'bull' ? 'Bull Reference (Downswing)' : 'Bear Reference (Upswing)';
 
             document.getElementById('match-scale').textContent = match.scale;
-            document.getElementById('match-bars').textContent = `${match.start_index} → ${match.end_index}`;
             document.getElementById('match-price').textContent = `${match.start_price} → ${match.end_price}`;
 
             updateProgress();
@@ -1147,7 +1138,11 @@
             dirEl.textContent = fp.direction === 'bull' ? 'Bull Reference (Downswing)' : 'Bear Reference (Upswing)';
 
             document.getElementById('fp-scale').textContent = fp.scale;
-            document.getElementById('fp-bars').textContent = `${fp.start_index} → ${fp.end_index}`;
+            // Show prices in swing direction: bull (high→low), bear (low→high)
+            const fpPriceRange = fp.direction === 'bull'
+                ? `${fp.high_price.toFixed(2)} → ${fp.low_price.toFixed(2)}`
+                : `${fp.low_price.toFixed(2)} → ${fp.high_price.toFixed(2)}`;
+            document.getElementById('fp-price').textContent = fpPriceRange;
             document.getElementById('fp-size').textContent = fp.size.toFixed(2);
             document.getElementById('fp-rank').textContent = `#${fp.rank}`;
 
@@ -1177,7 +1172,6 @@
             dirEl.textContent = fn.direction === 'bull' ? 'Bull Reference (Downswing)' : 'Bear Reference (Upswing)';
 
             document.getElementById('fn-scale').textContent = fn.scale;
-            document.getElementById('fn-bars').textContent = `${fn.start_index} → ${fn.end_index}`;
             document.getElementById('fn-price').textContent = `${fn.start_price} → ${fn.end_price}`;
 
             // Reset inputs and preset selection
