@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-15
 
 ---
 
 ## Pending Changes
+
+### 2025-12-15 - Data Collection Improvements
+- **Issue:** #55
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/models.py`, `api.py`, `review_controller.py`, `static/index.html`, `static/review.html`, `tests/test_ground_truth_foundation.py`
 
 ### 2025-12-15 - Swing Point Protection Validation
 - **Issue:** #54

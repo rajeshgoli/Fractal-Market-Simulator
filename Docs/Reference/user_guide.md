@@ -92,6 +92,8 @@ This allows precise selection of **intermediate structure** (e.g., lower highs, 
 
 Larger scales use tighter tolerances because fewer aggregated bars are visible.
 
+**Disabling Snap**: Hold `Shift` while clicking to use the exact clicked bar instead of snap-to-extrema. Useful when nearby extrema cause the snap to select the wrong bar.
+
 ### Direction Inference
 
 The annotator automatically determines swing direction based on price movement:
@@ -140,6 +142,7 @@ Toasts auto-dismiss after 2 seconds.
 | `N` | Next scale (cascade mode only) |
 | `Enter` | Confirm annotation (alternative to A) |
 | `Del` / `Backspace` | Delete last annotation |
+| `Shift` + Click | Disable snap-to-extrema for this click |
 
 ## API Endpoints
 
@@ -277,6 +280,11 @@ Review a sample of false positives (system detected, you didn't mark).
   - `2` or click "Too distant" - Isolated from surrounding structure
   - `3` or click "Something bigger" - Part of a larger swing
   - `4` or click "Counter trend" - Swing against prevailing trend direction
+- **Better Reference** (optional): After quick dismiss, you can optionally mark "what I would have chosen":
+  - A prompt appears: "Mark Better Reference?"
+  - Click the high point first, then the low point
+  - Press `Esc` to skip if not applicable
+  - This data helps tune detection parameters
 - **Other Actions**:
   - `N` or click "Dismiss (Other)" - Mark as noise with dropdown reason
   - `V` or click "Actually Valid" - Admit you missed this swing
