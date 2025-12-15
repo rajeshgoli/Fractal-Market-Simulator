@@ -8,7 +8,10 @@
 
 ## Pending Changes
 
-- **#64**: FP category refinements, filter tightening, --start-date parameter
+### 2025-12-15 - Best Extrema Adjustment
+- **Issue:** #65
+- **Type:** Feature
+- **Files:** `src/swing_analysis/swing_detector.py`, `tests/test_swing_detector.py`, `Docs/Reference/developer_guide.md`
 
 ---
 
@@ -16,6 +19,8 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 15 | Q-2025-12-15-2: Endpoint selection design | Designed → Ready for implementation |
+| Dec 15 | #64: FP category refinements, filter tightening, --start-date parameter | Accepted |
 | Dec 15 | #59, #60, #61, #62, #63 — Annotation UX + Too Small + Prominence filters | All Accepted |
 | Dec 15 | Q-2025-12-15-6: Too small + subsumed filter design | Designed → #62, #63 created |
 | Dec 15 | #54, #55, #56, #57, #58 - Protection validation, data collection, detection quality, UX batches | All Accepted |

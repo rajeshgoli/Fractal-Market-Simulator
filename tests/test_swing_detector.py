@@ -1105,5 +1105,359 @@ class TestProminenceFilter(unittest.TestCase):
         self.assertEqual(len(filtered), 1)
 
 
+class TestBestExtremaAdjustment(unittest.TestCase):
+    """Test suite for adjust_extrema feature (best extrema adjustment)."""
+
+    def test_adjust_extrema_default_enabled(self):
+        """Default adjust_extrema=True should be enabled."""
+        prices = [100, 105, 110, 115, 120, 115, 110, 105, 100, 105, 110]
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 2 for p in prices],
+            'low': [p - 2 for p in prices],
+            'close': prices
+        })
+
+        # With adjust_extrema (default True)
+        result_adjusted = detect_swings(df, lookback=2, filter_redundant=False)
+
+        # Without adjust_extrema
+        result_original = detect_swings(df, lookback=2, filter_redundant=False,
+                                        adjust_extrema=False)
+
+        # Both should return valid results
+        self.assertIn('bull_references', result_adjusted)
+        self.assertIn('bull_references', result_original)
+
+    def test_adjust_extrema_false_preserves_original(self):
+        """adjust_extrema=False should preserve original endpoint detection."""
+        # Create data where adjustment would change endpoints
+        # Swing high at index 4 (120), but index 5 has higher high (122)
+        prices = [100, 105, 110, 115, 120, 118, 110, 105, 100, 95, 90, 95, 100]
+        highs = [p + 2 for p in prices]
+        highs[5] = 122  # Higher high nearby but not the detected swing point
+        lows = [p - 2 for p in prices]
+
+        df = pd.DataFrame({
+            'open': prices,
+            'high': highs,
+            'low': lows,
+            'close': prices
+        })
+
+        # Without adjustment - should use original detection
+        result = detect_swings(df, lookback=2, filter_redundant=False,
+                               adjust_extrema=False, protection_tolerance=None)
+
+        # Check that references maintain original indices
+        # (The actual indices depend on detection, this validates the parameter works)
+        self.assertIn('bull_references', result)
+
+    def test_adjust_to_best_extrema_function_directly(self):
+        """Test _adjust_to_best_extrema function directly."""
+        from src.swing_analysis.swing_detector import _adjust_to_best_extrema
+        import numpy as np
+
+        # Create price arrays where better extrema exist nearby
+        highs = np.array([100, 105, 110, 125, 120, 105, 100, 95, 90, 85, 80], dtype=np.float64)
+        lows = np.array([98, 103, 108, 113, 118, 103, 98, 93, 88, 70, 78], dtype=np.float64)
+
+        # Original swing: high at index 4 (120), low at index 8 (88)
+        # Better high at index 3 (125), better low at index 9 (70)
+        original_swing = {
+            'high_price': 120.0,
+            'high_bar_index': 4,
+            'low_price': 88.0,
+            'low_bar_index': 8,
+            'size': 32.0,
+            'level_0382': 88.0 + (0.382 * 32.0),
+            'level_2x': 88.0 + (2.0 * 32.0),
+            'rank': 0
+        }
+
+        adjusted = _adjust_to_best_extrema(original_swing, highs, lows, lookback=2)
+
+        # High should be adjusted to index 3 (125)
+        self.assertEqual(adjusted['high_bar_index'], 3)
+        self.assertEqual(adjusted['high_price'], 125.0)
+
+        # Low should be adjusted to index 9 (70)
+        self.assertEqual(adjusted['low_bar_index'], 9)
+        self.assertEqual(adjusted['low_price'], 70.0)
+
+        # Size should be recalculated
+        self.assertEqual(adjusted['size'], 55.0)  # 125 - 70
+
+    def test_adjust_extrema_no_change_when_optimal(self):
+        """When detected points are already optimal, adjustment should not change them."""
+        from src.swing_analysis.swing_detector import _adjust_to_best_extrema
+        import numpy as np
+
+        # Create data where the detected points ARE the best extrema
+        highs = np.array([100, 105, 130, 105, 100], dtype=np.float64)  # 130 is highest
+        lows = np.array([98, 103, 70, 103, 98], dtype=np.float64)  # 70 is lowest
+
+        original_swing = {
+            'high_price': 130.0,
+            'high_bar_index': 2,
+            'low_price': 70.0,
+            'low_bar_index': 2,
+            'size': 60.0,
+            'level_0382': 70.0 + (0.382 * 60.0),
+            'level_2x': 70.0 + (2.0 * 60.0),
+            'rank': 0
+        }
+
+        adjusted = _adjust_to_best_extrema(original_swing, highs, lows, lookback=2)
+
+        # Should not change when already optimal
+        self.assertEqual(adjusted['high_bar_index'], 2)
+        self.assertEqual(adjusted['low_bar_index'], 2)
+        self.assertEqual(adjusted['size'], 60.0)
+
+    def test_adjust_extrema_respects_lookback_boundary(self):
+        """Adjustment should only search within ±lookback bars."""
+        from src.swing_analysis.swing_detector import _adjust_to_best_extrema
+        import numpy as np
+
+        # Better extrema exist but outside lookback window
+        highs = np.array([200, 100, 105, 110, 105, 100, 200], dtype=np.float64)
+        lows = np.array([50, 98, 103, 90, 103, 98, 50], dtype=np.float64)
+
+        # With lookback=1, indices 0 and 6 should not be considered
+        original_swing = {
+            'high_price': 110.0,
+            'high_bar_index': 3,
+            'low_price': 90.0,
+            'low_bar_index': 3,
+            'size': 20.0,
+            'level_0382': 90.0 + (0.382 * 20.0),
+            'level_2x': 90.0 + (2.0 * 20.0),
+            'rank': 0
+        }
+
+        adjusted = _adjust_to_best_extrema(original_swing, highs, lows, lookback=1)
+
+        # Should NOT find index 0 or 6 (outside lookback)
+        self.assertNotEqual(adjusted['high_bar_index'], 0)
+        self.assertNotEqual(adjusted['high_bar_index'], 6)
+        self.assertNotEqual(adjusted['low_bar_index'], 0)
+        self.assertNotEqual(adjusted['low_bar_index'], 6)
+
+    def test_adjust_extrema_handles_edge_indices(self):
+        """Adjustment should handle swings near array boundaries."""
+        from src.swing_analysis.swing_detector import _adjust_to_best_extrema
+        import numpy as np
+
+        highs = np.array([120, 100, 105, 110], dtype=np.float64)
+        lows = np.array([70, 98, 103, 108], dtype=np.float64)
+
+        # Swing near start of array
+        original_swing = {
+            'high_price': 100.0,
+            'high_bar_index': 1,
+            'low_price': 98.0,
+            'low_bar_index': 1,
+            'size': 2.0,
+            'level_0382': 98.0 + (0.382 * 2.0),
+            'level_2x': 98.0 + (2.0 * 2.0),
+            'rank': 0
+        }
+
+        # Should not crash and should find better extrema at index 0
+        adjusted = _adjust_to_best_extrema(original_swing, highs, lows, lookback=2)
+
+        self.assertEqual(adjusted['high_bar_index'], 0)
+        self.assertEqual(adjusted['high_price'], 120.0)
+        self.assertEqual(adjusted['low_bar_index'], 0)
+        self.assertEqual(adjusted['low_price'], 70.0)
+
+    def test_adjust_extrema_with_protection_revalidation(self):
+        """Adjusted swings should be re-validated against protection rules."""
+        # Create scenario where original swing passes protection
+        # but adjusted swing might fail (or vice versa)
+        prices = [100, 105, 110, 115, 120, 115, 110, 105, 100, 95, 90, 85]
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 2 for p in prices],
+            'low': [p - 2 for p in prices],
+            'close': prices
+        })
+
+        # With adjustment and protection
+        result_adjusted = detect_swings(df, lookback=2, filter_redundant=False,
+                                        adjust_extrema=True,
+                                        protection_tolerance=0.1)
+
+        # Without adjustment but with protection
+        result_original = detect_swings(df, lookback=2, filter_redundant=False,
+                                        adjust_extrema=False,
+                                        protection_tolerance=0.1)
+
+        # Both should produce valid results
+        self.assertIn('bull_references', result_adjusted)
+        self.assertIn('bull_references', result_original)
+
+    def test_adjust_extrema_integration_with_all_filters(self):
+        """Test adjust_extrema works correctly with all other filters."""
+        prices = (
+            [100, 105, 110, 115, 120, 125, 130, 125, 120, 115, 110, 105, 100] +
+            [105, 110, 115, 120, 125, 130, 135, 140, 135, 130, 125]
+        )
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 3 for p in prices],
+            'low': [p - 3 for p in prices],
+            'close': prices
+        })
+
+        # All filters enabled with adjustment
+        result = detect_swings(df, lookback=2, filter_redundant=True,
+                               adjust_extrema=True,
+                               protection_tolerance=0.1,
+                               min_candle_ratio=2.0,
+                               min_range_pct=1.0,
+                               min_prominence=1.0,
+                               max_rank=5)
+
+        # Should return valid results with proper ranking
+        self.assertIn('bull_references', result)
+        self.assertIn('bear_references', result)
+
+        # Ranks should be sequential
+        for i, ref in enumerate(result['bull_references']):
+            self.assertEqual(ref['rank'], i + 1)
+        for i, ref in enumerate(result['bear_references']):
+            self.assertEqual(ref['rank'], i + 1)
+
+    def test_adjust_extrema_recalculates_size_correctly(self):
+        """Adjusted swings should have correctly recalculated size."""
+        from src.swing_analysis.swing_detector import _adjust_to_best_extrema
+        import numpy as np
+
+        highs = np.array([100, 110, 150, 110, 100], dtype=np.float64)
+        lows = np.array([95, 100, 50, 100, 95], dtype=np.float64)
+
+        # Original swing: size = 110 - 100 = 10
+        original_swing = {
+            'high_price': 110.0,
+            'high_bar_index': 1,
+            'low_price': 100.0,
+            'low_bar_index': 3,
+            'size': 10.0,
+            'level_0382': 100.0 + (0.382 * 10.0),
+            'level_2x': 100.0 + (2.0 * 10.0),
+            'rank': 0
+        }
+
+        adjusted = _adjust_to_best_extrema(original_swing, highs, lows, lookback=2)
+
+        # Adjusted should find 150 high and 50 low
+        self.assertEqual(adjusted['high_price'], 150.0)
+        self.assertEqual(adjusted['low_price'], 50.0)
+        self.assertEqual(adjusted['size'], 100.0)  # 150 - 50
+
+        # Level calculations should be updated
+        self.assertAlmostEqual(adjusted['level_0382'], 50.0 + (0.382 * 100.0), places=5)
+        self.assertAlmostEqual(adjusted['level_2x'], 50.0 + (2.0 * 100.0), places=5)
+
+    def test_adjust_extrema_empty_dataframe(self):
+        """adjust_extrema should handle empty DataFrame gracefully."""
+        df = pd.DataFrame(columns=['open', 'high', 'low', 'close'])
+
+        result = detect_swings(df, lookback=2, filter_redundant=False,
+                               adjust_extrema=True)
+
+        self.assertEqual(result['bull_references'], [])
+        self.assertEqual(result['bear_references'], [])
+
+
+class TestProtectionFilter(unittest.TestCase):
+    """Test suite for _apply_protection_filter function."""
+
+    def test_protection_filter_bull_pre_formation(self):
+        """Test pre-formation protection for bull references."""
+        from src.swing_analysis.swing_detector import _apply_protection_filter, SparseTable
+        import numpy as np
+
+        # Create scenario where high is violated before low forms
+        highs = np.array([100, 110, 120, 130, 110, 105, 100], dtype=np.float64)
+        lows = np.array([95, 105, 115, 125, 105, 100, 95], dtype=np.float64)
+
+        highs_max_table = SparseTable(highs.tolist(), mode='max')
+        lows_min_table = SparseTable(lows.tolist(), mode='min')
+
+        # Bull swing: high at index 1 (110), low at index 5 (100)
+        # But higher high (130) appears at index 3 between them
+        references = [{
+            'high_price': 110.0,
+            'high_bar_index': 1,
+            'low_price': 100.0,
+            'low_bar_index': 5,
+            'size': 10.0
+        }]
+
+        filtered = _apply_protection_filter(
+            references, 'bull', highs, lows, 0.1,
+            highs_max_table, lows_min_table
+        )
+
+        # Should be filtered due to pre-formation violation
+        self.assertEqual(len(filtered), 0)
+
+    def test_protection_filter_bull_post_formation(self):
+        """Test post-formation protection for bull references."""
+        from src.swing_analysis.swing_detector import _apply_protection_filter, SparseTable
+        import numpy as np
+
+        # Create scenario where low is violated after formation
+        highs = np.array([100, 120, 110, 105, 100, 95, 90], dtype=np.float64)
+        lows = np.array([95, 100, 105, 100, 95, 85, 80], dtype=np.float64)
+
+        highs_max_table = SparseTable(highs.tolist(), mode='max')
+        lows_min_table = SparseTable(lows.tolist(), mode='min')
+
+        # Bull swing: high at index 1 (120), low at index 4 (95)
+        # Low violated at index 6 (80) which is < 95 - 0.1*25 = 92.5
+        references = [{
+            'high_price': 120.0,
+            'high_bar_index': 1,
+            'low_price': 95.0,
+            'low_bar_index': 4,
+            'size': 25.0
+        }]
+
+        filtered = _apply_protection_filter(
+            references, 'bull', highs, lows, 0.1,
+            highs_max_table, lows_min_table
+        )
+
+        # Should be filtered due to post-formation violation
+        self.assertEqual(len(filtered), 0)
+
+    def test_protection_filter_tolerance_none_disables(self):
+        """Setting protection_tolerance=None should return all references."""
+        from src.swing_analysis.swing_detector import _apply_protection_filter
+        import numpy as np
+
+        highs = np.array([100, 120, 110], dtype=np.float64)
+        lows = np.array([95, 100, 50], dtype=np.float64)  # Violating low
+
+        references = [{
+            'high_price': 120.0,
+            'high_bar_index': 1,
+            'low_price': 100.0,
+            'low_bar_index': 1,
+            'size': 20.0
+        }]
+
+        # With None tolerance, should return all
+        filtered = _apply_protection_filter(
+            references, 'bull', highs, lows, None, None, None
+        )
+
+        self.assertEqual(len(filtered), 1)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

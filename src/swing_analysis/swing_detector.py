@@ -361,6 +361,132 @@ def _apply_prominence_filter(references: List[Dict[str, Any]], highs: np.ndarray
     return filtered
 
 
+def _adjust_to_best_extrema(swing: Dict[str, Any], highs: np.ndarray,
+                            lows: np.ndarray, lookback: int) -> Dict[str, Any]:
+    """
+    Adjust swing endpoints to the best extrema in vicinity.
+
+    For swing highs: find highest high within ±lookback bars
+    For swing lows: find lowest low within ±lookback bars
+
+    Args:
+        swing: Reference swing dictionary with high_bar_index, low_bar_index, etc.
+        highs: Full numpy array of high prices
+        lows: Full numpy array of low prices
+        lookback: Number of bars before/after to search for better extrema
+
+    Returns:
+        Adjusted swing dictionary with updated endpoints and recalculated size
+    """
+    adjusted = swing.copy()
+    n = len(highs)
+
+    # Adjust high endpoint - find highest high in vicinity
+    high_idx = swing['high_bar_index']
+    start = max(0, high_idx - lookback)
+    end = min(n, high_idx + lookback + 1)
+
+    window_highs = highs[start:end]
+    best_high_offset = int(np.argmax(window_highs))
+    best_high_idx = start + best_high_offset
+
+    adjusted['high_bar_index'] = best_high_idx
+    adjusted['high_price'] = float(highs[best_high_idx])
+
+    # Adjust low endpoint - find lowest low in vicinity
+    low_idx = swing['low_bar_index']
+    start = max(0, low_idx - lookback)
+    end = min(n, low_idx + lookback + 1)
+
+    window_lows = lows[start:end]
+    best_low_offset = int(np.argmin(window_lows))
+    best_low_idx = start + best_low_offset
+
+    adjusted['low_bar_index'] = best_low_idx
+    adjusted['low_price'] = float(lows[best_low_idx])
+
+    # Recalculate size
+    adjusted['size'] = adjusted['high_price'] - adjusted['low_price']
+
+    # Recalculate level references
+    size = adjusted['size']
+    if size > 0:
+        adjusted['level_0382'] = adjusted['low_price'] + (0.382 * size)
+        adjusted['level_2x'] = adjusted['low_price'] + (2.0 * size)
+
+    return adjusted
+
+
+def _apply_protection_filter(references: List[Dict[str, Any]], direction: str,
+                              highs: np.ndarray, lows: np.ndarray,
+                              protection_tolerance: float,
+                              highs_max_table: Optional[SparseTable],
+                              lows_min_table: Optional[SparseTable]) -> List[Dict[str, Any]]:
+    """
+    Filter references where swing points are violated.
+
+    Protection validation checks:
+    - Pre-formation: Was the swing point violated before the pair formed?
+    - Post-formation: Was the swing point violated after formation?
+
+    Args:
+        references: List of reference swing dictionaries
+        direction: 'bull' or 'bear'
+        highs: Full numpy array of high prices
+        lows: Full numpy array of low prices
+        protection_tolerance: Fraction of swing size for violation threshold
+        highs_max_table: SparseTable for O(1) max queries on highs
+        lows_min_table: SparseTable for O(1) min queries on lows
+
+    Returns:
+        Filtered list of references that pass protection validation
+    """
+    if protection_tolerance is None:
+        return references
+
+    filtered = []
+
+    for ref in references:
+        high_idx = ref['high_bar_index']
+        low_idx = ref['low_bar_index']
+        high_price = ref['high_price']
+        low_price = ref['low_price']
+        size = ref['size']
+
+        if direction == 'bull':
+            # Bull reference: High BEFORE Low (downswing)
+            # Pre-formation: high not violated before low forms
+            if highs_max_table is not None:
+                max_between = highs_max_table.query(high_idx + 1, low_idx)
+                if max_between is not None and max_between > high_price:
+                    continue  # High was violated before low formed
+
+            # Post-formation: swing low not violated after formation
+            if lows_min_table is not None:
+                violation_threshold = low_price - (protection_tolerance * size)
+                min_subsequent = lows_min_table.query(low_idx + 1, len(lows))
+                if min_subsequent is not None and min_subsequent < violation_threshold:
+                    continue  # Low was violated
+        else:
+            # Bear reference: Low BEFORE High (upswing)
+            # Pre-formation: low not violated before high forms
+            if lows_min_table is not None:
+                min_between = lows_min_table.query(low_idx + 1, high_idx)
+                if min_between is not None and min_between < low_price:
+                    continue  # Low was violated before high formed
+
+            # Post-formation: swing high not violated after formation
+            if highs_max_table is not None:
+                violation_threshold = high_price + (protection_tolerance * size)
+                max_subsequent = highs_max_table.query(high_idx + 1, len(highs))
+                if max_subsequent is not None and max_subsequent > violation_threshold:
+                    continue  # High was violated
+
+        filtered.append(ref)
+
+    return filtered
+
+
 def _apply_size_filter(references: List[Dict[str, Any]], median_candle: float,
                        price_range: float, min_candle_ratio: Optional[float],
                        min_range_pct: Optional[float],
@@ -423,7 +549,8 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                   protection_tolerance: float = 0.1, max_rank: Optional[int] = None,
                   min_candle_ratio: Optional[float] = None,
                   min_range_pct: Optional[float] = None,
-                  min_prominence: Optional[float] = None) -> Dict[str, Any]:
+                  min_prominence: Optional[float] = None,
+                  adjust_extrema: bool = True) -> Dict[str, Any]:
     """
     Identifies swing highs and lows and pairs them to find valid reference swings.
 
@@ -446,6 +573,9 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         min_prominence: Minimum prominence as multiple of median candle height.
             Filters swings where the swing point doesn't "stand out" from neighbors.
             Prominence is the gap between the extremum and second-best in lookback window.
+        adjust_extrema: Whether to adjust swing endpoints to the best extrema in the
+            vicinity (within ±lookback bars). Default True. Set to False to preserve
+            original endpoint detection behavior.
 
     Returns:
         A dictionary containing current price, detected swing points, and valid reference swings.
@@ -542,20 +672,23 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             if not is_valid_structure:
                 continue
 
-            # PRE-FORMATION PROTECTION: high not violated before low forms
-            # If a higher high appeared between high_idx and low_idx, this reference is invalid
-            if protection_tolerance is not None and all_highs_max_table is not None:
-                max_between = all_highs_max_table.query(high_idx + 1, low_idx)
-                if max_between is not None and max_between > high_price:
-                    continue  # High was violated before low formed
+            # INLINE PROTECTION (only when adjust_extrema=False for backward compatibility)
+            # When adjust_extrema=True, protection is applied after adjustment
+            if not adjust_extrema:
+                # PRE-FORMATION PROTECTION: high not violated before low forms
+                # If a higher high appeared between high_idx and low_idx, this reference is invalid
+                if protection_tolerance is not None and all_highs_max_table is not None:
+                    max_between = all_highs_max_table.query(high_idx + 1, low_idx)
+                    if max_between is not None and max_between > high_price:
+                        continue  # High was violated before low formed
 
-            # POST-FORMATION PROTECTION: swing low not violated by subsequent price action
-            if protection_tolerance is not None and all_lows_min_table is not None:
-                violation_threshold = low_price - (protection_tolerance * size)
-                # Check all bars after the swing low
-                min_subsequent_low = all_lows_min_table.query(low_idx + 1, len(lows))
-                if min_subsequent_low is not None and min_subsequent_low < violation_threshold:
-                    continue  # Low was violated, skip this reference
+                # POST-FORMATION PROTECTION: swing low not violated by subsequent price action
+                if protection_tolerance is not None and all_lows_min_table is not None:
+                    violation_threshold = low_price - (protection_tolerance * size)
+                    # Check all bars after the swing low
+                    min_subsequent_low = all_lows_min_table.query(low_idx + 1, len(lows))
+                    if min_subsequent_low is not None and min_subsequent_low < violation_threshold:
+                        continue  # Low was violated, skip this reference
 
             bull_references.append({
                 "high_price": high_price,
@@ -612,20 +745,23 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             if not is_valid_structure:
                 continue
 
-            # PRE-FORMATION PROTECTION: low not violated before high forms
-            # If a lower low appeared between low_idx and high_idx, this reference is invalid
-            if protection_tolerance is not None and all_lows_min_table is not None:
-                min_between = all_lows_min_table.query(low_idx + 1, high_idx)
-                if min_between is not None and min_between < low_price:
-                    continue  # Low was violated before high formed
+            # INLINE PROTECTION (only when adjust_extrema=False for backward compatibility)
+            # When adjust_extrema=True, protection is applied after adjustment
+            if not adjust_extrema:
+                # PRE-FORMATION PROTECTION: low not violated before high forms
+                # If a lower low appeared between low_idx and high_idx, this reference is invalid
+                if protection_tolerance is not None and all_lows_min_table is not None:
+                    min_between = all_lows_min_table.query(low_idx + 1, high_idx)
+                    if min_between is not None and min_between < low_price:
+                        continue  # Low was violated before high formed
 
-            # POST-FORMATION PROTECTION: swing high not violated by subsequent price action
-            if protection_tolerance is not None and all_highs_max_table is not None:
-                violation_threshold = high_price + (protection_tolerance * size)
-                # Check all bars after the swing high
-                max_subsequent_high = all_highs_max_table.query(high_idx + 1, len(highs))
-                if max_subsequent_high is not None and max_subsequent_high > violation_threshold:
-                    continue  # High was violated, skip this reference
+                # POST-FORMATION PROTECTION: swing high not violated by subsequent price action
+                if protection_tolerance is not None and all_highs_max_table is not None:
+                    violation_threshold = high_price + (protection_tolerance * size)
+                    # Check all bars after the swing high
+                    max_subsequent_high = all_highs_max_table.query(high_idx + 1, len(highs))
+                    if max_subsequent_high is not None and max_subsequent_high > violation_threshold:
+                        continue  # High was violated, skip this reference
 
             bear_references.append({
                 "high_price": high_price,
@@ -638,7 +774,31 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                 "rank": 0  # Placeholder
             })
 
-    # 3. Apply Size Filter (after protection, before prominence)
+    # 3. Best Extrema Adjustment (when enabled)
+    # Adjusts swing endpoints to the best extrema within ±lookback bars
+    if adjust_extrema:
+        bull_references = [
+            _adjust_to_best_extrema(ref, highs, lows, lookback)
+            for ref in bull_references
+        ]
+        bear_references = [
+            _adjust_to_best_extrema(ref, highs, lows, lookback)
+            for ref in bear_references
+        ]
+
+    # 4. Protection Validation (after adjustment when adjust_extrema=True)
+    # Re-validates protection with potentially adjusted endpoints
+    if adjust_extrema and protection_tolerance is not None:
+        bull_references = _apply_protection_filter(
+            bull_references, 'bull', highs, lows,
+            protection_tolerance, all_highs_max_table, all_lows_min_table
+        )
+        bear_references = _apply_protection_filter(
+            bear_references, 'bear', highs, lows,
+            protection_tolerance, all_highs_max_table, all_lows_min_table
+        )
+
+    # 5. Apply Size Filter (after protection, before prominence)
     if min_candle_ratio is not None or min_range_pct is not None:
         bull_references = _apply_size_filter(
             bull_references, median_candle, price_range, min_candle_ratio, min_range_pct
@@ -647,7 +807,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             bear_references, median_candle, price_range, min_candle_ratio, min_range_pct
         )
 
-    # 4. Apply Prominence Filter (after size, before redundancy)
+    # 6. Apply Prominence Filter (after size, before redundancy)
     if min_prominence is not None:
         bull_references = _apply_prominence_filter(
             bull_references, highs, lows, lookback, median_candle, min_prominence, 'bull'
@@ -656,13 +816,13 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             bear_references, highs, lows, lookback, median_candle, min_prominence, 'bear'
         )
 
-    # 5. Filter Redundant Swings (Optional)
+    # 7. Filter Redundant Swings (Optional)
     if filter_redundant:
         quant_dec = Decimal(str(quantization))
         bull_references = filter_swings(bull_references, "bullish", quant_dec)
         bear_references = filter_swings(bear_references, "bearish", quant_dec)
 
-    # 6. Sort and Rank
+    # 8. Sort and Rank
     # Sort by size descending
     bull_references.sort(key=lambda x: x["size"], reverse=True)
     for idx, ref in enumerate(bull_references):
@@ -672,7 +832,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     for idx, ref in enumerate(bear_references):
         ref["rank"] = idx + 1
 
-    # 7. Filter by max_rank (optional)
+    # 9. Filter by max_rank (optional)
     if max_rank is not None:
         bull_references = bull_references[:max_rank]
         bear_references = bear_references[:max_rank]
