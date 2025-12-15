@@ -268,7 +268,8 @@ def filter_swings(references: List[Dict[str, Any]], direction: str, quantization
     return kept_references
 
 def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = True,
-                  quantization: float = 0.25, max_pair_distance: Optional[int] = None) -> Dict[str, Any]:
+                  quantization: float = 0.25, max_pair_distance: Optional[int] = None,
+                  protection_tolerance: float = 0.1) -> Dict[str, Any]:
     """
     Identifies swing highs and lows and pairs them to find valid reference swings.
 
@@ -280,6 +281,8 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         max_pair_distance: Maximum bar distance between swing pairs. None for no limit.
             For large datasets (>100K bars), recommend setting to 2000-5000 for performance.
             This limits reference swing detection to swings within this bar distance.
+        protection_tolerance: Fraction of swing size that the swing point can be violated
+            before the reference is invalidated. Default 0.1 (10%). Set to None to disable.
 
     Returns:
         A dictionary containing current price, detected swing points, and valid reference swings.
@@ -302,6 +305,11 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     lows = df['low'].values.astype(np.float64)
 
     swing_high_indices, swing_low_indices = _detect_swing_points_vectorized(highs, lows, lookback)
+
+    # Build sparse tables on ALL bar data for O(1) protection queries
+    # These check if swing points were violated by subsequent price action
+    all_lows_min_table = SparseTable(lows.tolist(), mode='min') if protection_tolerance is not None else None
+    all_highs_max_table = SparseTable(highs.tolist(), mode='max') if protection_tolerance is not None else None
 
     # Convert to list of dicts format
     swing_highs = [{"price": float(highs[i]), "bar_index": int(i)} for i in swing_high_indices]
@@ -366,6 +374,21 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             if not is_valid_structure:
                 continue
 
+            # PRE-FORMATION PROTECTION: high not violated before low forms
+            # If a higher high appeared between high_idx and low_idx, this reference is invalid
+            if protection_tolerance is not None and all_highs_max_table is not None:
+                max_between = all_highs_max_table.query(high_idx + 1, low_idx)
+                if max_between is not None and max_between > high_price:
+                    continue  # High was violated before low formed
+
+            # POST-FORMATION PROTECTION: swing low not violated by subsequent price action
+            if protection_tolerance is not None and all_lows_min_table is not None:
+                violation_threshold = low_price - (protection_tolerance * size)
+                # Check all bars after the swing low
+                min_subsequent_low = all_lows_min_table.query(low_idx + 1, len(lows))
+                if min_subsequent_low is not None and min_subsequent_low < violation_threshold:
+                    continue  # Low was violated, skip this reference
+
             bull_references.append({
                 "high_price": high_price,
                 "high_bar_index": high_idx,
@@ -420,6 +443,21 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
 
             if not is_valid_structure:
                 continue
+
+            # PRE-FORMATION PROTECTION: low not violated before high forms
+            # If a lower low appeared between low_idx and high_idx, this reference is invalid
+            if protection_tolerance is not None and all_lows_min_table is not None:
+                min_between = all_lows_min_table.query(low_idx + 1, high_idx)
+                if min_between is not None and min_between < low_price:
+                    continue  # Low was violated before high formed
+
+            # POST-FORMATION PROTECTION: swing high not violated by subsequent price action
+            if protection_tolerance is not None and all_highs_max_table is not None:
+                violation_threshold = high_price + (protection_tolerance * size)
+                # Check all bars after the swing high
+                max_subsequent_high = all_highs_max_table.query(high_idx + 1, len(highs))
+                if max_subsequent_high is not None and max_subsequent_high > violation_threshold:
+                    continue  # High was violated, skip this reference
 
             bear_references.append({
                 "high_price": high_price,

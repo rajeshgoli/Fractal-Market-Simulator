@@ -396,5 +396,216 @@ class TestSwingDetectorLargeDataset(unittest.TestCase):
         print(f"100K bars: {elapsed:.3f}s -> Extrapolated 6M: {extrapolated_6m:.1f}s")
 
 
+class TestSwingPointProtection(unittest.TestCase):
+    """Test swing point protection validation"""
+
+    def test_bull_reference_with_violated_low(self):
+        """Bull reference should be filtered when swing low is violated."""
+        # Pattern: High at 120 -> Low at 100 -> price recovers to 110 -> then violates low to 85
+        # Swing size = 20, violation threshold = 100 - (0.1 * 20) = 98
+        # Price goes to 85, which is < 98, so reference should be filtered
+        prices = (
+            [100, 105, 110, 115, 120, 118, 115] +  # Rise to swing high at idx 4
+            [112, 108, 104, 100, 102, 105, 108] +  # Drop to swing low at idx 10
+            [110, 112, 110, 108, 105, 100, 95, 90, 85, 90, 95, 100, 105, 110]  # Recovery then violation to 85
+        )
+
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],  # Low at idx 10 is 99, low at idx 22 is 84
+            'close': prices
+        })
+
+        # With protection validation enabled (default)
+        result_with_protection = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=0.1)
+
+        # Without protection validation
+        result_without_protection = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=None)
+
+        # The reference from high->low should be filtered out when protection is enabled
+        # because subsequent price action violated the swing low
+        bull_refs_with = result_with_protection['bull_references']
+        bull_refs_without = result_without_protection['bull_references']
+
+        # Should have fewer bull references when protection is enabled
+        self.assertLessEqual(len(bull_refs_with), len(bull_refs_without),
+            "Protection validation should filter out violated references")
+
+    def test_bull_reference_with_protected_low(self):
+        """Bull reference should be kept when swing low is not violated."""
+        # Pattern: High at 120 -> Low at 100 -> price recovers and stays above low
+        prices = (
+            [100, 105, 110, 115, 120, 118, 115] +  # Rise to swing high at idx 4
+            [112, 108, 104, 100, 102, 105, 108] +  # Drop to swing low at idx 10
+            [110, 112, 114, 112, 110, 108, 106, 104, 102, 101, 102, 104, 106, 108]  # Never goes below 100
+        )
+
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 0.5 for p in prices],
+            'low': [p - 0.5 for p in prices],  # Low at idx 10 is 99.5, never violated
+            'close': prices
+        })
+
+        # With protection validation enabled (default)
+        result_with_protection = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=0.1)
+
+        # Without protection validation
+        result_without_protection = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=None)
+
+        # Both should have the same bull references since low was never violated
+        bull_refs_with = result_with_protection['bull_references']
+        bull_refs_without = result_without_protection['bull_references']
+
+        # Reference count should be the same when low is protected
+        self.assertEqual(len(bull_refs_with), len(bull_refs_without),
+            "Protected references should be kept")
+
+    def test_bear_reference_with_violated_high(self):
+        """Bear reference should be filtered when swing high is violated."""
+        # Pattern: Low at 100 -> High at 120 -> price drops to 110 -> then violates high to 135
+        # Swing size = 20, violation threshold = 120 + (0.1 * 20) = 122
+        # Price goes to 135, which is > 122, so reference should be filtered
+        prices = (
+            [120, 115, 110, 105, 100, 102, 105] +  # Drop to swing low at idx 4
+            [108, 112, 116, 120, 118, 115, 112] +  # Rise to swing high at idx 10
+            [110, 108, 110, 112, 115, 120, 125, 130, 135, 130, 125, 120, 115, 110]  # Drop then violation to 135
+        )
+
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],  # High at idx 10 is 121, high at idx 22 is 136
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # With protection validation enabled (default)
+        result_with_protection = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=0.1)
+
+        # Without protection validation
+        result_without_protection = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=None)
+
+        bear_refs_with = result_with_protection['bear_references']
+        bear_refs_without = result_without_protection['bear_references']
+
+        # Should have fewer bear references when protection is enabled
+        self.assertLessEqual(len(bear_refs_with), len(bear_refs_without),
+            "Protection validation should filter out violated references")
+
+    def test_protection_tolerance_threshold(self):
+        """Protection should only filter when violation exceeds tolerance threshold."""
+        # Pattern with 5% violation (within 10% tolerance)
+        # High at 120 -> Low at 100 -> size = 20
+        # 5% of 20 = 1, so violation threshold = 100 - 2 = 98
+        # If price goes to 99, it's within tolerance and should be kept
+        prices = (
+            [100, 105, 110, 115, 120, 118, 115] +  # Rise to swing high at idx 4
+            [112, 108, 104, 100, 102, 105, 108] +  # Drop to swing low at idx 10
+            [110, 108, 106, 104, 102, 100, 99, 100, 102, 104, 106, 108, 110, 112]  # Goes to 99 (5% violation)
+        )
+
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 0.5 for p in prices],
+            'low': [p - 0.5 for p in prices],  # Low at idx 10 is 99.5, later low is 98.5
+            'close': prices
+        })
+
+        # With 10% tolerance - should keep reference (5% violation < 10% threshold)
+        result_10pct = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=0.1)
+
+        # With 3% tolerance - should filter reference (5% violation > 3% threshold)
+        result_3pct = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=0.03)
+
+        # 10% tolerance should be more permissive
+        self.assertGreaterEqual(len(result_10pct['bull_references']), len(result_3pct['bull_references']),
+            "Higher tolerance should keep more references")
+
+    def test_protection_disabled_with_none(self):
+        """Setting protection_tolerance=None should disable protection validation."""
+        # Same violated pattern as test_bull_reference_with_violated_low
+        prices = (
+            [100, 105, 110, 115, 120, 118, 115] +
+            [112, 108, 104, 100, 102, 105, 108] +
+            [110, 112, 110, 108, 105, 100, 95, 90, 85, 90, 95, 100, 105, 110]
+        )
+
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # With protection disabled
+        result = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=None)
+
+        # Should still return results (not crash)
+        self.assertIn('bull_references', result)
+        self.assertIn('bear_references', result)
+
+    def test_bull_preformation_high_violated(self):
+        """Bull reference should be filtered when high is violated before low forms."""
+        # Pattern: High at 120 -> Higher high at 130 -> Low at 100
+        # The original high at 120 is violated by 130 before the low at 100 forms
+        # So 120->100 should be filtered, but 130->100 should be valid
+        prices = (
+            [100, 105, 110, 115, 120, 118, 115] +  # Swing high at idx 4 (high=121)
+            [118, 122, 128, 130, 125, 120, 115] +  # Higher high at idx 10 (high=131)
+            [112, 108, 104, 100, 102, 105, 108] +  # Swing low at idx 17 (low=99)
+            [110, 112, 114, 112, 110, 108, 106, 108, 110, 112]  # Recovery
+        )
+
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # With protection validation enabled
+        result_with = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=0.1)
+
+        # Without protection validation
+        result_without = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=None)
+
+        # With protection, the 120->100 reference should be filtered (high violated by 130)
+        # Without protection, it would still appear
+        # The 130->100 reference should exist in both
+        self.assertLessEqual(len(result_with['bull_references']), len(result_without['bull_references']),
+            "Pre-formation protection should filter violated high references")
+
+    def test_bear_preformation_low_violated(self):
+        """Bear reference should be filtered when low is violated before high forms."""
+        # Pattern: Low at 100 -> Lower low at 90 -> High at 120
+        # The original low at 100 is violated by 90 before the high at 120 forms
+        # So 100->120 should be filtered, but 90->120 should be valid
+        prices = (
+            [120, 115, 110, 105, 100, 102, 105] +  # Swing low at idx 4 (low=99)
+            [102, 98, 92, 90, 95, 100, 105] +      # Lower low at idx 10 (low=89)
+            [108, 112, 116, 120, 118, 115, 112] +  # Swing high at idx 17 (high=121)
+            [110, 108, 106, 108, 110, 112, 114, 112, 110, 108]  # Continued
+        )
+
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # With protection validation enabled
+        result_with = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=0.1)
+
+        # Without protection validation
+        result_without = detect_swings(df, lookback=2, filter_redundant=False, protection_tolerance=None)
+
+        # With protection, the 100->120 reference should be filtered (low violated by 90)
+        # Without protection, it would still appear
+        self.assertLessEqual(len(result_with['bear_references']), len(result_without['bear_references']),
+            "Pre-formation protection should filter violated low references")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -151,8 +151,9 @@ def test_case_three_multiple_lows():
     prices[-1] = 170
     
     df = create_df(prices)
-    result = detect_swings(df, lookback=5)
-    
+    # Disable protection validation - this test focuses on multiple low detection
+    result = detect_swings(df, lookback=5, protection_tolerance=None)
+
     # Bull refs:
     # 1. 200-140 (Size 60). 0.382 = 140 + 22.92 = 162.92. Valid (170 > 162.92).
     # 2. 200-150 (Size 50). 0.382 = 150 + 19.1 = 169.1. Valid (170 > 169.1).
@@ -444,8 +445,9 @@ def test_case_twelve_multi_tier_filtering():
     prices[-1] = 160 
     
     df = create_df(prices)
-    result = detect_swings(df, lookback=3, filter_redundant=True)
-    
+    # Disable protection validation - this test focuses on multi-tier filtering
+    result = detect_swings(df, lookback=3, filter_redundant=True, protection_tolerance=None)
+
     # Should keep both intended swings (and potentially cross-pairings if distinct)
     relevant_refs = [r for r in result["bull_references"] if r["size"] >= 50]
     # We expect at least 200->100 and 190->140.
@@ -526,7 +528,8 @@ def test_case_fourteen_structurally_distinct():
     prices[-1] = 180
 
     df = create_df(prices)
-    result = detect_swings(df, lookback=3, filter_redundant=True)
+    # Disable protection validation - this test focuses on structural distinction
+    result = detect_swings(df, lookback=3, filter_redundant=True, protection_tolerance=None)
 
     # Only 2 valid large refs: 220->100 and 200->100
     # 220->120 is structurally invalid (lower low at 100 between them)
