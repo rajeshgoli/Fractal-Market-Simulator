@@ -59,6 +59,8 @@ If multiple candidates, pick the highest high / lowest low in the swing zone. Si
 
 **Rationale:** Matches actual annotation behavior. XL/L are high-confidence; M/S are optional depth.
 
+**Data Quality Requirement (#67):** JSON must distinguish "skipped" vs "reviewed with no annotations" for M/S scales. Requires schema version bump to v4 with new `skipped_scales` field.
+
 ---
 
 ## Next Steps
@@ -66,8 +68,9 @@ If multiple candidates, pick the highest high / lowest low in the swing zone. Si
 1. **Architect:** Design Fib confluence + best extrema implementation
 2. **Engineer:** Implement endpoint selection improvements
 3. **Engineer:** Add quota-per-scale option
-4. **Engineer:** Add "Skip to FP Review" workflow option
-5. **User:** Validate with XL/L FN review — confirm detection is complete
+4. **Engineer:** Add `skipped_scales` field and schema versioning (#67) — prerequisite for #5
+5. **Engineer:** Add "Skip to FP Review" workflow option (depends on #67)
+6. **User:** Validate with XL/L FN review — confirm detection is complete
 
 ---
 
