@@ -86,6 +86,20 @@ class SessionStatusUpdate(BaseModel):
     status: str  # "keep" or "discard"
 
 
+class SessionFinalizeRequest(BaseModel):
+    """Request to finalize session with timestamp-based filename."""
+    status: str  # "keep" or "discard"
+    label: Optional[str] = None  # Optional user-provided label
+
+
+class SessionFinalizeResponse(BaseModel):
+    """Response from finalizing session."""
+    success: bool
+    session_filename: Optional[str]  # None if discarded
+    review_filename: Optional[str]   # None if discarded or no review
+    message: str
+
+
 class ScaleInfo(BaseModel):
     """Information about a single scale."""
     scale: str
@@ -563,6 +577,84 @@ async def update_session_status(request: SessionStatusUpdate):
     s.storage.update_session(s.session)
 
     return {"status": "ok", "new_status": request.status}
+
+
+@app.post("/api/session/finalize", response_model=SessionFinalizeResponse)
+async def finalize_session(request: SessionFinalizeRequest):
+    """
+    Finalize session: keep (rename to clean timestamp) or discard (delete).
+
+    - keep: Renames files to 'yyyy-mmm-dd-HHmm[-label].json'
+    - discard: Deletes session and review files entirely
+
+    Args:
+        status: "keep" (save with clean name) or "discard" (delete files)
+        label: Optional user-provided label (only used for "keep")
+
+    Returns:
+        New filenames for "keep", or confirmation message for "discard"
+    """
+    s = get_state()
+
+    if request.status not in ("keep", "discard"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid status. Must be 'keep' or 'discard'."
+        )
+
+    # Update session status first (in memory, will be persisted or deleted)
+    s.session.status = request.status
+
+    try:
+        if request.status == "discard":
+            # Delete review file first (if exists)
+            if s.review_storage:
+                s.review_storage.finalize_review(
+                    session_id=s.session.session_id,
+                    status="discard"
+                )
+
+            # Delete session file
+            s.storage.finalize_session(
+                session_id=s.session.session_id,
+                status="discard"
+            )
+
+            return SessionFinalizeResponse(
+                success=True,
+                session_filename=None,
+                review_filename=None,
+                message="Session discarded (files deleted)"
+            )
+
+        # status == "keep": save session status then rename
+        s.storage.update_session(s.session)
+
+        # Finalize session file (rename to clean timestamp name)
+        session_filename, new_path_id = s.storage.finalize_session(
+            session_id=s.session.session_id,
+            status="keep",
+            label=request.label
+        )
+
+        # Finalize review file if it exists
+        review_filename = None
+        if s.review_storage:
+            review_filename = s.review_storage.finalize_review(
+                session_id=s.session.session_id,
+                status="keep",
+                new_path_id=new_path_id
+            )
+
+        return SessionFinalizeResponse(
+            success=True,
+            session_filename=session_filename,
+            review_filename=review_filename,
+            message=f"Session saved as {session_filename}"
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.get("/api/cascade/state", response_model=CascadeStateResponse)

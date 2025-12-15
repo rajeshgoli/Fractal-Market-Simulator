@@ -1038,6 +1038,115 @@ class TestReviewExportEndpoint:
         assert response.status_code == 400
 
 
+class TestSessionFinalizeEndpoint:
+    """Tests for POST /api/session/finalize endpoint."""
+
+    def test_finalize_keep_creates_clean_filename(self, client, temp_storage):
+        """Keep should rename to clean timestamp filename."""
+        response = client.post("/api/session/finalize", json={
+            "status": "keep"
+        })
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["success"] is True
+        assert data["session_filename"] is not None
+        # Should be clean timestamp format (no 'inprogress-' prefix)
+        assert not data["session_filename"].startswith("inprogress-")
+        # Should end with .json
+        assert data["session_filename"].endswith(".json")
+        # Should contain timestamp pattern
+        assert "-" in data["session_filename"]
+
+    def test_finalize_keep_with_label(self, client, temp_storage):
+        """Keep with label should include label in filename."""
+        response = client.post("/api/session/finalize", json={
+            "status": "keep",
+            "label": "trending market"
+        })
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["success"] is True
+        # Label should be sanitized (spaces -> underscores, lowercase)
+        assert "trending_market" in data["session_filename"]
+
+    def test_finalize_discard_deletes_files(self, client, temp_storage):
+        """Discard should delete session files."""
+        from pathlib import Path
+
+        # Get initial file count
+        storage_path = Path(temp_storage)
+        initial_files = list(storage_path.glob("*.json"))
+        assert len(initial_files) > 0  # Should have inprogress file
+
+        response = client.post("/api/session/finalize", json={
+            "status": "discard"
+        })
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["success"] is True
+        assert data["session_filename"] is None
+        assert data["message"] == "Session discarded (files deleted)"
+
+        # Verify file was deleted
+        remaining_files = list(storage_path.glob("*.json"))
+        assert len(remaining_files) < len(initial_files)
+
+    def test_finalize_invalid_status(self, client):
+        """Should reject invalid status."""
+        response = client.post("/api/session/finalize", json={
+            "status": "invalid"
+        })
+        assert response.status_code == 400
+        assert "keep" in response.json()["detail"].lower()
+
+    def test_finalize_keep_includes_review_file(self, cascade_client, temp_storage):
+        """Keep should also rename review file if it exists."""
+        # Start review to create review file
+        cascade_client.post("/api/review/start")
+
+        response = cascade_client.post("/api/session/finalize", json={
+            "status": "keep"
+        })
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["success"] is True
+        assert data["session_filename"] is not None
+        assert data["review_filename"] is not None
+        # Review filename should match session pattern
+        assert "_review.json" in data["review_filename"]
+
+
+class TestInprogressFilename:
+    """Tests for inprogress filename on session creation."""
+
+    def test_new_session_has_inprogress_filename(self, temp_storage, test_data_path):
+        """New sessions should be saved with inprogress- prefix."""
+        from pathlib import Path
+
+        # Reset and create new session
+        api.state = None
+        init_app(
+            data_file=test_data_path,
+            storage_dir=temp_storage,
+            resolution_minutes=1,
+            window_size=500,
+            scale="S",
+            target_bars=50
+        )
+
+        # Check files in storage
+        storage_path = Path(temp_storage)
+        json_files = list(storage_path.glob("*.json"))
+
+        # Should have exactly one file with inprogress- prefix
+        inprogress_files = [f for f in json_files if f.name.startswith("inprogress-")]
+        assert len(inprogress_files) == 1
+
+
 class TestReviewFlowIntegration:
     """Integration tests for complete review workflow."""
 

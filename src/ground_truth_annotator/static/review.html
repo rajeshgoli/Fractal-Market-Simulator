@@ -767,11 +767,19 @@
                     </div>
                     <div class="summary-section">
                         <div class="summary-title">Session Quality</div>
+                        <div style="margin-top: 10px; margin-bottom: 10px;">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 5px;">
+                                Session Label (optional)
+                            </label>
+                            <input type="text" id="session-label" class="feedback-input"
+                                placeholder="e.g., trending_market, volatile_range"
+                                style="min-height: auto; height: 36px; margin-bottom: 0;">
+                        </div>
                         <div class="action-row" style="margin-top: 10px;">
-                            <button class="btn btn-success" onclick="markSession('keep')" id="keep-btn">
+                            <button class="btn btn-success" onclick="finalizeSession('keep')" id="keep-btn">
                                 Keep Session
                             </button>
-                            <button class="btn btn-secondary" onclick="markSession('discard')" id="discard-btn">
+                            <button class="btn btn-secondary" onclick="finalizeSession('discard')" id="discard-btn">
                                 Discard (Practice)
                             </button>
                         </div>
@@ -1498,30 +1506,38 @@
             window.location.href = '/';
         }
 
-        // Mark session as keep or discard
-        async function markSession(status) {
+        // Finalize session: keep (rename) or discard (delete)
+        async function finalizeSession(status) {
             try {
-                const response = await fetch('/api/session/status', {
-                    method: 'PATCH',
+                const label = document.getElementById('session-label').value.trim() || null;
+
+                const response = await fetch('/api/session/finalize', {
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: status })
+                    body: JSON.stringify({ status: status, label: label })
                 });
 
                 if (!response.ok) throw new Error(await response.text());
+
+                const result = await response.json();
 
                 // Update UI to show confirmation
                 const msgEl = document.getElementById('session-status-msg');
                 const keepBtn = document.getElementById('keep-btn');
                 const discardBtn = document.getElementById('discard-btn');
+                const labelInput = document.getElementById('session-label');
+
+                // Disable all inputs after finalization
+                labelInput.disabled = true;
+                keepBtn.disabled = true;
+                discardBtn.disabled = true;
 
                 if (status === 'keep') {
-                    msgEl.innerHTML = '<span style="color: var(--accent-bull);">Session marked as KEEP</span>';
-                    keepBtn.disabled = true;
+                    msgEl.innerHTML = `<span style="color: var(--accent-bull);">Saved as: ${result.session_filename}</span>`;
                     keepBtn.style.opacity = '1';
                     discardBtn.style.opacity = '0.5';
                 } else {
-                    msgEl.innerHTML = '<span style="color: var(--text-secondary);">Session marked as DISCARD (practice)</span>';
-                    discardBtn.disabled = true;
+                    msgEl.innerHTML = `<span style="color: var(--text-secondary);">Session discarded (files deleted)</span>`;
                     discardBtn.style.opacity = '1';
                     keepBtn.style.opacity = '0.5';
                 }
@@ -1529,8 +1545,8 @@
                 msgEl.style.display = 'block';
 
             } catch (error) {
-                console.error('Error updating session status:', error);
-                alert('Failed to update session status: ' + error.message);
+                console.error('Error finalizing session:', error);
+                alert('Failed to finalize session: ' + error.message);
             }
         }
 

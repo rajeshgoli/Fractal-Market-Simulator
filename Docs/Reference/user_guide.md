@@ -154,13 +154,44 @@ The annotator exposes a REST API:
 | `/api/annotations` | POST | Create new annotation |
 | `/api/annotations/{id}` | DELETE | Delete annotation |
 | `/api/session` | GET | Get session state |
+| `/api/session/finalize` | POST | Finalize session (keep with label or discard) |
 
 ## Session Files
 
-Annotation sessions are saved to `annotation_sessions/{session_id}.json` containing:
+### Filename Convention
+
+Session files use timestamp-based naming for easy organization:
+
+| Stage | Filename Pattern | Example |
+|-------|-----------------|---------|
+| In Progress | `inprogress-yyyy-mmm-dd-HHmm.json` | `inprogress-2025-dec-15-0830.json` |
+| Kept (finalized) | `yyyy-mmm-dd-HHmm.json` | `2025-dec-15-0830.json` |
+| Kept with label | `yyyy-mmm-dd-HHmm-label.json` | `2025-dec-15-0830-trending_market.json` |
+| Discarded | *(deleted)* | - |
+
+- **In Progress**: New sessions start with `inprogress-` prefix
+- **Keep**: Finalized sessions get clean timestamp names
+- **Discard**: Practice sessions are deleted entirely (no files remain)
+
+This allows easy cleanup: `rm inprogress-*.json` removes abandoned sessions.
+
+### Session Quality and Labeling
+
+At the end of Review Mode, you can:
+
+1. **Add a label** (optional): Enter a descriptive label like "trending_market" or "volatile_range"
+2. **Keep Session**: Saves with clean timestamp filename (includes label if provided)
+3. **Discard Session**: Deletes the session files entirely
+
+Labels are sanitized for filesystem safety (spaces → underscores, special chars removed, lowercase).
+
+### File Contents
+
+Session files contain:
 - Session metadata (data file, resolution, window size)
 - All annotations with bar indices and prices
 - Scale completion status
+- Session status (keep/discard)
 
 ## Comparison Analysis
 

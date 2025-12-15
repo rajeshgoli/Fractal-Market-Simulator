@@ -1,12 +1,24 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-12
 
 ---
 
 ## Pending Changes
+
+### 2025-12-15 - Timestamp-based session filenames
+- **Issue:** #53
+- **Type:** Enhancement
+- **Files:** `src/ground_truth_annotator/storage.py`, `src/ground_truth_annotator/api.py`, `src/ground_truth_annotator/static/review.html`, `tests/test_ground_truth_annotator_api.py`, `Docs/Reference/user_guide.md`
+- **Summary:** Session files now use timestamp-based names (inprogress-... → clean timestamp on keep, deleted on discard)
+
+### 2025-12-15 - FP quick-select buttons broken + UI simplification
+- **Issue:** #52
+- **Type:** Bug + Enhancement
+- **Files:** `src/ground_truth_annotator/static/review.html`
+- **Commit:** 0ed95fa - Fixed click handler conflict, simplified to 5 direct-action buttons
 
 ### 2025-12-15 - FP quick-select buttons for common dismissal reasons
 - **Issue:** #51
