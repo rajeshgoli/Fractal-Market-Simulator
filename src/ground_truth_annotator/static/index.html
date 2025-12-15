@@ -612,6 +612,8 @@
         let selectionState = 'idle'; // 'idle' | 'selecting_end' | 'confirming'
         let startBarIndex = null;
         let endBarIndex = null;
+        let startClickedHigh = null; // true if user clicked near high, false if near low
+        let endClickedHigh = null;
 
         // Fibonacci preview lines
         let fibLines = [];
@@ -828,21 +830,26 @@
 
                 // Find bar with extremum closest to click price (or exact bar if snap disabled)
                 startBarIndex = disableSnap ? bar.index : findBestExtrema(bar.index, tolerance, lookingForHigh, clickPrice);
+                startClickedHigh = lookingForHigh; // Remember user's intent
                 selectionState = 'selecting_end';
                 updateInstruction();
                 updateMarkers();
             } else if (selectionState === 'selecting_end') {
-                if (bar.index === startBarIndex) {
-                    cancelSelection();
-                    return;
-                }
-
                 // Second click: determine intent from click position relative to candle midpoint
                 const candleMidpoint = (bar.high + bar.low) / 2;
                 const lookingForHigh = clickPrice >= candleMidpoint;
 
                 // Find bar with extremum closest to click price (or exact bar if snap disabled)
                 endBarIndex = disableSnap ? bar.index : findBestExtrema(bar.index, tolerance, lookingForHigh, clickPrice);
+                endClickedHigh = lookingForHigh; // Remember user's intent
+
+                // Check AFTER snapping if start and end are the same
+                if (endBarIndex === startBarIndex) {
+                    showToast('Start and end snapped to same bar - hold Shift to disable snap', true);
+                    cancelSelection();
+                    return;
+                }
+
                 selectionState = 'confirming';
                 showConfirmation();
             }
@@ -941,7 +948,23 @@
             const startBar = bars[startBarIndex];
             const endBar = bars[endBarIndex];
 
-            const isBull = startBar.high > endBar.high;
+            // Determine direction from user's click intent:
+            // - Clicked HIGH on start, LOW on end → downswing → bull reference
+            // - Clicked LOW on start, HIGH on end → upswing → bear reference
+            // - Ambiguous (same on both) → fall back to price comparison
+            let isBull;
+            if (startClickedHigh && !endClickedHigh) {
+                // User clicked high→low: downswing = bull reference
+                isBull = true;
+            } else if (!startClickedHigh && endClickedHigh) {
+                // User clicked low→high: upswing = bear reference
+                isBull = false;
+            } else {
+                // Ambiguous: fall back to price comparison
+                const startPrice = startClickedHigh ? startBar.high : startBar.low;
+                const endPrice = endClickedHigh ? endBar.high : endBar.low;
+                isBull = startPrice > endPrice;
+            }
             const direction = isBull ? 'bull' : 'bear';
             const directionText = isBull ? 'Bull Reference (Downswing)' : 'Bear Reference (Upswing)';
 
@@ -975,6 +998,8 @@
         function cancelSelection() {
             startBarIndex = null;
             endBarIndex = null;
+            startClickedHigh = null;
+            endClickedHigh = null;
             selectionState = 'idle';
             updateInstruction();
             updateMarkers();
