@@ -7,6 +7,9 @@ Usage:
 
 Cascade mode (XL → L → M → S progression):
     python -m src.ground_truth_annotator.main --data test.csv --cascade
+
+Filter by date (test recent market regimes):
+    python -m src.ground_truth_annotator.main --data test.csv --start-date 2020-Jan-01 --window 10000
 """
 
 import argparse
@@ -14,11 +17,13 @@ import logging
 import random
 import sys
 import time
+from datetime import datetime
 
+import pandas as pd
 import uvicorn
 
 from .api import app, init_app
-from ..data.ohlc_loader import get_file_metrics
+from ..data.ohlc_loader import get_file_metrics, load_ohlc
 from ..swing_analysis.resolution import SUPPORTED_RESOLUTIONS, parse_resolution
 
 logging.basicConfig(
@@ -53,6 +58,83 @@ def parse_offset(offset_str: str, total_bars: int, window_size: int) -> int:
         max_offset = max(0, total_bars - window_size)
         return random.randint(0, max_offset) if max_offset > 0 else 0
     return int(offset_str)
+
+
+def parse_start_date(date_str: str) -> datetime:
+    """
+    Parse flexible date formats.
+
+    Supported formats:
+        - 2020-Jan-01, 2020-jan-01
+        - 2020-01-01
+        - 01-Jan-2020
+        - Jan-01-2020
+
+    Args:
+        date_str: Date string in various formats
+
+    Returns:
+        datetime object
+
+    Raises:
+        ValueError: If date cannot be parsed
+    """
+    formats = [
+        "%Y-%b-%d",    # 2020-Jan-01
+        "%Y-%m-%d",    # 2020-01-01
+        "%d-%b-%Y",    # 01-Jan-2020
+        "%b-%d-%Y",    # Jan-01-2020
+        "%Y/%m/%d",    # 2020/01/01
+        "%m/%d/%Y",    # 01/01/2020
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+
+    raise ValueError(
+        f"Could not parse date '{date_str}'. "
+        f"Try formats like: 2020-Jan-01, 2020-01-01, 01-Jan-2020"
+    )
+
+
+def find_offset_for_date(data_file: str, start_date: datetime) -> int:
+    """
+    Find the bar index offset for a given start date.
+
+    Loads the data file and finds the first bar at or after the specified date.
+
+    Args:
+        data_file: Path to the OHLC data file
+        start_date: Target start date
+
+    Returns:
+        Integer offset (bar index)
+
+    Raises:
+        ValueError: If no bars exist at or after the start date
+    """
+    df, _ = load_ohlc(data_file)
+
+    # Make start_date timezone-aware if the index is timezone-aware
+    if df.index.tz is not None:
+        start_dt = pd.Timestamp(start_date, tz='UTC')
+    else:
+        start_dt = pd.Timestamp(start_date)
+
+    # Find first bar at or after start_date
+    mask = df.index >= start_dt
+    if not mask.any():
+        raise ValueError(
+            f"No data found at or after {start_date.strftime('%Y-%m-%d')}. "
+            f"Data range: {df.index.min()} to {df.index.max()}"
+        )
+
+    # Get the position of the first matching bar
+    first_match_idx = df.index.get_indexer([df.index[mask][0]])[0]
+    return int(first_match_idx)
 
 
 def main():
@@ -122,6 +204,12 @@ def main():
         default="0",
         help="Start offset in bars. Use 'random' for random position, or integer for fixed offset (default: 0)"
     )
+    parser.add_argument(
+        "--start-date",
+        type=str,
+        default=None,
+        help="Filter data to start at this date. Formats: 2020-Jan-01, 2020-01-01. Overrides --offset."
+    )
 
     args = parser.parse_args()
 
@@ -138,17 +226,30 @@ def main():
     print(f"{'='*60}")
 
     offset = 0  # Default offset
+    start_date_used = None  # Track if --start-date was used
     try:
         metrics = get_file_metrics(args.data)
 
-        # Calculate offset
-        offset = parse_offset(args.offset, metrics.total_bars, args.window)
+        # Calculate offset: --start-date takes precedence over --offset
+        if args.start_date:
+            try:
+                start_date_used = parse_start_date(args.start_date)
+                offset = find_offset_for_date(args.data, start_date_used)
+            except ValueError as e:
+                logger.error(str(e))
+                sys.exit(1)
+        else:
+            offset = parse_offset(args.offset, metrics.total_bars, args.window)
 
         print(f"Data file:   {args.data}")
         print(f"Resolution:  {args.resolution}")
         print(f"Total bars:  {format_number(metrics.total_bars)}")
         print(f"Window:      {format_number(args.window)} bars")
-        print(f"Offset:      {format_number(offset)} {'(random)' if args.offset.lower() == 'random' else ''}")
+        if start_date_used:
+            print(f"Start date:  {start_date_used.strftime('%Y-%m-%d')}")
+            print(f"Offset:      {format_number(offset)} (from start date)")
+        else:
+            print(f"Offset:      {format_number(offset)} {'(random)' if args.offset.lower() == 'random' else ''}")
         if args.cascade:
             print(f"Mode:        CASCADE (XL → L → M → S)")
         else:

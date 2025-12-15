@@ -1371,7 +1371,7 @@ class TestReviewSessionVersion:
     def test_create_session_has_version(self, review_session):
         """Test session creation has version field."""
         assert review_session.version == REVIEW_SCHEMA_VERSION
-        assert review_session.version == 2  # v2: Added difficulty, regime, session_comments
+        assert review_session.version == 3  # v3: Replaced subsumed with new FP categories
 
     def test_version_in_to_dict(self, review_session):
         """Test version is included in to_dict."""

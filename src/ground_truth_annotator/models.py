@@ -233,7 +233,7 @@ class SwingFeedback:
     swing_reference: Dict[str, Any]  # annotation_id for user swings, or DetectedSwing data for system
     verdict: str                  # "correct" | "incorrect" | "noise" | "valid_missed" | "explained"
     comment: Optional[str]        # Free text explanation (required for FN, optional for FP)
-    category: Optional[str]       # "too_small" | "wrong_direction" | "pattern" | "context" | etc.
+    category: Optional[str]       # FP categories: "too_small" | "too_distant" | "not_prominent" | "counter_trend" | "better_high" | "better_low" | "better_both" | "other"
     created_at: datetime
     better_reference: Optional[BetterReference] = None  # Optional "what I would have chosen" for FP dismissals
 
@@ -299,7 +299,8 @@ REVIEW_PHASES = ["matches", "fp_sample", "fn_feedback", "complete"]
 # Schema version for backward-compatible evolution
 # v1: Initial schema
 # v2: Added difficulty, regime, session_comments metadata fields
-REVIEW_SCHEMA_VERSION = 2
+# v3: Replaced subsumed with not_prominent, better_high, better_low, better_both
+REVIEW_SCHEMA_VERSION = 3
 
 
 @dataclass

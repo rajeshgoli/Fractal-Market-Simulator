@@ -244,11 +244,18 @@ class ComparisonAnalyzer:
         })
 
         # Run detection with standard parameters
+        # Filter parameters tightened based on ver3 feedback (42% too_small FPs remaining)
+        # - min_candle_ratio: 6.0 (up from 5.0) - swing must be 6x median candle
+        # - min_range_pct: 2.5 (up from 2.0) - swing must be 2.5% of price range
+        # - min_prominence: 1.5 (up from 1.0) - swing point must stand out by 1.5x median candle
         result = detect_swings(
             df,
             lookback=5,
             filter_redundant=True,
-            max_pair_distance=2000 if len(bars) > 100_000 else None
+            max_pair_distance=2000 if len(bars) > 100_000 else None,
+            min_candle_ratio=6.0,
+            min_range_pct=2.5,
+            min_prominence=1.5
         )
 
         detected_swings = []

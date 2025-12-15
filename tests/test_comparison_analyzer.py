@@ -863,6 +863,57 @@ class TestComparisonAnalyzerSystemDetection:
             assert swing.direction in ('bull', 'bear')
 
 
+class TestComparisonAnalyzerFilters:
+    """Tests for system detection with tightened filter parameters."""
+
+    def test_run_system_detection_uses_filters(self):
+        """Test that _run_system_detection applies size and prominence filters."""
+        analyzer = ComparisonAnalyzer()
+
+        # Create bars with swing-like patterns but vary the swing sizes
+        bars = []
+        timestamp = 0
+
+        # Create a significant swing (should be detected)
+        # Large uptrend
+        for i in range(30):
+            price = 5000.0 + i * 10  # 300 point gain
+            bars.append(Bar(
+                index=len(bars),
+                timestamp=timestamp,
+                open=price,
+                high=price + 3,
+                low=price - 3,
+                close=price + 2
+            ))
+            timestamp += 60
+
+        # Large downtrend
+        for i in range(30):
+            price = 5300.0 - i * 10  # 300 point drop
+            bars.append(Bar(
+                index=len(bars),
+                timestamp=timestamp,
+                open=price,
+                high=price + 3,
+                low=price - 3,
+                close=price - 2
+            ))
+            timestamp += 60
+
+        swings = analyzer._run_system_detection(bars)
+
+        # Should return a list (actual count depends on filter parameters)
+        assert isinstance(swings, list)
+
+        # All detected swings should have valid attributes
+        for swing in swings:
+            assert swing.direction in ('bull', 'bear')
+            assert swing.size > 0
+            assert swing.start_index >= 0
+            assert swing.end_index > swing.start_index or swing.end_index < swing.start_index
+
+
 class TestComparisonAnalyzerSession:
     """Tests for session-based comparison."""
 

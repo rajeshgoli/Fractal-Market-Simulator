@@ -812,15 +812,21 @@
                     <div class="fp-action-grid">
                         <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('too_small')"><kbd>1</kbd>Too small</button>
                         <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('too_distant')"><kbd>2</kbd>Too distant</button>
-                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('subsumed')"><kbd>3</kbd>Something bigger</button>
+                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('not_prominent')"><kbd>3</kbd>Not prominent</button>
                         <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('counter_trend')"><kbd>4</kbd>Counter trend</button>
+                    </div>
+                    <div class="fp-action-grid">
+                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('better_high')"><kbd>5</kbd>Better high</button>
+                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('better_low')"><kbd>6</kbd>Better low</button>
+                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('better_both')"><kbd>7</kbd>Better both</button>
                     </div>
                     <div class="fp-action-row">
                         <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('other')"><kbd>N</kbd>Dismiss (Other)</button>
                         <button class="fp-action-btn accept" onclick="submitFPFeedback('valid_missed')"><kbd>V</kbd>Accept</button>
                     </div>
                     <div class="keyboard-hints">
-                        <div class="hint-row"><kbd>1</kbd> Too small &nbsp; <kbd>2</kbd> Too distant &nbsp; <kbd>3</kbd> Something bigger &nbsp; <kbd>4</kbd> Counter trend</div>
+                        <div class="hint-row"><kbd>1</kbd> Too small &nbsp; <kbd>2</kbd> Too distant &nbsp; <kbd>3</kbd> Not prominent &nbsp; <kbd>4</kbd> Counter trend</div>
+                        <div class="hint-row"><kbd>5</kbd> Better high &nbsp; <kbd>6</kbd> Better low &nbsp; <kbd>7</kbd> Better both</div>
                         <div class="hint-row"><kbd>N</kbd> Dismiss (Other) &nbsp; <kbd>V</kbd> Accept (I missed it)</div>
                         <div class="hint-row"><kbd>Esc</kbd>/<kbd>C</kbd> Clear reference &nbsp; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp; <kbd>S</kbd> Skip remaining</div>
                     </div>
@@ -2256,9 +2262,15 @@
                     } else if (e.key === '2') {
                         dismissFPWithCategory('too_distant');
                     } else if (e.key === '3') {
-                        dismissFPWithCategory('subsumed');
+                        dismissFPWithCategory('not_prominent');
                     } else if (e.key === '4') {
                         dismissFPWithCategory('counter_trend');
+                    } else if (e.key === '5') {
+                        dismissFPWithCategory('better_high');
+                    } else if (e.key === '6') {
+                        dismissFPWithCategory('better_low');
+                    } else if (e.key === '7') {
+                        dismissFPWithCategory('better_both');
                     } else if (e.key.toLowerCase() === 'n') {
                         dismissFPWithCategory('other');
                     } else if (e.key.toLowerCase() === 'v') {
