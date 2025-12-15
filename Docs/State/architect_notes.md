@@ -88,7 +88,14 @@ tests/                         # 402 tests passing
 |----------|---------|
 | Annotation targets | How many sessions needed for statistically significant ground truth? |
 | Rule iteration | How to translate Review Mode feedback into detector improvements? |
-| **Trend-aware detection** | Recommend hybrid approach: `trend_context` param with auto/bullish/bearish/neutral modes. See `Docs/Comms/archive.md` Q-2025-12-15-1. Awaiting Product confirmation. |
+
+## Approved Designs (Awaiting Implementation Trigger)
+
+| Feature | Approach | Trigger |
+|---------|----------|---------|
+| **Trend-aware detection** | `trend_context` param (auto/bullish/bearish/neutral) as post-filter | 3+ sessions confirm counter-trend FPs in top-3 categories |
+
+See `Docs/Comms/archive.md` Q-2025-12-15-1 for full design.
 
 ---
 

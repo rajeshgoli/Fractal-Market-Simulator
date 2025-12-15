@@ -138,17 +138,31 @@ Repeat
 
 ---
 
-## P1: Trend-Aware Detection (NEW)
+## P1: Trend-Aware Detection
 
-**Status:** Open — pending Architect evaluation.
+**Status:** Approach confirmed. Implementation deferred until pattern validated.
 
 **Problem:** Detector emits reference ranges against the prevailing trend direction:
 - Downtrending market → finds bear references (counter-trend rallies) as FPs
 - Uptrending market → finds bull references (counter-trend pullbacks) as FPs
 
-**Impact:** Explains significant portion of 250x over-detection, especially at XL/L scales where trend is the dominant signal.
+**Impact:** May explain significant portion of 250x over-detection at XL/L scales.
 
-**Question for Architect:** What's the best approach to add trend awareness? See `Docs/Comms/questions.md`.
+**Confirmed Approach (Dec 15):**
+Add `trend_context` parameter to `detect_swings()`:
+- `"neutral"` — Current behavior (default)
+- `"bullish"` — Suppress bear_references
+- `"bearish"` — Suppress bull_references
+- `"auto"` — Calculate trend from price data, apply appropriate filter
+
+Implementation as post-filter; core algorithm unchanged. See `Docs/Comms/archive.md` Q-2025-12-15-1.
+
+**Data Collection (Dec 15):**
+Added "Counter trend" (`4`) to FP quick-select buttons. Track prevalence in annotation sessions before implementing full trend-aware detection.
+
+**Implementation Trigger:**
+- 3+ sessions show counter-trend in top-3 FP categories
+- Pattern appears across different market regimes
 
 ---
 
