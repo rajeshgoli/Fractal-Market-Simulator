@@ -420,10 +420,55 @@
             margin-right: 3px;
         }
 
-        /* FP quick-select buttons use orange theme */
-        .preset-btn.fp-preset:hover {
+        /* FP action buttons - distinct from FN preset buttons */
+        .fp-action-btn {
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex: 1;
+        }
+
+        .fp-action-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .fp-action-btn.dismiss:hover {
             background: var(--accent-orange);
             border-color: var(--accent-orange);
+        }
+
+        .fp-action-btn.accept:hover {
+            background: var(--accent-bull);
+            border-color: var(--accent-bull);
+        }
+
+        .fp-action-btn kbd {
+            background: rgba(255,255,255,0.15);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8rem;
+        }
+
+        .fp-action-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .fp-action-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
         }
 
         /* Summary view */
@@ -595,32 +640,19 @@
                             <span class="swing-detail-value" id="fp-rank">-</span>
                         </div>
                     </div>
-                    <label class="required-label" style="color: var(--text-secondary);">Quick dismiss (one-click):</label>
-                    <div class="preset-buttons fp-quick-buttons">
-                        <button class="preset-btn fp-preset" data-category="too_small" onclick="quickDismissFP('too_small')"><kbd>1</kbd>Too small</button>
-                        <button class="preset-btn fp-preset" data-category="too_distant" onclick="quickDismissFP('too_distant')"><kbd>2</kbd>Too distant</button>
-                        <button class="preset-btn fp-preset" data-category="subsumed" onclick="quickDismissFP('subsumed')"><kbd>3</kbd>Something bigger</button>
+                    <div class="fp-action-grid">
+                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('too_small')"><kbd>1</kbd>Too small</button>
+                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('too_distant')"><kbd>2</kbd>Too distant</button>
+                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('subsumed')"><kbd>3</kbd>Something bigger</button>
                     </div>
-                    <select class="category-select" id="fp-category" style="margin-top: 10px;">
-                        <option value="">Other reason...</option>
-                        <option value="wrong_direction">Direction seems off</option>
-                        <option value="not_a_swing">Not really a swing</option>
-                        <option value="other">Other edge case</option>
-                    </select>
-                    <div class="action-buttons">
-                        <button class="btn btn-warning" onclick="submitFPFeedback('noise')">
-                            <kbd>N</kbd> Dismiss (Other)
-                        </button>
-                        <button class="btn btn-success" onclick="submitFPFeedback('valid_missed')">
-                            <kbd>V</kbd> Actually Valid
-                        </button>
+                    <div class="fp-action-row">
+                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('other')"><kbd>N</kbd>Dismiss (Other)</button>
+                        <button class="fp-action-btn accept" onclick="submitFPFeedback('valid_missed')"><kbd>V</kbd>Accept</button>
                     </div>
                     <div class="keyboard-hints">
-                        <div class="hint-row"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Quick dismiss</div>
-                        <div class="hint-row"><kbd>N</kbd> Dismiss with other reason</div>
-                        <div class="hint-row"><kbd>V</kbd> Actually valid (I missed it)</div>
-                        <div class="hint-row"><kbd>&rarr;</kbd> Next swing</div>
-                        <div class="hint-row"><kbd>S</kbd> Skip remaining FPs</div>
+                        <div class="hint-row"><kbd>1</kbd> Too small &nbsp; <kbd>2</kbd> Too distant &nbsp; <kbd>3</kbd> Something bigger</div>
+                        <div class="hint-row"><kbd>N</kbd> Dismiss (Other) &nbsp; <kbd>V</kbd> Accept (I missed it)</div>
+                        <div class="hint-row"><kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp; <kbd>S</kbd> Skip remaining</div>
                     </div>
                     <div class="nav-buttons">
                         <button class="btn btn-secondary" onclick="previousSwing()" id="fp-prev-btn">
@@ -1110,8 +1142,6 @@
             document.getElementById('fp-size').textContent = fp.size.toFixed(2);
             document.getElementById('fp-rank').textContent = `#${fp.rank}`;
 
-            // Reset category dropdown
-            document.getElementById('fp-category').value = '';
 
             updateProgress();
             updateNavButtons('fp');
@@ -1145,8 +1175,8 @@
             const commentEl = document.getElementById('fn-comment');
             const categoryEl = document.getElementById('fn-category');
 
-            // Clear preset selection
-            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('selected'));
+            // Clear FN preset selection
+            document.querySelectorAll('#fn-panel .preset-btn').forEach(b => b.classList.remove('selected'));
 
             if (fn.feedback) {
                 commentEl.value = fn.feedback.comment || '';
@@ -1243,7 +1273,7 @@
         // Submit FP feedback
         async function submitFPFeedback(verdict) {
             const fp = fpSample[currentIndex];
-            const category = document.getElementById('fp-category').value || null;
+            const category = null;  // Category handled by quickDismissFP for dismiss actions
 
             try {
                 await fetch('/api/review/feedback', {
@@ -1582,14 +1612,15 @@
 
         // Enable/disable FN submit based on comment and clear preset selection on manual typing
         document.getElementById('fn-comment').addEventListener('input', () => {
-            // Clear preset selection when user types manually
-            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('selected'));
+            // Clear FN preset selection when user types manually
+            document.querySelectorAll('#fn-panel .preset-btn').forEach(b => b.classList.remove('selected'));
             updateFNSubmitState();
         });
 
-        // Select preset by index (0-4)
+        // Select FN preset by index (0-4)
         function selectPreset(index) {
-            const presetBtns = document.querySelectorAll('.preset-btn');
+            // Only target FN preset buttons (those with data-preset attribute inside fn-panel)
+            const presetBtns = document.querySelectorAll('#fn-panel .preset-btn');
             if (index >= 0 && index < presetBtns.length) {
                 const btn = presetBtns[index];
                 const preset = btn.dataset.preset;
@@ -1603,8 +1634,8 @@
             }
         }
 
-        // Preset button click handlers
-        document.querySelectorAll('.preset-btn').forEach((btn, index) => {
+        // FN preset button click handlers (only for FN panel)
+        document.querySelectorAll('#fn-panel .preset-btn').forEach((btn, index) => {
             btn.addEventListener('click', () => {
                 selectPreset(index);
             });
