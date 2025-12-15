@@ -25,14 +25,19 @@ Execute implementation tasks with precision. Tasks come from GitHub issues.
 2. **Filter by Product Goal**: Check `Docs/State/product_direction.md` for current objective
    - Prioritize issues that serve the stated product goal
    - Defer or tag issues that don't serve current direction
-3. **Scope & Plan**: Define boundaries, outline approach for non-trivial work
-4. **Implement**: Code + tests, minimum viable scope, maximum quality
-5. **Document** (REQUIRED after every task):
+3. **Prepare**: Read `Docs/Reference/developer_guide.md` for context
+   - **Filter changes**: See "Filter Pipeline Reference" section for insertion points
+   - **New modules**: Check "Module Reference" for existing patterns
+   - **Data structures**: Review "Key Data Structures" before defining new ones
+   - Only read source code when the guide is insufficient
+4. **Scope & Plan**: Define boundaries, outline approach for non-trivial work
+5. **Implement**: Code + tests, minimum viable scope, maximum quality
+6. **Document** (REQUIRED after every task):
    - Update `Docs/Reference/user_guide.md` if user-facing changes
    - Update `Docs/Reference/developer_guide.md` if implementation/architecture changes
    - Add implementation notes as **comments on the GitHub issue**
-6. **Track**: Update `Docs/State/pending_review.md` (increment count, list issue numbers)
-7. **Handoff**: Close or comment on issue, signal ready for review
+7. **Track**: Update `Docs/State/pending_review.md` (increment count, list issue numbers)
+8. **Handoff**: Close or comment on issue, signal ready for review
 
 ## pending_review.md Format
 

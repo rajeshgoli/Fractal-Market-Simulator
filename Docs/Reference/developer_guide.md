@@ -501,6 +501,111 @@ Uses `SparseTable` for O(1) range minimum/maximum queries to validate swing stru
 - Addresses "subsumed" false positives where detector finds locally-optimal extrema that blend with neighbors
 - Set to `None` (default) to disable
 
+#### Filter Pipeline Reference
+
+The `detect_swings()` function applies filters in a specific order. Understanding this pipeline is essential for adding new filters or debugging detection behavior.
+
+**Pipeline Steps:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ 1. SWING DETECTION                                                   │
+│    _detect_swing_points_vectorized()                                │
+│    - O(N) vectorized detection using rolling windows                │
+│    - Identifies swing highs (local maxima) and lows (local minima)  │
+└─────────────────────────────────────────────────────────────────────┘
+                                   ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 2. PAIRING & STRUCTURAL VALIDATION                                   │
+│    - Match swing highs with swing lows to form reference candidates │
+│    - Bull: High BEFORE Low (downswing)                              │
+│    - Bear: Low BEFORE High (upswing)                                │
+│    - Uses SparseTable for O(1) range min/max queries                │
+│    - Validates: geometric validity, price range, structure          │
+└─────────────────────────────────────────────────────────────────────┘
+                                   ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 3. PROTECTION VALIDATION (protection_tolerance)                      │
+│    - Pre-formation: Was swing point violated before pair formed?    │
+│    - Post-formation: Was swing point violated after formation?      │
+│    - Set protection_tolerance=None to disable                       │
+└─────────────────────────────────────────────────────────────────────┘
+                                   ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 4. SIZE FILTER (min_candle_ratio, min_range_pct)                    │
+│    _apply_size_filter()                                             │
+│    - Filters swings too small relative to context                   │
+│    - OR logic: passes if either threshold met                       │
+│    - High volatility exception for 1-2 bar swings                   │
+└─────────────────────────────────────────────────────────────────────┘
+                                   ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 5. PROMINENCE FILTER (min_prominence)          ← INSERT NEW FILTERS │
+│    _apply_prominence_filter()                                       │
+│    - Filters swings that don't "stand out" from neighbors           │
+│    - Checks gap between extremum and second-best in window          │
+└─────────────────────────────────────────────────────────────────────┘
+                                   ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 6. REDUNDANCY FILTER (filter_redundant)                             │
+│    filter_swings()                                                  │
+│    - Removes structurally redundant swings using Fibonacci bands    │
+│    - Keeps largest swing when multiple occupy same bands            │
+│    - Tiered processing: anchor → filter → next tier                 │
+└─────────────────────────────────────────────────────────────────────┘
+                                   ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 7. RANKING                                                          │
+│    - Sort by size descending                                        │
+│    - Assign rank 1, 2, 3... to each reference                       │
+└─────────────────────────────────────────────────────────────────────┘
+                                   ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 8. MAX RANK FILTER (max_rank)                                       │
+│    - Limit output to top N swings per direction                     │
+│    - Applied last to preserve ranking integrity                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Adding a New Filter:**
+
+1. **Create helper function** following naming convention:
+   ```python
+   def _apply_<name>_filter(references: List[Dict[str, Any]], ...) -> List[Dict[str, Any]]:
+       """Filter description."""
+       if <parameter> is None:
+           return references  # Disabled by default
+
+       filtered = []
+       for ref in references:
+           if <condition>:
+               filtered.append(ref)
+       return filtered
+   ```
+
+2. **Add parameter** to `detect_swings()` signature with `None` default:
+   ```python
+   def detect_swings(df, ..., new_filter_param: Optional[float] = None) -> Dict[str, Any]:
+   ```
+
+3. **Insert filter call** between steps 4-6 (after size, before redundancy):
+   ```python
+   # 5. Apply New Filter (after size, before redundancy)
+   if new_filter_param is not None:
+       bull_references = _apply_new_filter(bull_references, ..., new_filter_param)
+       bear_references = _apply_new_filter(bear_references, ..., new_filter_param)
+   ```
+
+4. **Add tests** following `TestProminenceFilter` or `TestSizeFilter` patterns in `tests/test_swing_detector.py`
+
+**Key Internal Classes:**
+
+| Class | Purpose |
+|-------|---------|
+| `SparseTable` | O(1) range min/max queries for structural validation |
+| `filter_swings()` | Fibonacci band redundancy filtering |
+| `get_level_band()` | Determine which Fib band a price falls into |
+
 ---
 
 ### Ground Truth Annotator
