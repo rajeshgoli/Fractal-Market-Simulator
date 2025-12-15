@@ -4,6 +4,65 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 15, 2025 - Too Small and Subsumed FPs Dominate
+
+**Context:** User completed 5 ver2 sessions (post-Phase 1 max_rank fix). Data shows max_rank helped but two categories still dominate noise.
+
+### Quantitative Analysis (5 ver2 sessions)
+
+| Metric | Count |
+|--------|-------|
+| Total FPs reviewed | 97 |
+| True FPs (noise) | 60 |
+| valid_missed | 37 |
+
+**FP Category Breakdown:**
+
+| Category | Count | % of True FPs |
+|----------|-------|---------------|
+| too_small | 39 | **65%** |
+| subsumed | 17 | **28%** |
+| too_distant | 2 | 3% |
+| counter_trend | 1 | 2% |
+
+**93% of remaining FPs are too_small or subsumed.** Max_rank filter reduced volume but didn't address root cause.
+
+### User-Proposed Heuristics
+
+**1. Too Small Filter**
+
+User observation: "We should address too small swings before continuing as that's the cause of max noise."
+
+Proposed heuristics:
+- **Bar count threshold:** If swing spans < 5% of the analysis range bars, discard
+- **Volatility threshold:** If swing magnitude < 3x median candle size in the range, discard
+
+"Obviously I'm making this up — use data to come up with heuristics on filtering."
+
+**2. Subsumed / "Stands Out" Detection**
+
+User observation: "Subsumed category is not picking good highs or lows in the range. You can pick something that 'stands out' from the other highs rather than highs in noise. This is what you'll see in my annotations."
+
+Pattern from `better_reference` data:
+- User consistently selects extrema that are **significantly higher/lower** than surrounding points
+- Detector finds points *near* important levels but not *the* important swing
+- The "stand out" high is the one that's distinctly higher than adjacent highs, not just locally highest
+
+### Priority
+
+**P0 — Too Small filtering is blocking.** 65% of FP noise. Must address before continuing annotation.
+
+**P1 — Subsumed "stands out" heuristic.** 28% of FP noise. Harder to specify but clear in visual review.
+
+### Action
+
+Hand off to Architect:
+1. Analyze existing annotation data to derive too_small thresholds empirically
+2. Propose "stands out" heuristic based on better_reference coordinates
+3. Implement filters and validate with new sessions
+
+---
+
 ## December 15, 2025 - Reference Swing Validation Broken
 
 **Context:** User observation during annotation session. Reference swings shown that violate basic definition.

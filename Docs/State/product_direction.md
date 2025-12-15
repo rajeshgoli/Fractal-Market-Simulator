@@ -7,9 +7,39 @@
 
 ## Current Objective
 
-**Collect ground truth data.**
+**Fix "too small" and "subsumed" FP noise before continuing annotation.**
 
-P1 UX blockers are resolved. The annotation tool is ready for quality data collection sessions.
+Ver2 sessions (5 completed) show max_rank filter helped but **93% of remaining FPs are too_small (65%) or subsumed (28%)**. Must address before collecting more data — annotation velocity is blocked by dismissing noise.
+
+---
+
+## P0: Too Small Filter (Blocking)
+
+**Problem:** 65% of FPs are swings that are too small to be meaningful at the scale being analyzed.
+
+**User-Proposed Heuristics:**
+1. **Bar count threshold:** Discard if swing spans < 5% of range bars
+2. **Volatility threshold:** Discard if swing magnitude < 3x median candle size
+
+**Action:** Architect to analyze annotation data empirically, derive thresholds, implement filter.
+
+---
+
+## P1: Subsumed / "Stands Out" Heuristic
+
+**Problem:** 28% of FPs are swings with endpoints *near* but not *at* the important extrema. User consistently picks highs/lows that "stand out" from surrounding noise.
+
+**Pattern from better_reference data:**
+- Detector finds local extrema that happen to be near important levels
+- User picks the extrema that is **distinctly higher/lower** than adjacent points
+- The difference: "highest point in noisy region" vs "point that stands out from surrounding highs"
+
+**Potential heuristics (for Architect to evaluate):**
+- Distance from nearest higher high (for tops) / lower low (for bottoms)
+- Percentile rank within local window
+- Price delta from surrounding extrema
+
+**Action:** Architect to analyze better_reference coordinates, propose heuristic, implement.
 
 ---
 
@@ -196,6 +226,14 @@ Timestamp-based session filenames with keep/discard workflow implemented. Sessio
 | FN Auto-Advance | FP auto-advances, FN requires extra click. Inconsistent. | Ready |
 | Session Metadata | Difficulty (1-5) + market regime + comments at session end | Ready |
 | Inline Better Reference | Modal flow with no verification. Should be inline with Fib preview. | Ready |
+| Fib Preview on Alternate | No Fib lines when selecting alternate swing in FP dismissal | Ready |
+| ESC to Cancel Selection | ESC should clear pending alternate selection for re-pick | Ready |
+| Remove Redundant Screen | "Move to next section" after FPs → go straight to review | Ready |
+| Add -0.1 Fib Level | Add stop level -0.1 to existing Fib preview | Ready |
+| Precompute System Swings | Compute detector swings in background while user annotates | Ready |
+| Review Screen Show XL | Show XL scale on review screen for big picture context | Ready |
+| Versioned Filenames | Format: `yyyy-mmm-dd-HHmm-ver<version>.json` for easy parsing | Ready |
+| PST/PDT Timestamps | Use local timezone for HHmm instead of UTC | Ready |
 | Zoom/Pan for S-Scale | Snap finicky at small scale | Deferred |
 | Snap at Chart Edges | Snap radius may extend beyond visible data | Deferred |
 
@@ -220,9 +258,30 @@ Timestamp-based session filenames with keep/discard workflow implemented. Sessio
 
 ## Session Observations (Dec 15, Updated)
 
-**Sessions completed:** 10
+### Ver2 Sessions (Post-max_rank fix)
 
-### Quantitative Summary
+**Sessions completed:** 5 (ver2)
+
+| Metric | Count |
+|--------|-------|
+| Total FPs reviewed | 97 |
+| True FPs (noise) | 60 |
+| valid_missed | 37 |
+| Matches | 3 |
+| FNs | 2 |
+
+**FP Category Distribution (ver2):**
+
+| Category | Count | % of True FPs |
+|----------|-------|---------------|
+| too_small | 39 | **65%** |
+| subsumed | 17 | **28%** |
+| too_distant | 2 | 3% |
+| counter_trend | 1 | 2% |
+
+**93% of remaining FPs are too_small or subsumed.** Max_rank filter reduced volume but root cause persists.
+
+### Pre-Ver2 Sessions (10 sessions)
 
 | Metric | Total |
 |--------|-------|
@@ -232,7 +291,7 @@ Timestamp-based session filenames with keep/discard workflow implemented. Sessio
 | Valid missed | 56 |
 | FNs | 33 |
 
-### FP Category Distribution
+**FP Category Distribution (pre-ver2):**
 
 | Category | Count | % of True FPs |
 |----------|-------|---------------|
@@ -241,7 +300,7 @@ Timestamp-based session filenames with keep/discard workflow implemented. Sessio
 | too_distant | 5 | 4% |
 | other | 2 | 2% |
 
-**95% of FPs are too_small or subsumed** — stable across all 10 sessions.
+**Pattern is stable across all sessions** — too_small and subsumed dominate.
 
 ### FN Analysis
 
@@ -329,11 +388,13 @@ Hold modifier (Shift?) to temporarily disable snap-to-extrema. Useful when snap 
 
 ## Session Context
 
-**Where we are:** 10 sessions complete. Root cause identified. Ready for implementation.
+**Where we are:** 15 sessions complete (10 ver1 + 5 ver2). Max_rank filter (#56) implemented. Two root causes remain.
 
 **What's next:**
-1. **#56** — Detection quality: Add `max_rank` filter + relax matching tolerance (Phase 1)
-2. **#57** — UX improvements: FN auto-advance, session metadata, inline better reference
-3. **Phase 2** — Investigate 16 true FN misses after Phase 1 complete
+1. **P0: Too Small Filter** — Derive thresholds from data (bar count %, volatility multiple), implement filter
+2. **P1: Subsumed "Stands Out" Heuristic** — Analyze better_reference data, propose heuristic for selecting truly prominent extrema
+3. **Validate** — Run 3-5 sessions post-fix to confirm FP reduction
 
-**Key insight:** Detector finds primary structures correctly (rank #1). The problem is noise from secondary structures (rank 2+). Simple rank filtering should reduce FPs by >80%.
+**Key insight:** Max_rank reduced volume but didn't address root cause. 93% of remaining FPs are too_small (65%) or subsumed (28%). Need swing-level filtering based on:
+- **Too small:** Bar count and volatility thresholds
+- **Subsumed:** "Stands out" heuristic to select prominent extrema over locally-optimal-but-noisy points

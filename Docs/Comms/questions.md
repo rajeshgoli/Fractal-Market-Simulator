@@ -4,7 +4,7 @@ Questions between roles. When resolved, move to `archive.md` with resolution.
 
 ---
 
-## Q-2025-12-15-4: Detection Quality — Reactions vs Primary Structures
+## Q-2025-12-15-6: Too Small and Subsumed Filters
 
 **From:** Product
 **To:** Architect
@@ -12,58 +12,54 @@ Questions between roles. When resolved, move to `archive.md` with resolution.
 
 ### Context
 
-6 annotation sessions complete. Clear pattern emerged:
-- 95% of true FPs are "too small" (54%) or "subsumed" (41%)
-- FNs are consistently "biggest swing" or "most impulsive"
-- Match rate: 50%
+15 annotation sessions complete (10 ver1 + 5 ver2). Max_rank filter (#56) implemented and helped but didn't address root cause.
 
-### The Problem
+**Ver2 Session Data (post-max_rank):**
 
-Detector finds **secondary reactions** instead of **primary structures**.
+| Category | Count | % of True FPs |
+|----------|-------|---------------|
+| too_small | 39 | **65%** |
+| subsumed | 17 | **28%** |
+| too_distant | 2 | 3% |
+| counter_trend | 1 | 2% |
 
-**User's characterization:**
+**93% of remaining FPs are too_small or subsumed.** Pattern stable across all sessions.
 
-- **"Subsumed":** Catches swings with endpoints *near* important levels but not *the* important swing. Example: catches a bounce after a selloff, misses the original meltdown. Finds echoes, not signals.
+### User Direction
 
-- **"Too small":** Almost always 1-2 candle ranges. Noise unless huge impulse (>5 candles of volume in 1-2 bars).
+"We should address too small swings before continuing as that's the cause of max noise."
 
-### Key Insight
+"Subsumed category is not picking good highs or lows. You can pick something that 'stands out' from the other highs rather than highs in noise."
 
-**Significance is relative to context, not absolute:**
+### Deliverable 1: Too Small Filter (P0)
 
-- 100pt in 2 candles: significant if surrounding candles are 10pt, noise if they're 60pt
-- 50pt in 20 candles: noise if peers are 200pt, meaningful if it's the most recent unviolated swing providing tactical targets
+**User-proposed heuristics (starting point):**
+1. Bar count threshold: Discard if swing spans < 5% of range bars
+2. Volatility threshold: Discard if swing magnitude < 3x median candle size
 
-Simple thresholds (min bar span, min size) won't work. Need relative significance scoring.
+**Request:** Analyze annotation data empirically to derive thresholds. User explicitly said "I'm making this up — use data."
 
-### Open Questions
+### Deliverable 2: "Stands Out" Heuristic (P1)
 
-1. Why are primary swings not detected? Are they:
-   - Failing protection checks?
-   - Outside Fibonacci zone?
-   - Detected but ranked lower?
+**Pattern from better_reference data:**
+- Detector finds local extrema near important levels
+- User picks extrema that are **distinctly higher/lower** than adjacent points
+- "Highest point in noisy region" vs "point that stands out from surrounding highs"
 
-2. How should relative significance be scored? Factors:
-   - Size relative to local volatility
-   - Duration relative to scale
-   - Recency (most recent unviolated)
-   - Tactical value (provides actionable targets)
+**Potential approaches:**
+- Distance from nearest higher high (for tops) / lower low (for bottoms)
+- Percentile rank within local window
+- Price delta from surrounding extrema
 
-3. Should we collect "what I would have chosen instead" data for FP dismissals to understand detector-vs-human divergence?
+**Request:** Analyze better_reference coordinates from annotation sessions. Quantify "stands out" pattern. Propose heuristic.
 
-### Related: Structural Validation Bug (Edge Case)
+### Data Available
 
-2-candle ranges can have invalid geometry. `swing_detector.py:363-375` checks intervening swing lows, not all bar lows. Becomes irrelevant if short-span ranges are filtered/de-prioritized.
+- 15 annotation sessions in `annotation_sessions/`
+- `better_reference` coordinates captured for subsumed dismissals
+- Session files have bar indices and prices for both detector's choice and user's choice
 
-### Deliverable
+### Priority
 
-Design approach for detection quality improvement. Consider whether this is a filtering fix, ranking fix, or fundamental detection change.
-
-### Status
-
-**Blocked on data collection.** Before Architect can design a fix, we need:
-1. Engineer to implement "better reference" field for FP dismissals
-2. User to annotate with new tooling
-3. Concrete "detector found X, should have found Y" data to analyze
-
-This question will be ready for Architect after data collection phase.
+**P0** — Too small is 65% of noise. Blocking annotation velocity.
+**P1** — Subsumed is 28% of noise. Harder to specify but clear in visual review.
