@@ -4,6 +4,61 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 15, 2025 - FP Category Feedback (Batch Collection)
+
+**Context:** User testing new version with too_small and prominence filters. Collecting additional FP category feedback for batch implementation.
+
+**Status:** Collecting - will implement in one batch
+
+### Ver3 Session Results (6 sessions, 119 FP samples)
+
+| Category | Count | % | Notes |
+|----------|-------|---|-------|
+| subsumed | 37 | 48% | Now dominant issue |
+| too_small | 32 | 42% | Improved from 65% but still present |
+| counter_trend | 6 | 8% | |
+| too_distant | 2 | 3% | |
+
+**Valid-missed:** 42 (35% of samples)
+
+### Feedback on Current Filters
+
+**Too Small:** Still seeing 1-2 candle swings that aren't prominent. Filters need tightening.
+
+**Subsumed:** Needs subcategories to collect clean signal. Three distinct varieties:
+- "I see a better high" (low is fine, high is wrong)
+- "I see a better low" (high is fine, low is wrong)
+- "I see both better high and low" (entire swing misplaced)
+
+### New FP Categories Requested
+
+| Key | Label | Description |
+|-----|-------|-------------|
+| `not_prominent` | "Not prominent enough" | Swing is technically correct but either the high or the low are not prominent enough - seems random |
+| `better_high` | "Better high" | Subsumed variant: I see a better high for this swing |
+| `better_low` | "Better low" | Subsumed variant: I see a better low for this swing |
+| `better_both` | "Better high and low" | Subsumed variant: I see both a better high and low |
+
+**Engineer note:** Bump JSON version when adding new categories.
+
+### CLI Enhancement
+
+**`--start-date` parameter requested**
+
+Current: `python3 -m src.ground_truth_annotator.main --data test_data/es-5m.csv --cascade --offset random`
+
+Problem: Random offset biases towards older data (more of it in dataset).
+
+Request: `--start-date 2020-Jan-01 --window 10000` to test more recent data with potentially different market regimes.
+
+### Goal
+
+Close FPs as fast as possible to rise the signal on FNs (the gold).
+
+*(More feedback may be added as testing continues)*
+
+---
+
 ## December 15, 2025 - Too Small and Subsumed FPs Dominate
 
 **Context:** User completed 5 ver2 sessions (post-Phase 1 max_rank fix). Data shows max_rank helped but two categories still dominate noise.
