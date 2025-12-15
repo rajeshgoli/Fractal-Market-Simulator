@@ -13,7 +13,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .models import AnnotationSession, SwingAnnotation, ReviewSession, SwingFeedback
+from .models import (
+    AnnotationSession, SwingAnnotation, ReviewSession, SwingFeedback,
+    REVIEW_SCHEMA_VERSION
+)
 
 
 def get_local_time(dt: datetime) -> datetime:
@@ -86,21 +89,23 @@ def generate_inprogress_filename(created_at: datetime) -> str:
 def generate_final_filename(
     created_at: datetime,
     label: Optional[str] = None,
-    version: int = 1
+    collision_number: int = 0
 ) -> str:
     """
-    Generate final filename for kept sessions with versioning.
+    Generate final filename for kept sessions with schema versioning.
 
-    Format: yyyy-mmm-dd-HHmm-ver<version>.json (default)
-    Format: yyyy-mmm-dd-HHmm-ver<version>-label.json (with label)
+    Format: yyyy-mmm-dd-HHmm-ver<schema>.json (default)
+    Format: yyyy-mmm-dd-HHmm-ver<schema>-try<N>.json (collision)
+    Format: yyyy-mmm-dd-HHmm-ver<schema>-label.json (with label)
+    Format: yyyy-mmm-dd-HHmm-ver<schema>-label-try<N>.json (label + collision)
 
-    Version tracking enables multiple sessions from the same time window
-    (e.g., re-annotations of the same data).
+    Version reflects the schema version (REVIEW_SCHEMA_VERSION from models.py).
+    Collision handling uses -try<N> suffix for the rare case of duplicate timestamps.
 
     Args:
-        created_at: Session creation timestamp (UTC, converted to Pacific)
+        created_at: Session creation timestamp (UTC, converted to local)
         label: Optional user-provided label
-        version: Version number (default 1)
+        collision_number: Collision avoidance number (0 = no collision)
 
     Returns:
         Filename string (without path)
@@ -109,18 +114,23 @@ def generate_final_filename(
         >>> from datetime import datetime
         >>> dt = datetime(2025, 12, 15, 16, 30)  # 16:30 UTC = 08:30 PST
         >>> generate_final_filename(dt)
-        '2025-dec-15-0830-ver1.json'
-        >>> generate_final_filename(dt, "trending_market")
-        '2025-dec-15-0830-ver1-trending_market.json'
-        >>> generate_final_filename(dt, version=2)
         '2025-dec-15-0830-ver2.json'
+        >>> generate_final_filename(dt, "trending_market")
+        '2025-dec-15-0830-ver2-trending_market.json'
+        >>> generate_final_filename(dt, collision_number=2)
+        '2025-dec-15-0830-ver2-try2.json'
     """
     timestamp_base = generate_timestamp_base(created_at)
+    version = REVIEW_SCHEMA_VERSION
 
     if label:
         sanitized_label = sanitize_label(label)
+        if collision_number > 0:
+            return f"{timestamp_base}-ver{version}-{sanitized_label}-try{collision_number}.json"
         return f"{timestamp_base}-ver{version}-{sanitized_label}.json"
     else:
+        if collision_number > 0:
+            return f"{timestamp_base}-ver{version}-try{collision_number}.json"
         return f"{timestamp_base}-ver{version}.json"
 
 
@@ -382,40 +392,54 @@ class AnnotationStorage:
             return True
         return False
 
-    def _find_next_version(self, timestamp_base: str, label: Optional[str] = None) -> int:
+    def _find_collision_number(self, timestamp_base: str, label: Optional[str] = None) -> int:
         """
-        Find the next available version number for a timestamp base.
+        Find the collision number needed for a filename with given timestamp and label.
 
-        Scans existing files to find the highest existing version and returns version + 1.
+        Checks if the base filename exists; if so, scans for -try<N> suffixes.
+        Returns 0 if no collision, or the next try number if collision exists.
 
         Args:
             timestamp_base: The timestamp portion (e.g., '2025-dec-15-0830')
             label: Optional label to match
 
         Returns:
-            Next available version number (1 if no existing files)
+            0 if no collision, otherwise next available try number
         """
-        # Build regex pattern to match existing versioned files
-        # Format: {timestamp_base}-ver{N}[-label].json
+        version = REVIEW_SCHEMA_VERSION
+
+        # Check if the base filename (without -try<N>) exists
+        if label:
+            sanitized_label = sanitize_label(label)
+            base_filename = f"{timestamp_base}-ver{version}-{sanitized_label}.json"
+        else:
+            base_filename = f"{timestamp_base}-ver{version}.json"
+
+        base_path = self._storage_dir / base_filename
+        if not base_path.exists():
+            # No collision - use base filename
+            return 0
+
+        # Base filename exists - find next available try number
+        # Pattern: {timestamp_base}-ver{version}[-label]-try{N}.json
         if label:
             sanitized_label = sanitize_label(label)
             pattern = re.compile(
-                rf'^{re.escape(timestamp_base)}-ver(\d+)-{re.escape(sanitized_label)}\.json$'
+                rf'^{re.escape(timestamp_base)}-ver{version}-{re.escape(sanitized_label)}-try(\d+)\.json$'
             )
         else:
-            # Match files without label (ver followed by .json or -review.json)
             pattern = re.compile(
-                rf'^{re.escape(timestamp_base)}-ver(\d+)\.json$'
+                rf'^{re.escape(timestamp_base)}-ver{version}-try(\d+)\.json$'
             )
 
-        max_version = 0
+        max_try = 1  # Start at 2 since base filename (try 1 implicitly) exists
         for path in self._storage_dir.glob("*.json"):
             match = pattern.match(path.name)
             if match:
-                version = int(match.group(1))
-                max_version = max(max_version, version)
+                try_num = int(match.group(1))
+                max_try = max(max_try, try_num)
 
-        return max_version + 1
+        return max_try + 1
 
     def finalize_session(
         self,
@@ -424,12 +448,12 @@ class AnnotationStorage:
         label: Optional[str] = None
     ) -> Tuple[Optional[str], Optional[str]]:
         """
-        Finalize a session: keep (rename to versioned timestamp) or discard (delete).
+        Finalize a session: keep (rename to schema-versioned timestamp) or discard (delete).
 
-        - keep: Renames to 'yyyy-mmm-dd-HHmm-ver{N}[-label].json' (Pacific time)
+        - keep: Renames to 'yyyy-mmm-dd-HHmm-ver{schema}[-label][-try{N}].json' (local time)
         - discard: Deletes the session file entirely
 
-        Version numbers auto-increment if a file with the same timestamp exists.
+        Version reflects schema version. Collision avoidance uses -try<N> suffix (rare).
 
         Args:
             session_id: UUID of the session
@@ -460,10 +484,10 @@ class AnnotationStorage:
             self._session_paths.pop(session_id, None)
             return None, None
 
-        # status == "keep": rename to versioned timestamp filename
+        # status == "keep": rename to schema-versioned timestamp filename
         timestamp_base = generate_timestamp_base(session.created_at)
-        version = self._find_next_version(timestamp_base, label)
-        new_filename = generate_final_filename(session.created_at, label, version)
+        collision_number = self._find_collision_number(timestamp_base, label)
+        new_filename = generate_final_filename(session.created_at, label, collision_number)
         new_path = self._storage_dir / new_filename
 
         # Rename file

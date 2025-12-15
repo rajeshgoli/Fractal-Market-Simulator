@@ -20,6 +20,7 @@ from src.ground_truth_annotator.storage import (
     sanitize_label,
     AnnotationStorage,
 )
+from src.ground_truth_annotator.models import REVIEW_SCHEMA_VERSION
 
 
 class TestLocalTimezone:
@@ -91,37 +92,45 @@ class TestTimestampBase:
 
 
 class TestVersionedFilenames:
-    """Test versioned filename generation."""
+    """Test versioned filename generation with schema version."""
 
-    def test_default_version(self):
-        """Test default version 1 in filename."""
+    def test_uses_schema_version(self):
+        """Test that filename uses REVIEW_SCHEMA_VERSION."""
         dt = datetime(2025, 12, 15, 16, 30)
         filename = generate_final_filename(dt)
 
-        # Should contain -ver1.json
-        assert "-ver1.json" in filename
+        # Should contain schema version (currently ver2)
+        assert f"-ver{REVIEW_SCHEMA_VERSION}.json" in filename
         assert filename.startswith("2025-dec-")
 
-    def test_custom_version(self):
-        """Test custom version number."""
+    def test_collision_number_adds_try_suffix(self):
+        """Test collision handling adds -try<N> suffix."""
         dt = datetime(2025, 12, 15, 16, 30)
-        filename = generate_final_filename(dt, version=3)
+        filename = generate_final_filename(dt, collision_number=2)
 
-        assert "-ver3.json" in filename
+        assert f"-ver{REVIEW_SCHEMA_VERSION}-try2.json" in filename
 
     def test_with_label(self):
-        """Test filename with label."""
+        """Test filename with label uses schema version."""
         dt = datetime(2025, 12, 15, 16, 30)
         filename = generate_final_filename(dt, label="test_session")
 
-        assert "-ver1-test_session.json" in filename
+        assert f"-ver{REVIEW_SCHEMA_VERSION}-test_session.json" in filename
 
-    def test_with_label_and_version(self):
-        """Test filename with both label and version."""
+    def test_with_label_and_collision(self):
+        """Test filename with label and collision handling."""
         dt = datetime(2025, 12, 15, 16, 30)
-        filename = generate_final_filename(dt, label="trending", version=2)
+        filename = generate_final_filename(dt, label="trending", collision_number=3)
 
-        assert "-ver2-trending.json" in filename
+        assert f"-ver{REVIEW_SCHEMA_VERSION}-trending-try3.json" in filename
+
+    def test_no_collision_no_try_suffix(self):
+        """Test that collision_number=0 produces no -try suffix."""
+        dt = datetime(2025, 12, 15, 16, 30)
+        filename = generate_final_filename(dt, collision_number=0)
+
+        assert "-try" not in filename
+        assert f"-ver{REVIEW_SCHEMA_VERSION}.json" in filename
 
 
 class TestInProgressFilename:
@@ -162,8 +171,8 @@ class TestSanitizeLabel:
         assert len(sanitize_label(long_label)) == 50
 
 
-class TestAnnotationStorageVersioning:
-    """Test version auto-increment in storage."""
+class TestAnnotationStorageCollision:
+    """Test collision detection for schema-versioned filenames."""
 
     def setup_method(self):
         """Create temp directory for each test."""
@@ -174,45 +183,54 @@ class TestAnnotationStorageVersioning:
         """Clean up temp directory."""
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def test_find_next_version_empty(self):
-        """Test version is 1 when no existing files."""
-        version = self.storage._find_next_version("2025-dec-15-0830")
-        assert version == 1
+    def test_no_collision_returns_zero(self):
+        """Test returns 0 when no existing file with schema version."""
+        collision = self.storage._find_collision_number("2025-dec-15-0830")
+        assert collision == 0
 
-    def test_find_next_version_increment(self):
-        """Test version increments when files exist."""
-        # Create existing versioned file
-        (Path(self.temp_dir) / "2025-dec-15-0830-ver1.json").write_text("{}")
+    def test_collision_returns_try_number(self):
+        """Test returns try number when base file exists."""
+        # Create existing file with schema version
+        base_file = f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}.json"
+        (Path(self.temp_dir) / base_file).write_text("{}")
 
-        version = self.storage._find_next_version("2025-dec-15-0830")
-        assert version == 2
+        collision = self.storage._find_collision_number("2025-dec-15-0830")
+        assert collision == 2  # First try after base
 
-    def test_find_next_version_gap(self):
-        """Test version finds max and increments."""
-        # Create files with gap
-        (Path(self.temp_dir) / "2025-dec-15-0830-ver1.json").write_text("{}")
-        (Path(self.temp_dir) / "2025-dec-15-0830-ver3.json").write_text("{}")
+    def test_finds_max_try_number(self):
+        """Test finds highest try number and increments."""
+        # Create base file and some try files
+        base_file = f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}.json"
+        try2_file = f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}-try2.json"
+        try4_file = f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}-try4.json"
+        (Path(self.temp_dir) / base_file).write_text("{}")
+        (Path(self.temp_dir) / try2_file).write_text("{}")
+        (Path(self.temp_dir) / try4_file).write_text("{}")
 
-        version = self.storage._find_next_version("2025-dec-15-0830")
-        assert version == 4
+        collision = self.storage._find_collision_number("2025-dec-15-0830")
+        assert collision == 5  # Next after try4
 
-    def test_find_next_version_with_label(self):
-        """Test version tracking with label."""
+    def test_collision_with_label(self):
+        """Test collision detection with label."""
+        # Create base file with label
+        base_file = f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}-test.json"
+        (Path(self.temp_dir) / base_file).write_text("{}")
+
+        collision = self.storage._find_collision_number("2025-dec-15-0830", "test")
+        assert collision == 2
+
+    def test_label_collision_independent(self):
+        """Test that collision is tracked independently per label."""
         # Create file without label
-        (Path(self.temp_dir) / "2025-dec-15-0830-ver1.json").write_text("{}")
-        # Create file with label
-        (Path(self.temp_dir) / "2025-dec-15-0830-ver1-test.json").write_text("{}")
+        no_label_file = f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}.json"
+        (Path(self.temp_dir) / no_label_file).write_text("{}")
 
-        # Without label should find ver1
-        version_no_label = self.storage._find_next_version("2025-dec-15-0830")
-        assert version_no_label == 2
+        # File with label should have no collision
+        collision = self.storage._find_collision_number("2025-dec-15-0830", "test")
+        assert collision == 0  # No collision for labeled file
 
-        # With label should find ver1 (independent)
-        version_with_label = self.storage._find_next_version("2025-dec-15-0830", "test")
-        assert version_with_label == 2
-
-    def test_finalize_creates_versioned_file(self):
-        """Test that finalization creates properly versioned filename."""
+    def test_finalize_creates_schema_versioned_file(self):
+        """Test that finalization creates properly schema-versioned filename."""
         session = self.storage.create_session(
             data_file="test.csv",
             resolution="5m",
@@ -224,6 +242,7 @@ class TestAnnotationStorageVersioning:
             status="keep"
         )
 
-        assert "-ver1.json" in filename
-        assert "-ver1" in path_id
+        assert f"-ver{REVIEW_SCHEMA_VERSION}.json" in filename
+        assert f"-ver{REVIEW_SCHEMA_VERSION}" in path_id
+        assert "-try" not in filename  # No collision
         assert (Path(self.temp_dir) / filename).exists()

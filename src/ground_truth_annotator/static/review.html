@@ -1153,6 +1153,9 @@
 
                 if (xlBars.length === 0) return;
 
+                // Show container BEFORE creating chart (LightweightCharts needs visible container)
+                document.getElementById('xl-reference-container').style.display = 'block';
+
                 // Initialize XL chart if not done
                 if (!xlChart) {
                     initXLChart();
@@ -1180,9 +1183,6 @@
                     document.getElementById('xl-annotation-count').textContent =
                         `${xlAnnotations.length} annotation${xlAnnotations.length !== 1 ? 's' : ''}`;
                 }
-
-                // Show the XL reference panel
-                document.getElementById('xl-reference-container').style.display = 'block';
 
             } catch (error) {
                 console.log('Could not load XL context:', error.message);
