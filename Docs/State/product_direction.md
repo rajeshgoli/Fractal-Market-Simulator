@@ -213,13 +213,118 @@ Timestamp-based session filenames with keep/discard workflow implemented. Sessio
 
 ---
 
+## Session Observations (Dec 15)
+
+**Sessions completed:** 6
+
+### Quantitative Summary
+
+| Metric | Total |
+|--------|-------|
+| Annotations | 38 |
+| Matches (correct) | 19 (50%) |
+| FPs reviewed | 106 |
+| FNs | 17 |
+
+### FP Category Distribution
+
+| Category | Count | % of True FPs |
+|----------|-------|---------------|
+| too_small | ~41 | 54% |
+| subsumed | ~31 | 41% |
+| too_distant | 2 | 3% |
+| other | 2 | 3% |
+| valid_missed* | ~37 | — |
+
+*valid_missed = detector found legit swings user didn't annotate (not true FPs)
+
+**True FPs: ~69. too_small + subsumed = 95%**
+
+### FN Themes (17 total)
+
+- "Biggest swing I see at this scale" — dominant
+- "Most impulsive move/reference" — several
+- "Inner/nested structure" — several
+- "Fits timeframe context" / "Nearest swing" — several
+
+---
+
+## P0: Detection Quality — Reactions vs Primary Structures
+
+**Status:** Root cause identified from 6 annotation sessions. Ready for Architect.
+
+### The Problem
+
+Detector finds **secondary reactions** instead of **primary structures**:
+- 95% of true FPs are "too small" (54%) or "subsumed" (41%)
+- FNs are consistently "biggest swing" or "most impulsive"
+- Match rate: 50% (19/38 annotations across 6 sessions)
+
+### User's Characterization
+
+**"Subsumed":** Detector catches swings with endpoints *near* important levels but not *the* important swing. Example: catches a bounce after a selloff, misses the original meltdown. Finds echoes, not signals.
+
+**"Too small":** Almost always 1-2 candle ranges. These are noise unless there's a huge impulse (>5 candles of volume in 1-2 bars).
+
+### Key Insight: Significance Is Relative
+
+Simple thresholds won't work. What matters:
+
+| Factor | Context |
+|--------|---------|
+| Size | Relative to local volatility (100pt in 10pt candles ≠ 100pt in 60pt candles) |
+| Duration | Relative to other swings at this scale |
+| Recency | Most recent unviolated swing has tactical value |
+| Targets | Whether it provides actionable Fibonacci levels |
+
+A 2-candle range CAN be meaningful if 10x surrounding volatility. A 20-candle range CAN be noise if dwarfed by peers.
+
+### Open Question
+
+Why are primary swings not detected? Are they:
+1. Failing protection checks (violated by subsequent price)?
+2. Outside Fibonacci zone (current price moved too far)?
+3. Detected but ranked lower (buried in noise)?
+
+**Data needed:** Optional "what I would have chosen instead" field for FP dismissals. See P1.5 below.
+
+### Related: Structural Validation Bug (Edge Case)
+
+2-candle ranges can have invalid geometry (swing low not actual lowest bar low). Becomes irrelevant if short-span ranges are filtered or de-prioritized.
+
+**Root cause:** `swing_detector.py:363-375` checks intervening swing lows, not all bar lows.
+
+---
+
+## P1.5: Data Collection Improvements (Blocking)
+
+**Status:** Ready for Engineer. Blocks P0 fix design.
+
+### 1. Optional "Better Reference" for FP Dismissals
+
+When dismissing an FP, optionally mark what you would have chosen instead. Gives "detector found X, should have found Y" data.
+
+- Strictly optional (overwhelming otherwise)
+- Two-click selection like annotation mode
+- Stored in review feedback
+
+### 2. Feedback JSON Versioning
+
+Add `"version": 1` field before schema changes. Allows backward-compatible interpretation.
+
+### 3. Snap Toggle Hotkey
+
+Hold modifier (Shift?) to temporarily disable snap-to-extrema. Useful when snap doesn't find the right point and user wants manual selection.
+
+---
+
 ## Session Context
 
-**Where we are:** P1 UX blockers resolved. Annotation tool is production-ready.
+**Where we are:** 6 sessions complete. Pattern confirmed. Need better data before Architect can design fix.
 
 **What's next:**
-1. Run 5-10 quality annotation sessions across different market regimes
-2. Analyze feedback patterns (FP categories, FN clusters)
-3. Iterate detection rules based on patterns
+1. **Engineer** to implement P1.5 data collection improvements (blocking)
+2. **User** to annotate with new tooling, capturing "detector found X, should have found Y"
+3. **Architect** to design fix based on concrete divergence data
 
-**Key insight:** Tool friction eliminated. Ready to collect data at scale.
+**Key insight:** We know WHAT's wrong (reactions vs primary structures) but not WHY (filtered out? ranked lower? not detected?). The "better reference" data will show exactly where detection diverges from user intuition.
