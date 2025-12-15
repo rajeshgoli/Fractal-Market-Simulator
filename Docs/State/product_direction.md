@@ -7,39 +7,106 @@
 
 ## Current Objective
 
-**Fix "too small" and "subsumed" FP noise before continuing annotation.**
+**Improve endpoint selection (Fib confluence + best extrema), then validate with FN review.**
 
-Ver2 sessions (5 completed) show max_rank filter helped but **93% of remaining FPs are too_small (65%) or subsumed (28%)**. Must address before collecting more data — annotation velocity is blocked by dismissing noise.
-
----
-
-## P0: Too Small Filter (Blocking)
-
-**Problem:** 65% of FPs are swings that are too small to be meaningful at the scale being analyzed.
-
-**User-Proposed Heuristics:**
-1. **Bar count threshold:** Discard if swing spans < 5% of range bars
-2. **Volatility threshold:** Discard if swing magnitude < 3x median candle size
-
-**Action:** Architect to analyze annotation data empirically, derive thresholds, implement filter.
+Ver3 sessions (5 completed) show prior filters working — FP volume is manageable. Remaining FPs are **75% wrong endpoint selection** (better_high/low/both). Core detection is sound; refinement needed on *which* high/low to pick.
 
 ---
 
-## P1: Subsumed / "Stands Out" Heuristic
+## P0: Endpoint Selection Improvement
 
-**Problem:** 28% of FPs are swings with endpoints *near* but not *at* the important extrema. User consistently picks highs/lows that "stand out" from surrounding noise.
+**Problem:** 75% of FPs are swings where algorithm picked a suboptimal high or low. The swing is real, but there's a "better" endpoint nearby.
 
-**Pattern from better_reference data:**
-- Detector finds local extrema that happen to be near important levels
-- User picks the extrema that is **distinctly higher/lower** than adjacent points
-- The difference: "highest point in noisy region" vs "point that stands out from surrounding highs"
+**Proposed Approach (confirmed with user):**
 
-**Potential heuristics (for Architect to evaluate):**
-- Distance from nearest higher high (for tops) / lower low (for bottoms)
-- Percentile rank within local window
-- Price delta from surrounding extrema
+### A. Fib Confluence (Primary Signal)
+Prefer highs/lows that land near fib levels of a larger swing. These are structurally significant — price respects them because participants watch them.
 
-**Action:** Architect to analyze better_reference coordinates, propose heuristic, implement.
+**Open question:** Which larger swing to reference? Immediate parent, or multiple ancestors? Could score by "fib confluence count."
+
+### B. Best Extrema in Vicinity (Tie Breaker)
+If multiple candidates, pick the highest high / lowest low in the swing zone. Simple rule that catches many "better_high/better_low" errors.
+
+**Definition:** "Vicinity" = within the swing's bar range, or X% of price range.
+
+---
+
+## P1: Swing Quantity Control (Quota per Scale)
+
+**Problem:** Some "too small" / "not prominent" FPs may be display artifacts — detector runs on 5m bars, UI shows aggregated view.
+
+**Proposed Fix:** Instead of threshold filtering, use **ranking + quota:**
+
+| Scale | Keep |
+|-------|------|
+| XL | 2 biggest + 2 highest impulse = ~4 total |
+| L | Slightly more |
+| M | More |
+| S | Most, but still capped |
+
+**Why this is elegant:**
+- No threshold tuning
+- Best swings naturally surface
+- Scale controls quantity, not arbitrary filters
+
+---
+
+## P1.5: Workflow Improvement — Skip M/S Review
+
+**Problem:** User is diligent about XL/L annotation but not M/S. Current workflow forces review of all scales.
+
+**Proposed Fix:** After XL and L review, allow skipping to FP review. User can optionally review M/S if needed, but it's not required.
+
+**Rationale:** Matches actual annotation behavior. XL/L are high-confidence; M/S are optional depth.
+
+---
+
+## Next Steps
+
+1. **Architect:** Design Fib confluence + best extrema implementation
+2. **Engineer:** Implement endpoint selection improvements
+3. **Engineer:** Add quota-per-scale option
+4. **Engineer:** Add "Skip to FP Review" workflow option
+5. **User:** Validate with XL/L FN review — confirm detection is complete
+
+---
+
+## Ver3 Session Data (Dec 15)
+
+**Sessions completed:** 5 (ver3)
+
+| Metric | Count |
+|--------|-------|
+| Total FPs reviewed | 34 |
+| True FPs (noise) | 16 |
+| valid_missed | 18 |
+| Matches | 2 |
+| FNs (direct capture) | 3 |
+
+**Annotations by scale (high-confidence = XL+L):**
+
+| Scale | Count |
+|-------|-------|
+| XL | 10 |
+| L | 11 |
+| M | 2 |
+| S | 1 |
+
+**FP Category Distribution (ver3):**
+
+| Category | Count | % of True FPs |
+|----------|-------|---------------|
+| better_high | 6 | 37.5% |
+| better_low | 3 | 18.75% |
+| better_both | 3 | 18.75% |
+| too_small | 2 | 12.5% |
+| not_prominent | 2 | 12.5% |
+
+**Key insight:** 75% of FPs are endpoint selection issues (better_high/low/both). Core swing detection is working; need to pick better endpoints.
+
+---
+
+## Previous P0/P1 (Resolved by Ver3 Filters)
 
 ---
 
