@@ -649,7 +649,7 @@ class SwingFeedback:
     swing_reference: Dict[str, Any]  # annotation_id or DetectedSwing data
     verdict: str                  # "correct" | "incorrect" | "noise" | "valid_missed" | "explained"
     comment: Optional[str]        # Free text explanation
-    category: Optional[str]       # "too_small" | "wrong_direction" | "pattern" | etc.
+    category: Optional[str]       # FP: "too_small" | "too_distant" | "not_prominent" | "counter_trend" | "better_high" | "better_low" | "better_both" | "other"
     created_at: datetime
 
 @dataclass
@@ -798,6 +798,8 @@ python -m src.ground_truth_annotator.main --data test.csv --scale S --target-bar
 | `--scale` | S | Scale to annotate (S/M/L/XL) |
 | `--target-bars` | 200 | Bars to display in chart |
 | `--port` | 8000 | Server port |
+| `--offset` | 0 | Start offset in bars (use 'random' for random position) |
+| `--start-date` | None | Filter to start at date (e.g., `2020-Jan-01`). Overrides --offset. |
 
 #### `src/ground_truth_annotator/comparison_analyzer.py`
 

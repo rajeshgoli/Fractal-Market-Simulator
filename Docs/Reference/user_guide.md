@@ -42,6 +42,7 @@ Open http://127.0.0.1:8000 in your browser.
 | `--target-bars N` | Target bars to display in chart (default: 200) |
 | `--cascade` | Enable XL → L → M → S cascade workflow |
 | `--offset N` | Start offset in bars. Use 'random' for random position (default: 0) |
+| `--start-date DATE` | Filter data to start at this date. Overrides --offset. Formats: `2020-Jan-01`, `2020-01-01` |
 
 ### Examples
 
@@ -63,6 +64,9 @@ python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --cascade -
 
 # Fixed offset to start at specific bar
 python -m src.ground_truth_annotator.main --data test_data/es-1m.csv --cascade --offset 100000
+
+# Start from specific date (test recent market regimes)
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --start-date 2020-Jan-01 --window 10000
 ```
 
 ## The Two-Click Annotation Workflow
@@ -286,8 +290,11 @@ Review a sample of false positives (system detected, you didn't mark).
 - **Quick Dismiss** (one-click): Use preset buttons for common reasons:
   - `1` or click "Too small" - Detection insignificant at this scale
   - `2` or click "Too distant" - Isolated from surrounding structure
-  - `3` or click "Something bigger" - Part of a larger swing
+  - `3` or click "Not prominent" - Swing point doesn't stand out from neighbors
   - `4` or click "Counter trend" - Swing against prevailing trend direction
+  - `5` or click "Better high" - User sees a better high for this swing
+  - `6` or click "Better low" - User sees a better low for this swing
+  - `7` or click "Better both" - Both better high and low available
 - **Better Reference** (inline, optional): Mark "what I would have chosen" directly on the chart:
   - Click the chart to mark the high point first
   - Click again to mark the low point
@@ -374,8 +381,11 @@ Alternatively, click **"← Back to Annotation"** to return to the current sessi
 | Matches | `S` | Skip all |
 | FP Sample | `1` | Quick dismiss: Too small |
 | FP Sample | `2` | Quick dismiss: Too distant |
-| FP Sample | `3` | Quick dismiss: Something bigger |
+| FP Sample | `3` | Quick dismiss: Not prominent |
 | FP Sample | `4` | Quick dismiss: Counter trend |
+| FP Sample | `5` | Quick dismiss: Better high |
+| FP Sample | `6` | Quick dismiss: Better low |
+| FP Sample | `7` | Quick dismiss: Better both |
 | FP Sample | `N` | Dismiss with other reason |
 | FP Sample | `V` | Valid (I missed it) |
 | FP Sample | `C` | Clear better reference selection |
