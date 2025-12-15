@@ -171,6 +171,31 @@
             height: 450px;
         }
 
+        .reference-chart {
+            width: 100%;
+            height: 150px;
+        }
+
+        .chart-container.reference-panel {
+            border: 2px solid var(--accent-purple);
+            opacity: 0.9;
+        }
+
+        .chart-container.reference-panel .chart-header {
+            border-bottom: 1px solid var(--accent-purple);
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+        }
+
+        .completed-badge {
+            background: var(--accent-purple);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
         .sidebar {
             display: flex;
             flex-direction: column;
@@ -684,6 +709,18 @@
 
         <div class="main-content">
             <div class="chart-area">
+                <!-- XL Reference Panel - Big Picture Context -->
+                <div class="chart-container reference-panel" id="xl-reference-container" style="display: none;">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <h3>XL Scale Context</h3>
+                            <span class="completed-badge">Big Picture</span>
+                        </div>
+                        <span class="info-value" id="xl-annotation-count">0 annotations</span>
+                    </div>
+                    <div class="reference-chart" id="xl-reference-chart"></div>
+                </div>
+
                 <div class="chart-container">
                     <div class="chart-header">
                         <div class="chart-title">
@@ -785,7 +822,7 @@
                     <div class="keyboard-hints">
                         <div class="hint-row"><kbd>1</kbd> Too small &nbsp; <kbd>2</kbd> Too distant &nbsp; <kbd>3</kbd> Something bigger &nbsp; <kbd>4</kbd> Counter trend</div>
                         <div class="hint-row"><kbd>N</kbd> Dismiss (Other) &nbsp; <kbd>V</kbd> Accept (I missed it)</div>
-                        <div class="hint-row"><kbd>C</kbd> Clear reference &nbsp; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp; <kbd>S</kbd> Skip remaining</div>
+                        <div class="hint-row"><kbd>Esc</kbd>/<kbd>C</kbd> Clear reference &nbsp; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp; <kbd>S</kbd> Skip remaining</div>
                     </div>
                     <div class="nav-buttons">
                         <button class="btn btn-secondary" onclick="previousSwing()" id="fp-prev-btn">
@@ -985,6 +1022,12 @@
         let candleSeries = null;
         let bars = [];
 
+        // XL Reference chart state
+        let xlChart = null;
+        let xlCandleSeries = null;
+        let xlBars = [];
+        let xlAnnotations = [];
+
         // Review data
         let reviewState = null;
         let matches = [];
@@ -1050,7 +1093,131 @@
 
             window.addEventListener('resize', () => {
                 chart.applyOptions({ width: container.clientWidth });
+                if (xlChart) {
+                    const xlContainer = document.getElementById('xl-reference-chart');
+                    xlChart.applyOptions({ width: xlContainer.clientWidth });
+                }
             });
+        }
+
+        // Initialize XL reference chart
+        function initXLChart() {
+            const container = document.getElementById('xl-reference-chart');
+            if (!container) return;
+
+            xlChart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { type: 'solid', color: '#16213e' },
+                    textColor: '#a0a0a0',
+                },
+                grid: {
+                    vertLines: { color: '#333' },
+                    horzLines: { color: '#333' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#333',
+                },
+                timeScale: {
+                    borderColor: '#333',
+                    timeVisible: true,
+                },
+                handleScroll: false,
+                handleScale: false,
+            });
+
+            xlCandleSeries = xlChart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+            });
+        }
+
+        // Load XL bars and annotations for context
+        async function loadXLContext() {
+            try {
+                // Load XL scale bars
+                const barsResponse = await fetch('/api/bars?scale=XL');
+                if (!barsResponse.ok) {
+                    // XL scale might not exist - silently skip
+                    console.log('XL scale not available');
+                    return;
+                }
+
+                xlBars = await barsResponse.json();
+
+                if (xlBars.length === 0) return;
+
+                // Initialize XL chart if not done
+                if (!xlChart) {
+                    initXLChart();
+                }
+
+                // Set chart data
+                const chartData = xlBars.map(bar => ({
+                    time: bar.timestamp,
+                    open: bar.open,
+                    high: bar.high,
+                    low: bar.low,
+                    close: bar.close,
+                }));
+
+                xlCandleSeries.setData(chartData);
+                xlChart.timeScale().fitContent();
+
+                // Load XL annotations via cascade reference endpoint
+                const annotationsResponse = await fetch('/api/cascade/reference');
+                if (annotationsResponse.ok) {
+                    xlAnnotations = await annotationsResponse.json();
+                    updateXLMarkers();
+
+                    // Update annotation count display
+                    document.getElementById('xl-annotation-count').textContent =
+                        `${xlAnnotations.length} annotation${xlAnnotations.length !== 1 ? 's' : ''}`;
+                }
+
+                // Show the XL reference panel
+                document.getElementById('xl-reference-container').style.display = 'block';
+
+            } catch (error) {
+                console.log('Could not load XL context:', error.message);
+            }
+        }
+
+        // Update XL chart markers
+        function updateXLMarkers() {
+            if (!xlCandleSeries || !xlBars.length) return;
+
+            const markers = [];
+            xlAnnotations.forEach((ann, idx) => {
+                const startBar = xlBars[ann.start_bar_index];
+                const endBar = xlBars[ann.end_bar_index];
+                if (!startBar || !endBar) return;
+
+                const color = ann.direction === 'bull' ? '#26a69a' : '#ef5350';
+
+                markers.push({
+                    time: startBar.timestamp,
+                    position: ann.direction === 'bull' ? 'aboveBar' : 'belowBar',
+                    color: color,
+                    shape: 'circle',
+                    text: `${idx + 1}`,
+                });
+                markers.push({
+                    time: endBar.timestamp,
+                    position: ann.direction === 'bull' ? 'belowBar' : 'aboveBar',
+                    color: color,
+                    shape: 'circle',
+                    text: `${idx + 1}`,
+                });
+            });
+
+            xlCandleSeries.setMarkers(markers);
         }
 
         // Load bars for a scale
@@ -1130,8 +1297,11 @@
                 reviewState = await response.json();
                 currentPhase = reviewState.phase;
 
-                // Load all phase data
-                await loadPhaseData();
+                // Load all phase data and XL context in parallel
+                await Promise.all([
+                    loadPhaseData(),
+                    loadXLContext()
+                ]);
 
                 // Update UI
                 updatePhaseUI();
@@ -1224,7 +1394,9 @@
             switch (currentPhase) {
                 case 'matches':
                     if (matches.length === 0) {
-                        document.getElementById('empty-panel').classList.remove('hidden');
+                        // Auto-skip empty matches phase
+                        advancePhase();
+                        return;
                     } else {
                         document.getElementById('matches-panel').classList.remove('hidden');
                         showCurrentMatch();
@@ -1233,7 +1405,9 @@
 
                 case 'fp_sample':
                     if (fpSample.length === 0) {
-                        document.getElementById('empty-panel').classList.remove('hidden');
+                        // Auto-skip empty FP phase
+                        advancePhase();
+                        return;
                     } else {
                         document.getElementById('fp-panel').classList.remove('hidden');
                         showCurrentFP();
@@ -1242,7 +1416,9 @@
 
                 case 'fn_feedback':
                     if (fnList.length === 0) {
-                        document.getElementById('empty-panel').classList.remove('hidden');
+                        // Auto-skip empty FN phase → go straight to summary
+                        advancePhase();
+                        return;
                     } else {
                         document.getElementById('fn-panel').classList.remove('hidden');
                         showCurrentFN();
@@ -1536,6 +1712,8 @@
                 betterRefState.highBar = clickedBar;
                 updateBetterRefUI();
                 updateBetterRefMarkers();
+                // Show preliminary Fib preview using clicked high and current FP's low
+                drawFibPreviewPartial();
             } else if (!betterRefState.lowBar) {
                 // Second click - low point
                 betterRefState.lowBar = clickedBar;
@@ -1543,6 +1721,59 @@
                 updateBetterRefMarkers();
                 drawFibPreview();
             }
+        }
+
+        // Draw preliminary Fib preview when only high point is selected
+        // Uses the current FP's low as a temporary reference
+        function drawFibPreviewPartial() {
+            clearFibPreview();
+
+            if (!betterRefState.highBar) return;
+
+            const fp = fpSample[currentIndex];
+            if (!fp) return;
+
+            // Use clicked high and FP's low as preliminary reference
+            const high = betterRefState.highBar.high;
+            const low = fp.low_price;
+            const range = high - low;
+
+            if (range <= 0) return;
+
+            // Key Fib levels with lighter opacity for partial preview
+            const fibLevels = [
+                { ratio: -0.1, color: 'rgba(156, 39, 176, 0.25)', label: '-0.1' },
+                { ratio: 0.382, color: 'rgba(156, 39, 176, 0.3)' },
+                { ratio: 0.5, color: 'rgba(156, 39, 176, 0.35)' },
+                { ratio: 0.618, color: 'rgba(156, 39, 176, 0.3)' },
+            ];
+
+            // Find time range for drawing lines
+            const fpStartBar = bars.find(b => b.source_start_index <= fp.start_index && b.source_end_index >= fp.start_index);
+            const fpEndBar = bars.find(b => b.source_start_index <= fp.end_index && b.source_end_index >= fp.end_index);
+
+            if (!fpStartBar || !fpEndBar) return;
+
+            const startTime = Math.min(betterRefState.highBar.timestamp, fpStartBar.timestamp, fpEndBar.timestamp);
+            const endTime = Math.max(betterRefState.highBar.timestamp, fpStartBar.timestamp, fpEndBar.timestamp);
+
+            fibLevels.forEach(level => {
+                const price = low + (range * level.ratio);
+                const line = chart.addLineSeries({
+                    color: level.color,
+                    lineWidth: 1,
+                    lineStyle: 3, // Dotted for partial preview
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+
+                line.setData([
+                    { time: startTime, value: price },
+                    { time: endTime, value: price },
+                ]);
+
+                fibLines.push(line);
+            });
         }
 
         // Update the inline UI to show current selection
@@ -1636,8 +1867,9 @@
             const low = betterRefState.lowBar.low;
             const range = high - low;
 
-            // Key Fib levels: 0.382, 0.5, 0.618, 1.0
+            // Key Fib levels including -0.1 stop level
             const fibLevels = [
+                { ratio: -0.1, color: 'rgba(239, 83, 80, 0.5)', label: '-0.1 (stop)' },  // Red for stop
                 { ratio: 0.382, color: 'rgba(156, 39, 176, 0.5)' },
                 { ratio: 0.5, color: 'rgba(156, 39, 176, 0.6)' },
                 { ratio: 0.618, color: 'rgba(156, 39, 176, 0.5)' },
@@ -2014,7 +2246,12 @@
                     break;
 
                 case 'fp_sample':
-                    if (e.key === '1') {
+                    if (e.key === 'Escape') {
+                        // ESC clears pending alternate selection for re-pick
+                        if (betterRefState.highBar || betterRefState.lowBar) {
+                            clearBetterRef();
+                        }
+                    } else if (e.key === '1') {
                         dismissFPWithCategory('too_small');
                     } else if (e.key === '2') {
                         dismissFPWithCategory('too_distant');

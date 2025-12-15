@@ -8,14 +8,38 @@ Handles file I/O, session management, and data export.
 import json
 import os
 import re
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 from .models import AnnotationSession, SwingAnnotation, ReviewSession, SwingFeedback
 
 
-def generate_timestamp_base(created_at: datetime) -> str:
+def get_local_time(dt: datetime) -> datetime:
+    """
+    Convert datetime to local timezone.
+
+    Uses system's local timezone (e.g., PST/PDT on the user's machine).
+
+    Args:
+        dt: datetime (naive assumed UTC, or timezone-aware)
+
+    Returns:
+        Datetime in local timezone (naive, for filename use)
+    """
+    if dt.tzinfo is None:
+        # Naive datetime - assume UTC
+        timestamp = dt.replace(tzinfo=timezone.utc).timestamp()
+    else:
+        timestamp = dt.timestamp()
+
+    # Convert to local time using system timezone
+    local_struct = time.localtime(timestamp)
+    return datetime(*local_struct[:6])
+
+
+def generate_timestamp_base(created_at: datetime, use_local: bool = True) -> str:
     """
     Generate timestamp base string from session creation time.
 
@@ -23,12 +47,18 @@ def generate_timestamp_base(created_at: datetime) -> str:
 
     Args:
         created_at: Session creation timestamp
+        use_local: If True, convert to local timezone
 
     Returns:
         Timestamp string without prefix or extension
     """
-    month_abbr = created_at.strftime('%b').lower()
-    return f"{created_at.year}-{month_abbr}-{created_at.day:02d}-{created_at.hour:02d}{created_at.minute:02d}"
+    if use_local:
+        local_dt = get_local_time(created_at)
+    else:
+        local_dt = created_at
+
+    month_abbr = local_dt.strftime('%b').lower()
+    return f"{local_dt.year}-{month_abbr}-{local_dt.day:02d}-{local_dt.hour:02d}{local_dt.minute:02d}"
 
 
 def generate_inprogress_filename(created_at: datetime) -> str:
@@ -53,35 +83,45 @@ def generate_inprogress_filename(created_at: datetime) -> str:
     return f"inprogress-{timestamp_base}.json"
 
 
-def generate_final_filename(created_at: datetime, label: Optional[str] = None) -> str:
+def generate_final_filename(
+    created_at: datetime,
+    label: Optional[str] = None,
+    version: int = 1
+) -> str:
     """
-    Generate final filename for kept sessions.
+    Generate final filename for kept sessions with versioning.
 
-    Format: yyyy-mmm-dd-HHmm.json (default)
-    Format: yyyy-mmm-dd-HHmm-label.json (with label)
+    Format: yyyy-mmm-dd-HHmm-ver<version>.json (default)
+    Format: yyyy-mmm-dd-HHmm-ver<version>-label.json (with label)
+
+    Version tracking enables multiple sessions from the same time window
+    (e.g., re-annotations of the same data).
 
     Args:
-        created_at: Session creation timestamp
+        created_at: Session creation timestamp (UTC, converted to Pacific)
         label: Optional user-provided label
+        version: Version number (default 1)
 
     Returns:
         Filename string (without path)
 
     Examples:
         >>> from datetime import datetime
-        >>> dt = datetime(2025, 12, 15, 8, 30)
+        >>> dt = datetime(2025, 12, 15, 16, 30)  # 16:30 UTC = 08:30 PST
         >>> generate_final_filename(dt)
-        '2025-dec-15-0830.json'
+        '2025-dec-15-0830-ver1.json'
         >>> generate_final_filename(dt, "trending_market")
-        '2025-dec-15-0830-trending_market.json'
+        '2025-dec-15-0830-ver1-trending_market.json'
+        >>> generate_final_filename(dt, version=2)
+        '2025-dec-15-0830-ver2.json'
     """
     timestamp_base = generate_timestamp_base(created_at)
 
     if label:
         sanitized_label = sanitize_label(label)
-        return f"{timestamp_base}-{sanitized_label}.json"
+        return f"{timestamp_base}-ver{version}-{sanitized_label}.json"
     else:
-        return f"{timestamp_base}.json"
+        return f"{timestamp_base}-ver{version}.json"
 
 
 def sanitize_label(label: str) -> str:
@@ -342,6 +382,41 @@ class AnnotationStorage:
             return True
         return False
 
+    def _find_next_version(self, timestamp_base: str, label: Optional[str] = None) -> int:
+        """
+        Find the next available version number for a timestamp base.
+
+        Scans existing files to find the highest existing version and returns version + 1.
+
+        Args:
+            timestamp_base: The timestamp portion (e.g., '2025-dec-15-0830')
+            label: Optional label to match
+
+        Returns:
+            Next available version number (1 if no existing files)
+        """
+        # Build regex pattern to match existing versioned files
+        # Format: {timestamp_base}-ver{N}[-label].json
+        if label:
+            sanitized_label = sanitize_label(label)
+            pattern = re.compile(
+                rf'^{re.escape(timestamp_base)}-ver(\d+)-{re.escape(sanitized_label)}\.json$'
+            )
+        else:
+            # Match files without label (ver followed by .json or -review.json)
+            pattern = re.compile(
+                rf'^{re.escape(timestamp_base)}-ver(\d+)\.json$'
+            )
+
+        max_version = 0
+        for path in self._storage_dir.glob("*.json"):
+            match = pattern.match(path.name)
+            if match:
+                version = int(match.group(1))
+                max_version = max(max_version, version)
+
+        return max_version + 1
+
     def finalize_session(
         self,
         session_id: str,
@@ -349,10 +424,12 @@ class AnnotationStorage:
         label: Optional[str] = None
     ) -> Tuple[Optional[str], Optional[str]]:
         """
-        Finalize a session: keep (rename to clean timestamp) or discard (delete).
+        Finalize a session: keep (rename to versioned timestamp) or discard (delete).
 
-        - keep: Renames from 'inprogress-...' to clean 'yyyy-mmm-dd-HHmm[-label].json'
+        - keep: Renames to 'yyyy-mmm-dd-HHmm-ver{N}[-label].json' (Pacific time)
         - discard: Deletes the session file entirely
+
+        Version numbers auto-increment if a file with the same timestamp exists.
 
         Args:
             session_id: UUID of the session
@@ -383,18 +460,11 @@ class AnnotationStorage:
             self._session_paths.pop(session_id, None)
             return None, None
 
-        # status == "keep": rename to clean timestamp filename
-        new_filename = generate_final_filename(session.created_at, label)
+        # status == "keep": rename to versioned timestamp filename
+        timestamp_base = generate_timestamp_base(session.created_at)
+        version = self._find_next_version(timestamp_base, label)
+        new_filename = generate_final_filename(session.created_at, label, version)
         new_path = self._storage_dir / new_filename
-
-        # Handle filename collision (add counter suffix if needed)
-        counter = 1
-        base_filename = new_filename
-        while new_path.exists():
-            base = base_filename.rsplit('.json', 1)[0]
-            new_filename = f"{base}_{counter}.json"
-            new_path = self._storage_dir / new_filename
-            counter += 1
 
         # Rename file
         if old_path.exists():

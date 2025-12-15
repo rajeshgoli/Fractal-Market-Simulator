@@ -686,16 +686,17 @@
             // Extensions project beyond the start in the retracement direction
             const fibRange = startPrice - endPrice;
             const levels = [
-                { level: 0, price: endPrice, label: '0' },
-                { level: 0.382, price: endPrice + fibRange * 0.382, label: '0.382' },
-                { level: 1.0, price: startPrice, label: '1.0' },
-                { level: 2.0, price: endPrice + fibRange * 2.0, label: '2.0' },
+                { level: -0.1, price: endPrice + fibRange * -0.1, label: '-0.1', color: '#ef5350' },  // Red stop level
+                { level: 0, price: endPrice, label: '0', color: '#9c27b0' },
+                { level: 0.382, price: endPrice + fibRange * 0.382, label: '0.382', color: '#9c27b0' },
+                { level: 1.0, price: startPrice, label: '1.0', color: '#9c27b0' },
+                { level: 2.0, price: endPrice + fibRange * 2.0, label: '2.0', color: '#9c27b0' },
             ];
 
-            levels.forEach(({ price, label }) => {
+            levels.forEach(({ price, label, color }) => {
                 const line = mainCandleSeries.createPriceLine({
                     price: price,
-                    color: '#9c27b0',
+                    color: color,
                     lineWidth: 1,
                     lineStyle: 2, // dashed
                     axisLabelVisible: true,

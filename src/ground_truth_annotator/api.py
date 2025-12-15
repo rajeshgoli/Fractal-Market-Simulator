@@ -8,8 +8,10 @@ Provides REST API endpoints for:
 - Cascade workflow (XL → L → M → S scale progression)
 """
 
+import asyncio
 import logging
 import random
+import threading
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -297,6 +299,9 @@ class AppState:
     cascade_enabled: bool = False
     # Cached DataFrame to avoid re-reading file on next window
     cached_dataframe: Optional[pd.DataFrame] = None
+    # Background precomputation tracking
+    precompute_in_progress: bool = False
+    precompute_thread: Optional[threading.Thread] = None
 
 
 # Global state
@@ -486,6 +491,9 @@ async def create_annotation(request: AnnotationCreate):
     # Sync cascade controller's session if in cascade mode
     if s.cascade_controller:
         s.cascade_controller._session = s.session
+
+    # Start background precomputation early (after first annotation)
+    start_precomputation_if_ready(s)
 
     return AnnotationResponse(
         annotation_id=annotation.annotation_id,
@@ -930,11 +938,68 @@ async def export_comparison(format: str = Query("json", description="Export form
 def _ensure_comparison_run(s: AppState) -> Dict[str, ComparisonResult]:
     """Ensure comparison has been run and cached."""
     if s.comparison_results is None:
-        analyzer = ComparisonAnalyzer(tolerance_pct=0.1)
-        s.comparison_results = analyzer.compare_session(s.session, s.source_bars)
-        # Also update the comparison report
-        s.comparison_report = analyzer.generate_report(s.comparison_results)
+        # Wait for precomputation if in progress
+        if s.precompute_in_progress and s.precompute_thread:
+            logger.info("Waiting for background precomputation to complete...")
+            s.precompute_thread.join(timeout=30)  # Wait up to 30 seconds
+
+        # If still not available, run synchronously
+        if s.comparison_results is None:
+            analyzer = ComparisonAnalyzer(tolerance_pct=0.1)
+            s.comparison_results = analyzer.compare_session(s.session, s.source_bars)
+            # Also update the comparison report
+            s.comparison_report = analyzer.generate_report(s.comparison_results)
     return s.comparison_results
+
+
+def _precompute_comparison_background(s: AppState) -> None:
+    """
+    Run comparison analysis in background thread.
+
+    This allows the UI to remain responsive while the comparison is computed.
+    Results are stored in AppState.comparison_results for later use.
+    """
+    try:
+        logger.info("Starting background precomputation of system swings...")
+        s.precompute_in_progress = True
+
+        analyzer = ComparisonAnalyzer(tolerance_pct=0.1)
+        results = analyzer.compare_session(s.session, s.source_bars)
+        report = analyzer.generate_report(results)
+
+        # Store results
+        s.comparison_results = results
+        s.comparison_report = report
+
+        logger.info("Background precomputation complete")
+    except Exception as e:
+        logger.error(f"Background precomputation failed: {e}")
+    finally:
+        s.precompute_in_progress = False
+
+
+def start_precomputation_if_ready(s: AppState) -> None:
+    """
+    Start background precomputation if conditions are met.
+
+    Triggers early (after first annotation) to maximize time for computation
+    to complete before user enters review mode.
+    """
+    if s.precompute_in_progress:
+        return
+    if s.comparison_results is not None:
+        return
+    if len(s.session.annotations) == 0:
+        return  # Wait for at least one annotation
+
+    # Start background thread
+    s.precompute_thread = threading.Thread(
+        target=_precompute_comparison_background,
+        args=(s,),
+        daemon=True
+    )
+    s.precompute_thread.start()
+    logger.info("Started background precomputation thread (triggered by annotation)")
 
 
 def _get_review_controller(s: AppState) -> ReviewController:

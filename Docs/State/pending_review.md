@@ -1,12 +1,18 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-15
 
 ---
 
 ## Pending Changes
+
+### 2025-12-15 - Annotation UX Improvements
+- **Issue:** #58
+- **Type:** Enhancement
+- **Files:** `src/ground_truth_annotator/static/review.html`, `static/index.html`, `api.py`, `storage.py`, `tests/ground_truth_annotator/test_storage.py`
+- **Summary:** FP dismissal flow (Fib preview on alternate, ESC cancel, skip empty phases), -0.1 Fib stop level, XL scale context on review, background precomputation, versioned filenames with local timezone
 
 ### 2025-12-15 - Review Mode UX Improvements
 - **Issue:** #57
