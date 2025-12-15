@@ -90,6 +90,9 @@ class SessionFinalizeRequest(BaseModel):
     """Request to finalize session with timestamp-based filename."""
     status: str  # "keep" or "discard"
     label: Optional[str] = None  # Optional user-provided label
+    difficulty: Optional[int] = None  # 1-5 difficulty rating
+    regime: Optional[str] = None  # "bull" | "bear" | "chop"
+    comments: Optional[str] = None  # Free-form comments
 
 
 class SessionFinalizeResponse(BaseModel):
@@ -638,6 +641,14 @@ async def finalize_session(request: SessionFinalizeRequest):
 
         # status == "keep": save session status then rename
         s.storage.update_session(s.session)
+
+        # Update review session with metadata if it exists
+        if s.review_controller:
+            review = s.review_controller.get_or_create_review()
+            review.difficulty = request.difficulty
+            review.regime = request.regime
+            review.session_comments = request.comments
+            s.review_storage.save_review(review)
 
         # Finalize session file (rename to clean timestamp name)
         session_filename, new_path_id = s.storage.finalize_session(

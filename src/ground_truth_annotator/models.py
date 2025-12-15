@@ -297,7 +297,9 @@ class SwingFeedback:
 REVIEW_PHASES = ["matches", "fp_sample", "fn_feedback", "complete"]
 
 # Schema version for backward-compatible evolution
-REVIEW_SCHEMA_VERSION = 1
+# v1: Initial schema
+# v2: Added difficulty, regime, session_comments metadata fields
+REVIEW_SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -318,6 +320,10 @@ class ReviewSession:
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
     version: int = REVIEW_SCHEMA_VERSION  # Schema version for backward compatibility
+    # Session metadata (collected at end of review)
+    difficulty: Optional[int] = None      # 1-5 difficulty rating
+    regime: Optional[str] = None          # "bull" | "bear" | "chop"
+    session_comments: Optional[str] = None  # Free-form comments
 
     @classmethod
     def create(cls, session_id: str) -> 'ReviewSession':
@@ -375,7 +381,10 @@ class ReviewSession:
             'fn_feedback': [f.to_dict() for f in self.fn_feedback],
             'fp_sample_indices': self.fp_sample_indices,
             'started_at': self.started_at.isoformat(),
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'difficulty': self.difficulty,
+            'regime': self.regime,
+            'session_comments': self.session_comments
         }
 
     @classmethod
@@ -391,5 +400,8 @@ class ReviewSession:
             fp_sample_indices=data.get('fp_sample_indices', []),
             started_at=datetime.fromisoformat(data['started_at']),
             completed_at=datetime.fromisoformat(data['completed_at']) if data.get('completed_at') else None,
-            version=data.get('version', 1)  # Default to 1 for legacy data without version
+            version=data.get('version', 1),  # Default to 1 for legacy data without version
+            difficulty=data.get('difficulty'),
+            regime=data.get('regime'),
+            session_comments=data.get('session_comments')
         )

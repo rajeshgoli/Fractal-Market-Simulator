@@ -532,6 +532,130 @@
             display: none !important;
         }
 
+        /* Difficulty rating buttons */
+        .difficulty-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .difficulty-btn:hover {
+            border-color: var(--accent-blue);
+            transform: scale(1.1);
+        }
+
+        .difficulty-btn.selected {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+
+        /* Market regime buttons */
+        .regime-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .regime-btn:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .regime-btn.selected {
+            border-color: var(--accent-blue);
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .regime-btn[data-value="bull"].selected {
+            background: var(--accent-bull);
+            border-color: var(--accent-bull);
+        }
+
+        .regime-btn[data-value="bear"].selected {
+            background: var(--accent-bear);
+            border-color: var(--accent-bear);
+        }
+
+        .regime-btn[data-value="chop"].selected {
+            background: var(--accent-orange);
+            border-color: var(--accent-orange);
+        }
+
+        /* Inline better reference selection */
+        .better-ref-inline {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .better-ref-inline.has-selection {
+            border-color: var(--accent-purple);
+            background: rgba(156, 39, 176, 0.1);
+        }
+
+        .better-ref-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .better-ref-title {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .better-ref-clear {
+            padding: 4px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .better-ref-clear:hover {
+            background: var(--accent-bear);
+            border-color: var(--accent-bear);
+            color: white;
+        }
+
+        .better-ref-clear kbd {
+            background: rgba(255,255,255,0.15);
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 0.7rem;
+            margin-right: 3px;
+        }
+
+        .better-ref-status {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .better-ref-status.complete {
+            color: var(--accent-purple);
+            font-weight: 500;
+        }
+
         @media (max-width: 1200px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -636,20 +760,32 @@
                             <span class="swing-detail-value" id="fp-rank">-</span>
                         </div>
                     </div>
+                    <!-- Inline Better Reference Selection -->
+                    <div class="better-ref-inline" id="better-ref-inline">
+                        <div class="better-ref-header">
+                            <span class="better-ref-title">Better Reference (optional)</span>
+                            <button class="better-ref-clear" id="better-ref-clear" onclick="clearBetterRef()" style="display: none;">
+                                <kbd>C</kbd> Clear
+                            </button>
+                        </div>
+                        <div class="better-ref-status" id="inline-ref-status">
+                            Click chart to mark high, then low
+                        </div>
+                    </div>
                     <div class="fp-action-grid">
-                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('too_small')"><kbd>1</kbd>Too small</button>
-                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('too_distant')"><kbd>2</kbd>Too distant</button>
-                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('subsumed')"><kbd>3</kbd>Something bigger</button>
-                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('counter_trend')"><kbd>4</kbd>Counter trend</button>
+                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('too_small')"><kbd>1</kbd>Too small</button>
+                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('too_distant')"><kbd>2</kbd>Too distant</button>
+                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('subsumed')"><kbd>3</kbd>Something bigger</button>
+                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('counter_trend')"><kbd>4</kbd>Counter trend</button>
                     </div>
                     <div class="fp-action-row">
-                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('other')"><kbd>N</kbd>Dismiss (Other)</button>
+                        <button class="fp-action-btn dismiss" onclick="dismissFPWithCategory('other')"><kbd>N</kbd>Dismiss (Other)</button>
                         <button class="fp-action-btn accept" onclick="submitFPFeedback('valid_missed')"><kbd>V</kbd>Accept</button>
                     </div>
                     <div class="keyboard-hints">
                         <div class="hint-row"><kbd>1</kbd> Too small &nbsp; <kbd>2</kbd> Too distant &nbsp; <kbd>3</kbd> Something bigger &nbsp; <kbd>4</kbd> Counter trend</div>
                         <div class="hint-row"><kbd>N</kbd> Dismiss (Other) &nbsp; <kbd>V</kbd> Accept (I missed it)</div>
-                        <div class="hint-row"><kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp; <kbd>S</kbd> Skip remaining</div>
+                        <div class="hint-row"><kbd>C</kbd> Clear reference &nbsp; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp; <kbd>S</kbd> Skip remaining</div>
                     </div>
                     <div class="nav-buttons">
                         <button class="btn btn-secondary" onclick="previousSwing()" id="fp-prev-btn">
@@ -760,13 +896,51 @@
                     </div>
                     <div class="summary-section">
                         <div class="summary-title">Session Quality</div>
-                        <div style="margin-top: 10px; margin-bottom: 10px;">
+                        <!-- Difficulty Rating -->
+                        <div style="margin-top: 10px; margin-bottom: 15px;">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 8px;">
+                                Difficulty (optional)
+                            </label>
+                            <div class="difficulty-rating" id="difficulty-rating" style="display: flex; gap: 8px; align-items: center;">
+                                <button class="difficulty-btn" data-value="1" title="Very easy">1</button>
+                                <button class="difficulty-btn" data-value="2" title="Easy">2</button>
+                                <button class="difficulty-btn" data-value="3" title="Medium">3</button>
+                                <button class="difficulty-btn" data-value="4" title="Hard">4</button>
+                                <button class="difficulty-btn" data-value="5" title="Very hard">5</button>
+                                <span style="font-size: 0.75rem; color: var(--text-secondary); margin-left: 8px;">
+                                    <span id="difficulty-label-easy">Easy</span>
+                                    <span id="difficulty-label-hard" style="float: right;">Hard</span>
+                                </span>
+                            </div>
+                        </div>
+                        <!-- Market Regime -->
+                        <div style="margin-bottom: 15px;">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 8px;">
+                                Market Regime (optional)
+                            </label>
+                            <div class="regime-buttons" id="regime-buttons" style="display: flex; gap: 8px;">
+                                <button class="regime-btn" data-value="bull">Bull</button>
+                                <button class="regime-btn" data-value="bear">Bear</button>
+                                <button class="regime-btn" data-value="chop">Chop</button>
+                            </div>
+                        </div>
+                        <!-- Session Label -->
+                        <div style="margin-bottom: 10px;">
                             <label style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 5px;">
                                 Session Label (optional)
                             </label>
                             <input type="text" id="session-label" class="feedback-input"
                                 placeholder="e.g., trending_market, volatile_range"
                                 style="min-height: auto; height: 36px; margin-bottom: 0;">
+                        </div>
+                        <!-- Comments -->
+                        <div style="margin-bottom: 15px;">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary); display: block; margin-bottom: 5px;">
+                                Comments (optional)
+                            </label>
+                            <textarea class="feedback-input" id="session-comments"
+                                placeholder="Any notes about this session..."
+                                style="min-height: 60px;"></textarea>
                         </div>
                         <div class="action-row" style="margin-top: 10px;">
                             <button class="btn btn-success" onclick="finalizeSession('keep')" id="keep-btn">
@@ -801,28 +975,6 @@
                         </button>
                     </div>
                 </div>
-
-                <!-- Better Reference Selection Panel -->
-                <div class="card hidden" id="better-ref-panel" style="border: 2px solid var(--accent-purple);">
-                    <div class="card-title" style="border-color: var(--accent-purple);">
-                        Mark Better Reference? <span style="font-weight: normal; font-size: 0.8rem;">(Optional)</span>
-                    </div>
-                    <div id="better-ref-instruction" style="margin-bottom: 12px; font-size: 0.9rem;">
-                        Click the <strong>high point</strong> first, then the <strong>low point</strong>.
-                    </div>
-                    <div id="better-ref-status" style="margin-bottom: 12px; font-size: 0.85rem; color: var(--text-secondary);">
-                        Waiting for first click (high)...
-                    </div>
-                    <div class="action-buttons">
-                        <button class="btn btn-secondary" onclick="skipBetterRef()">
-                            <kbd>Esc</kbd> Skip
-                        </button>
-                    </div>
-                    <div class="keyboard-hints" style="margin-top: 10px;">
-                        <div class="hint-row"><kbd>Click</kbd> Chart to select points</div>
-                        <div class="hint-row"><kbd>Esc</kbd> Skip this step</div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -843,13 +995,20 @@
         let currentIndex = 0;
         let currentPhase = 'matches';
 
-        // Better reference selection state
+        // Better reference selection state (inline mode - always available during FP phase)
         let betterRefState = {
-            active: false,
-            pendingFP: null,      // FP being dismissed
-            pendingCategory: null, // Category selected
             highBar: null,        // First click (high point)
             lowBar: null,         // Second click (low point)
+            clickHandlerActive: false,  // Whether click handler is subscribed
+        };
+
+        // Fib line series for preview
+        let fibLines = [];
+
+        // Session metadata state
+        let sessionMetadata = {
+            difficulty: null,     // 1-5 or null
+            regime: null,         // "bull" | "bear" | "chop" | null
         };
 
         // Get session_id from URL
@@ -1054,6 +1213,12 @@
             document.getElementById('summary-panel').classList.add('hidden');
             document.getElementById('empty-panel').classList.add('hidden');
 
+            // Disable better ref click handler when leaving FP phase
+            if (currentPhase !== 'fp_sample') {
+                disableInlineBetterRef();
+                resetBetterRefState();
+            }
+
             currentIndex = 0;
 
             switch (currentPhase) {
@@ -1156,6 +1321,12 @@
             }
 
             const fp = fpSample[currentIndex];
+
+            // Reset better reference state for new FP
+            resetBetterRefState();
+
+            // Enable inline better reference click handler
+            enableInlineBetterRef();
 
             // Load bars for scale
             await loadBars(fp.scale);
@@ -1333,41 +1504,29 @@
             }
         }
 
-        // Quick dismiss FP with preset category - offers optional better reference
-        async function quickDismissFP(category) {
-            const fp = fpSample[currentIndex];
+        // ============================================================================
+        // Inline Better Reference Selection (always active during FP phase)
+        // ============================================================================
 
-            // Store pending dismissal and show better reference prompt
-            betterRefState = {
-                active: true,
-                pendingFP: fp,
-                pendingCategory: category,
-                highBar: null,
-                lowBar: null,
-            };
-
-            // Show better reference panel, hide FP panel
-            document.getElementById('fp-panel').classList.add('hidden');
-            document.getElementById('better-ref-panel').classList.remove('hidden');
-            document.getElementById('better-ref-status').textContent = 'Waiting for first click (high)...';
-
-            // Enable chart click handler for better reference selection
-            enableBetterRefClickHandler();
-        }
-
-        // Enable chart click handler for better reference selection
-        function enableBetterRefClickHandler() {
-            chart.subscribeClick(handleBetterRefClick);
+        // Enable chart click handler for FP phase
+        function enableInlineBetterRef() {
+            if (!betterRefState.clickHandlerActive) {
+                chart.subscribeClick(handleInlineBetterRefClick);
+                betterRefState.clickHandlerActive = true;
+            }
         }
 
         // Disable chart click handler
-        function disableBetterRefClickHandler() {
-            chart.unsubscribeClick(handleBetterRefClick);
+        function disableInlineBetterRef() {
+            if (betterRefState.clickHandlerActive) {
+                chart.unsubscribeClick(handleInlineBetterRefClick);
+                betterRefState.clickHandlerActive = false;
+            }
         }
 
-        // Handle chart click during better reference selection
-        function handleBetterRefClick(param) {
-            if (!betterRefState.active || !param.time) return;
+        // Handle chart click during FP phase for better reference selection
+        function handleInlineBetterRefClick(param) {
+            if (currentPhase !== 'fp_sample' || !param.time) return;
 
             const clickedBar = bars.find(b => b.timestamp === param.time);
             if (!clickedBar) return;
@@ -1375,44 +1534,182 @@
             if (!betterRefState.highBar) {
                 // First click - high point
                 betterRefState.highBar = clickedBar;
-                document.getElementById('better-ref-status').textContent =
-                    `High: Bar ${clickedBar.index} @ ${clickedBar.high.toFixed(2)} — Now click low point...`;
-
-                // Add marker for high point
-                candleSeries.setMarkers([{
-                    time: clickedBar.timestamp,
-                    position: 'aboveBar',
-                    color: '#9c27b0',
-                    shape: 'arrowDown',
-                    text: 'H',
-                }]);
-            } else {
+                updateBetterRefUI();
+                updateBetterRefMarkers();
+            } else if (!betterRefState.lowBar) {
                 // Second click - low point
                 betterRefState.lowBar = clickedBar;
-
-                // Submit with better reference
-                submitFPWithBetterRef();
+                updateBetterRefUI();
+                updateBetterRefMarkers();
+                drawFibPreview();
             }
         }
 
-        // Submit FP feedback with optional better reference
-        async function submitFPWithBetterRef() {
-            const { pendingFP, pendingCategory, highBar, lowBar } = betterRefState;
+        // Update the inline UI to show current selection
+        function updateBetterRefUI() {
+            const statusEl = document.getElementById('inline-ref-status');
+            const clearBtn = document.getElementById('better-ref-clear');
+            const container = document.getElementById('better-ref-inline');
+
+            if (!betterRefState.highBar) {
+                statusEl.textContent = 'Click chart to mark high, then low';
+                statusEl.classList.remove('complete');
+                clearBtn.style.display = 'none';
+                container.classList.remove('has-selection');
+            } else if (!betterRefState.lowBar) {
+                statusEl.textContent = `High: ${betterRefState.highBar.high.toFixed(2)} — Now click low`;
+                statusEl.classList.remove('complete');
+                clearBtn.style.display = 'inline-block';
+                container.classList.add('has-selection');
+            } else {
+                const range = Math.abs(betterRefState.highBar.high - betterRefState.lowBar.low).toFixed(2);
+                statusEl.textContent = `H: ${betterRefState.highBar.high.toFixed(2)} → L: ${betterRefState.lowBar.low.toFixed(2)} (${range} pts)`;
+                statusEl.classList.add('complete');
+                clearBtn.style.display = 'inline-block';
+                container.classList.add('has-selection');
+            }
+        }
+
+        // Update markers on chart to show selected points
+        function updateBetterRefMarkers() {
+            const markers = [];
+
+            // Keep the original FP swing markers
+            const fp = fpSample[currentIndex];
+            if (fp) {
+                const startBar = bars.find(b => b.source_start_index <= fp.start_index && b.source_end_index >= fp.start_index);
+                const endBar = bars.find(b => b.source_start_index <= fp.end_index && b.source_end_index >= fp.end_index);
+                const color = fp.direction === 'bull' ? '#26a69a' : '#ef5350';
+
+                if (startBar) {
+                    markers.push({
+                        time: startBar.timestamp,
+                        position: fp.direction === 'bull' ? 'aboveBar' : 'belowBar',
+                        color: color,
+                        shape: 'arrowDown',
+                        text: 'Start',
+                    });
+                }
+                if (endBar) {
+                    markers.push({
+                        time: endBar.timestamp,
+                        position: fp.direction === 'bull' ? 'belowBar' : 'aboveBar',
+                        color: color,
+                        shape: 'arrowUp',
+                        text: 'End',
+                    });
+                }
+            }
+
+            // Add better reference markers
+            if (betterRefState.highBar) {
+                markers.push({
+                    time: betterRefState.highBar.timestamp,
+                    position: 'aboveBar',
+                    color: '#9c27b0',
+                    shape: 'circle',
+                    text: 'H',
+                });
+            }
+            if (betterRefState.lowBar) {
+                markers.push({
+                    time: betterRefState.lowBar.timestamp,
+                    position: 'belowBar',
+                    color: '#9c27b0',
+                    shape: 'circle',
+                    text: 'L',
+                });
+            }
+
+            // Sort by time for proper rendering
+            markers.sort((a, b) => a.time - b.time);
+            candleSeries.setMarkers(markers);
+        }
+
+        // Draw Fibonacci preview lines when both points selected
+        function drawFibPreview() {
+            clearFibPreview();
+
+            if (!betterRefState.highBar || !betterRefState.lowBar) return;
+
+            const high = betterRefState.highBar.high;
+            const low = betterRefState.lowBar.low;
+            const range = high - low;
+
+            // Key Fib levels: 0.382, 0.5, 0.618, 1.0
+            const fibLevels = [
+                { ratio: 0.382, color: 'rgba(156, 39, 176, 0.5)' },
+                { ratio: 0.5, color: 'rgba(156, 39, 176, 0.6)' },
+                { ratio: 0.618, color: 'rgba(156, 39, 176, 0.5)' },
+            ];
+
+            fibLevels.forEach(level => {
+                const price = low + (range * level.ratio);
+                const line = chart.addLineSeries({
+                    color: level.color,
+                    lineWidth: 1,
+                    lineStyle: 2, // Dashed
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+
+                // Draw line across visible range
+                const startTime = Math.min(betterRefState.highBar.timestamp, betterRefState.lowBar.timestamp);
+                const endTime = Math.max(betterRefState.highBar.timestamp, betterRefState.lowBar.timestamp);
+
+                line.setData([
+                    { time: startTime, value: price },
+                    { time: endTime, value: price },
+                ]);
+
+                fibLines.push(line);
+            });
+        }
+
+        // Clear Fibonacci preview lines
+        function clearFibPreview() {
+            fibLines.forEach(line => {
+                chart.removeSeries(line);
+            });
+            fibLines = [];
+        }
+
+        // Clear better reference selection
+        function clearBetterRef() {
+            betterRefState.highBar = null;
+            betterRefState.lowBar = null;
+            clearFibPreview();
+            updateBetterRefUI();
+            // Re-show FP swing markers
+            showCurrentFP();
+        }
+
+        // Reset better reference state when moving to new FP
+        function resetBetterRefState() {
+            betterRefState.highBar = null;
+            betterRefState.lowBar = null;
+            clearFibPreview();
+            updateBetterRefUI();
+        }
+
+        // Dismiss FP with category and optional better reference (inline flow)
+        async function dismissFPWithCategory(category) {
+            const fp = fpSample[currentIndex];
 
             const payload = {
                 swing_type: 'false_positive',
-                swing_reference: { sample_index: pendingFP.fp_index },
+                swing_reference: { sample_index: fp.fp_index },
                 verdict: 'noise',
-                category: pendingCategory,
+                category: category,
             };
 
             // Add better reference if both points selected
-            if (highBar && lowBar) {
+            if (betterRefState.highBar && betterRefState.lowBar) {
                 payload.better_reference = {
-                    high_bar_index: highBar.index,
-                    low_bar_index: lowBar.index,
-                    high_price: highBar.high.toFixed(2),
-                    low_price: lowBar.low.toFixed(2),
+                    high_bar_index: betterRefState.highBar.index,
+                    low_bar_index: betterRefState.lowBar.index,
+                    high_price: betterRefState.highBar.high.toFixed(2),
+                    low_price: betterRefState.lowBar.low.toFixed(2),
                 };
             }
 
@@ -1424,45 +1721,25 @@
                 });
 
                 // Update local state
-                pendingFP.feedback = {
+                fp.feedback = {
                     verdict: 'noise',
-                    category: pendingCategory,
+                    category: category,
                     better_reference: payload.better_reference || null
                 };
 
-                // Clean up and move to next
-                cleanupBetterRefState();
+                // Reset better ref state and move to next
+                resetBetterRefState();
                 nextSwing();
 
             } catch (error) {
                 console.error('Error submitting feedback:', error);
                 alert('Failed to submit feedback');
-                cleanupBetterRefState();
             }
         }
 
-        // Skip better reference and submit without it
-        function skipBetterRef() {
-            submitFPWithBetterRef();
-        }
-
-        // Clean up better reference state
-        function cleanupBetterRefState() {
-            disableBetterRefClickHandler();
-            betterRefState = {
-                active: false,
-                pendingFP: null,
-                pendingCategory: null,
-                highBar: null,
-                lowBar: null,
-            };
-
-            // Hide better ref panel, show FP panel
-            document.getElementById('better-ref-panel').classList.add('hidden');
-            document.getElementById('fp-panel').classList.remove('hidden');
-
-            // Clear markers
-            candleSeries.setMarkers([]);
+        // Legacy function kept for compatibility (called by "Dismiss (Other)" with N key)
+        function quickDismissFP(category) {
+            dismissFPWithCategory(category);
         }
 
         // Submit FN feedback
@@ -1640,11 +1917,18 @@
         async function finalizeSession(status) {
             try {
                 const label = document.getElementById('session-label').value.trim() || null;
+                const comments = document.getElementById('session-comments').value.trim() || null;
 
                 const response = await fetch('/api/session/finalize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: status, label: label })
+                    body: JSON.stringify({
+                        status: status,
+                        label: label,
+                        difficulty: sessionMetadata.difficulty,
+                        regime: sessionMetadata.regime,
+                        comments: comments
+                    })
                 });
 
                 if (!response.ok) throw new Error(await response.text());
@@ -1656,11 +1940,19 @@
                 const keepBtn = document.getElementById('keep-btn');
                 const discardBtn = document.getElementById('discard-btn');
                 const labelInput = document.getElementById('session-label');
+                const commentsInput = document.getElementById('session-comments');
 
                 // Disable all inputs after finalization
                 labelInput.disabled = true;
+                commentsInput.disabled = true;
                 keepBtn.disabled = true;
                 discardBtn.disabled = true;
+
+                // Disable difficulty and regime buttons
+                document.querySelectorAll('.difficulty-btn, .regime-btn').forEach(btn => {
+                    btn.disabled = true;
+                    btn.style.cursor = 'default';
+                });
 
                 if (status === 'keep') {
                     msgEl.innerHTML = `<span style="color: var(--accent-bull);">Saved as: ${result.session_filename}</span>`;
@@ -1697,23 +1989,12 @@
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            // Handle Escape during better reference selection
-            if (betterRefState.active && e.key === 'Escape') {
-                skipBetterRef();
-                return;
-            }
-
-            // Ignore if typing in textarea
-            if (e.target.tagName === 'TEXTAREA') {
+            // Ignore if typing in textarea or input
+            if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
                 if (e.key === 'Enter' && !e.shiftKey && currentPhase === 'fn_feedback') {
                     e.preventDefault();
                     submitFNFeedback();
                 }
-                return;
-            }
-
-            // Block normal FP shortcuts during better reference selection
-            if (betterRefState.active) {
                 return;
             }
 
@@ -1734,17 +2015,19 @@
 
                 case 'fp_sample':
                     if (e.key === '1') {
-                        quickDismissFP('too_small');
+                        dismissFPWithCategory('too_small');
                     } else if (e.key === '2') {
-                        quickDismissFP('too_distant');
+                        dismissFPWithCategory('too_distant');
                     } else if (e.key === '3') {
-                        quickDismissFP('subsumed');
+                        dismissFPWithCategory('subsumed');
                     } else if (e.key === '4') {
-                        quickDismissFP('counter_trend');
+                        dismissFPWithCategory('counter_trend');
                     } else if (e.key.toLowerCase() === 'n') {
-                        submitFPFeedback('noise');
+                        dismissFPWithCategory('other');
                     } else if (e.key.toLowerCase() === 'v') {
                         submitFPFeedback('valid_missed');
+                    } else if (e.key.toLowerCase() === 'c') {
+                        clearBetterRef();
                     } else if (e.key === 'ArrowRight') {
                         nextSwing();
                     } else if (e.key === 'ArrowLeft') {
@@ -1776,7 +2059,7 @@
             updateFNSubmitState();
         });
 
-        // Select FN preset by index (0-4)
+        // Select FN preset by index (0-4) and auto-submit
         function selectPreset(index) {
             // Only target FN preset buttons (those with data-preset attribute inside fn-panel)
             const presetBtns = document.querySelectorAll('#fn-panel .preset-btn');
@@ -1790,6 +2073,9 @@
                 btn.classList.add('selected');
 
                 updateFNSubmitState();
+
+                // Auto-submit like FP buttons do (consistent UX)
+                submitFNFeedback();
             }
         }
 
@@ -1797,6 +2083,30 @@
         document.querySelectorAll('#fn-panel .preset-btn').forEach((btn, index) => {
             btn.addEventListener('click', () => {
                 selectPreset(index);
+            });
+        });
+
+        // Difficulty rating button handlers
+        document.querySelectorAll('.difficulty-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const value = parseInt(btn.dataset.value);
+                sessionMetadata.difficulty = value;
+
+                // Update visual selection
+                document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+            });
+        });
+
+        // Market regime button handlers
+        document.querySelectorAll('.regime-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const value = btn.dataset.value;
+                sessionMetadata.regime = value;
+
+                // Update visual selection
+                document.querySelectorAll('.regime-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
             });
         });
 

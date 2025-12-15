@@ -280,15 +280,18 @@ Review a sample of false positives (system detected, you didn't mark).
   - `2` or click "Too distant" - Isolated from surrounding structure
   - `3` or click "Something bigger" - Part of a larger swing
   - `4` or click "Counter trend" - Swing against prevailing trend direction
-- **Better Reference** (optional): After quick dismiss, you can optionally mark "what I would have chosen":
-  - A prompt appears: "Mark Better Reference?"
-  - Click the high point first, then the low point
-  - Press `Esc` to skip if not applicable
+- **Better Reference** (inline, optional): Mark "what I would have chosen" directly on the chart:
+  - Click the chart to mark the high point first
+  - Click again to mark the low point
+  - Fibonacci preview lines appear at 0.382, 0.5, 0.618 levels
+  - Press `C` to clear selection and start over
+  - Then press a dismiss button (`1`-`4` or `N`) to submit with the reference
+  - If no reference is marked, dismiss submits without one
   - This data helps tune detection parameters
 - **Other Actions**:
   - `N` or click "Dismiss (Other)" - Mark as noise with dropdown reason
   - `V` or click "Actually Valid" - Admit you missed this swing
-  - Optional: Select reason from "Other" dropdown (wrong_direction, not_a_swing, other)
+  - `C` - Clear better reference selection
   - `S` - Skip remaining FPs (advance to Phase 3)
 
 #### Phase 3: FN Feedback
@@ -297,16 +300,15 @@ Explain each false negative (you marked, system missed).
 
 - **Purpose**: Capture qualitative signal for improving detection
 - **Actions**:
-  - Select a preset explanation using keyboard shortcuts `1`-`5`:
+  - Select a preset explanation using keyboard shortcuts `1`-`5` (auto-submits and advances):
     - `1` - "Biggest swing I see at this scale"
     - `2` - "Most impulsive move"
     - `3` - "Reversal pattern"
     - `4` - "Structure break"
     - `5` - "Timeframe fit"
-  - Or type a custom explanation in the text field
+  - Or type a custom explanation in the text field and press `Enter` or click "Submit Feedback"
   - Optional: Select category (pattern, size, context, structure, other)
-  - `Enter` or click "Submit Feedback" - Submit and advance
-- **Note**: All FNs must have feedback before completing review
+- **Note**: Preset buttons auto-submit and advance (same as FP dismiss flow). All FNs must have feedback before completing review.
 
 ### Summary View
 
@@ -317,12 +319,18 @@ After all phases, see statistics:
 
 ### Session Quality Control
 
-Before exporting or moving to the next window, mark the session quality:
+Before exporting or moving to the next window, provide session metadata and mark quality:
 
-- **Keep Session** - Include this session in ground truth analysis
-- **Discard (Practice)** - Exclude from analysis (e.g., learning the tool, made mistakes)
+**Session Metadata (optional)**:
+- **Difficulty Rating (1-5)**: How hard was this annotation session?
+- **Market Regime**: Bull, Bear, or Chop - characterize the overall market behavior
+- **Comments**: Free-form notes about the session
 
-This allows filtering analysis data to only include high-quality annotation sessions.
+**Session Quality**:
+- **Keep Session** - Include this session in ground truth analysis (saves with metadata)
+- **Discard (Practice)** - Exclude from analysis (deletes session files)
+
+This allows filtering analysis data to only include high-quality annotation sessions, and the metadata helps correlate detection quality with market conditions.
 
 ### Exporting Feedback
 
@@ -362,9 +370,10 @@ Alternatively, click **"← Back to Annotation"** to return to the current sessi
 | FP Sample | `4` | Quick dismiss: Counter trend |
 | FP Sample | `N` | Dismiss with other reason |
 | FP Sample | `V` | Valid (I missed it) |
+| FP Sample | `C` | Clear better reference selection |
 | FP Sample | `S` | Skip remaining |
-| FN Feedback | `1`-`5` | Select preset explanation |
-| FN Feedback | `Enter` | Submit (when comment filled) |
+| FN Feedback | `1`-`5` | Select preset (auto-submits and advances) |
+| FN Feedback | `Enter` | Submit (when custom comment typed) |
 | All | `→` | Next swing |
 | All | `←` | Previous swing |
 

@@ -1,12 +1,18 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-15
 
 ---
 
 ## Pending Changes
+
+### 2025-12-15 - Review Mode UX Improvements
+- **Issue:** #57
+- **Type:** Enhancement
+- **Files:** `src/ground_truth_annotator/static/review.html`, `api.py`, `models.py`, `tests/test_ground_truth_foundation.py`, `Docs/Reference/user_guide.md`
+- **Summary:** FN auto-advance, session metadata (difficulty/regime/comments), inline better reference selection
 
 ### 2025-12-15 - Detection Quality Improvements (Phase 1)
 - **Issue:** #56
