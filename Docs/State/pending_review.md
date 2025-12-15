@@ -8,15 +8,15 @@
 
 ## Pending Changes
 
-### 2025-12-12 - Add preset buttons for FN explanations
-- **Issue:** #47
+### 2025-12-15 - FP quick-select buttons for common dismissal reasons
+- **Issue:** #51
 - **Type:** Enhancement
 - **Files:** `src/ground_truth_annotator/static/review.html`
 
-### 2025-12-12 - Fix inverted Fibonacci reference level labels
-- **Issue:** #46
+### 2025-12-12 - Fix flaky performance scaling tests
+- **Issue:** #31
 - **Type:** Bug Fix
-- **Files:** `src/ground_truth_annotator/static/index.html`
+- **Files:** `tests/test_swing_detector.py`, `tests/test_scale_calibrator.py`
 
 ---
 
@@ -24,6 +24,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 12 | #46-#50 - P1 UX fixes (Fib labels, presets, toast, keep/discard, caching) | All Accepted |
 | Dec 12 | #44 - Deprecated module removal | Accepted |
 | Dec 12 | Review Mode epic (#38) - #39, #40, #41, #42, #43 | All Accepted, epic closed |
 | Dec 12 | #32, #33, #34, #35, #37 - UX polish batch | All Accepted |

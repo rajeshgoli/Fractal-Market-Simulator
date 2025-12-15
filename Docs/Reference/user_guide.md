@@ -241,10 +241,14 @@ Review swings where your annotation matched system detection.
 Review a sample of false positives (system detected, you didn't mark).
 
 - **Purpose**: Understand why system detects swings you didn't mark
-- **Actions**:
-  - `N` or click "Noise" - Mark as noise (not a real swing)
+- **Quick Dismiss** (one-click): Use preset buttons for common reasons:
+  - `1` or click "Too small" - Detection insignificant at this scale
+  - `2` or click "Too distant" - Isolated from surrounding structure
+  - `3` or click "Something bigger" - Part of a larger swing
+- **Other Actions**:
+  - `N` or click "Dismiss (Other)" - Mark as noise with dropdown reason
   - `V` or click "Actually Valid" - Admit you missed this swing
-  - Optional: Select reason from dropdown (too_small, wrong_direction, not_a_swing, other)
+  - Optional: Select reason from "Other" dropdown (wrong_direction, not_a_swing, other)
   - `S` - Skip remaining FPs (advance to Phase 3)
 
 #### Phase 3: FN Feedback
@@ -312,7 +316,10 @@ Alternatively, click **"← Back to Annotation"** to return to the current sessi
 | Matches | `G` | Good (correct) |
 | Matches | `W` | Wrong (incorrect) |
 | Matches | `S` | Skip all |
-| FP Sample | `N` | Noise |
+| FP Sample | `1` | Quick dismiss: Too small |
+| FP Sample | `2` | Quick dismiss: Too distant |
+| FP Sample | `3` | Quick dismiss: Something bigger |
+| FP Sample | `N` | Dismiss with other reason |
 | FP Sample | `V` | Valid (I missed it) |
 | FP Sample | `S` | Skip remaining |
 | FN Feedback | `1`-`5` | Select preset explanation |
