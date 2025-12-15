@@ -417,6 +417,56 @@ def _adjust_to_best_extrema(swing: Dict[str, Any], highs: np.ndarray,
     return adjusted
 
 
+def _apply_quota(references: List[Dict[str, Any]], quota: int) -> List[Dict[str, Any]]:
+    """
+    Rank swings by combined score and return top N.
+
+    Combined score = 0.6 × size_rank + 0.4 × impulse_rank
+    Lower combined score is better (closer to rank 1 in both dimensions).
+
+    Args:
+        references: List of reference swing dictionaries with 'size',
+                   'high_bar_index', and 'low_bar_index' keys
+        quota: Maximum number of swings to return
+
+    Returns:
+        Top N swings by combined score, with added fields:
+        - impulse: size / span (measures how quickly the swing formed)
+        - size_rank: rank by size (1 = largest)
+        - impulse_rank: rank by impulse (1 = most impulsive)
+        - combined_score: weighted combination of ranks (lower is better)
+    """
+    if not references or quota is None:
+        return references
+
+    SIZE_WEIGHT = 0.6
+    IMPULSE_WEIGHT = 0.4
+
+    # Calculate impulse for each swing
+    for ref in references:
+        span = abs(ref['high_bar_index'] - ref['low_bar_index']) + 1
+        ref['impulse'] = ref['size'] / span if span > 0 else 0.0
+
+    # Rank by size (1 = largest)
+    by_size = sorted(references, key=lambda r: r['size'], reverse=True)
+    for rank, ref in enumerate(by_size, 1):
+        ref['size_rank'] = rank
+
+    # Rank by impulse (1 = most impulsive)
+    by_impulse = sorted(references, key=lambda r: r['impulse'], reverse=True)
+    for rank, ref in enumerate(by_impulse, 1):
+        ref['impulse_rank'] = rank
+
+    # Combined score (lower is better)
+    for ref in references:
+        ref['combined_score'] = (SIZE_WEIGHT * ref['size_rank'] +
+                                  IMPULSE_WEIGHT * ref['impulse_rank'])
+
+    # Sort by combined score and take top N
+    references.sort(key=lambda r: r['combined_score'])
+    return references[:quota]
+
+
 def _apply_protection_filter(references: List[Dict[str, Any]], direction: str,
                               highs: np.ndarray, lows: np.ndarray,
                               protection_tolerance: float,
@@ -550,7 +600,8 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                   min_candle_ratio: Optional[float] = None,
                   min_range_pct: Optional[float] = None,
                   min_prominence: Optional[float] = None,
-                  adjust_extrema: bool = True) -> Dict[str, Any]:
+                  adjust_extrema: bool = True,
+                  quota: Optional[int] = None) -> Dict[str, Any]:
     """
     Identifies swing highs and lows and pairs them to find valid reference swings.
 
@@ -566,6 +617,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             before the reference is invalidated. Default 0.1 (10%). Set to None to disable.
         max_rank: If set, only return top N swings per direction (bull and bear).
             Reduces noise from secondary structures. Default None returns all swings.
+            DEPRECATED: Use quota instead for combined size+impulse ranking.
         min_candle_ratio: Minimum swing size as multiple of median candle height.
             Swings smaller than this are filtered. Uses OR logic with min_range_pct.
         min_range_pct: Minimum swing size as percentage of window price range.
@@ -576,6 +628,9 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         adjust_extrema: Whether to adjust swing endpoints to the best extrema in the
             vicinity (within ±lookback bars). Default True. Set to False to preserve
             original endpoint detection behavior.
+        quota: If set, limit output to top N swings per direction using combined
+            size+impulse ranking. Adds impulse, size_rank, impulse_rank, and
+            combined_score fields to output. Takes precedence over max_rank.
 
     Returns:
         A dictionary containing current price, detected swing points, and valid reference swings.
@@ -822,18 +877,34 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         bull_references = filter_swings(bull_references, "bullish", quant_dec)
         bear_references = filter_swings(bear_references, "bearish", quant_dec)
 
-    # 8. Sort and Rank
-    # Sort by size descending
-    bull_references.sort(key=lambda x: x["size"], reverse=True)
-    for idx, ref in enumerate(bull_references):
-        ref["rank"] = idx + 1
+    # 8. Apply Quota Filter (takes precedence over max_rank)
+    # Quota uses combined size+impulse ranking for better swing selection
+    if quota is not None:
+        bull_references = _apply_quota(bull_references, quota)
+        bear_references = _apply_quota(bear_references, quota)
 
-    bear_references.sort(key=lambda x: x["size"], reverse=True)
-    for idx, ref in enumerate(bear_references):
-        ref["rank"] = idx + 1
+    # 9. Sort and Rank
+    # Sort by size descending (or by combined_score if quota was applied)
+    if quota is not None:
+        # Quota already sorted by combined_score, keep that order
+        # Assign final rank based on position
+        for idx, ref in enumerate(bull_references):
+            ref["rank"] = idx + 1
+        for idx, ref in enumerate(bear_references):
+            ref["rank"] = idx + 1
+    else:
+        # Traditional ranking by size
+        bull_references.sort(key=lambda x: x["size"], reverse=True)
+        for idx, ref in enumerate(bull_references):
+            ref["rank"] = idx + 1
 
-    # 9. Filter by max_rank (optional)
-    if max_rank is not None:
+        bear_references.sort(key=lambda x: x["size"], reverse=True)
+        for idx, ref in enumerate(bear_references):
+            ref["rank"] = idx + 1
+
+    # 10. Filter by max_rank (optional, deprecated in favor of quota)
+    # Only applied if quota is not set
+    if quota is None and max_rank is not None:
         bull_references = bull_references[:max_rank]
         bear_references = bear_references[:max_rank]
 

@@ -1372,6 +1372,243 @@ class TestBestExtremaAdjustment(unittest.TestCase):
         self.assertEqual(result['bear_references'], [])
 
 
+class TestQuotaFilter(unittest.TestCase):
+    """Test suite for quota parameter and _apply_quota function."""
+
+    def _create_synthetic_bars(self, num_bars: int, seed: int = 42) -> pd.DataFrame:
+        """Create synthetic OHLC data with multiple swing patterns."""
+        np.random.seed(seed)
+        prices = np.cumsum(np.random.randn(num_bars) * 2) + 5000
+        return pd.DataFrame({
+            'open': prices,
+            'high': prices + np.abs(np.random.randn(num_bars)),
+            'low': prices - np.abs(np.random.randn(num_bars)),
+            'close': prices + np.random.randn(num_bars) * 0.5
+        })
+
+    def test_quota_none_returns_all(self):
+        """With quota=None (default), all swings are returned."""
+        df = self._create_synthetic_bars(1000)
+
+        result_all = detect_swings(df, lookback=5, filter_redundant=False, quota=None)
+        result_default = detect_swings(df, lookback=5, filter_redundant=False)
+
+        # Both should return the same number of references
+        self.assertEqual(len(result_all['bull_references']), len(result_default['bull_references']))
+        self.assertEqual(len(result_all['bear_references']), len(result_default['bear_references']))
+
+    def test_quota_limits_output(self):
+        """quota=N limits output to top N swings per direction."""
+        df = self._create_synthetic_bars(1000)
+
+        # Get baseline (unfiltered)
+        result_all = detect_swings(df, lookback=5, filter_redundant=False, quota=None)
+
+        # Test with quota=2
+        result_quota2 = detect_swings(df, lookback=5, filter_redundant=False, quota=2)
+
+        # Should have at most 2 per direction
+        self.assertLessEqual(len(result_quota2['bull_references']), 2)
+        self.assertLessEqual(len(result_quota2['bear_references']), 2)
+
+        # Should have fewer than unfiltered (if there were more than 2)
+        if len(result_all['bull_references']) > 2:
+            self.assertEqual(len(result_quota2['bull_references']), 2)
+        if len(result_all['bear_references']) > 2:
+            self.assertEqual(len(result_quota2['bear_references']), 2)
+
+    def test_quota_adds_impulse_field(self):
+        """Swings with quota should have impulse field."""
+        df = self._create_synthetic_bars(500)
+
+        result = detect_swings(df, lookback=5, filter_redundant=False, quota=5)
+
+        for ref in result['bull_references']:
+            self.assertIn('impulse', ref)
+            self.assertIsNotNone(ref['impulse'])
+            # Impulse should be positive (size / span)
+            self.assertGreater(ref['impulse'], 0)
+
+        for ref in result['bear_references']:
+            self.assertIn('impulse', ref)
+            self.assertIsNotNone(ref['impulse'])
+            self.assertGreater(ref['impulse'], 0)
+
+    def test_quota_adds_ranking_fields(self):
+        """Swings with quota should have size_rank, impulse_rank, combined_score."""
+        df = self._create_synthetic_bars(500)
+
+        result = detect_swings(df, lookback=5, filter_redundant=False, quota=5)
+
+        for ref in result['bull_references']:
+            self.assertIn('size_rank', ref)
+            self.assertIn('impulse_rank', ref)
+            self.assertIn('combined_score', ref)
+            # Ranks should be positive integers
+            self.assertGreater(ref['size_rank'], 0)
+            self.assertGreater(ref['impulse_rank'], 0)
+            # Combined score should be positive
+            self.assertGreater(ref['combined_score'], 0)
+
+    def test_quota_combined_score_calculation(self):
+        """Combined score should be 0.6 * size_rank + 0.4 * impulse_rank."""
+        from src.swing_analysis.swing_detector import _apply_quota
+
+        references = [
+            {"size": 10.0, "high_bar_index": 10, "low_bar_index": 0},
+            {"size": 20.0, "high_bar_index": 25, "low_bar_index": 5},
+            {"size": 15.0, "high_bar_index": 40, "low_bar_index": 30},
+        ]
+
+        result = _apply_quota(references, quota=3)
+
+        for ref in result:
+            expected_score = 0.6 * ref['size_rank'] + 0.4 * ref['impulse_rank']
+            self.assertAlmostEqual(ref['combined_score'], expected_score, places=5)
+
+    def test_quota_impulse_calculation(self):
+        """Impulse should be size / span."""
+        from src.swing_analysis.swing_detector import _apply_quota
+
+        references = [
+            {"size": 10.0, "high_bar_index": 10, "low_bar_index": 0},  # span = 11
+            {"size": 20.0, "high_bar_index": 5, "low_bar_index": 3},   # span = 3
+        ]
+
+        result = _apply_quota(references, quota=2)
+
+        # First ref: size=10, span=11, impulse = 10/11 ≈ 0.909
+        # Second ref: size=20, span=3, impulse = 20/3 ≈ 6.667
+        ref1 = [r for r in result if r['size'] == 10.0][0]
+        ref2 = [r for r in result if r['size'] == 20.0][0]
+
+        self.assertAlmostEqual(ref1['impulse'], 10.0 / 11, places=3)
+        self.assertAlmostEqual(ref2['impulse'], 20.0 / 3, places=3)
+
+    def test_quota_sorts_by_combined_score(self):
+        """Swings should be sorted by combined score (lower is better)."""
+        df = self._create_synthetic_bars(1000)
+
+        result = detect_swings(df, lookback=5, filter_redundant=False, quota=5)
+
+        # Check bull references are sorted by combined_score
+        if len(result['bull_references']) > 1:
+            for i in range(len(result['bull_references']) - 1):
+                current = result['bull_references'][i]['combined_score']
+                next_score = result['bull_references'][i + 1]['combined_score']
+                self.assertLessEqual(current, next_score)
+
+        # Check bear references are sorted by combined_score
+        if len(result['bear_references']) > 1:
+            for i in range(len(result['bear_references']) - 1):
+                current = result['bear_references'][i]['combined_score']
+                next_score = result['bear_references'][i + 1]['combined_score']
+                self.assertLessEqual(current, next_score)
+
+    def test_quota_takes_precedence_over_max_rank(self):
+        """quota should take precedence over max_rank when both are set."""
+        df = self._create_synthetic_bars(1000)
+
+        # With both quota=3 and max_rank=5, quota should win
+        result = detect_swings(df, lookback=5, filter_redundant=False, quota=3, max_rank=5)
+
+        # Should respect quota (3), not max_rank (5)
+        self.assertLessEqual(len(result['bull_references']), 3)
+        self.assertLessEqual(len(result['bear_references']), 3)
+
+    def test_quota_backward_compatibility_with_max_rank(self):
+        """max_rank should still work when quota is not set."""
+        df = self._create_synthetic_bars(1000)
+
+        # Get baseline
+        result_all = detect_swings(df, lookback=5, filter_redundant=False)
+
+        # With only max_rank
+        result_max_rank = detect_swings(df, lookback=5, filter_redundant=False, max_rank=2)
+
+        # Should have at most 2 per direction (max_rank behavior)
+        self.assertLessEqual(len(result_max_rank['bull_references']), 2)
+        self.assertLessEqual(len(result_max_rank['bear_references']), 2)
+
+        # Should NOT have quota fields when only max_rank is used
+        for ref in result_max_rank['bull_references']:
+            self.assertNotIn('impulse', ref)
+            self.assertNotIn('combined_score', ref)
+
+    def test_quota_with_filtering(self):
+        """quota works correctly with structural filtering enabled."""
+        df = self._create_synthetic_bars(1000)
+
+        # With filtering enabled
+        result_filtered = detect_swings(df, lookback=5, filter_redundant=True, quota=2)
+
+        # Should still respect quota
+        self.assertLessEqual(len(result_filtered['bull_references']), 2)
+        self.assertLessEqual(len(result_filtered['bear_references']), 2)
+
+        # Should have quota fields
+        for ref in result_filtered['bull_references']:
+            self.assertIn('combined_score', ref)
+
+    def test_quota_larger_than_total(self):
+        """quota larger than total swings returns all available."""
+        df = self._create_synthetic_bars(100)  # Small dataset
+
+        result_all = detect_swings(df, lookback=5, filter_redundant=False, quota=None)
+        result_large = detect_swings(df, lookback=5, filter_redundant=False, quota=1000)
+
+        # Should return the same number of results
+        self.assertEqual(len(result_all['bull_references']), len(result_large['bull_references']))
+        self.assertEqual(len(result_all['bear_references']), len(result_large['bear_references']))
+
+    def test_quota_empty_references(self):
+        """_apply_quota should handle empty references gracefully."""
+        from src.swing_analysis.swing_detector import _apply_quota
+
+        result = _apply_quota([], quota=5)
+        self.assertEqual(result, [])
+
+    def test_quota_preserves_final_rank(self):
+        """Final rank should be assigned based on position after quota filter."""
+        df = self._create_synthetic_bars(500)
+
+        result = detect_swings(df, lookback=5, filter_redundant=False, quota=3)
+
+        # Ranks should be sequential 1, 2, 3
+        for i, ref in enumerate(result['bull_references']):
+            self.assertEqual(ref['rank'], i + 1)
+        for i, ref in enumerate(result['bear_references']):
+            self.assertEqual(ref['rank'], i + 1)
+
+    def test_quota_with_all_filters(self):
+        """quota should work correctly with all other filters enabled."""
+        prices = (
+            [100, 105, 110, 120, 130, 140, 135, 125, 115, 105, 100] +
+            [102, 106, 112, 120, 130, 145, 155, 150, 140, 125, 110, 100] +
+            [105, 110, 115, 120]
+        )
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # All filters enabled including quota
+        result = detect_swings(df, lookback=2, filter_redundant=True,
+                               min_candle_ratio=3.0, min_range_pct=1.0,
+                               min_prominence=1.0, quota=5)
+
+        # Should return valid results with all filters applied
+        self.assertIn('bull_references', result)
+        self.assertIn('bear_references', result)
+
+        # Should have quota fields
+        for ref in result['bull_references']:
+            self.assertIn('combined_score', ref)
+            self.assertEqual(ref['rank'], result['bull_references'].index(ref) + 1)
+
+
 class TestProtectionFilter(unittest.TestCase):
     """Test suite for _apply_protection_filter function."""
 

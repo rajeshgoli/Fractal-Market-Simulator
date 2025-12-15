@@ -30,6 +30,11 @@ class DetectedSwing:
     low_price: float
     size: float
     rank: int
+    # Quota-related fields (only present when quota filter is applied)
+    impulse: Optional[float] = None         # size / span - measures how quickly swing formed
+    size_rank: Optional[int] = None         # rank by size (1 = largest)
+    impulse_rank: Optional[int] = None      # rank by impulse (1 = most impulsive)
+    combined_score: Optional[float] = None  # weighted combination of ranks (lower = better)
 
 
 @dataclass
@@ -74,6 +79,16 @@ class ComparisonResult:
                     'low_price': swing.low_price,
                     'size': swing.size,
                     'rank': swing.rank,
+                    # Quota-related fields (included when quota is used)
+                    **(
+                        {
+                            'impulse': swing.impulse,
+                            'size_rank': swing.size_rank,
+                            'impulse_rank': swing.impulse_rank,
+                            'combined_score': swing.combined_score
+                        }
+                        if swing.impulse is not None else {}
+                    )
                 }
                 for swing in self.false_positives
             ],
@@ -99,6 +114,15 @@ class ComparisonAnalyzer:
     Uses tolerance-based matching to determine if a user annotation
     corresponds to a system-detected swing.
     """
+
+    # Scale-specific quotas for swing detection
+    # Fewer swings at larger scales (more significant), more at smaller scales
+    SCALE_QUOTAS = {
+        'XL': 4,
+        'L': 6,
+        'M': 10,
+        'S': 15
+    }
 
     def __init__(self, tolerance_pct: float = 0.2, min_tolerance_bars: int = 5):
         """
@@ -226,9 +250,15 @@ class ComparisonAnalyzer:
 
         return start_match and end_match
 
-    def _run_system_detection(self, bars: List[Bar]) -> List[DetectedSwing]:
+    def _run_system_detection(self, bars: List[Bar], quota: Optional[int] = None) -> List[DetectedSwing]:
         """
         Run the swing detector on bars and normalize output.
+
+        Args:
+            bars: List of Bar objects to analyze
+            quota: Optional quota to limit output (uses combined size+impulse ranking).
+                   If None, returns all detected swings. For scale-specific quotas,
+                   use SCALE_QUOTAS class attribute.
 
         Returns list of DetectedSwing objects for comparison.
         """
@@ -248,6 +278,7 @@ class ComparisonAnalyzer:
         # - min_candle_ratio: 6.0 (up from 5.0) - swing must be 6x median candle
         # - min_range_pct: 2.5 (up from 2.0) - swing must be 2.5% of price range
         # - min_prominence: 1.5 (up from 1.0) - swing point must stand out by 1.5x median candle
+        # - quota: uses combined size+impulse ranking (replaces max_rank)
         result = detect_swings(
             df,
             lookback=5,
@@ -255,7 +286,8 @@ class ComparisonAnalyzer:
             max_pair_distance=2000 if len(bars) > 100_000 else None,
             min_candle_ratio=6.0,
             min_range_pct=2.5,
-            min_prominence=1.5
+            min_prominence=1.5,
+            quota=quota
         )
 
         detected_swings = []
@@ -269,7 +301,12 @@ class ComparisonAnalyzer:
                 high_price=ref['high_price'],
                 low_price=ref['low_price'],
                 size=ref['size'],
-                rank=ref.get('rank', 0)
+                rank=ref.get('rank', 0),
+                # Quota-related fields (present when quota is used)
+                impulse=ref.get('impulse'),
+                size_rank=ref.get('size_rank'),
+                impulse_rank=ref.get('impulse_rank'),
+                combined_score=ref.get('combined_score')
             )
             detected_swings.append(swing)
 
@@ -282,7 +319,12 @@ class ComparisonAnalyzer:
                 high_price=ref['high_price'],
                 low_price=ref['low_price'],
                 size=ref['size'],
-                rank=ref.get('rank', 0)
+                rank=ref.get('rank', 0),
+                # Quota-related fields (present when quota is used)
+                impulse=ref.get('impulse'),
+                size_rank=ref.get('size_rank'),
+                impulse_rank=ref.get('impulse_rank'),
+                combined_score=ref.get('combined_score')
             )
             detected_swings.append(swing)
 
