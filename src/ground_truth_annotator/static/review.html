@@ -644,13 +644,14 @@
                         <button class="fp-action-btn dismiss" onclick="quickDismissFP('too_small')"><kbd>1</kbd>Too small</button>
                         <button class="fp-action-btn dismiss" onclick="quickDismissFP('too_distant')"><kbd>2</kbd>Too distant</button>
                         <button class="fp-action-btn dismiss" onclick="quickDismissFP('subsumed')"><kbd>3</kbd>Something bigger</button>
+                        <button class="fp-action-btn dismiss" onclick="quickDismissFP('counter_trend')"><kbd>4</kbd>Counter trend</button>
                     </div>
                     <div class="fp-action-row">
                         <button class="fp-action-btn dismiss" onclick="quickDismissFP('other')"><kbd>N</kbd>Dismiss (Other)</button>
                         <button class="fp-action-btn accept" onclick="submitFPFeedback('valid_missed')"><kbd>V</kbd>Accept</button>
                     </div>
                     <div class="keyboard-hints">
-                        <div class="hint-row"><kbd>1</kbd> Too small &nbsp; <kbd>2</kbd> Too distant &nbsp; <kbd>3</kbd> Something bigger</div>
+                        <div class="hint-row"><kbd>1</kbd> Too small &nbsp; <kbd>2</kbd> Too distant &nbsp; <kbd>3</kbd> Something bigger &nbsp; <kbd>4</kbd> Counter trend</div>
                         <div class="hint-row"><kbd>N</kbd> Dismiss (Other) &nbsp; <kbd>V</kbd> Accept (I missed it)</div>
                         <div class="hint-row"><kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp; <kbd>S</kbd> Skip remaining</div>
                     </div>
@@ -1598,6 +1599,8 @@
                         quickDismissFP('too_distant');
                     } else if (e.key === '3') {
                         quickDismissFP('subsumed');
+                    } else if (e.key === '4') {
+                        quickDismissFP('counter_trend');
                     } else if (e.key.toLowerCase() === 'n') {
                         submitFPFeedback('noise');
                     } else if (e.key.toLowerCase() === 'v') {
