@@ -420,6 +420,12 @@
             margin-right: 3px;
         }
 
+        /* FP quick-select buttons use orange theme */
+        .preset-btn.fp-preset:hover {
+            background: var(--accent-orange);
+            border-color: var(--accent-orange);
+        }
+
         /* Summary view */
         .summary-section {
             margin-bottom: 20px;
@@ -589,23 +595,29 @@
                             <span class="swing-detail-value" id="fp-rank">-</span>
                         </div>
                     </div>
-                    <select class="category-select" id="fp-category">
-                        <option value="">Why is this noise? (optional)</option>
-                        <option value="too_small">Too small to be significant</option>
+                    <label class="required-label" style="color: var(--text-secondary);">Quick dismiss (one-click):</label>
+                    <div class="preset-buttons fp-quick-buttons">
+                        <button class="preset-btn fp-preset" data-category="too_small" onclick="quickDismissFP('too_small')"><kbd>1</kbd>Too small</button>
+                        <button class="preset-btn fp-preset" data-category="too_distant" onclick="quickDismissFP('too_distant')"><kbd>2</kbd>Too distant</button>
+                        <button class="preset-btn fp-preset" data-category="subsumed" onclick="quickDismissFP('subsumed')"><kbd>3</kbd>Something bigger</button>
+                    </div>
+                    <select class="category-select" id="fp-category" style="margin-top: 10px;">
+                        <option value="">Other reason...</option>
                         <option value="wrong_direction">Direction seems off</option>
                         <option value="not_a_swing">Not really a swing</option>
-                        <option value="other">Other</option>
+                        <option value="other">Other edge case</option>
                     </select>
                     <div class="action-buttons">
                         <button class="btn btn-warning" onclick="submitFPFeedback('noise')">
-                            <kbd>N</kbd> Noise
+                            <kbd>N</kbd> Dismiss (Other)
                         </button>
                         <button class="btn btn-success" onclick="submitFPFeedback('valid_missed')">
                             <kbd>V</kbd> Actually Valid
                         </button>
                     </div>
                     <div class="keyboard-hints">
-                        <div class="hint-row"><kbd>N</kbd> Mark as noise</div>
+                        <div class="hint-row"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Quick dismiss</div>
+                        <div class="hint-row"><kbd>N</kbd> Dismiss with other reason</div>
                         <div class="hint-row"><kbd>V</kbd> Actually valid (I missed it)</div>
                         <div class="hint-row"><kbd>&rarr;</kbd> Next swing</div>
                         <div class="hint-row"><kbd>S</kbd> Skip remaining FPs</div>
@@ -1257,6 +1269,34 @@
             }
         }
 
+        // Quick dismiss FP with preset category (one-click)
+        async function quickDismissFP(category) {
+            const fp = fpSample[currentIndex];
+
+            try {
+                await fetch('/api/review/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        swing_type: 'false_positive',
+                        swing_reference: { sample_index: fp.fp_index },
+                        verdict: 'noise',
+                        category: category
+                    })
+                });
+
+                // Update local state
+                fp.feedback = { verdict: 'noise', category };
+
+                // Move to next
+                nextSwing();
+
+            } catch (error) {
+                console.error('Error submitting feedback:', error);
+                alert('Failed to submit feedback');
+            }
+        }
+
         // Submit FN feedback
         async function submitFNFeedback() {
             const fn = fnList[currentIndex];
@@ -1506,7 +1546,13 @@
                     break;
 
                 case 'fp_sample':
-                    if (e.key.toLowerCase() === 'n') {
+                    if (e.key === '1') {
+                        quickDismissFP('too_small');
+                    } else if (e.key === '2') {
+                        quickDismissFP('too_distant');
+                    } else if (e.key === '3') {
+                        quickDismissFP('subsumed');
+                    } else if (e.key.toLowerCase() === 'n') {
                         submitFPFeedback('noise');
                     } else if (e.key.toLowerCase() === 'v') {
                         submitFPFeedback('valid_missed');
