@@ -187,12 +187,17 @@ Timestamp-based session filenames with keep/discard workflow implemented. Sessio
 
 ---
 
-## P2: Annotation UX (Deferred)
+## P2: Annotation UX (#57)
+
+**Status:** Issue filed. See GitHub issue #57.
 
 | Item | Problem | Status |
 |------|---------|--------|
-| Zoom/Pan for S-Scale | Snap finicky at small scale | Deferred until blocking |
-| Snap at Chart Edges | Snap radius may extend beyond visible data | Deferred until blocking |
+| FN Auto-Advance | FP auto-advances, FN requires extra click. Inconsistent. | Ready |
+| Session Metadata | Difficulty (1-5) + market regime + comments at session end | Ready |
+| Inline Better Reference | Modal flow with no verification. Should be inline with Fib preview. | Ready |
+| Zoom/Pan for S-Scale | Snap finicky at small scale | Deferred |
+| Snap at Chart Edges | Snap radius may extend beyond visible data | Deferred |
 
 ---
 
@@ -213,86 +218,90 @@ Timestamp-based session filenames with keep/discard workflow implemented. Sessio
 
 ---
 
-## Session Observations (Dec 15)
+## Session Observations (Dec 15, Updated)
 
-**Sessions completed:** 6
+**Sessions completed:** 10
 
 ### Quantitative Summary
 
 | Metric | Total |
 |--------|-------|
-| Annotations | 38 |
-| Matches (correct) | 19 (50%) |
-| FPs reviewed | 106 |
-| FNs | 17 |
+| Matches confirmed | 37 |
+| FPs reviewed | 185 |
+| True FPs | 129 |
+| Valid missed | 56 |
+| FNs | 33 |
 
 ### FP Category Distribution
 
 | Category | Count | % of True FPs |
 |----------|-------|---------------|
-| too_small | ~41 | 54% |
-| subsumed | ~31 | 41% |
-| too_distant | 2 | 3% |
-| other | 2 | 3% |
-| valid_missed* | ~37 | — |
+| too_small | 68 | 53% |
+| subsumed | 54 | 42% |
+| too_distant | 5 | 4% |
+| other | 2 | 2% |
 
-*valid_missed = detector found legit swings user didn't annotate (not true FPs)
+**95% of FPs are too_small or subsumed** — stable across all 10 sessions.
 
-**True FPs: ~69. too_small + subsumed = 95%**
+### FN Analysis
 
-### FN Themes (17 total)
+| Type | Count | Description |
+|------|-------|-------------|
+| Matching issues | 9 | Detector found swing, comparison too strict |
+| True misses | 16 | Detector doesn't output the swing |
 
-- "Biggest swing I see at this scale" — dominant
-- "Most impulsive move/reference" — several
-- "Inner/nested structure" — several
-- "Fits timeframe context" / "Nearest swing" — several
+### FN Themes (33 total)
+
+| Theme | Count |
+|-------|-------|
+| "Biggest swing at this scale" | 19 |
+| "Fits timeframe/nearest" | 4 |
+| "Most impulsive move" | 4 |
+| "Inner/nested structure" | 3 |
+| Other | 3 |
 
 ---
 
-## P0: Detection Quality — Reactions vs Primary Structures
+## P0: Detection Quality — Reactions vs Primary Structures (#56)
 
-**Status:** Root cause identified from 6 annotation sessions. Ready for Architect.
+**Status:** Root cause identified. Implementation ready. See GitHub issue #56.
 
-### The Problem
+### Key Finding
 
-Detector finds **secondary reactions** instead of **primary structures**:
-- 95% of true FPs are "too small" (54%) or "subsumed" (41%)
-- FNs are consistently "biggest swing" or "most impulsive"
-- Match rate: 50% (19/38 annotations across 6 sessions)
+**The detector DOES find primary structures correctly and ranks them #1.**
 
-### User's Characterization
+The problem is OUTPUT VOLUME — detector also emits many secondary structures (rank 2, 3, 4...) which users dismiss as "too small" or "subsumed".
 
-**"Subsumed":** Detector catches swings with endpoints *near* important levels but not *the* important swing. Example: catches a bounce after a selloff, misses the original meltdown. Finds echoes, not signals.
+**Evidence from session 1838:**
+- Detector output: 71 swings across all scales
+- User annotations: 9 swings
+- If rank=1 only: 8 swings (close match!)
+- If rank≤2: 12 swings
 
-**"Too small":** Almost always 1-2 candle ranges. These are noise unless there's a huge impulse (>5 candles of volume in 1-2 bars).
+### Two Distinct Problems
 
-### Key Insight: Significance Is Relative
+| Problem | Count | Root Cause | Fix |
+|---------|-------|------------|-----|
+| **FPs** | 129 | Too many secondary structures | Add `max_rank` filter |
+| **FN (matching)** | 9 | Comparison tolerance too strict | Relax threshold |
+| **FN (true miss)** | 16 | Protection/Fib zone filters | Needs investigation |
 
-Simple thresholds won't work. What matters:
+### Recommended Implementation
 
-| Factor | Context |
-|--------|---------|
-| Size | Relative to local volatility (100pt in 10pt candles ≠ 100pt in 60pt candles) |
-| Duration | Relative to other swings at this scale |
-| Recency | Most recent unviolated swing has tactical value |
-| Targets | Whether it provides actionable Fibonacci levels |
+**Phase 1 (Quick wins):**
+1. Add `max_rank` parameter to `detect_swings()` — filter to top N per direction
+2. Relax comparison matching tolerance to 20% of span
 
-A 2-candle range CAN be meaningful if 10x surrounding volatility. A 20-candle range CAN be noise if dwarfed by peers.
+**Phase 2 (Investigation):**
+- Instrument detection to track why swings are filtered
+- Categorize 16 true misses by filter reason
+- Determine if protection checks are too aggressive
 
-### Open Question
+### User's Characterization (still valid)
 
-Why are primary swings not detected? Are they:
-1. Failing protection checks (violated by subsequent price)?
-2. Outside Fibonacci zone (current price moved too far)?
-3. Detected but ranked lower (buried in noise)?
+**"Subsumed":** Detector catches swings with endpoints *near* important levels but not *the* important swing. These are rank 2+ swings that should be filtered.
 
-**Data needed:** Optional "what I would have chosen instead" field for FP dismissals. See P1.5 below.
-
-### Related: Structural Validation Bug (Edge Case)
-
-2-candle ranges can have invalid geometry (swing low not actual lowest bar low). Becomes irrelevant if short-span ranges are filtered or de-prioritized.
-
-**Root cause:** `swing_detector.py:363-375` checks intervening swing lows, not all bar lows.
+**"Too small":** Low-rank, small swings. Filtered by rank threshold.
 
 ---
 
@@ -320,11 +329,11 @@ Hold modifier (Shift?) to temporarily disable snap-to-extrema. Useful when snap 
 
 ## Session Context
 
-**Where we are:** 6 sessions complete. Pattern confirmed. Need better data before Architect can design fix.
+**Where we are:** 10 sessions complete. Root cause identified. Ready for implementation.
 
 **What's next:**
-1. **Engineer** to implement P1.5 data collection improvements (blocking)
-2. **User** to annotate with new tooling, capturing "detector found X, should have found Y"
-3. **Architect** to design fix based on concrete divergence data
+1. **#56** — Detection quality: Add `max_rank` filter + relax matching tolerance (Phase 1)
+2. **#57** — UX improvements: FN auto-advance, session metadata, inline better reference
+3. **Phase 2** — Investigate 16 true FN misses after Phase 1 complete
 
-**Key insight:** We know WHAT's wrong (reactions vs primary structures) but not WHY (filtered out? ranked lower? not detected?). The "better reference" data will show exactly where detection diverges from user intuition.
+**Key insight:** Detector finds primary structures correctly (rank #1). The problem is noise from secondary structures (rank 2+). Simple rank filtering should reduce FPs by >80%.
