@@ -477,7 +477,7 @@ events = detector.detect_events(current_bar, active_swings)
 
 **Purpose**: Legacy swing detection using pandas. Used for batch analysis and historical swing identification.
 
-**Key Function**: `detect_swings(df, lookback=5, filter_redundant=True, protection_tolerance=0.1)`
+**Key Function**: `detect_swings(df, lookback=5, filter_redundant=True, protection_tolerance=0.1, max_rank=None, min_candle_ratio=None, min_range_pct=None, min_prominence=None)`
 
 Uses `SparseTable` for O(1) range minimum/maximum queries to validate swing structure efficiently.
 
@@ -485,6 +485,21 @@ Uses `SparseTable` for O(1) range minimum/maximum queries to validate swing stru
 - **Pre-formation**: High violated before low forms (bull) / Low violated before high forms (bear)
 - **Post-formation**: Swing point violated beyond tolerance threshold after formation
 - Set `protection_tolerance=None` to disable
+
+**Size Filter** (added #62): Filters swings that are too small relative to context:
+- `min_candle_ratio`: Minimum swing size as multiple of median candle height (e.g., 5.0 = 5x median)
+- `min_range_pct`: Minimum swing size as percentage of window price range (e.g., 2.0 = 2%)
+- **OR logic**: Swing kept if it passes **either** threshold
+- **High volatility exception**: 1-2 bar swings kept if ≥3x median candle (prevents filtering significant short-duration moves)
+- Set both to `None` (default) to disable
+
+**Prominence Filter** (added #63): Filters swings that don't "stand out" from surrounding points:
+- `min_prominence`: Minimum prominence as multiple of median candle height (e.g., 1.0 = 1x median)
+- **Prominence definition**: Gap between the extremum and second-best value within the lookback window
+- For bull references: checks swing low prominence (how much lower than nearest competing low)
+- For bear references: checks swing high prominence (how much higher than nearest competing high)
+- Addresses "subsumed" false positives where detector finds locally-optimal extrema that blend with neighbors
+- Set to `None` (default) to disable
 
 ---
 

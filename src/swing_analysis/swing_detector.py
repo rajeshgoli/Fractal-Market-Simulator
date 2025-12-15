@@ -268,6 +268,99 @@ def filter_swings(references: List[Dict[str, Any]], direction: str, quantization
     return kept_references
 
 
+def _calculate_prominence(price: float, index: int, prices: np.ndarray, lookback: int,
+                          is_high: bool) -> float:
+    """
+    Calculate the prominence of a swing point.
+
+    Prominence measures how much a swing point "stands out" from its neighbors.
+    For a swing high, it's the difference between the high and the second-highest
+    point within the lookback window. For a swing low, it's the difference between
+    the second-lowest and the low.
+
+    Args:
+        price: The price of the swing point
+        index: Bar index of the swing point
+        prices: Full price array (highs for swing highs, lows for swing lows)
+        lookback: Number of bars before/after to consider
+        is_high: True for swing high, False for swing low
+
+    Returns:
+        Prominence value (always >= 0)
+    """
+    n = len(prices)
+    start = max(0, index - lookback)
+    end = min(n, index + lookback + 1)
+
+    window = prices[start:end]
+
+    if len(window) < 2:
+        return 0.0
+
+    if is_high:
+        # For swing high: gap between this high and second-highest
+        sorted_vals = sorted(window, reverse=True)
+        if prices[index] == sorted_vals[0]:
+            # This is the max, prominence is gap to second-highest
+            return sorted_vals[0] - sorted_vals[1]
+        else:
+            # Not actually the max in window (edge case)
+            return 0.0
+    else:
+        # For swing low: gap between second-lowest and this low
+        sorted_vals = sorted(window)
+        if prices[index] == sorted_vals[0]:
+            # This is the min, prominence is gap to second-lowest
+            return sorted_vals[1] - sorted_vals[0]
+        else:
+            # Not actually the min in window (edge case)
+            return 0.0
+
+
+def _apply_prominence_filter(references: List[Dict[str, Any]], highs: np.ndarray,
+                              lows: np.ndarray, lookback: int, median_candle: float,
+                              min_prominence: float, direction: str) -> List[Dict[str, Any]]:
+    """
+    Filter swings that don't stand out prominently from surrounding points.
+
+    Args:
+        references: List of reference swing dictionaries
+        highs: Full numpy array of high prices
+        lows: Full numpy array of low prices
+        lookback: Lookback window for prominence calculation
+        median_candle: Median candle height
+        min_prominence: Minimum prominence as multiple of median candle
+        direction: 'bull' or 'bear' to determine which swing point to check
+
+    Returns:
+        Filtered list of references
+    """
+    if min_prominence is None or median_candle <= 0:
+        return references
+
+    threshold = min_prominence * median_candle
+    filtered = []
+
+    for ref in references:
+        if direction == 'bull':
+            # Bull reference: high before low (downswing). Check the swing low.
+            # The low should stand out from surrounding lows.
+            prominence = _calculate_prominence(
+                ref["low_price"], ref["low_bar_index"], lows, lookback, is_high=False
+            )
+        else:
+            # Bear reference: low before high (upswing). Check the swing high.
+            # The high should stand out from surrounding highs.
+            prominence = _calculate_prominence(
+                ref["high_price"], ref["high_bar_index"], highs, lookback, is_high=True
+            )
+
+        if prominence >= threshold:
+            filtered.append(ref)
+
+    return filtered
+
+
 def _apply_size_filter(references: List[Dict[str, Any]], median_candle: float,
                        price_range: float, min_candle_ratio: Optional[float],
                        min_range_pct: Optional[float],
@@ -329,7 +422,8 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                   quantization: float = 0.25, max_pair_distance: Optional[int] = None,
                   protection_tolerance: float = 0.1, max_rank: Optional[int] = None,
                   min_candle_ratio: Optional[float] = None,
-                  min_range_pct: Optional[float] = None) -> Dict[str, Any]:
+                  min_range_pct: Optional[float] = None,
+                  min_prominence: Optional[float] = None) -> Dict[str, Any]:
     """
     Identifies swing highs and lows and pairs them to find valid reference swings.
 
@@ -349,6 +443,9 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             Swings smaller than this are filtered. Uses OR logic with min_range_pct.
         min_range_pct: Minimum swing size as percentage of window price range.
             Swings smaller than this are filtered. Uses OR logic with min_candle_ratio.
+        min_prominence: Minimum prominence as multiple of median candle height.
+            Filters swings where the swing point doesn't "stand out" from neighbors.
+            Prominence is the gap between the extremum and second-best in lookback window.
 
     Returns:
         A dictionary containing current price, detected swing points, and valid reference swings.
@@ -541,7 +638,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                 "rank": 0  # Placeholder
             })
 
-    # 3. Apply Size Filter (after protection, before redundancy)
+    # 3. Apply Size Filter (after protection, before prominence)
     if min_candle_ratio is not None or min_range_pct is not None:
         bull_references = _apply_size_filter(
             bull_references, median_candle, price_range, min_candle_ratio, min_range_pct
@@ -550,13 +647,22 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             bear_references, median_candle, price_range, min_candle_ratio, min_range_pct
         )
 
-    # 4. Filter Redundant Swings (Optional)
+    # 4. Apply Prominence Filter (after size, before redundancy)
+    if min_prominence is not None:
+        bull_references = _apply_prominence_filter(
+            bull_references, highs, lows, lookback, median_candle, min_prominence, 'bull'
+        )
+        bear_references = _apply_prominence_filter(
+            bear_references, highs, lows, lookback, median_candle, min_prominence, 'bear'
+        )
+
+    # 5. Filter Redundant Swings (Optional)
     if filter_redundant:
         quant_dec = Decimal(str(quantization))
         bull_references = filter_swings(bull_references, "bullish", quant_dec)
         bear_references = filter_swings(bear_references, "bearish", quant_dec)
 
-    # 5. Sort and Rank
+    # 6. Sort and Rank
     # Sort by size descending
     bull_references.sort(key=lambda x: x["size"], reverse=True)
     for idx, ref in enumerate(bull_references):
@@ -566,7 +672,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     for idx, ref in enumerate(bear_references):
         ref["rank"] = idx + 1
 
-    # 6. Filter by max_rank (optional)
+    # 7. Filter by max_rank (optional)
     if max_rank is not None:
         bull_references = bull_references[:max_rank]
         bear_references = bear_references[:max_rank]

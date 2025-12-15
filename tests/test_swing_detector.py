@@ -895,5 +895,215 @@ class TestSizeFilter(unittest.TestCase):
             self.assertEqual(ref['rank'], i + 1)
 
 
+class TestProminenceFilter(unittest.TestCase):
+    """Test suite for min_prominence filter."""
+
+    def test_prominence_filter_backward_compatibility(self):
+        """Default None value should not filter any swings."""
+        prices = [100, 105, 110, 115, 120, 115, 110, 105, 100, 105, 110]
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 2 for p in prices],
+            'low': [p - 2 for p in prices],
+            'close': prices
+        })
+
+        # Without prominence filter (default)
+        result_default = detect_swings(df, lookback=2, filter_redundant=False)
+
+        # Explicitly passing None should be the same
+        result_none = detect_swings(df, lookback=2, filter_redundant=False,
+                                    min_prominence=None)
+
+        self.assertEqual(len(result_default['bull_references']), len(result_none['bull_references']))
+        self.assertEqual(len(result_default['bear_references']), len(result_none['bear_references']))
+
+    def test_calculate_prominence_swing_high(self):
+        """Test prominence calculation for swing highs."""
+        from src.swing_analysis.swing_detector import _calculate_prominence
+        import numpy as np
+
+        # Window: [100, 105, 120, 105, 100] - index 2 is the high
+        # Prominence = 120 - 105 = 15
+        prices = np.array([100.0, 105.0, 120.0, 105.0, 100.0])
+
+        prominence = _calculate_prominence(120.0, 2, prices, lookback=2, is_high=True)
+        self.assertEqual(prominence, 15.0)
+
+    def test_calculate_prominence_swing_low(self):
+        """Test prominence calculation for swing lows."""
+        from src.swing_analysis.swing_detector import _calculate_prominence
+        import numpy as np
+
+        # Window: [110, 105, 90, 105, 110] - index 2 is the low
+        # Prominence = 105 - 90 = 15
+        prices = np.array([110.0, 105.0, 90.0, 105.0, 110.0])
+
+        prominence = _calculate_prominence(90.0, 2, prices, lookback=2, is_high=False)
+        self.assertEqual(prominence, 15.0)
+
+    def test_prominence_filter_keeps_prominent_swings(self):
+        """Swings with high prominence should be kept."""
+        from src.swing_analysis.swing_detector import _apply_prominence_filter
+        import numpy as np
+
+        # Swing low at index 5 with strong prominence
+        # Surrounding lows: ..., 105, 110, 80, 105, 110, ...
+        # Prominence = 105 - 80 = 25
+        highs = np.array([100, 105, 110, 115, 120, 125, 120, 115, 110, 105, 100], dtype=np.float64)
+        lows = np.array([98, 103, 108, 105, 110, 80, 105, 110, 108, 103, 98], dtype=np.float64)
+
+        # median candle ~= 2, threshold at min_prominence=5.0 is 10.0
+        # Prominence 25 >= 10 so should keep
+        references = [
+            {"high_price": 125.0, "high_bar_index": 5, "low_price": 80.0, "low_bar_index": 5}
+        ]
+
+        filtered = _apply_prominence_filter(
+            references, highs, lows, lookback=2, median_candle=2.0,
+            min_prominence=5.0, direction='bull'
+        )
+
+        self.assertEqual(len(filtered), 1)
+
+    def test_prominence_filter_removes_subsumed_swings(self):
+        """Swings with low prominence (subsumed) should be filtered."""
+        from src.swing_analysis.swing_detector import _apply_prominence_filter
+        import numpy as np
+
+        # Swing low at index 5 with weak prominence
+        # Surrounding lows: 99, 98, 97, 98, 99 - all very close
+        # Prominence = 98 - 97 = 1
+        highs = np.array([100, 101, 102, 101, 100, 101, 102, 101, 100, 101, 102], dtype=np.float64)
+        lows = np.array([99, 98, 97, 98, 99, 97, 98, 99, 98, 97, 99], dtype=np.float64)
+
+        # median candle ~= 3, threshold at min_prominence=1.0 is 3.0
+        # Prominence 1 < 3 so should filter
+        references = [
+            {"high_price": 102.0, "high_bar_index": 2, "low_price": 97.0, "low_bar_index": 5}
+        ]
+
+        filtered = _apply_prominence_filter(
+            references, highs, lows, lookback=2, median_candle=3.0,
+            min_prominence=1.0, direction='bull'
+        )
+
+        self.assertEqual(len(filtered), 0)
+
+    def test_prominence_filter_bear_direction(self):
+        """Test prominence filter for bear references (checks swing high)."""
+        from src.swing_analysis.swing_detector import _apply_prominence_filter
+        import numpy as np
+
+        # Bear reference: low before high. Check the swing high prominence.
+        # Swing high at index 5 with strong prominence
+        highs = np.array([100, 105, 110, 105, 100, 130, 100, 105, 110, 105, 100], dtype=np.float64)
+        lows = np.array([98, 103, 108, 103, 98, 95, 98, 103, 108, 103, 98], dtype=np.float64)
+
+        # Prominence = 130 - 110 = 20
+        # median candle ~= 2, threshold at min_prominence=5.0 is 10.0
+        # 20 >= 10 so should keep
+        references = [
+            {"high_price": 130.0, "high_bar_index": 5, "low_price": 95.0, "low_bar_index": 5}
+        ]
+
+        filtered = _apply_prominence_filter(
+            references, highs, lows, lookback=2, median_candle=2.0,
+            min_prominence=5.0, direction='bear'
+        )
+
+        self.assertEqual(len(filtered), 1)
+
+    def test_prominence_filter_integration(self):
+        """Test prominence filter integrates correctly with detect_swings."""
+        # Create data with clear prominent and non-prominent swings
+        # A prominent swing followed by a subsumed swing
+        prices = (
+            [100, 105, 110, 115, 120] +  # Run up
+            [115, 110, 105, 100, 95, 90] +  # Sharp drop (prominent low)
+            [92, 94, 96, 98, 100, 102, 104] +  # Gradual rise with minor dips
+            [103, 104, 105, 106]  # Continue up
+        )
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # Without prominence filter
+        result_no_filter = detect_swings(df, lookback=2, filter_redundant=False,
+                                         min_prominence=None)
+
+        # With prominence filter
+        result_filtered = detect_swings(df, lookback=2, filter_redundant=False,
+                                        min_prominence=2.0)
+
+        # Filtered should have fewer or equal swings
+        self.assertLessEqual(len(result_filtered['bull_references']),
+                            len(result_no_filter['bull_references']))
+        self.assertLessEqual(len(result_filtered['bear_references']),
+                            len(result_no_filter['bear_references']))
+
+    def test_prominence_filter_empty_dataframe(self):
+        """Prominence filter should handle empty DataFrame gracefully."""
+        df = pd.DataFrame(columns=['open', 'high', 'low', 'close'])
+
+        result = detect_swings(df, lookback=2, filter_redundant=False,
+                               min_prominence=1.0)
+
+        self.assertEqual(result['bull_references'], [])
+        self.assertEqual(result['bear_references'], [])
+
+    def test_prominence_filter_with_all_filters(self):
+        """Prominence filter should work correctly with size and redundancy filters."""
+        prices = (
+            [100, 105, 110, 120, 130, 140, 135, 125, 115, 105, 100] +
+            [102, 106, 112, 120, 130, 145, 155, 150, 140, 125, 110, 100] +
+            [105, 110, 115, 120]
+        )
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 1 for p in prices],
+            'low': [p - 1 for p in prices],
+            'close': prices
+        })
+
+        # All filters enabled
+        result = detect_swings(df, lookback=2, filter_redundant=True,
+                               min_candle_ratio=3.0, min_range_pct=1.0,
+                               min_prominence=1.0, max_rank=5)
+
+        # Should return valid results with all filters applied
+        self.assertIn('bull_references', result)
+        self.assertIn('bear_references', result)
+
+        # Ranks should be sequential
+        for i, ref in enumerate(result['bull_references']):
+            self.assertEqual(ref['rank'], i + 1)
+        for i, ref in enumerate(result['bear_references']):
+            self.assertEqual(ref['rank'], i + 1)
+
+    def test_prominence_zero_median_candle(self):
+        """Filter should handle zero median candle gracefully."""
+        from src.swing_analysis.swing_detector import _apply_prominence_filter
+        import numpy as np
+
+        highs = np.array([100.0, 100.0, 100.0], dtype=np.float64)
+        lows = np.array([100.0, 100.0, 100.0], dtype=np.float64)
+
+        references = [
+            {"high_price": 100.0, "high_bar_index": 1, "low_price": 100.0, "low_bar_index": 1}
+        ]
+
+        # Should return references unchanged when median_candle is 0
+        filtered = _apply_prominence_filter(
+            references, highs, lows, lookback=1, median_candle=0.0,
+            min_prominence=1.0, direction='bull'
+        )
+
+        self.assertEqual(len(filtered), 1)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
