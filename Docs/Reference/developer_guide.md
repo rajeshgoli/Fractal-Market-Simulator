@@ -477,9 +477,14 @@ events = detector.detect_events(current_bar, active_swings)
 
 **Purpose**: Legacy swing detection using pandas. Used for batch analysis and historical swing identification.
 
-**Key Function**: `detect_swings(df, lookback=5, filter_redundant=True)`
+**Key Function**: `detect_swings(df, lookback=5, filter_redundant=True, protection_tolerance=0.1)`
 
 Uses `SparseTable` for O(1) range minimum/maximum queries to validate swing structure efficiently.
+
+**Protection Validation** (added #54): Filters references where swing points are violated:
+- **Pre-formation**: High violated before low forms (bull) / Low violated before high forms (bear)
+- **Post-formation**: Swing point violated beyond tolerance threshold after formation
+- Set `protection_tolerance=None` to disable
 
 ---
 

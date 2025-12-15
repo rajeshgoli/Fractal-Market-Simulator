@@ -8,7 +8,10 @@
 
 ## Pending Changes
 
-- **Counter trend FP category** - Added button 4 "Counter trend" to FP quick-select for tracking prevalence before implementing trend-aware detection
+### 2025-12-15 - Swing Point Protection Validation
+- **Issue:** #54
+- **Type:** Feature
+- **Files:** `src/swing_analysis/swing_detector.py`, `tests/test_swing_detector.py`, `tests/test_swing_detector_unit.py`
 
 ---
 
@@ -16,6 +19,8 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 15 | Protection validation design (Q-2025-12-15-2) | Approved → #54 created |
+| Dec 15 | Counter-trend FP category | Accepted |
 | Dec 15 | #31, #51, #52, #53 - Test stability, FP quick-select, session filenames | All Accepted |
 | Dec 12 | #46-#50 - P1 UX fixes (Fib labels, presets, toast, keep/discard, caching) | All Accepted |
 | Dec 12 | #44 - Deprecated module removal | Accepted |
