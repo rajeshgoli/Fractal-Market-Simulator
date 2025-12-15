@@ -4,6 +4,114 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 15, 2025 - Directional Mismatch in Reference Detection
+
+**Context:** User feedback during annotation sessions. Consistent FP pattern observed.
+
+### Problem
+
+Detector emits reference ranges in the wrong direction relative to the prevailing trend:
+- **In downtrending markets:** Detects bull references ✓ but also bear references (counter-trend rallies) that are noise
+- **In uptrending markets:** Detects bear references ✓ but also bull references (counter-trend pullbacks) that are noise
+
+**Especially important at XL and L scales** where trend direction is the dominant signal.
+
+### Root Cause
+
+Current `swing_detector.py` logic (lines 325-433) finds reference ranges based on:
+1. Geometric validity (High→Low or Low→High)
+2. Price proximity (current price within 0.382-2x)
+3. Size (ranked by magnitude)
+
+**Missing:** Trend context. The detector treats bull and bear references equally regardless of whether the market is trending up or down.
+
+### Impact
+
+- False positives at XL/L scale for counter-trend swings
+- User wastes time reviewing geometrically valid but contextually irrelevant detections
+- 250x over-detection partially explained by this directional blindness
+
+### User Question
+
+"Did you get the direction right?"
+
+**Answer:** No. The detector doesn't consider trend direction at all.
+
+### Potential Solutions (for Architect to evaluate)
+
+1. **Trend filter:** Calculate prevailing trend at each scale, suppress counter-trend references
+2. **Directional weighting:** Downweight (not eliminate) counter-trend swings in ranking
+3. **User-specified bias:** Let user indicate "bullish" or "bearish" context per session
+4. **Adaptive:** Use larger-scale trend to filter smaller-scale detections
+
+### Priority
+
+**P1 for rule iteration.** This explains a significant portion of the FP noise, especially at larger scales.
+
+---
+
+## December 15, 2025 - Session Labeling Request
+
+**Context:** Pre-testing feedback. User has accumulated multiple UUID-named session files and finds them impossible to reason about.
+
+### Problem
+
+Session files use UUIDs (e.g., `914b36db-893f-40aa-82e3-76d5de91c8cb.json`). With multiple sessions accumulated, user can't tell which is which without opening each file.
+
+### Request
+
+1. **Label at end of session** — After completing annotation/review, prompt for a human-readable label
+2. **Use label for filename** — Rename session file from UUID to user-provided label (e.g., `es-trending-dec15.json`)
+
+### Rationale
+
+"Hard for me to reason about them with their alphanumeric names."
+
+### Action
+
+- Cleared all existing sessions (test data, not production annotations)
+- Created issue #53 for session labeling feature
+
+---
+
+## December 15, 2025 - FP Quick-Select Buttons Not Working
+
+**Context:** User testing the FP quick-select buttons from issue #51. Buttons exist but don't function as expected.
+
+### Bug: Buttons Don't Dismiss
+
+User report: "When I click on those buttons, nothing happens. I still need to click on Dismiss."
+
+The quick-select buttons (Too small, Too distant, Something bigger) are supposed to dismiss in one click and advance to next. Currently they appear to do nothing.
+
+**Root cause hypothesis:** JavaScript conflict - `addEventListener` on `.preset-btn` (lines 1607-1611) may interfere with `onclick` handlers on FP buttons.
+
+### UX Simplification Request
+
+Current UI has too many elements:
+- 3 quick-select buttons
+- Dropdown for "Other reason..."
+- "Dismiss (Other)" button
+- "Actually Valid" button
+
+**User request:** Replace with 5 direct-action buttons:
+
+| Button | Action |
+|--------|--------|
+| Too small | Dismiss + advance |
+| Too distant | Dismiss + advance |
+| Something bigger | Dismiss + advance |
+| Dismiss (Other) | Dismiss with "other" category + advance |
+| Accept | Mark valid + advance |
+
+Each button should complete the action in one click and immediately advance to next swing. No dropdown needed.
+
+### Key Quote
+
+"Why not give me 5 buttons (3 of too distant, etc., plus dismiss (other reasons), and accept) and when I click on any one the screen moves to next?"
+
+---
+
 ## December 12, 2025 - First Full Annotation Session UX Feedback
 
 **Context:** User completed first real annotation session using the ground truth annotator. This is actionable UX feedback from actual usage.

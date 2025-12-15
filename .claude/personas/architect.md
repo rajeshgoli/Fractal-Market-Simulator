@@ -14,12 +14,35 @@ Review deliverables, maintain architectural vision, determine next steps and own
 1. **Read**: GitHub issues marked for review OR `Docs/State/product_direction.md`
 2. **Verify**: Correctness, completeness, alignment, quality
 3. **Fitness Check**: Does this work serve the stated Product objective?
-4. **Diagnose**: Accepted / Accepted with notes / Requires follow-up
-5. **Update `Docs/State/architect_notes.md`**: ALWAYS rewrite as forward-looking
-6. **Reset `Docs/State/pending_review.md`**: Set count to 0
-7. **Determine Owner**: Engineering, Architecture, or Product
-8. **Communicate**: Create GitHub issue for Engineer, or add to `Docs/Comms/questions.md` for Product
-9. **Output**: Review summary
+4. **Documentation Check**: Verify `Docs/Reference/user_guide.md` and `Docs/Reference/developer_guide.md` are current. Call out discrepancies.
+5. **Diagnose**: Accepted / Accepted with notes / Requires follow-up
+6. **Update `Docs/State/architect_notes.md`**: ALWAYS rewrite as forward-looking
+7. **Reset `Docs/State/pending_review.md`**: Set count to 0
+8. **Determine Owner(s) and Parallelism**: See Handoff section below
+9. **Communicate**: Create GitHub issue for Engineer, or add to `Docs/Comms/questions.md` for Product
+10. **Output**: Review summary with explicit handoff instructions
+
+## Handoff Instructions (CRITICAL)
+
+When handing off work, you MUST specify:
+
+**If parallel work is possible:**
+```
+**Parallel Execution:** Yes
+- As [role1], read [doc1] and [action1]
+- As [role2], read [doc2] and [action2]
+(These can run simultaneously)
+```
+
+**If sequential work is required:**
+```
+**Parallel Execution:** No (sequential required)
+1. As [role1], read [doc1] and [action1]
+2. As [role2], read [doc2] and [action2]
+(Must complete in order)
+```
+
+Always be explicit. Never leave parallelism ambiguous.
 
 ## CRITICAL: Context Management
 
@@ -36,11 +59,20 @@ Review deliverables, maintain architectural vision, determine next steps and own
 ## Review Summary
 
 **Status:** [Accepted / Accepted with notes / Requires follow-up]
+**Documentation:** [user_guide.md and developer_guide.md current / discrepancies noted]
 **Next Step:** [Concrete description]
-**Owner:** [Engineering / Architecture / Product]
+**Owner(s):** [Engineering / Architecture / Product]
+**Parallel Execution:** [Yes / No (sequential required)]
 **Updated:** [Which artifact(s)]
 
-**Instruction:** [Direct instruction to next owner]
+**Instructions:**
+[If parallel:]
+- As [role1], read [doc1] and [action1]
+- As [role2], read [doc2] and [action2]
+
+[If sequential:]
+1. As [role1], read [doc1] and [action1]
+2. As [role2], read [doc2] and [action2]
 ```
 
 ## Owner Artifacts

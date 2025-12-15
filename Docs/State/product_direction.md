@@ -1,6 +1,6 @@
 # Product Direction
 
-**Last Updated:** December 12, 2025
+**Last Updated:** December 15, 2025
 **Owner:** Product
 
 ---
@@ -135,6 +135,41 @@ Repeat
 | #35 | Non-blocking confirmation | Done |
 | #33 | Fibonacci preview lines | Done |
 | #32 | Snap-to-extrema | Done |
+
+---
+
+## P1: Trend-Aware Detection (NEW)
+
+**Status:** Open — pending Architect evaluation.
+
+**Problem:** Detector emits reference ranges against the prevailing trend direction:
+- Downtrending market → finds bear references (counter-trend rallies) as FPs
+- Uptrending market → finds bull references (counter-trend pullbacks) as FPs
+
+**Impact:** Explains significant portion of 250x over-detection, especially at XL/L scales where trend is the dominant signal.
+
+**Question for Architect:** What's the best approach to add trend awareness? See `Docs/Comms/questions.md`.
+
+---
+
+## P1 (Complete): FP Quick-Select Buttons (#52)
+
+**Status:** Complete.
+
+Five direct-action buttons now work for FP review:
+- Too small (`1`) - Dismiss + advance
+- Too distant (`2`) - Dismiss + advance
+- Something bigger (`3`) - Dismiss + advance
+- Dismiss (Other) (`N`) - Dismiss + advance
+- Accept (`V`) - Accept + advance
+
+---
+
+## P1.5 (Complete): Session Labeling (#53)
+
+**Status:** Complete.
+
+Timestamp-based session filenames with keep/discard workflow implemented. Sessions now saved as `session_YYYYMMDD_HHMMSS.json` instead of UUIDs.
 
 ---
 

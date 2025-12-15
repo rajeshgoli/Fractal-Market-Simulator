@@ -14,23 +14,23 @@
 |-----------|--------|-------|
 | Swing Detector | Healthy | O(N log N), vectorized, production-ready |
 | Ground Truth Annotator | Healthy | Two-click annotation + Review Mode complete |
-| Review Mode | Healthy | 3-phase feedback with preset FN explanations |
-| Session Management | Healthy | Keep/discard quality control, instant window loading |
+| Review Mode | Healthy | 3-phase feedback with preset FN explanations, FP quick-select |
+| Session Management | Healthy | Timestamp filenames, keep/discard workflow, instant window loading |
 | Comparison Analyzer | Healthy | FP/FN detection with matching |
 | Bar Aggregator | Healthy | Multi-scale aggregation |
 | Scale Calibrator | Healthy | Quartile-based S/M/L/XL boundaries |
+| Test Suite | Healthy | 402 tests passing, scaling tests stabilized |
 
 ---
 
-## Recent Improvements (Accepted Dec 12)
+## Recent Improvements (Accepted Dec 15)
 
 | Issue | Feature | Impact |
 |-------|---------|--------|
-| #50 | DataFrame caching | 30-40s → <3s on next window load |
-| #49 | Session quality control | Keep/discard sessions for analysis filtering |
-| #48 | Save confirmation + export | Toast feedback, in-annotation JSON export |
-| #47 | FN preset buttons | 1-5 keyboard shortcuts for common explanations |
-| #46 | Fibonacci level fix | Correct 0 at swing end, extensions beyond start |
+| #53 | Timestamp-based session filenames | Human-readable names, chronological sorting |
+| #52 | FP quick-select fix + 5-button UI | One-click dismiss with keyboard shortcuts |
+| #51 | FP quick-select buttons | Quick dismiss for common FP categories |
+| #31 | Flaky test fix | Scaling tests now stable (multiple runs, min selection) |
 
 ---
 
@@ -38,12 +38,12 @@
 
 | Document | Status | Action Needed |
 |----------|--------|---------------|
-| `Docs/Reference/user_guide.md` | Current | Updated Dec 12 |
-| `Docs/Reference/developer_guide.md` | Current | Minor: mention cached_dataframe in AppState |
+| `Docs/Reference/user_guide.md` | Current | Updated Dec 15 with session filenames |
+| `Docs/Reference/developer_guide.md` | Current | No changes needed |
 | `CLAUDE.md` | Current | No changes needed |
 | `Docs/State/architect_notes.md` | Current | This file |
 
-**Documentation Priority:** Low. All features work correctly; docs up to date.
+**Documentation Priority:** Low. All features documented.
 
 ---
 
@@ -55,10 +55,12 @@ python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --cascade -
 
 1. Cascade through XL → L → M → S scales
 2. Auto-redirect to Review Mode after S completes
-3. Review matches, FP sample, FN feedback (1-5 presets available)
-4. Mark session as "Keep" or "Discard"
-5. Export feedback JSON
+3. Review matches, FP sample (quick-select buttons: 1-3, N, V), FN feedback (1-5 presets)
+4. Optionally add session label
+5. Keep or Discard session
 6. Load next window (instant, <3s)
+
+**Session files:** Timestamp-based names (`2025-dec-15-0830.json`) for easy organization.
 
 ---
 
@@ -71,12 +73,12 @@ src/
 ├── data/                      # OHLC loading (2 files)
 └── examples/                  # Demo scripts
 
-tests/                         # 396 tests (1 flaky, pre-existing)
+tests/                         # 402 tests passing
 ```
 
 **Key Metrics:**
-- Test count: 395 passed, 2 skipped, 1 flaky (pre-existing)
-- Flaky test: `test_scaling_factor` - passes in isolation, fails occasionally in suite
+- Test count: 402 passed, 2 skipped
+- All scaling tests now stable
 
 ---
 
@@ -103,6 +105,7 @@ tests/                         # 396 tests (1 flaky, pre-existing)
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 15 | #31, #51, #52, #53 - Test stability, FP quick-select, session filenames | All Accepted |
 | Dec 12 | #46-#50 - P1 UX fixes from annotation session | All Accepted |
 | Dec 12 | #44 - Deprecated module removal | Accepted |
 | Dec 12 | Review Mode epic (#38) - 5 issues | All accepted |

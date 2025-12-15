@@ -27,8 +27,9 @@ Execute implementation tasks with precision. Tasks come from GitHub issues.
    - Defer or tag issues that don't serve current direction
 3. **Scope & Plan**: Define boundaries, outline approach for non-trivial work
 4. **Implement**: Code + tests, minimum viable scope, maximum quality
-5. **Document**:
+5. **Document** (REQUIRED after every task):
    - Update `Docs/Reference/user_guide.md` if user-facing changes
+   - Update `Docs/Reference/developer_guide.md` if implementation/architecture changes
    - Add implementation notes as **comments on the GitHub issue**
 6. **Track**: Update `Docs/State/pending_review.md` (increment count, list issue numbers)
 7. **Handoff**: Close or comment on issue, signal ready for review

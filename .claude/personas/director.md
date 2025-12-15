@@ -95,6 +95,7 @@ Check GitHub issues for tasks
 Implement (code + tests)
     ↓
 Update user_guide.md if user-facing
+Update developer_guide.md if implementation/architecture changes
     ↓
 Comment on GitHub issue with notes
     ↓
@@ -111,15 +112,19 @@ Review GitHub issues and/or product_direction.md
     ↓
 Verify / Diagnose
     ↓
+Check user_guide.md + developer_guide.md are current (call out discrepancies)
+    ↓
 Update architect_notes.md (rewrite, forward-looking)
     ↓
 Reset pending_review.md to 0
     ↓
-Determine next owner
+Determine next owner(s) + specify parallelism
     ↓
 Create GitHub issue (Engineer) OR add to questions.md (Product)
     ↓
-Output: Review summary with instruction
+Output: Review summary with explicit handoff instructions
+       - If parallel: bullet list of concurrent tasks
+       - If sequential: numbered list in order
 ```
 
 ### Product Workflow
