@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-15
 
@@ -8,32 +8,7 @@
 
 ## Pending Changes
 
-### 2025-12-15 - Annotation UX Improvements
-- **Issue:** #58
-- **Type:** Enhancement
-- **Files:** `src/ground_truth_annotator/static/review.html`, `static/index.html`, `api.py`, `storage.py`, `tests/ground_truth_annotator/test_storage.py`
-- **Summary:** FP dismissal flow (Fib preview on alternate, ESC cancel, skip empty phases), -0.1 Fib stop level, XL scale context on review, background precomputation, versioned filenames with local timezone
-
-### 2025-12-15 - Review Mode UX Improvements
-- **Issue:** #57
-- **Type:** Enhancement
-- **Files:** `src/ground_truth_annotator/static/review.html`, `api.py`, `models.py`, `tests/test_ground_truth_foundation.py`, `Docs/Reference/user_guide.md`
-- **Summary:** FN auto-advance, session metadata (difficulty/regime/comments), inline better reference selection
-
-### 2025-12-15 - Detection Quality Improvements (Phase 1)
-- **Issue:** #56
-- **Type:** Enhancement
-- **Files:** `src/swing_analysis/swing_detector.py`, `src/ground_truth_annotator/comparison_analyzer.py`, `tests/test_swing_detector.py`, `tests/test_comparison_analyzer.py`, `Docs/Reference/user_guide.md`
-
-### 2025-12-15 - Data Collection Improvements
-- **Issue:** #55
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/models.py`, `api.py`, `review_controller.py`, `static/index.html`, `static/review.html`, `tests/test_ground_truth_foundation.py`
-
-### 2025-12-15 - Swing Point Protection Validation
-- **Issue:** #54
-- **Type:** Feature
-- **Files:** `src/swing_analysis/swing_detector.py`, `tests/test_swing_detector.py`, `tests/test_swing_detector_unit.py`
+- **#59** - Fix snap-to-extrema annotation failures and direction inference
 
 ---
 
@@ -41,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 15 | #54, #55, #56, #57, #58 - Protection validation, data collection, detection quality, UX batches | All Accepted |
 | Dec 15 | Protection validation design (Q-2025-12-15-2) | Approved → #54 created |
 | Dec 15 | Counter-trend FP category | Accepted |
 | Dec 15 | #31, #51, #52, #53 - Test stability, FP quick-select, session filenames | All Accepted |

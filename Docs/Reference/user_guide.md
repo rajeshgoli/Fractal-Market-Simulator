@@ -96,12 +96,19 @@ Larger scales use tighter tolerances because fewer aggregated bars are visible.
 
 ### Direction Inference
 
-The annotator automatically determines swing direction based on price movement:
+The annotator determines swing direction based on **where you click** on each candle:
 
-| Price Movement | Direction | Meaning |
-|---------------|-----------|---------|
-| Start high > End high | Bull Reference | Downswing completed, now bullish |
-| Start high ≤ End high | Bear Reference | Upswing completed, now bearish |
+| Start Click | End Click | Direction | Meaning |
+|-------------|-----------|-----------|---------|
+| Near HIGH | Near LOW | Bull Reference | Downswing (high → low) |
+| Near LOW | Near HIGH | Bear Reference | Upswing (low → high) |
+| Same on both | (fallback) | Price comparison | Uses clicked prices |
+
+Click position relative to candle midpoint determines intent:
+- **Above midpoint** → You're marking the HIGH
+- **Below midpoint** → You're marking the LOW
+
+This allows precise control over direction even when bar structure is ambiguous (e.g., first bar has higher high but you want to mark a bear reference from its low).
 
 ## User Interface
 
@@ -124,6 +131,7 @@ Brief notifications appear at the bottom of the screen to confirm actions:
 - "Annotation saved" - After accepting an annotation
 - "Annotation deleted" - After removing an annotation
 - "Session exported" - After downloading session JSON
+- "Start and end snapped to same bar..." - When snap-to-extrema causes both clicks to resolve to the same bar (hold Shift to disable snap)
 
 Toasts auto-dismiss after 2 seconds.
 

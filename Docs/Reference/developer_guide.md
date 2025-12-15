@@ -645,14 +645,20 @@ The UI automatically snaps clicks to the best extrema within a scale-aware toler
 ```javascript
 const SNAP_TOLERANCE = { XL: 5, L: 10, M: 20, S: 30 };
 
-function findBestExtrema(clickedIndex, tolerance, lookingForHigh) {
+// State for click intent tracking
+let startClickedHigh = null;  // true if user clicked near high
+let endClickedHigh = null;
+
+function findBestExtrema(clickedIndex, tolerance, lookingForHigh, targetPrice) {
     // Searches bars[clickedIndex - tolerance] to bars[clickedIndex + tolerance]
-    // Returns index of bar with highest high (or lowest low)
+    // Returns index of bar with extremum closest to targetPrice
 }
 ```
 
-- **First click**: Finds both highest high and lowest low in range, picks whichever is more prominent
-- **Second click**: Snaps to opposite extrema based on detected swing direction
+- **Click intent**: Determined by click position relative to candle midpoint (above = HIGH, below = LOW)
+- **Snap validation**: After snapping, checks if start and end resolve to same bar; shows error toast if so
+- **Direction inference**: Uses stored click intents (`startClickedHigh`, `endClickedHigh`) instead of comparing bar highs
+- **Shift key**: Disables snap-to-extrema, uses exact clicked bar
 
 #### `src/ground_truth_annotator/main.py`
 
