@@ -269,7 +269,7 @@ def filter_swings(references: List[Dict[str, Any]], direction: str, quantization
 
 def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = True,
                   quantization: float = 0.25, max_pair_distance: Optional[int] = None,
-                  protection_tolerance: float = 0.1) -> Dict[str, Any]:
+                  protection_tolerance: float = 0.1, max_rank: Optional[int] = None) -> Dict[str, Any]:
     """
     Identifies swing highs and lows and pairs them to find valid reference swings.
 
@@ -283,6 +283,8 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             This limits reference swing detection to swings within this bar distance.
         protection_tolerance: Fraction of swing size that the swing point can be violated
             before the reference is invalidated. Default 0.1 (10%). Set to None to disable.
+        max_rank: If set, only return top N swings per direction (bull and bear).
+            Reduces noise from secondary structures. Default None returns all swings.
 
     Returns:
         A dictionary containing current price, detected swing points, and valid reference swings.
@@ -481,10 +483,15 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     bull_references.sort(key=lambda x: x["size"], reverse=True)
     for idx, ref in enumerate(bull_references):
         ref["rank"] = idx + 1
-        
+
     bear_references.sort(key=lambda x: x["size"], reverse=True)
     for idx, ref in enumerate(bear_references):
         ref["rank"] = idx + 1
+
+    # 5. Filter by max_rank (optional)
+    if max_rank is not None:
+        bull_references = bull_references[:max_rank]
+        bear_references = bear_references[:max_rank]
 
     return {
         "current_price": current_price,

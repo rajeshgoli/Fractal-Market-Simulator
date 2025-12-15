@@ -399,10 +399,10 @@ class TestComparisonAnalyzer:
         assert len(result.false_positives) == 0
 
     def test_minimum_tolerance_floor(self):
-        """Test that tolerance has a minimum of 5 bars."""
-        analyzer = ComparisonAnalyzer(tolerance_pct=0.1)
+        """Test that tolerance has a minimum of 5 bars by default."""
+        analyzer = ComparisonAnalyzer(tolerance_pct=0.2, min_tolerance_bars=5)
 
-        # Duration = 20 bars, 10% = 2 bars, but minimum is 5
+        # Duration = 20 bars, 20% = 4 bars, but minimum is 5
         annotation = SwingAnnotation.create(
             scale='S',
             direction='bull',
@@ -429,6 +429,140 @@ class TestComparisonAnalyzer:
         result = analyzer.compare_scale([annotation], [system_swing], 'S')
 
         assert len(result.matches) == 1
+
+    def test_custom_min_tolerance_bars(self):
+        """Test configurable minimum tolerance bars for large-scale matching."""
+        # Duration = 8000 bars, with 1000 bar endpoint differences
+        annotation = SwingAnnotation.create(
+            scale='XL',
+            direction='bull',
+            start_bar_index=0,
+            end_bar_index=80,
+            start_source_index=27000,
+            end_source_index=35000,
+            start_price=Decimal('5500'),
+            end_price=Decimal('5000'),
+            window_id='test'
+        )
+
+        # System swing has ~1000 bar offset at start, ~740 at end
+        system_swing = DetectedSwing(
+            direction='bull',
+            start_index=27996,
+            end_index=34260,
+            high_price=5500.0,
+            low_price=5000.0,
+            size=500.0,
+            rank=1
+        )
+
+        # With default min_tolerance (5): 20% of 8000 = 1600 bars tolerance
+        # Start diff = 996, end diff = 740 - should match
+        analyzer_default = ComparisonAnalyzer(tolerance_pct=0.2, min_tolerance_bars=5)
+        result_default = analyzer_default.compare_scale([annotation], [system_swing], 'XL')
+        assert len(result_default.matches) == 1
+
+        # With higher min_tolerance (500): ensures large swings always have reasonable tolerance
+        analyzer_large = ComparisonAnalyzer(tolerance_pct=0.2, min_tolerance_bars=500)
+        result_large = analyzer_large.compare_scale([annotation], [system_swing], 'XL')
+        assert len(result_large.matches) == 1
+
+    def test_tolerance_pct_20_percent_default(self):
+        """Test that 20% tolerance is now the default."""
+        analyzer = ComparisonAnalyzer()  # Using defaults
+
+        # Duration = 100 bars, 20% = 20 bars tolerance
+        annotation = SwingAnnotation.create(
+            scale='M',
+            direction='bull',
+            start_bar_index=0,
+            end_bar_index=10,
+            start_source_index=100,
+            end_source_index=200,
+            start_price=Decimal('5100'),
+            end_price=Decimal('5050'),
+            window_id='test'
+        )
+
+        # System swing off by 18 bars at end (within 20% tolerance)
+        system_swing = DetectedSwing(
+            direction='bull',
+            start_index=100,
+            end_index=218,
+            high_price=5100.0,
+            low_price=5050.0,
+            size=50.0,
+            rank=1
+        )
+
+        result = analyzer.compare_scale([annotation], [system_swing], 'M')
+
+        # 18 bars is within 20% of 100 = 20 bars
+        assert len(result.matches) == 1
+
+    def test_tolerance_edge_case_just_within(self):
+        """Test match at exactly the tolerance boundary."""
+        analyzer = ComparisonAnalyzer(tolerance_pct=0.2, min_tolerance_bars=5)
+
+        # Duration = 100 bars, tolerance = max(5, 20) = 20 bars
+        annotation = SwingAnnotation.create(
+            scale='M',
+            direction='bull',
+            start_bar_index=0,
+            end_bar_index=10,
+            start_source_index=100,
+            end_source_index=200,
+            start_price=Decimal('5100'),
+            end_price=Decimal('5050'),
+            window_id='test'
+        )
+
+        # Off by exactly 20 bars (should still match - boundary inclusive)
+        system_swing = DetectedSwing(
+            direction='bull',
+            start_index=100,
+            end_index=220,
+            high_price=5100.0,
+            low_price=5050.0,
+            size=50.0,
+            rank=1
+        )
+
+        result = analyzer.compare_scale([annotation], [system_swing], 'M')
+        assert len(result.matches) == 1
+
+    def test_tolerance_edge_case_just_outside(self):
+        """Test no match just outside tolerance boundary."""
+        analyzer = ComparisonAnalyzer(tolerance_pct=0.2, min_tolerance_bars=5)
+
+        # Duration = 100 bars, tolerance = max(5, 20) = 20 bars
+        annotation = SwingAnnotation.create(
+            scale='M',
+            direction='bull',
+            start_bar_index=0,
+            end_bar_index=10,
+            start_source_index=100,
+            end_source_index=200,
+            start_price=Decimal('5100'),
+            end_price=Decimal('5050'),
+            window_id='test'
+        )
+
+        # Off by 21 bars (should NOT match - just outside)
+        system_swing = DetectedSwing(
+            direction='bull',
+            start_index=100,
+            end_index=221,
+            high_price=5100.0,
+            low_price=5050.0,
+            size=50.0,
+            rank=1
+        )
+
+        result = analyzer.compare_scale([annotation], [system_swing], 'M')
+        assert len(result.matches) == 0
+        assert len(result.false_negatives) == 1
+        assert len(result.false_positives) == 1
 
     def test_multiple_annotations_multiple_system(self):
         """Test comparison with multiple annotations and system swings."""

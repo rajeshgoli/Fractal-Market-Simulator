@@ -233,9 +233,9 @@ The comparison report includes:
 
 A user annotation matches a system-detected swing when:
 1. **Direction matches**: Both are bull or both are bear
-2. **Start index within tolerance**: User's start is within 10% of swing duration from system's start
-3. **End index within tolerance**: User's end is within 10% of swing duration from system's end
-4. **Minimum tolerance**: At least 5 bars tolerance for short swings
+2. **Start index within tolerance**: User's start is within 20% of swing duration from system's start
+3. **End index within tolerance**: User's end is within 20% of swing duration from system's end
+4. **Minimum tolerance**: At least 5 bars tolerance for short swings (configurable)
 
 ### API Endpoints
 

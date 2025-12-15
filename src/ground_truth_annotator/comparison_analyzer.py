@@ -100,15 +100,19 @@ class ComparisonAnalyzer:
     corresponds to a system-detected swing.
     """
 
-    def __init__(self, tolerance_pct: float = 0.1):
+    def __init__(self, tolerance_pct: float = 0.2, min_tolerance_bars: int = 5):
         """
         Initialize comparison analyzer.
 
         Args:
             tolerance_pct: Tolerance for matching swing boundaries as a
-                          percentage of swing duration. Default 10%.
+                          percentage of swing duration. Default 20%.
+            min_tolerance_bars: Minimum tolerance in bars, regardless of span.
+                               Default 5 bars. For large-scale comparisons,
+                               consider setting to 500 for better matching.
         """
         self.tolerance_pct = tolerance_pct
+        self.min_tolerance_bars = min_tolerance_bars
 
     def compare_scale(
         self,
@@ -204,7 +208,7 @@ class ComparisonAnalyzer:
         3. End indices within tolerance
 
         Tolerance is calculated as percentage of swing duration,
-        with a minimum of 5 bars.
+        with a configurable minimum.
         """
         # Direction must match
         if user_ann.direction != system_swing.direction:
@@ -212,7 +216,7 @@ class ComparisonAnalyzer:
 
         # Calculate tolerance in bars
         duration = abs(user_ann.end_source_index - user_ann.start_source_index)
-        tolerance_bars = max(5, int(duration * self.tolerance_pct))
+        tolerance_bars = max(self.min_tolerance_bars, int(duration * self.tolerance_pct))
 
         # Check start index match
         start_match = abs(user_ann.start_source_index - system_swing.start_index) <= tolerance_bars

@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-15
 
 ---
 
 ## Pending Changes
+
+### 2025-12-15 - Detection Quality Improvements (Phase 1)
+- **Issue:** #56
+- **Type:** Enhancement
+- **Files:** `src/swing_analysis/swing_detector.py`, `src/ground_truth_annotator/comparison_analyzer.py`, `tests/test_swing_detector.py`, `tests/test_comparison_analyzer.py`, `Docs/Reference/user_guide.md`
 
 ### 2025-12-15 - Data Collection Improvements
 - **Issue:** #55
