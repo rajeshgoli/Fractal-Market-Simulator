@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-15
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-*(None)*
+- **Counter trend FP category** - Added button 4 "Counter trend" to FP quick-select for tracking prevalence before implementing trend-aware detection
 
 ---
 

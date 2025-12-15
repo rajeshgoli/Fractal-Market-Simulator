@@ -276,6 +276,7 @@ Review a sample of false positives (system detected, you didn't mark).
   - `1` or click "Too small" - Detection insignificant at this scale
   - `2` or click "Too distant" - Isolated from surrounding structure
   - `3` or click "Something bigger" - Part of a larger swing
+  - `4` or click "Counter trend" - Swing against prevailing trend direction
 - **Other Actions**:
   - `N` or click "Dismiss (Other)" - Mark as noise with dropdown reason
   - `V` or click "Actually Valid" - Admit you missed this swing
@@ -350,6 +351,7 @@ Alternatively, click **"← Back to Annotation"** to return to the current sessi
 | FP Sample | `1` | Quick dismiss: Too small |
 | FP Sample | `2` | Quick dismiss: Too distant |
 | FP Sample | `3` | Quick dismiss: Something bigger |
+| FP Sample | `4` | Quick dismiss: Counter trend |
 | FP Sample | `N` | Dismiss with other reason |
 | FP Sample | `V` | Valid (I missed it) |
 | FP Sample | `S` | Skip remaining |
