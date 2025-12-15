@@ -801,6 +801,28 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- Better Reference Selection Panel -->
+                <div class="card hidden" id="better-ref-panel" style="border: 2px solid var(--accent-purple);">
+                    <div class="card-title" style="border-color: var(--accent-purple);">
+                        Mark Better Reference? <span style="font-weight: normal; font-size: 0.8rem;">(Optional)</span>
+                    </div>
+                    <div id="better-ref-instruction" style="margin-bottom: 12px; font-size: 0.9rem;">
+                        Click the <strong>high point</strong> first, then the <strong>low point</strong>.
+                    </div>
+                    <div id="better-ref-status" style="margin-bottom: 12px; font-size: 0.85rem; color: var(--text-secondary);">
+                        Waiting for first click (high)...
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" onclick="skipBetterRef()">
+                            <kbd>Esc</kbd> Skip
+                        </button>
+                    </div>
+                    <div class="keyboard-hints" style="margin-top: 10px;">
+                        <div class="hint-row"><kbd>Click</kbd> Chart to select points</div>
+                        <div class="hint-row"><kbd>Esc</kbd> Skip this step</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -820,6 +842,15 @@
         // Current indices
         let currentIndex = 0;
         let currentPhase = 'matches';
+
+        // Better reference selection state
+        let betterRefState = {
+            active: false,
+            pendingFP: null,      // FP being dismissed
+            pendingCategory: null, // Category selected
+            highBar: null,        // First click (high point)
+            lowBar: null,         // Second click (low point)
+        };
 
         // Get session_id from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -1302,32 +1333,136 @@
             }
         }
 
-        // Quick dismiss FP with preset category (one-click)
+        // Quick dismiss FP with preset category - offers optional better reference
         async function quickDismissFP(category) {
             const fp = fpSample[currentIndex];
+
+            // Store pending dismissal and show better reference prompt
+            betterRefState = {
+                active: true,
+                pendingFP: fp,
+                pendingCategory: category,
+                highBar: null,
+                lowBar: null,
+            };
+
+            // Show better reference panel, hide FP panel
+            document.getElementById('fp-panel').classList.add('hidden');
+            document.getElementById('better-ref-panel').classList.remove('hidden');
+            document.getElementById('better-ref-status').textContent = 'Waiting for first click (high)...';
+
+            // Enable chart click handler for better reference selection
+            enableBetterRefClickHandler();
+        }
+
+        // Enable chart click handler for better reference selection
+        function enableBetterRefClickHandler() {
+            chart.subscribeClick(handleBetterRefClick);
+        }
+
+        // Disable chart click handler
+        function disableBetterRefClickHandler() {
+            chart.unsubscribeClick(handleBetterRefClick);
+        }
+
+        // Handle chart click during better reference selection
+        function handleBetterRefClick(param) {
+            if (!betterRefState.active || !param.time) return;
+
+            const clickedBar = bars.find(b => b.timestamp === param.time);
+            if (!clickedBar) return;
+
+            if (!betterRefState.highBar) {
+                // First click - high point
+                betterRefState.highBar = clickedBar;
+                document.getElementById('better-ref-status').textContent =
+                    `High: Bar ${clickedBar.index} @ ${clickedBar.high.toFixed(2)} — Now click low point...`;
+
+                // Add marker for high point
+                candleSeries.setMarkers([{
+                    time: clickedBar.timestamp,
+                    position: 'aboveBar',
+                    color: '#9c27b0',
+                    shape: 'arrowDown',
+                    text: 'H',
+                }]);
+            } else {
+                // Second click - low point
+                betterRefState.lowBar = clickedBar;
+
+                // Submit with better reference
+                submitFPWithBetterRef();
+            }
+        }
+
+        // Submit FP feedback with optional better reference
+        async function submitFPWithBetterRef() {
+            const { pendingFP, pendingCategory, highBar, lowBar } = betterRefState;
+
+            const payload = {
+                swing_type: 'false_positive',
+                swing_reference: { sample_index: pendingFP.fp_index },
+                verdict: 'noise',
+                category: pendingCategory,
+            };
+
+            // Add better reference if both points selected
+            if (highBar && lowBar) {
+                payload.better_reference = {
+                    high_bar_index: highBar.index,
+                    low_bar_index: lowBar.index,
+                    high_price: highBar.high.toFixed(2),
+                    low_price: lowBar.low.toFixed(2),
+                };
+            }
 
             try {
                 await fetch('/api/review/feedback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        swing_type: 'false_positive',
-                        swing_reference: { sample_index: fp.fp_index },
-                        verdict: 'noise',
-                        category: category
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 // Update local state
-                fp.feedback = { verdict: 'noise', category };
+                pendingFP.feedback = {
+                    verdict: 'noise',
+                    category: pendingCategory,
+                    better_reference: payload.better_reference || null
+                };
 
-                // Move to next
+                // Clean up and move to next
+                cleanupBetterRefState();
                 nextSwing();
 
             } catch (error) {
                 console.error('Error submitting feedback:', error);
                 alert('Failed to submit feedback');
+                cleanupBetterRefState();
             }
+        }
+
+        // Skip better reference and submit without it
+        function skipBetterRef() {
+            submitFPWithBetterRef();
+        }
+
+        // Clean up better reference state
+        function cleanupBetterRefState() {
+            disableBetterRefClickHandler();
+            betterRefState = {
+                active: false,
+                pendingFP: null,
+                pendingCategory: null,
+                highBar: null,
+                lowBar: null,
+            };
+
+            // Hide better ref panel, show FP panel
+            document.getElementById('better-ref-panel').classList.add('hidden');
+            document.getElementById('fp-panel').classList.remove('hidden');
+
+            // Clear markers
+            candleSeries.setMarkers([]);
         }
 
         // Submit FN feedback
@@ -1562,12 +1697,23 @@
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
+            // Handle Escape during better reference selection
+            if (betterRefState.active && e.key === 'Escape') {
+                skipBetterRef();
+                return;
+            }
+
             // Ignore if typing in textarea
             if (e.target.tagName === 'TEXTAREA') {
                 if (e.key === 'Enter' && !e.shiftKey && currentPhase === 'fn_feedback') {
                     e.preventDefault();
                     submitFNFeedback();
                 }
+                return;
+            }
+
+            // Block normal FP shortcuts during better reference selection
+            if (betterRefState.active) {
                 return;
             }
 

@@ -17,7 +17,8 @@ import pytest
 from src.swing_analysis.bar_aggregator import BarAggregator
 from src.swing_analysis.bull_reference_detector import Bar
 from src.ground_truth_annotator.models import (
-    SwingAnnotation, AnnotationSession, SwingFeedback, ReviewSession, REVIEW_PHASES
+    SwingAnnotation, AnnotationSession, SwingFeedback, ReviewSession, REVIEW_PHASES,
+    BetterReference, REVIEW_SCHEMA_VERSION
 )
 from src.ground_truth_annotator.storage import AnnotationStorage, ReviewStorage
 from src.ground_truth_annotator.main import parse_offset
@@ -1213,3 +1214,235 @@ class TestAnnotationStorageStatus:
 
         assert 'status' in data
         assert data['status'] == "keep"
+
+
+# ============================================================================
+# BetterReference Model Tests (Issue #55)
+# ============================================================================
+
+@pytest.fixture
+def sample_better_reference():
+    """Create a sample BetterReference for testing."""
+    return BetterReference(
+        high_bar_index=10,
+        low_bar_index=25,
+        high_price=Decimal("4550.00"),
+        low_price=Decimal("4500.25")
+    )
+
+
+class TestBetterReference:
+    """Tests for BetterReference dataclass."""
+
+    def test_create_better_reference(self, sample_better_reference):
+        """Test BetterReference creation."""
+        assert sample_better_reference.high_bar_index == 10
+        assert sample_better_reference.low_bar_index == 25
+        assert sample_better_reference.high_price == Decimal("4550.00")
+        assert sample_better_reference.low_price == Decimal("4500.25")
+
+    def test_to_dict_serialization(self, sample_better_reference):
+        """Test serialization to dictionary."""
+        data = sample_better_reference.to_dict()
+
+        assert data['high_bar_index'] == 10
+        assert data['low_bar_index'] == 25
+        assert data['high_price'] == "4550.00"
+        assert data['low_price'] == "4500.25"
+
+    def test_from_dict_deserialization(self, sample_better_reference):
+        """Test deserialization from dictionary."""
+        data = sample_better_reference.to_dict()
+        restored = BetterReference.from_dict(data)
+
+        assert restored.high_bar_index == sample_better_reference.high_bar_index
+        assert restored.low_bar_index == sample_better_reference.low_bar_index
+        assert restored.high_price == sample_better_reference.high_price
+        assert restored.low_price == sample_better_reference.low_price
+
+    def test_roundtrip_serialization(self, sample_better_reference):
+        """Test that to_dict -> from_dict preserves all fields."""
+        data = sample_better_reference.to_dict()
+        restored = BetterReference.from_dict(data)
+
+        assert restored.high_bar_index == sample_better_reference.high_bar_index
+        assert restored.low_bar_index == sample_better_reference.low_bar_index
+        assert restored.high_price == sample_better_reference.high_price
+        assert restored.low_price == sample_better_reference.low_price
+
+
+# ============================================================================
+# SwingFeedback with BetterReference Tests (Issue #55)
+# ============================================================================
+
+class TestSwingFeedbackWithBetterReference:
+    """Tests for SwingFeedback with better_reference field."""
+
+    def test_create_feedback_without_better_reference(self, sample_fp_feedback):
+        """Test feedback creation without better_reference has None."""
+        assert sample_fp_feedback.better_reference is None
+
+    def test_create_feedback_with_better_reference(self, sample_better_reference):
+        """Test feedback creation with better_reference."""
+        feedback = SwingFeedback.create(
+            swing_type="false_positive",
+            swing_reference={"sample_index": 5},
+            verdict="noise",
+            category="too_small",
+            better_reference=sample_better_reference
+        )
+
+        assert feedback.better_reference is not None
+        assert feedback.better_reference.high_bar_index == 10
+        assert feedback.better_reference.low_bar_index == 25
+
+    def test_to_dict_without_better_reference(self, sample_fp_feedback):
+        """Test serialization without better_reference omits the field."""
+        data = sample_fp_feedback.to_dict()
+        assert 'better_reference' not in data
+
+    def test_to_dict_with_better_reference(self, sample_better_reference):
+        """Test serialization with better_reference includes it."""
+        feedback = SwingFeedback.create(
+            swing_type="false_positive",
+            swing_reference={"sample_index": 5},
+            verdict="noise",
+            category="too_small",
+            better_reference=sample_better_reference
+        )
+
+        data = feedback.to_dict()
+
+        assert 'better_reference' in data
+        assert data['better_reference']['high_bar_index'] == 10
+        assert data['better_reference']['low_bar_index'] == 25
+
+    def test_from_dict_without_better_reference(self, sample_fp_feedback):
+        """Test deserialization without better_reference."""
+        data = sample_fp_feedback.to_dict()
+        restored = SwingFeedback.from_dict(data)
+
+        assert restored.better_reference is None
+
+    def test_from_dict_with_better_reference(self, sample_better_reference):
+        """Test deserialization with better_reference."""
+        feedback = SwingFeedback.create(
+            swing_type="false_positive",
+            swing_reference={"sample_index": 5},
+            verdict="noise",
+            category="too_small",
+            better_reference=sample_better_reference
+        )
+
+        data = feedback.to_dict()
+        restored = SwingFeedback.from_dict(data)
+
+        assert restored.better_reference is not None
+        assert restored.better_reference.high_bar_index == 10
+        assert restored.better_reference.low_bar_index == 25
+        assert restored.better_reference.high_price == Decimal("4550.00")
+
+    def test_roundtrip_with_better_reference(self, sample_better_reference):
+        """Test that to_dict -> from_dict preserves better_reference."""
+        feedback = SwingFeedback.create(
+            swing_type="false_positive",
+            swing_reference={"sample_index": 5},
+            verdict="noise",
+            category="subsumed",
+            better_reference=sample_better_reference
+        )
+
+        data = feedback.to_dict()
+        restored = SwingFeedback.from_dict(data)
+
+        assert restored.better_reference.high_bar_index == feedback.better_reference.high_bar_index
+        assert restored.better_reference.low_bar_index == feedback.better_reference.low_bar_index
+        assert restored.better_reference.high_price == feedback.better_reference.high_price
+        assert restored.better_reference.low_price == feedback.better_reference.low_price
+
+
+# ============================================================================
+# ReviewSession Version Field Tests (Issue #55)
+# ============================================================================
+
+class TestReviewSessionVersion:
+    """Tests for ReviewSession version field."""
+
+    def test_create_session_has_version(self, review_session):
+        """Test session creation has version field."""
+        assert review_session.version == REVIEW_SCHEMA_VERSION
+        assert review_session.version == 1
+
+    def test_version_in_to_dict(self, review_session):
+        """Test version is included in to_dict."""
+        data = review_session.to_dict()
+
+        assert 'version' in data
+        assert data['version'] == REVIEW_SCHEMA_VERSION
+
+    def test_version_restored_from_dict(self, review_session):
+        """Test version is restored from from_dict."""
+        data = review_session.to_dict()
+        restored = ReviewSession.from_dict(data)
+
+        assert restored.version == REVIEW_SCHEMA_VERSION
+
+    def test_legacy_data_without_version(self):
+        """Test from_dict handles legacy data without version field."""
+        # Simulate legacy data without version field
+        data = {
+            'review_id': 'test-review-id',
+            'session_id': 'test-session-id',
+            'phase': 'matches',
+            'match_feedback': [],
+            'fp_feedback': [],
+            'fn_feedback': [],
+            'fp_sample_indices': [],
+            'started_at': '2025-01-01T00:00:00+00:00',
+            'completed_at': None
+            # No version field
+        }
+
+        review = ReviewSession.from_dict(data)
+
+        # Should default to version 1 for backward compatibility
+        assert review.version == 1
+
+    def test_version_roundtrip(self, review_session, sample_feedback):
+        """Test version survives full roundtrip with feedback."""
+        review_session.add_feedback(sample_feedback)
+        review_session.advance_phase()
+
+        data = review_session.to_dict()
+        restored = ReviewSession.from_dict(data)
+
+        assert restored.version == review_session.version
+        assert restored.version == REVIEW_SCHEMA_VERSION
+
+
+class TestReviewStorageVersion:
+    """Tests for ReviewStorage with version field."""
+
+    def test_created_review_has_version(self, review_storage):
+        """Test reviews created through storage have version."""
+        review = review_storage.create_review("test-session-version")
+
+        assert review.version == REVIEW_SCHEMA_VERSION
+
+    def test_version_persists(self, review_storage):
+        """Test version persists when saving/loading reviews."""
+        review = review_storage.create_review("version-persist-test")
+
+        loaded = review_storage.get_review("version-persist-test")
+
+        assert loaded.version == REVIEW_SCHEMA_VERSION
+
+    def test_version_in_export_json(self, review_storage):
+        """Test exported JSON includes version."""
+        review_storage.create_review("version-export-test")
+
+        exported = review_storage.export_review("version-export-test", format="json")
+        data = json.loads(exported)
+
+        assert 'version' in data
+        assert data['version'] == REVIEW_SCHEMA_VERSION

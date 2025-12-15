@@ -233,6 +233,14 @@ class FNItem(BaseModel):
     feedback: Optional[dict]
 
 
+class BetterReferenceSubmit(BaseModel):
+    """Optional better reference when dismissing FP."""
+    high_bar_index: int
+    low_bar_index: int
+    high_price: str
+    low_price: str
+
+
 class FeedbackSubmit(BaseModel):
     """Request to submit feedback."""
     swing_type: str  # "match" | "false_positive" | "false_negative"
@@ -240,6 +248,7 @@ class FeedbackSubmit(BaseModel):
     verdict: str  # "correct" | "incorrect" | "noise" | "valid_missed" | "explained"
     comment: Optional[str] = None
     category: Optional[str] = None
+    better_reference: Optional[BetterReferenceSubmit] = None  # "What I would have chosen instead"
 
 
 class ReviewSummaryResponse(BaseModel):
@@ -1077,7 +1086,7 @@ async def submit_feedback(request: FeedbackSubmit):
     Submit feedback on a swing.
 
     - For matches: verdict = "correct" or "incorrect"
-    - For FPs: verdict = "noise" or "valid_missed", optional category
+    - For FPs: verdict = "noise" or "valid_missed", optional category and better_reference
     - For FNs: verdict = "explained", comment REQUIRED
 
     Returns {"status": "ok", "feedback_id": str}
@@ -1085,13 +1094,25 @@ async def submit_feedback(request: FeedbackSubmit):
     s = get_state()
     controller = _get_review_controller(s)
 
+    # Convert better_reference from API model to domain model
+    better_ref = None
+    if request.better_reference:
+        from .models import BetterReference
+        better_ref = BetterReference(
+            high_bar_index=request.better_reference.high_bar_index,
+            low_bar_index=request.better_reference.low_bar_index,
+            high_price=Decimal(request.better_reference.high_price),
+            low_price=Decimal(request.better_reference.low_price)
+        )
+
     try:
         feedback = controller.submit_feedback(
             swing_type=request.swing_type,
             swing_reference=request.swing_reference,
             verdict=request.verdict,
             comment=request.comment,
-            category=request.category
+            category=request.category,
+            better_reference=better_ref
         )
         return {"status": "ok", "feedback_id": feedback.feedback_id}
     except ValueError as e:

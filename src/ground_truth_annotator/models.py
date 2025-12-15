@@ -189,6 +189,38 @@ class AnnotationSession:
 
 
 @dataclass
+class BetterReference:
+    """
+    Optional user-provided "better" reference when dismissing an FP.
+
+    Captures what the user would have chosen instead of the detected swing.
+    """
+    high_bar_index: int           # Aggregated view index of the high point
+    low_bar_index: int            # Aggregated view index of the low point
+    high_price: Decimal           # Price at high point
+    low_price: Decimal            # Price at low point
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary for JSON storage."""
+        return {
+            'high_bar_index': self.high_bar_index,
+            'low_bar_index': self.low_bar_index,
+            'high_price': str(self.high_price),
+            'low_price': str(self.low_price)
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'BetterReference':
+        """Deserialize from dictionary."""
+        return cls(
+            high_bar_index=data['high_bar_index'],
+            low_bar_index=data['low_bar_index'],
+            high_price=Decimal(data['high_price']),
+            low_price=Decimal(data['low_price'])
+        )
+
+
+@dataclass
 class SwingFeedback:
     """
     Feedback on a single swing (match, FP, or FN).
@@ -203,6 +235,7 @@ class SwingFeedback:
     comment: Optional[str]        # Free text explanation (required for FN, optional for FP)
     category: Optional[str]       # "too_small" | "wrong_direction" | "pattern" | "context" | etc.
     created_at: datetime
+    better_reference: Optional[BetterReference] = None  # Optional "what I would have chosen" for FP dismissals
 
     @classmethod
     def create(
@@ -211,7 +244,8 @@ class SwingFeedback:
         swing_reference: Dict[str, Any],
         verdict: str,
         comment: Optional[str] = None,
-        category: Optional[str] = None
+        category: Optional[str] = None,
+        better_reference: Optional[BetterReference] = None
     ) -> 'SwingFeedback':
         """Factory method with auto-generated ID and timestamp."""
         return cls(
@@ -221,12 +255,13 @@ class SwingFeedback:
             verdict=verdict,
             comment=comment,
             category=category,
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(timezone.utc),
+            better_reference=better_reference
         )
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON storage."""
-        return {
+        result = {
             'feedback_id': self.feedback_id,
             'swing_type': self.swing_type,
             'swing_reference': self.swing_reference,
@@ -235,10 +270,17 @@ class SwingFeedback:
             'category': self.category,
             'created_at': self.created_at.isoformat()
         }
+        if self.better_reference is not None:
+            result['better_reference'] = self.better_reference.to_dict()
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SwingFeedback':
         """Deserialize from dictionary."""
+        better_ref = None
+        if data.get('better_reference'):
+            better_ref = BetterReference.from_dict(data['better_reference'])
+
         return cls(
             feedback_id=data['feedback_id'],
             swing_type=data['swing_type'],
@@ -246,12 +288,16 @@ class SwingFeedback:
             verdict=data['verdict'],
             comment=data.get('comment'),
             category=data.get('category'),
-            created_at=datetime.fromisoformat(data['created_at'])
+            created_at=datetime.fromisoformat(data['created_at']),
+            better_reference=better_ref
         )
 
 
 # Phase order for ReviewSession
 REVIEW_PHASES = ["matches", "fp_sample", "fn_feedback", "complete"]
+
+# Schema version for backward-compatible evolution
+REVIEW_SCHEMA_VERSION = 1
 
 
 @dataclass
@@ -271,6 +317,7 @@ class ReviewSession:
     fp_sample_indices: List[int] = field(default_factory=list)
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
+    version: int = REVIEW_SCHEMA_VERSION  # Schema version for backward compatibility
 
     @classmethod
     def create(cls, session_id: str) -> 'ReviewSession':
@@ -284,7 +331,8 @@ class ReviewSession:
             fn_feedback=[],
             fp_sample_indices=[],
             started_at=datetime.now(timezone.utc),
-            completed_at=None
+            completed_at=None,
+            version=REVIEW_SCHEMA_VERSION
         )
 
     def add_feedback(self, feedback: SwingFeedback) -> None:
@@ -320,6 +368,7 @@ class ReviewSession:
         return {
             'review_id': self.review_id,
             'session_id': self.session_id,
+            'version': self.version,
             'phase': self.phase,
             'match_feedback': [f.to_dict() for f in self.match_feedback],
             'fp_feedback': [f.to_dict() for f in self.fp_feedback],
@@ -341,5 +390,6 @@ class ReviewSession:
             fn_feedback=[SwingFeedback.from_dict(f) for f in data.get('fn_feedback', [])],
             fp_sample_indices=data.get('fp_sample_indices', []),
             started_at=datetime.fromisoformat(data['started_at']),
-            completed_at=datetime.fromisoformat(data['completed_at']) if data.get('completed_at') else None
+            completed_at=datetime.fromisoformat(data['completed_at']) if data.get('completed_at') else None,
+            version=data.get('version', 1)  # Default to 1 for legacy data without version
         )

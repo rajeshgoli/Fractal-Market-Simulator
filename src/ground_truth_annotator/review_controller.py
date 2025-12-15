@@ -8,7 +8,7 @@ Handles phase transitions, FP sampling, and progress tracking.
 import random
 from typing import Any, Dict, List, Optional, Tuple
 
-from .models import ReviewSession, SwingFeedback, REVIEW_PHASES
+from .models import ReviewSession, SwingFeedback, BetterReference, REVIEW_PHASES
 from .storage import AnnotationStorage, ReviewStorage
 from .comparison_analyzer import ComparisonResult, DetectedSwing
 
@@ -271,7 +271,8 @@ class ReviewController:
         swing_reference: dict,
         verdict: str,
         comment: Optional[str] = None,
-        category: Optional[str] = None
+        category: Optional[str] = None,
+        better_reference: Optional[BetterReference] = None
     ) -> SwingFeedback:
         """
         Submit feedback for a swing.
@@ -282,6 +283,7 @@ class ReviewController:
             verdict: "correct" | "incorrect" | "noise" | "valid_missed" | "explained"
             comment: Free text (required for FN)
             category: Optional categorization
+            better_reference: Optional "what I would have chosen" for FP dismissals
 
         Raises:
             ValueError: If FN submitted without comment
@@ -296,7 +298,8 @@ class ReviewController:
             swing_reference=swing_reference,
             verdict=verdict,
             comment=comment,
-            category=category
+            category=category,
+            better_reference=better_reference
         )
 
         review.add_feedback(feedback)

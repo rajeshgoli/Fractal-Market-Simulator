@@ -744,6 +744,11 @@
                 wickUpColor: '#26a69a',
             });
 
+            // Track shift key state for snap toggle
+            let shiftKeyPressed = false;
+            document.addEventListener('keydown', (e) => { if (e.key === 'Shift') shiftKeyPressed = true; });
+            document.addEventListener('keyup', (e) => { if (e.key === 'Shift') shiftKeyPressed = false; });
+
             // Handle click on chart
             mainChart.subscribeClick((param) => {
                 if (!param.time) return;
@@ -751,7 +756,8 @@
                 if (!clickedBar) return;
                 // Convert Y pixel coordinate to price for intent detection
                 const clickPrice = mainCandleSeries.coordinateToPrice(param.point.y);
-                handleBarClick(clickedBar, clickPrice);
+                // Pass shift state: when true, disable snap-to-extrema
+                handleBarClick(clickedBar, clickPrice, shiftKeyPressed);
             });
 
             // Handle resize
@@ -810,16 +816,17 @@
 
         // Handle click on a bar
         // clickPrice: the price level where the user clicked (from Y coordinate)
-        function handleBarClick(bar, clickPrice) {
-            const tolerance = getSnapTolerance();
+        // disableSnap: if true (Shift held), use exact click bar instead of snap-to-extrema
+        function handleBarClick(bar, clickPrice, disableSnap = false) {
+            const tolerance = disableSnap ? 0 : getSnapTolerance();
 
             if (selectionState === 'idle') {
                 // First click: determine intent from click position relative to candle midpoint
                 const candleMidpoint = (bar.high + bar.low) / 2;
                 const lookingForHigh = clickPrice >= candleMidpoint;
 
-                // Find bar with extremum closest to click price
-                startBarIndex = findBestExtrema(bar.index, tolerance, lookingForHigh, clickPrice);
+                // Find bar with extremum closest to click price (or exact bar if snap disabled)
+                startBarIndex = disableSnap ? bar.index : findBestExtrema(bar.index, tolerance, lookingForHigh, clickPrice);
                 selectionState = 'selecting_end';
                 updateInstruction();
                 updateMarkers();
@@ -833,8 +840,8 @@
                 const candleMidpoint = (bar.high + bar.low) / 2;
                 const lookingForHigh = clickPrice >= candleMidpoint;
 
-                // Find bar with extremum closest to click price
-                endBarIndex = findBestExtrema(bar.index, tolerance, lookingForHigh, clickPrice);
+                // Find bar with extremum closest to click price (or exact bar if snap disabled)
+                endBarIndex = disableSnap ? bar.index : findBestExtrema(bar.index, tolerance, lookingForHigh, clickPrice);
                 selectionState = 'confirming';
                 showConfirmation();
             }
