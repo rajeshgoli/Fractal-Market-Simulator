@@ -159,7 +159,7 @@ class ScaleCalibrator:
                 median_durations=median_durations
             )
             
-        except Exception as e:
+        except (ValueError, IndexError, KeyError, ZeroDivisionError, TypeError) as e:
             self.logger.error(f"Error calibrating scales for {instrument}: {e}")
             return self._create_default_config(instrument, 0)
     
@@ -225,7 +225,7 @@ class ScaleCalibrator:
                     'speed': speed
                 })
 
-        except Exception as e:
+        except (ValueError, IndexError, KeyError, ZeroDivisionError, TypeError) as e:
             self.logger.error(f"Error detecting swings: {e}")
 
         return all_swings
@@ -265,7 +265,7 @@ class ScaleCalibrator:
             
             return boundaries
             
-        except Exception as e:
+        except (ValueError, IndexError, ZeroDivisionError, TypeError) as e:
             self.logger.error(f"Error computing quartiles: {e}")
             return None
     

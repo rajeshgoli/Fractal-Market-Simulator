@@ -1477,15 +1477,15 @@ class TestProtectionFilter(unittest.TestCase):
 
     def test_protection_filter_bull_pre_formation(self):
         """Test pre-formation protection for bull references."""
-        from src.swing_analysis.swing_detector import _apply_protection_filter, SparseTable
+        from src.swing_analysis.swing_detector import _apply_protection_filter, _build_suffix_max, _build_suffix_min
         import numpy as np
 
         # Create scenario where high is violated before low forms
         highs = np.array([100, 110, 120, 130, 110, 105, 100], dtype=np.float64)
         lows = np.array([95, 105, 115, 125, 105, 100, 95], dtype=np.float64)
 
-        highs_max_table = SparseTable(highs.tolist(), mode='max')
-        lows_min_table = SparseTable(lows.tolist(), mode='min')
+        suffix_max_highs = _build_suffix_max(highs)
+        suffix_min_lows = _build_suffix_min(lows)
 
         # Bull swing: high at index 1 (110), low at index 5 (100)
         # But higher high (130) appears at index 3 between them
@@ -1499,7 +1499,7 @@ class TestProtectionFilter(unittest.TestCase):
 
         filtered = _apply_protection_filter(
             references, 'bull', highs, lows, 0.1,
-            highs_max_table, lows_min_table
+            suffix_max_highs, suffix_min_lows
         )
 
         # Should be filtered due to pre-formation violation
@@ -1507,15 +1507,15 @@ class TestProtectionFilter(unittest.TestCase):
 
     def test_protection_filter_bull_post_formation(self):
         """Test post-formation protection for bull references."""
-        from src.swing_analysis.swing_detector import _apply_protection_filter, SparseTable
+        from src.swing_analysis.swing_detector import _apply_protection_filter, _build_suffix_max, _build_suffix_min
         import numpy as np
 
         # Create scenario where low is violated after formation
         highs = np.array([100, 120, 110, 105, 100, 95, 90], dtype=np.float64)
         lows = np.array([95, 100, 105, 100, 95, 85, 80], dtype=np.float64)
 
-        highs_max_table = SparseTable(highs.tolist(), mode='max')
-        lows_min_table = SparseTable(lows.tolist(), mode='min')
+        suffix_max_highs = _build_suffix_max(highs)
+        suffix_min_lows = _build_suffix_min(lows)
 
         # Bull swing: high at index 1 (120), low at index 4 (95)
         # Low violated at index 6 (80) which is < 95 - 0.1*25 = 92.5
@@ -1529,7 +1529,7 @@ class TestProtectionFilter(unittest.TestCase):
 
         filtered = _apply_protection_filter(
             references, 'bull', highs, lows, 0.1,
-            highs_max_table, lows_min_table
+            suffix_max_highs, suffix_min_lows
         )
 
         # Should be filtered due to post-formation violation
@@ -2030,6 +2030,97 @@ class TestLargerSwingsParameter(unittest.TestCase):
         # (depends on actual swing detection, but metadata should be present)
         for ref in result_filtered['bull_references']:
             self.assertIn('structurally_separated', ref)
+
+
+class TestReferenceSwingDataclass(unittest.TestCase):
+    """Test suite for ReferenceSwing dataclass."""
+
+    def test_reference_swing_creation(self):
+        """Test creating a ReferenceSwing instance."""
+        from src.swing_analysis.swing_detector import ReferenceSwing
+
+        swing = ReferenceSwing(
+            high_price=120.0,
+            high_bar_index=10,
+            low_price=100.0,
+            low_bar_index=5,
+            size=20.0,
+            direction="bull",
+            level_0382=107.64,
+            level_2x=140.0
+        )
+
+        self.assertEqual(swing.high_price, 120.0)
+        self.assertEqual(swing.low_price, 100.0)
+        self.assertEqual(swing.size, 20.0)
+        self.assertEqual(swing.direction, "bull")
+        self.assertEqual(swing.rank, 0)  # Default
+
+    def test_reference_swing_span_property(self):
+        """Test the span property calculation."""
+        from src.swing_analysis.swing_detector import ReferenceSwing
+
+        swing = ReferenceSwing(
+            high_price=120.0,
+            high_bar_index=10,
+            low_price=100.0,
+            low_bar_index=5,
+            size=20.0,
+            direction="bull"
+        )
+
+        self.assertEqual(swing.span, 6)  # |10 - 5| + 1 = 6
+
+    def test_reference_swing_to_dict(self):
+        """Test conversion to dictionary for backward compatibility."""
+        from src.swing_analysis.swing_detector import ReferenceSwing
+
+        swing = ReferenceSwing(
+            high_price=120.0,
+            high_bar_index=10,
+            low_price=100.0,
+            low_bar_index=5,
+            size=20.0,
+            direction="bull",
+            level_0382=107.64,
+            level_2x=140.0,
+            rank=1
+        )
+
+        d = swing.to_dict()
+
+        self.assertIsInstance(d, dict)
+        self.assertEqual(d['high_price'], 120.0)
+        self.assertEqual(d['low_price'], 100.0)
+        self.assertEqual(d['size'], 20.0)
+        self.assertEqual(d['rank'], 1)
+        # Direction should be removed for backward compatibility
+        self.assertNotIn('direction', d)
+
+    def test_reference_swing_optional_fields(self):
+        """Test that optional fields have correct defaults."""
+        from src.swing_analysis.swing_detector import ReferenceSwing
+
+        swing = ReferenceSwing(
+            high_price=120.0,
+            high_bar_index=10,
+            low_price=100.0,
+            low_bar_index=5,
+            size=20.0,
+            direction="bear"
+        )
+
+        # Check defaults
+        self.assertEqual(swing.level_0382, 0.0)
+        self.assertEqual(swing.level_2x, 0.0)
+        self.assertEqual(swing.rank, 0)
+        self.assertEqual(swing.impulse, 0.0)
+        self.assertIsNone(swing.size_rank)
+        self.assertIsNone(swing.impulse_rank)
+        self.assertIsNone(swing.combined_score)
+        self.assertFalse(swing.structurally_separated)
+        self.assertIsNone(swing.containing_swing_id)
+        self.assertEqual(swing.fib_confluence_score, 0.0)
 
 
 if __name__ == '__main__':

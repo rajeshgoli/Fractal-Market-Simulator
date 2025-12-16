@@ -992,7 +992,7 @@ def _precompute_comparison_background(s: AppState) -> None:
         s.comparison_report = report
 
         logger.info("Background precomputation complete")
-    except Exception as e:
+    except (ValueError, KeyError, TypeError, AttributeError, RuntimeError) as e:
         logger.error(f"Background precomputation failed: {e}")
     finally:
         s.precompute_in_progress = False

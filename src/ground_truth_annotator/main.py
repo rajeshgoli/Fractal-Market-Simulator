@@ -261,7 +261,7 @@ def main():
     except FileNotFoundError:
         logger.error(f"Data file not found: {args.data}")
         sys.exit(1)
-    except Exception as e:
+    except (ValueError, OSError, pd.errors.ParserError) as e:
         logger.error(f"Failed to read file metrics: {e}")
         sys.exit(1)
 
@@ -282,7 +282,7 @@ def main():
     except FileNotFoundError as e:
         logger.error(f"Data file not found: {e}")
         sys.exit(1)
-    except Exception as e:
+    except (ValueError, OSError, RuntimeError, TypeError) as e:
         logger.error(f"Failed to initialize: {e}")
         import traceback
         traceback.print_exc()

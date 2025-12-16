@@ -625,11 +625,12 @@ The `detect_swings()` function applies filters in a specific order. Understandin
 
 4. **Add tests** following `TestProminenceFilter` or `TestSizeFilter` patterns in `tests/test_swing_detector.py`
 
-**Key Internal Classes:**
+**Key Internal Functions:**
 
-| Class | Purpose |
-|-------|---------|
-| `SparseTable` | O(1) range min/max queries for structural validation |
+| Function | Purpose |
+|----------|---------|
+| `_build_suffix_min()` / `_build_suffix_max()` | O(1) suffix min/max queries for protection validation |
+| `_range_min()` / `_range_max()` | Range min/max queries using numpy slicing |
 | `filter_swings()` | Fibonacci band redundancy filtering |
 | `get_level_band()` | Determine which Fib band a price falls into |
 

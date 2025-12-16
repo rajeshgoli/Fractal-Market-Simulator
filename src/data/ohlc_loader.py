@@ -90,7 +90,7 @@ def get_file_metrics(filepath: str) -> FileMetrics:
             df_tail.columns = df_tail.columns.str.lower()
             if 'time' in df_tail.columns and len(df_tail) > 0:
                 last_timestamp = datetime.utcfromtimestamp(df_tail['time'].iloc[-1])
-    except Exception:
+    except (KeyError, ValueError, IndexError, pd.errors.EmptyDataError):
         # If timestamp extraction fails, continue without them
         pass
 
@@ -184,7 +184,7 @@ def load_ohlc_window(
             for c in cols:
                 df[c] = df[c].astype('float64')
 
-    except Exception as e:
+    except (KeyError, ValueError, TypeError, pd.errors.ParserError) as e:
         raise ValueError(f"Error parsing file: {e}")
 
     # Reorder and set index
@@ -361,7 +361,7 @@ def load_ohlc(filepath: str) -> Tuple[pd.DataFrame, List[Tuple[pd.Timestamp, pd.
             # Volume is already handled and cast to int64 above
             # df['volume'] = df['volume'].astype('int64')
 
-    except Exception as e:
+    except (KeyError, ValueError, TypeError, pd.errors.ParserError) as e:
         # Catch parsing errors
         raise ValueError(f"Error parsing file: {e}")
 

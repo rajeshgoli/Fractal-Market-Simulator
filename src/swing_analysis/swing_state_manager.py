@@ -348,7 +348,7 @@ class SwingStateManager:
                 highest_since_high=high_price if not is_bull else None
             )
             
-        except Exception as e:
+        except (ValueError, KeyError, TypeError, AttributeError) as e:
             logging.warning(f"Failed to create active swing: {e}")
             return None
     

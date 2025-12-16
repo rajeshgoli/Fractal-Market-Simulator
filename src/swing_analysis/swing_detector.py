@@ -1,84 +1,128 @@
 import bisect
+import decimal
 import math
+from dataclasses import dataclass, asdict, field
 from decimal import Decimal
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Literal
 import numpy as np
 import pandas as pd
 from .constants import SEPARATION_FIB_LEVELS
 from .level_calculator import calculate_levels, Level, score_swing_fib_confluence
 
 
-class SparseTable:
+@dataclass
+class ReferenceSwing:
     """
-    Sparse Table for O(1) Range Minimum/Maximum Queries.
+    A detected reference swing with all computed properties.
 
-    Preprocessing: O(N log N) time and space
-    Query: O(1) time
-
-    Used to efficiently check if any value in a range is below/above a threshold.
+    Reference swings are high-low pairs used to calculate Fibonacci levels.
+    - Bull Reference: High BEFORE Low (downswing completed, now bullish)
+    - Bear Reference: Low BEFORE High (upswing completed, now bearish)
     """
+    # Required fields
+    high_price: float
+    high_bar_index: int
+    low_price: float
+    low_bar_index: int
+    size: float
+    direction: Literal["bull", "bear"]
 
-    def __init__(self, values: List[float], mode: str = 'min'):
-        """
-        Build sparse table from values.
+    # Level calculations (FIB levels)
+    level_0382: float = 0.0
+    level_2x: float = 0.0
 
-        Args:
-            values: List of values to build the table from
-            mode: 'min' for range minimum queries, 'max' for range maximum
-        """
-        self.n = len(values)
-        self.mode = mode
+    # Ranking (computed during filtering)
+    rank: int = 0
+    impulse: float = 0.0
+    size_rank: Optional[int] = None
+    impulse_rank: Optional[int] = None
+    combined_score: Optional[float] = None
 
-        if self.n == 0:
-            self.log_table = []
-            self.table = []
-            return
+    # Structural properties (computed during Phase 3 filtering)
+    structurally_separated: bool = False
+    containing_swing_id: Optional[str] = None
+    fib_confluence_score: float = 0.0
 
-        # Precompute log values
-        self.log_table = [0] * (self.n + 1)
-        for i in range(2, self.n + 1):
-            self.log_table[i] = self.log_table[i // 2] + 1
+    @property
+    def span(self) -> int:
+        """Number of bars in the swing."""
+        return abs(self.high_bar_index - self.low_bar_index) + 1
 
-        self.k = self.log_table[self.n] + 1 if self.n > 0 else 1
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for backward compatibility."""
+        result = asdict(self)
+        # Remove direction from dict output for backward compatibility
+        # (existing code doesn't expect direction field in the dict)
+        del result['direction']
+        return result
 
-        # Build sparse table
-        # table[j][i] = min/max of range [i, i + 2^j - 1]
-        self.table = [[float('inf') if mode == 'min' else float('-inf')] * self.n for _ in range(self.k)]
 
-        # Initialize with original values
-        for i in range(self.n):
-            self.table[0][i] = values[i]
+def _build_suffix_min(values: np.ndarray) -> np.ndarray:
+    """
+    Build array where suffix_min[i] = min(values[i:]).
 
-        # Build table
-        compare = min if mode == 'min' else max
-        for j in range(1, self.k):
-            length = 1 << j  # 2^j
-            for i in range(self.n - length + 1):
-                self.table[j][i] = compare(
-                    self.table[j - 1][i],
-                    self.table[j - 1][i + (1 << (j - 1))]
-                )
+    O(N) preprocessing, O(1) query for suffix minimum.
 
-    def query(self, left: int, right: int) -> Optional[float]:
-        """
-        Query min/max in range [left, right) (exclusive right).
+    Args:
+        values: 1D numpy array
 
-        Returns None if range is empty or invalid.
-        """
-        if left >= right or left < 0 or right > self.n:
-            return None
+    Returns:
+        Array where suffix_min[i] = min of all values from index i to end
+    """
+    if len(values) == 0:
+        return np.array([])
+    return np.minimum.accumulate(values[::-1])[::-1]
 
-        length = right - left
-        if length == 0:
-            return None
 
-        k = self.log_table[length]
-        compare = min if self.mode == 'min' else max
+def _build_suffix_max(values: np.ndarray) -> np.ndarray:
+    """
+    Build array where suffix_max[i] = max(values[i:]).
 
-        return compare(
-            self.table[k][left],
-            self.table[k][right - (1 << k)]
-        )
+    O(N) preprocessing, O(1) query for suffix maximum.
+
+    Args:
+        values: 1D numpy array
+
+    Returns:
+        Array where suffix_max[i] = max of all values from index i to end
+    """
+    if len(values) == 0:
+        return np.array([])
+    return np.maximum.accumulate(values[::-1])[::-1]
+
+
+def _range_min(values: np.ndarray, start: int, end: int) -> Optional[float]:
+    """
+    Get minimum value in range [start, end).
+
+    Args:
+        values: 1D numpy array
+        start: Start index (inclusive)
+        end: End index (exclusive)
+
+    Returns:
+        Minimum value in range, or None if range is invalid/empty
+    """
+    if start >= end or start < 0 or end > len(values):
+        return None
+    return float(np.min(values[start:end]))
+
+
+def _range_max(values: np.ndarray, start: int, end: int) -> Optional[float]:
+    """
+    Get maximum value in range [start, end).
+
+    Args:
+        values: 1D numpy array
+        start: Start index (inclusive)
+        end: End index (exclusive)
+
+    Returns:
+        Maximum value in range, or None if range is invalid/empty
+    """
+    if start >= end or start < 0 or end > len(values):
+        return None
+    return float(np.max(values[start:end]))
 
 def _detect_swing_points_vectorized(highs: np.ndarray, lows: np.ndarray, lookback: int) -> tuple:
     """
@@ -178,7 +222,7 @@ def filter_swings(references: List[Dict[str, Any]], direction: str, quantization
                 direction=direction,
                 quantization=quantization
             )
-        except Exception:
+        except (ValueError, decimal.InvalidOperation, TypeError):
             # Fallback if calculation fails (shouldn't happen with valid data)
             remaining_refs.pop(0)
             continue
@@ -471,8 +515,8 @@ def _apply_quota(references: List[Dict[str, Any]], quota: int) -> List[Dict[str,
 def _apply_protection_filter(references: List[Dict[str, Any]], direction: str,
                               highs: np.ndarray, lows: np.ndarray,
                               protection_tolerance: float,
-                              highs_max_table: Optional[SparseTable],
-                              lows_min_table: Optional[SparseTable]) -> List[Dict[str, Any]]:
+                              suffix_max_highs: Optional[np.ndarray],
+                              suffix_min_lows: Optional[np.ndarray]) -> List[Dict[str, Any]]:
     """
     Filter references where swing points are violated.
 
@@ -486,8 +530,8 @@ def _apply_protection_filter(references: List[Dict[str, Any]], direction: str,
         highs: Full numpy array of high prices
         lows: Full numpy array of low prices
         protection_tolerance: Fraction of swing size for violation threshold
-        highs_max_table: SparseTable for O(1) max queries on highs
-        lows_min_table: SparseTable for O(1) min queries on lows
+        suffix_max_highs: Precomputed suffix max array for highs (suffix_max[i] = max(highs[i:]))
+        suffix_min_lows: Precomputed suffix min array for lows (suffix_min[i] = min(lows[i:]))
 
     Returns:
         Filtered list of references that pass protection validation
@@ -507,30 +551,28 @@ def _apply_protection_filter(references: List[Dict[str, Any]], direction: str,
         if direction == 'bull':
             # Bull reference: High BEFORE Low (downswing)
             # Pre-formation: high not violated before low forms
-            if highs_max_table is not None:
-                max_between = highs_max_table.query(high_idx + 1, low_idx)
-                if max_between is not None and max_between > high_price:
-                    continue  # High was violated before low formed
+            max_between = _range_max(highs, high_idx + 1, low_idx)
+            if max_between is not None and max_between > high_price:
+                continue  # High was violated before low formed
 
             # Post-formation: swing low not violated after formation
-            if lows_min_table is not None:
+            if suffix_min_lows is not None and low_idx + 1 < len(suffix_min_lows):
                 violation_threshold = low_price - (protection_tolerance * size)
-                min_subsequent = lows_min_table.query(low_idx + 1, len(lows))
-                if min_subsequent is not None and min_subsequent < violation_threshold:
+                min_subsequent = suffix_min_lows[low_idx + 1]
+                if min_subsequent < violation_threshold:
                     continue  # Low was violated
         else:
             # Bear reference: Low BEFORE High (upswing)
             # Pre-formation: low not violated before high forms
-            if lows_min_table is not None:
-                min_between = lows_min_table.query(low_idx + 1, high_idx)
-                if min_between is not None and min_between < low_price:
-                    continue  # Low was violated before high formed
+            min_between = _range_min(lows, low_idx + 1, high_idx)
+            if min_between is not None and min_between < low_price:
+                continue  # Low was violated before high formed
 
             # Post-formation: swing high not violated after formation
-            if highs_max_table is not None:
+            if suffix_max_highs is not None and high_idx + 1 < len(suffix_max_highs):
                 violation_threshold = high_price + (protection_tolerance * size)
-                max_subsequent = highs_max_table.query(high_idx + 1, len(highs))
-                if max_subsequent is not None and max_subsequent > violation_threshold:
+                max_subsequent = suffix_max_highs[high_idx + 1]
+                if max_subsequent > violation_threshold:
                     continue  # High was violated
 
         filtered.append(ref)
@@ -869,10 +911,10 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
 
     swing_high_indices, swing_low_indices = _detect_swing_points_vectorized(highs, lows, lookback)
 
-    # Build sparse tables on ALL bar data for O(1) protection queries
+    # Build suffix arrays on ALL bar data for O(1) protection queries
     # These check if swing points were violated by subsequent price action
-    all_lows_min_table = SparseTable(lows.tolist(), mode='min') if protection_tolerance is not None else None
-    all_highs_max_table = SparseTable(highs.tolist(), mode='max') if protection_tolerance is not None else None
+    suffix_min_lows = _build_suffix_min(lows) if protection_tolerance is not None else None
+    suffix_max_highs = _build_suffix_max(highs) if protection_tolerance is not None else None
 
     # Calculate context metrics for size filtering
     candle_heights = highs - lows
@@ -890,13 +932,9 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     # Pre-compute sorted index/price arrays for O(log N) binary search lookups
     # Both arrays are already sorted by bar_index due to chronological detection order
     low_indices = [l["bar_index"] for l in swing_lows]
-    low_prices = [l["price"] for l in swing_lows]
+    low_prices = np.array([l["price"] for l in swing_lows])
     high_indices = [h["bar_index"] for h in swing_highs]
-    high_prices = [h["price"] for h in swing_highs]
-
-    # Build sparse tables for O(1) range min/max queries
-    low_min_table = SparseTable(low_prices, mode='min')
-    high_max_table = SparseTable(high_prices, mode='max')
+    high_prices = np.array([h["price"] for h in swing_highs])
 
     # Bull References: High BEFORE Low (Downswing)
     # O(H × D) where D = swings within max_pair_distance, with O(1) interval validation
@@ -928,14 +966,11 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             if not (level_0382 < current_price < level_2x):
                 continue
 
-            # EXPENSIVE CHECK: structural validity using O(1) RMQ
+            # EXPENSIVE CHECK: structural validity using numpy range query
             # The Low must be the lowest point between High and Low.
-            interval_start = start_j
-            interval_end = j  # Current position (exclusive)
-
             is_valid_structure = True
-            if interval_start < interval_end:
-                interval_min = low_min_table.query(interval_start, interval_end)
+            if start_j < j:
+                interval_min = _range_min(low_prices, start_j, j)
                 if interval_min is not None and interval_min < low_price:
                     is_valid_structure = False
 
@@ -947,18 +982,19 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             if not adjust_extrema:
                 # PRE-FORMATION PROTECTION: high not violated before low forms
                 # If a higher high appeared between high_idx and low_idx, this reference is invalid
-                if protection_tolerance is not None and all_highs_max_table is not None:
-                    max_between = all_highs_max_table.query(high_idx + 1, low_idx)
+                if protection_tolerance is not None:
+                    max_between = _range_max(highs, high_idx + 1, low_idx)
                     if max_between is not None and max_between > high_price:
                         continue  # High was violated before low formed
 
                 # POST-FORMATION PROTECTION: swing low not violated by subsequent price action
-                if protection_tolerance is not None and all_lows_min_table is not None:
+                if protection_tolerance is not None and suffix_min_lows is not None:
                     violation_threshold = low_price - (protection_tolerance * size)
-                    # Check all bars after the swing low
-                    min_subsequent_low = all_lows_min_table.query(low_idx + 1, len(lows))
-                    if min_subsequent_low is not None and min_subsequent_low < violation_threshold:
-                        continue  # Low was violated, skip this reference
+                    # Check all bars after the swing low (O(1) suffix query)
+                    if low_idx + 1 < len(suffix_min_lows):
+                        min_subsequent_low = suffix_min_lows[low_idx + 1]
+                        if min_subsequent_low < violation_threshold:
+                            continue  # Low was violated, skip this reference
 
             bull_references.append({
                 "high_price": high_price,
@@ -1001,14 +1037,11 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             if not (level_2x < current_price < level_0382):
                 continue
 
-            # EXPENSIVE CHECK: structural validity using O(1) RMQ
+            # EXPENSIVE CHECK: structural validity using numpy range query
             # The High must be the highest point between Low and High.
-            interval_start = start_j
-            interval_end = j  # Current position (exclusive)
-
             is_valid_structure = True
-            if interval_start < interval_end:
-                interval_max = high_max_table.query(interval_start, interval_end)
+            if start_j < j:
+                interval_max = _range_max(high_prices, start_j, j)
                 if interval_max is not None and interval_max > high_price:
                     is_valid_structure = False
 
@@ -1020,18 +1053,19 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             if not adjust_extrema:
                 # PRE-FORMATION PROTECTION: low not violated before high forms
                 # If a lower low appeared between low_idx and high_idx, this reference is invalid
-                if protection_tolerance is not None and all_lows_min_table is not None:
-                    min_between = all_lows_min_table.query(low_idx + 1, high_idx)
+                if protection_tolerance is not None:
+                    min_between = _range_min(lows, low_idx + 1, high_idx)
                     if min_between is not None and min_between < low_price:
                         continue  # Low was violated before high formed
 
                 # POST-FORMATION PROTECTION: swing high not violated by subsequent price action
-                if protection_tolerance is not None and all_highs_max_table is not None:
+                if protection_tolerance is not None and suffix_max_highs is not None:
                     violation_threshold = high_price + (protection_tolerance * size)
-                    # Check all bars after the swing high
-                    max_subsequent_high = all_highs_max_table.query(high_idx + 1, len(highs))
-                    if max_subsequent_high is not None and max_subsequent_high > violation_threshold:
-                        continue  # High was violated, skip this reference
+                    # Check all bars after the swing high (O(1) suffix query)
+                    if high_idx + 1 < len(suffix_max_highs):
+                        max_subsequent_high = suffix_max_highs[high_idx + 1]
+                        if max_subsequent_high > violation_threshold:
+                            continue  # High was violated, skip this reference
 
             bear_references.append({
                 "high_price": high_price,
@@ -1061,11 +1095,11 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     if adjust_extrema and protection_tolerance is not None:
         bull_references = _apply_protection_filter(
             bull_references, 'bull', highs, lows,
-            protection_tolerance, all_highs_max_table, all_lows_min_table
+            protection_tolerance, suffix_max_highs, suffix_min_lows
         )
         bear_references = _apply_protection_filter(
             bear_references, 'bear', highs, lows,
-            protection_tolerance, all_highs_max_table, all_lows_min_table
+            protection_tolerance, suffix_max_highs, suffix_min_lows
         )
 
     # 5. Apply Size Filter (after protection, before prominence)
