@@ -70,6 +70,23 @@ class AnnotationResponse(BaseModel):
     window_id: str
 
 
+def _annotation_to_response(ann: SwingAnnotation) -> AnnotationResponse:
+    """Convert domain model to API response."""
+    return AnnotationResponse(
+        annotation_id=ann.annotation_id,
+        scale=ann.scale,
+        direction=ann.direction,
+        start_bar_index=ann.start_bar_index,
+        end_bar_index=ann.end_bar_index,
+        start_source_index=ann.start_source_index,
+        end_source_index=ann.end_source_index,
+        start_price=str(ann.start_price),
+        end_price=str(ann.end_price),
+        created_at=ann.created_at.isoformat(),
+        window_id=ann.window_id
+    )
+
+
 class SessionResponse(BaseModel):
     """Session state returned by the API."""
     session_id: str
@@ -505,19 +522,7 @@ async def create_annotation(request: AnnotationCreate):
     # Start background precomputation early (after first annotation)
     start_precomputation_if_ready(s)
 
-    return AnnotationResponse(
-        annotation_id=annotation.annotation_id,
-        scale=annotation.scale,
-        direction=annotation.direction,
-        start_bar_index=annotation.start_bar_index,
-        end_bar_index=annotation.end_bar_index,
-        start_source_index=annotation.start_source_index,
-        end_source_index=annotation.end_source_index,
-        start_price=str(annotation.start_price),
-        end_price=str(annotation.end_price),
-        created_at=annotation.created_at.isoformat(),
-        window_id=annotation.window_id
-    )
+    return _annotation_to_response(annotation)
 
 
 @app.get("/api/annotations", response_model=List[AnnotationResponse])
@@ -527,22 +532,7 @@ async def list_annotations():
 
     annotations = s.storage.get_annotations(s.session.session_id, scale=s.scale)
 
-    return [
-        AnnotationResponse(
-            annotation_id=ann.annotation_id,
-            scale=ann.scale,
-            direction=ann.direction,
-            start_bar_index=ann.start_bar_index,
-            end_bar_index=ann.end_bar_index,
-            start_source_index=ann.start_source_index,
-            end_source_index=ann.end_source_index,
-            start_price=str(ann.start_price),
-            end_price=str(ann.end_price),
-            created_at=ann.created_at.isoformat(),
-            window_id=ann.window_id
-        )
-        for ann in annotations
-    ]
+    return [_annotation_to_response(ann) for ann in annotations]
 
 
 @app.delete("/api/annotations/{annotation_id}")
@@ -812,22 +802,7 @@ async def get_reference_annotations():
 
     annotations = s.cascade_controller.get_reference_annotations()
 
-    return [
-        AnnotationResponse(
-            annotation_id=ann.annotation_id,
-            scale=ann.scale,
-            direction=ann.direction,
-            start_bar_index=ann.start_bar_index,
-            end_bar_index=ann.end_bar_index,
-            start_source_index=ann.start_source_index,
-            end_source_index=ann.end_source_index,
-            start_price=str(ann.start_price),
-            end_price=str(ann.end_price),
-            created_at=ann.created_at.isoformat(),
-            window_id=ann.window_id
-        )
-        for ann in annotations
-    ]
+    return [_annotation_to_response(ann) for ann in annotations]
 
 
 @app.post("/api/compare", response_model=ComparisonRunResponse)

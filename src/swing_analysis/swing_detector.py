@@ -4,15 +4,8 @@ from decimal import Decimal
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 import pandas as pd
+from .constants import SEPARATION_FIB_LEVELS
 from .level_calculator import calculate_levels, Level, score_swing_fib_confluence
-
-
-# Extended FIB grid for structural separation (symmetric)
-# Standard levels have asymmetric gaps; extended grid fills voids where valid reversals occur
-SEPARATION_FIB_LEVELS = [
-    0.236, 0.382, 0.5, 0.618, 0.786, 1.0,
-    1.236, 1.382, 1.5, 1.618, 1.786, 2.0
-]
 
 
 class SparseTable:

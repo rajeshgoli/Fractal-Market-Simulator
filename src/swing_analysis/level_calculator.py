@@ -2,18 +2,14 @@ from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 
+from .constants import CONFLUENCE_FIB_RATIOS
+
+
 @dataclass
 class Level:
     multiplier: Decimal
     price: Decimal
     level_type: str
-
-
-# Extended FIB ratios for confluence scoring (includes standard + extensions)
-CONFLUENCE_FIB_RATIOS = [
-    0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0,
-    1.236, 1.382, 1.5, 1.618, 1.786, 2.0
-]
 
 def calculate_levels(
     high: Decimal,
