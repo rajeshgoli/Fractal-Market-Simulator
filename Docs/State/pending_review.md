@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-16
 
@@ -10,6 +10,7 @@
 
 - **#78**: Discretization overlay in Ground Truth Annotator
 - **#79**: Discretizer validation on sample data
+- **#81**: Consolidate annotation sessions into ground_truth.json
 
 ---
 
