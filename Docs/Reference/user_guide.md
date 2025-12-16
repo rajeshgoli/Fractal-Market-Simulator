@@ -409,3 +409,92 @@ Alternatively, click **"← Back to Annotation"** to return to the current sessi
 | `/api/review/summary` | GET | Get final review summary |
 | `/api/review/export` | GET | Export feedback (JSON or CSV) |
 
+## Discretization View
+
+The Discretization View visualizes structural events (level crossings, completions, invalidations) overlaid on the OHLC chart. Use it to verify that discretization logic corresponds to visible price action.
+
+### Accessing the View
+
+Navigate to http://127.0.0.1:8000/discretization while the annotator is running.
+
+### Running Discretization
+
+1. Click **"Run Discretization"** to process the current window
+2. The system detects swings and generates structural events
+3. Events appear as markers on the chart
+
+### Event Markers
+
+| Event Type | Color | Shape | Meaning |
+|------------|-------|-------|---------|
+| Level Cross (Up) | Blue | ▲ | Price crossed a Fib level upward |
+| Level Cross (Down) | Orange | ▼ | Price crossed a Fib level downward |
+| Completion | Green | ★ | Swing reached 2x extension |
+| Invalidation | Red | ✕ | Swing fell below threshold |
+| Swing Formed | Purple | ● | New swing detected |
+
+### Shock Visualization
+
+Impulsive moves get enhanced markers:
+- **range_multiple > 2.0**: Larger marker (1.5x size)
+- **range_multiple > 3.0**: Red highlight
+- **levels_jumped >= 3**: Extra-large marker
+
+### Filtering Events
+
+Use the sidebar filters to focus on specific events:
+
+| Filter | Description |
+|--------|-------------|
+| Scale | Show only XL, L, M, or S events |
+| Event Type | Show only level crosses, completions, etc. |
+| Shock Threshold | Minimum `range_multiple` to display |
+| Min Levels Jumped | Filter for multi-level jumps |
+| Show gaps only | Only display gap events |
+
+### Viewing Swing Fib Levels
+
+Click any swing in the **"Active Swings"** sidebar to overlay its Fibonacci levels on the chart:
+- Purple lines at defended pivot (0) and origin (1)
+- Blue lines in retracement zone (0.382, 0.5, 0.618)
+- Orange lines in extension zone (1.382, 1.5, 1.618)
+- Green lines at completion zone (2.0+)
+
+### Tooltip Details
+
+Hover over any event marker to see:
+- Bar index and timestamp
+- Level crossed (for level cross events)
+- **Effort annotation**: Dwell bars, test count
+- **Shock annotation**: Levels jumped, range multiple, gap flag
+- **Parent context**: Larger-scale position (scale, band, ratio)
+
+### Statistics Panel
+
+The sidebar shows real-time counts:
+- Level Crosses
+- Completions
+- Invalidations
+- Shock Events (range_multiple > 2.0)
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/discretization` | GET | Serve discretization UI |
+| `/api/discretization/state` | GET | Check if discretization has been run |
+| `/api/discretization/run` | POST | Run discretization on current window |
+| `/api/discretization/events` | GET | Get all events (with optional filters) |
+| `/api/discretization/swings` | GET | Get all detected swings |
+| `/api/discretization/levels` | GET | Get Fib levels for a specific swing |
+
+### What to Assess
+
+When viewing the discretization overlay, consider:
+- **Do completions/invalidations correspond to obvious structural moves?**
+- **Are level crossings logged where you'd expect them?**
+- **Do shock events (larger markers) match impulsive price action?**
+- **Is the narrative coherent, or mostly noise?**
+
+This assessment informs whether to proceed to hypothesis validation or refine swing detection further.
+
