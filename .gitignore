@@ -84,3 +84,6 @@ validation_results/
 
 # Local-only files
 .claude/why.md
+
+# Ground truth annotator - in-progress sessions (ephemeral)
+ground_truth/sessions/

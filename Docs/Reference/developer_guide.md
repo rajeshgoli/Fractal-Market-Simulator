@@ -1021,10 +1021,57 @@ Both `AnnotationSession` and `ReviewSession` use `REVIEW_SCHEMA_VERSION` for bac
 
 **Purpose**: JSON-backed persistence for annotation sessions.
 
+**Directory Structure**:
+
+```
+ground_truth/
+├── ground_truth.json              # All completed sessions (version-controlled)
+└── sessions/                      # In-progress only (ephemeral, gitignored)
+    └── inprogress-{timestamp}.json
+```
+
+**Session Lifecycle**:
+
+1. **Session start** → Create `ground_truth/sessions/inprogress-{timestamp}.json`
+2. **During session** → Update working file as normal
+3. **Finalize "keep"** → Append session+review to `ground_truth.json`, delete working files
+4. **Finalize "discard"** → Delete working files
+
+**Ground Truth Schema**:
+
+```json
+{
+  "metadata": {
+    "schema_version": 1,
+    "created_at": "...",
+    "last_updated": "..."
+  },
+  "sessions": [
+    {
+      "finalized_at": "...",
+      "original_filename": "2025-dec-15-1225-ver1",
+      "session": { ... AnnotationSession dict ... },
+      "review": { ... ReviewSession dict ... }
+    }
+  ]
+}
+```
+
+**Single-User Assumption**:
+
+This storage layer is designed for single-user operation. Concurrent users would cause:
+- Race conditions on `ground_truth.json` appends
+- Potential data loss from concurrent writes
+
+If multi-user becomes a requirement, the storage layer would need:
+- File locking on writes, or
+- SQLite/database backend, or
+- Per-user ground truth files with merge strategy
+
 **Key Class**: `AnnotationStorage`
 
 ```python
-storage = AnnotationStorage(storage_dir="annotation_sessions")
+storage = AnnotationStorage()  # Uses ground_truth/sessions/ by default
 
 # Create session
 session = storage.create_session(
@@ -1042,15 +1089,17 @@ annotations = storage.get_annotations(session.session_id, scale="S")
 # Delete annotation
 storage.delete_annotation(session.session_id, annotation_id)
 
-# Export
-csv_string = storage.export_session(session.session_id, format="csv")
-json_string = storage.export_session(session.session_id, format="json")
+# Finalize session (appends to ground_truth.json, deletes working files)
+session_filename, path_id = storage.finalize_session(session.session_id, status="keep")
+
+# Clean up stale sessions (older than 3 hours)
+deleted_count = storage.cleanup_stale_sessions()
 ```
 
 **Key Class**: `ReviewStorage`
 
 ```python
-review_storage = ReviewStorage(storage_dir="annotation_sessions")
+review_storage = ReviewStorage()  # Uses ground_truth/sessions/ by default
 
 # Create review session for an annotation session
 review = review_storage.create_review(session_id="abc123")
@@ -1070,12 +1119,9 @@ review.advance_phase()  # matches -> fp_sample -> fn_feedback -> complete
 # Get review
 loaded = review_storage.get_review(session_id="abc123")
 
-# Export
-json_string = review_storage.export_review(session_id, format="json")
-csv_string = review_storage.export_review(session_id, format="csv")
+# Finalize review (deletes working file; data already in ground_truth.json)
+review_storage.finalize_review(session_id, status="keep", new_path_id=path_id)
 ```
-
-**File Naming**: Reviews are stored as `{session_id}_review.json` in the same directory as annotation sessions.
 
 #### `src/ground_truth_annotator/api.py`
 

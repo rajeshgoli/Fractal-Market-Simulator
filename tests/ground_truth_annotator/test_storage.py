@@ -177,7 +177,10 @@ class TestAnnotationStorageCollision:
     def setup_method(self):
         """Create temp directory for each test."""
         self.temp_dir = tempfile.mkdtemp()
-        self.storage = AnnotationStorage(self.temp_dir)
+        self.storage = AnnotationStorage(
+            storage_dir=self.temp_dir,
+            ground_truth_dir=self.temp_dir
+        )
 
     def teardown_method(self):
         """Clean up temp directory."""
@@ -229,8 +232,8 @@ class TestAnnotationStorageCollision:
         collision = self.storage._find_collision_number("2025-dec-15-0830", "test")
         assert collision == 0  # No collision for labeled file
 
-    def test_finalize_creates_schema_versioned_file(self):
-        """Test that finalization creates properly schema-versioned filename."""
+    def test_finalize_appends_to_ground_truth(self):
+        """Test that finalization appends session to ground_truth.json."""
         session = self.storage.create_session(
             data_file="test.csv",
             resolution="5m",
@@ -242,7 +245,24 @@ class TestAnnotationStorageCollision:
             status="keep"
         )
 
+        # Verify filename format
         assert f"-ver{REVIEW_SCHEMA_VERSION}.json" in filename
         assert f"-ver{REVIEW_SCHEMA_VERSION}" in path_id
         assert "-try" not in filename  # No collision
-        assert (Path(self.temp_dir) / filename).exists()
+
+        # Verify working file is deleted
+        working_files = list(Path(self.temp_dir).glob("inprogress-*.json"))
+        assert len(working_files) == 0
+
+        # Verify data is appended to ground_truth.json
+        ground_truth_file = Path(self.temp_dir) / "ground_truth.json"
+        assert ground_truth_file.exists()
+
+        import json
+        with open(ground_truth_file, 'r') as f:
+            ground_truth = json.load(f)
+
+        assert "sessions" in ground_truth
+        assert len(ground_truth["sessions"]) == 1
+        assert ground_truth["sessions"][0]["original_filename"] == path_id
+        assert ground_truth["sessions"][0]["session"]["session_id"] == session.session_id

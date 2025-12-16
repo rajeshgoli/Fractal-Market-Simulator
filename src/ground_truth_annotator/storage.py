@@ -3,6 +3,16 @@ Annotation Storage Layer
 
 JSON-backed persistence for annotation sessions and swing annotations.
 Handles file I/O, session management, and data export.
+
+## Single-User Assumption
+
+This storage layer is designed for single-user operation. Concurrent users would
+cause race conditions on ground_truth.json writes and potential data loss.
+
+If multi-user becomes a requirement, the storage layer would need:
+- File locking on ground_truth.json appends, or
+- SQLite/database backend, or
+- Per-user ground truth files with merge strategy
 """
 
 import json
@@ -11,13 +21,24 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .csv_utils import escape_csv_field
 from .models import (
     AnnotationSession, SwingAnnotation, ReviewSession, SwingFeedback,
     REVIEW_SCHEMA_VERSION
 )
+
+# Ground truth directory structure
+GROUND_TRUTH_DIR = Path("ground_truth")
+GROUND_TRUTH_FILE = GROUND_TRUTH_DIR / "ground_truth.json"
+GROUND_TRUTH_SESSIONS_DIR = GROUND_TRUTH_DIR / "sessions"
+
+# Schema version for ground_truth.json
+GROUND_TRUTH_SCHEMA_VERSION = 1
+
+# Maximum age for stale sessions (3 hours in seconds)
+STALE_SESSION_MAX_AGE_HOURS = 3
 
 
 def get_local_time(dt: datetime) -> datetime:
@@ -165,28 +186,48 @@ class AnnotationStorage:
     """
     JSON-backed annotation persistence.
 
-    Stores each session as a separate JSON file for simplicity and
-    easy inspection. Supports CRUD operations on annotations and
-    session metadata management.
+    Stores in-progress sessions as separate JSON files in ground_truth/sessions/.
+    On finalize "keep", session+review data is appended to ground_truth/ground_truth.json
+    and the working files are deleted.
 
-    New sessions are created with 'inprogress-' prefix and renamed
-    to final timestamp-based name when finalized.
+    ## Single-User Assumption
+
+    This storage layer is designed for single-user operation. Concurrent users
+    would cause race conditions on ground_truth.json writes. See module docstring
+    for multi-user alternatives.
+
+    ## Lifecycle
+
+    1. Session start → Create ground_truth/sessions/inprogress-{timestamp}.json
+    2. During session → Update working file as normal
+    3. Finalize "keep" → Append to ground_truth.json, delete working files
+    4. Finalize "discard" → Delete working files
     """
 
-    DEFAULT_STORAGE_DIR = "annotation_sessions"
+    DEFAULT_STORAGE_DIR = str(GROUND_TRUTH_SESSIONS_DIR)
 
-    def __init__(self, storage_dir: Optional[str] = None):
+    def __init__(
+        self,
+        storage_dir: Optional[str] = None,
+        ground_truth_dir: Optional[str] = None
+    ):
         """
         Initialize storage with a directory for session files.
 
         Args:
             storage_dir: Directory path for storing session files.
-                        Defaults to 'annotation_sessions' in current directory.
+                        Defaults to 'ground_truth/sessions' in current directory.
+            ground_truth_dir: Directory path for ground_truth.json.
+                             Defaults to 'ground_truth' in current directory.
         """
         self._storage_dir = Path(storage_dir or self.DEFAULT_STORAGE_DIR)
         self._storage_dir.mkdir(parents=True, exist_ok=True)
         # Track session_id -> current filename mapping for active sessions
         self._session_paths: dict = {}
+        # Ground truth directory (configurable for testing)
+        self._ground_truth_dir = Path(ground_truth_dir) if ground_truth_dir else GROUND_TRUTH_DIR
+        self._ground_truth_file = self._ground_truth_dir / "ground_truth.json"
+        self._ground_truth_dir.mkdir(parents=True, exist_ok=True)
 
     def _session_path(self, session_id: str) -> Path:
         """Get the file path for a session."""
@@ -449,21 +490,19 @@ class AnnotationStorage:
         label: Optional[str] = None
     ) -> Tuple[Optional[str], Optional[str]]:
         """
-        Finalize a session: keep (rename to schema-versioned timestamp) or discard (delete).
+        Finalize a session: keep (append to ground_truth.json) or discard (delete).
 
-        - keep: Renames to 'yyyy-mmm-dd-HHmm-ver{schema}[-label][-try{N}].json' (local time)
+        - keep: Appends session+review to ground_truth.json, deletes working files
         - discard: Deletes the session file entirely
-
-        Version reflects schema version. Collision avoidance uses -try<N> suffix (rare).
 
         Args:
             session_id: UUID of the session
-            status: "keep" (rename to final name) or "discard" (delete file)
-            label: Optional user-provided label (only used for "keep")
+            status: "keep" (append to ground_truth) or "discard" (delete file)
+            label: Optional user-provided label (used in original_filename for reference)
 
         Returns:
-            Tuple of (new_filename, new_path_id) for "keep", or (None, None) for "discard"
-            Note: The session object still contains original session_id
+            Tuple of (original_filename, path_id) for "keep", or (None, None) for "discard"
+            Note: Working files are deleted; data is now in ground_truth.json
 
         Raises:
             ValueError: If session not found or invalid status
@@ -485,23 +524,35 @@ class AnnotationStorage:
             self._session_paths.pop(session_id, None)
             return None, None
 
-        # status == "keep": rename to schema-versioned timestamp filename
+        # status == "keep": append to ground_truth.json, then delete working files
+
+        # Generate the original_filename for reference (same format as before)
         timestamp_base = generate_timestamp_base(session.created_at)
         collision_number = self._find_collision_number(timestamp_base, label)
-        new_filename = generate_final_filename(session.created_at, label, collision_number)
-        new_path = self._storage_dir / new_filename
+        original_filename = generate_final_filename(session.created_at, label, collision_number)
+        path_id = original_filename.rsplit('.json', 1)[0]
 
-        # Rename file
+        # Read review data if it exists
+        review_data = None
+        review_path = self._storage_dir / f"{session_id}_review.json"
+        if review_path.exists():
+            try:
+                with open(review_path, 'r') as f:
+                    review_data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass  # If we can't read review, proceed without it
+
+        # Append to ground_truth.json
+        self._append_to_ground_truth(session, path_id, review_data)
+
+        # Delete the session working file
         if old_path.exists():
-            old_path.rename(new_path)
+            old_path.unlink()
 
-        # Update tracking
-        self._session_paths[session_id] = new_filename
+        # Clean up tracking
+        self._session_paths.pop(session_id, None)
 
-        # Derive the path_id (filename without .json)
-        new_path_id = new_filename.rsplit('.json', 1)[0]
-
-        return new_filename, new_path_id
+        return original_filename, path_id
 
     def export_session(
         self,
@@ -557,6 +608,100 @@ class AnnotationStorage:
         path = self._session_path(session.session_id)
         with open(path, 'w') as f:
             json.dump(session.to_dict(), f, indent=2)
+
+    def _append_to_ground_truth(
+        self,
+        session: AnnotationSession,
+        original_filename: str,
+        review_data: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Append a finalized session to the ground truth file.
+
+        Creates the ground_truth.json file if it doesn't exist.
+        Appends the session and optional review data as a new entry.
+
+        Args:
+            session: The finalized AnnotationSession
+            original_filename: The session's filename (without .json extension)
+            review_data: Optional review session dict to include
+        """
+        # Read existing ground truth or create new structure
+        if self._ground_truth_file.exists():
+            with open(self._ground_truth_file, 'r') as f:
+                ground_truth = json.load(f)
+        else:
+            ground_truth = {
+                "metadata": {
+                    "schema_version": GROUND_TRUTH_SCHEMA_VERSION,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "last_updated": datetime.now(timezone.utc).isoformat()
+                },
+                "sessions": []
+            }
+
+        # Create the session entry
+        entry = {
+            "finalized_at": datetime.now(timezone.utc).isoformat(),
+            "original_filename": original_filename,
+            "session": session.to_dict()
+        }
+
+        # Include review data if available
+        if review_data is not None:
+            entry["review"] = review_data
+
+        # Append and update metadata
+        ground_truth["sessions"].append(entry)
+        ground_truth["metadata"]["last_updated"] = datetime.now(timezone.utc).isoformat()
+
+        # Write back
+        with open(self._ground_truth_file, 'w') as f:
+            json.dump(ground_truth, f, indent=2)
+
+    def cleanup_stale_sessions(self, max_age_hours: int = STALE_SESSION_MAX_AGE_HOURS) -> int:
+        """
+        Delete in-progress sessions older than max_age_hours.
+
+        Stale sessions are working files that were never finalized,
+        likely from crashed or abandoned annotation sessions.
+
+        Args:
+            max_age_hours: Maximum age in hours before a session is considered stale
+
+        Returns:
+            Number of stale sessions deleted
+        """
+        deleted_count = 0
+        max_age_seconds = max_age_hours * 3600
+        now = time.time()
+
+        for path in self._storage_dir.glob("inprogress-*.json"):
+            try:
+                # Check file modification time
+                mtime = path.stat().st_mtime
+                age_seconds = now - mtime
+
+                if age_seconds > max_age_seconds:
+                    # Also delete associated review file if exists
+                    # First, read the session to get its ID
+                    try:
+                        with open(path, 'r') as f:
+                            data = json.load(f)
+                            session_id = data.get('session_id')
+                            if session_id:
+                                review_path = self._storage_dir / f"{session_id}_review.json"
+                                if review_path.exists():
+                                    review_path.unlink()
+                    except (json.JSONDecodeError, KeyError):
+                        pass  # Can't read session ID, just delete the file
+
+                    path.unlink()
+                    deleted_count += 1
+            except OSError:
+                continue  # Skip files we can't access
+
+        return deleted_count
 
 
 class ReviewStorage:
@@ -650,34 +795,35 @@ class ReviewStorage:
         new_path_id: Optional[str] = None
     ) -> Optional[str]:
         """
-        Finalize review file: keep (rename) or discard (delete).
+        Finalize review file: delete working file.
+
+        Note: On "keep", the review data is already appended to ground_truth.json
+        by AnnotationStorage.finalize_session(). This method just cleans up the
+        working file.
 
         Args:
             session_id: Original UUID of the annotation session
-            status: "keep" (rename to match session) or "discard" (delete)
-            new_path_id: New path ID from finalized session (required for "keep")
+            status: "keep" or "discard" (both delete the working file)
+            new_path_id: Path ID for reference in returned filename (optional)
 
         Returns:
-            New review filename for "keep", None for "discard" or if no review existed
+            Reference filename for "keep" (e.g., "2025-dec-15-1225-ver4_review.json"),
+            None for "discard" or if no review existed
         """
         old_path = self._review_path(session_id)
         if not old_path.exists():
             return None
 
+        # Delete the working file (data already in ground_truth.json for "keep")
+        old_path.unlink()
+
         if status == "discard":
-            # Delete the review file
-            old_path.unlink()
             return None
 
-        # status == "keep": rename to match session filename
-        if new_path_id is None:
-            raise ValueError("new_path_id required for 'keep' status")
-
-        new_filename = f"{new_path_id}_review.json"
-        new_path = self._storage_dir / new_filename
-
-        old_path.rename(new_path)
-        return new_filename
+        # Return reference filename for API compatibility
+        if new_path_id is not None:
+            return f"{new_path_id}_review.json"
+        return None
 
     def export_review(self, session_id: str, format: str = "json") -> str:
         """
