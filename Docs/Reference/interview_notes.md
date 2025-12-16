@@ -4,6 +4,76 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 15, 2025 - FIB-Based Structural Separation for Extrema Selection
+
+**Context:** User completed 5 ver4 sessions (94 FP reviews). Reviewing patterns in FP data.
+
+### Ver4 Session Analysis
+
+| Category | Count | % |
+|----------|-------|---|
+| valid_missed | 36 | 38% |
+| better_high | 27 | 29% |
+| too_small | 18 | 19% |
+| better_low | 8 | 9% |
+| better_both | 5 | 5% |
+
+**Key finding:** 42% of FPs are extrema selection problems (better_high/low/both). The algo finds swings in the right area but anchors to sub-optimal endpoints.
+
+### User Observations
+
+**1. "Too small" is hard to evaluate visually:**
+> "If you give me a one or two candle swing, I can't quite say whether the high was before the low always. And I can't say if an important FIB level is near it."
+
+User suggests these may be better evaluated by **FIB reaction testing** — do later price movements react at the swing's projected FIB levels (1.618, 2.0)?
+
+**2. Extrema selection lacks structural significance:**
+
+The algo picks extrema that satisfy lookback rules but aren't "structurally defended":
+
+> "It picks a random lower high in a series of lower highs — why that one? There's no low differentiating it from the highest high."
+
+> "For lows, it picks something that's not the lowest. Mechanically the 0.1 hasn't been violated, but imagine placing a stop below it — it would be casually violated because it's not breaking the structural low."
+
+**The stop placement heuristic:** A valid swing low is one you'd defend with a stop. If price casually violates it on the way to the real low, it wasn't structural.
+
+### Circularity Problem with FIB Reaction Eval
+
+User initially proposed using FIB reactions to validate swings, then recognized the trap:
+
+> "If we use FIB reactions — then it may become circular reasoning (we get the FIB reactions because we picked the swings that got the FIB reactions)."
+
+**Constraint:** Must fix extrema selection using only information available *at the time of the swing*, not future price behavior.
+
+### Proposed Solution: FIB-Based Structural Separation
+
+Use FIB levels from **larger swings** (already established, no lookahead) to define "meaningful separation":
+
+```
+Given: High A exists at scale S
+To register High B at scale S:
+  1. There must be a Low L between A and B
+  2. L must be ≥1 FIB level away from High A (measured on scale M+ grid)
+  3. High B and L must be ≥1 FIB level apart (on any larger scale grid)
+
+For XL swings (no larger reference):
+  → Fall back to N bars or X% move (volatility-adjusted)
+```
+
+**Why this works:**
+- **No lookahead** — Larger swings are historical (already confirmed)
+- **Market-structure-aware** — "Meaningful separation" = FIB unit, not arbitrary price/bars
+- **Scale-coherent** — Small swings must register on larger FIB grids to matter
+- **Self-consistent** — Uses existing multi-scale architecture (S→M→L→XL)
+
+**Key insight:** Separation measured in *FIB units* is structurally meaningful. A 10-point move is noise or signal depending on where it sits on the larger swing's grid.
+
+### Handoff
+
+Question added to `Docs/Comms/questions.md` for Architect: Is this implementable given current SwingDetector and ScaleCalibrator architecture?
+
+---
+
 ## December 15, 2025 - FP Category Feedback (Batch Collection)
 
 **Context:** User testing new version with too_small and prominence filters. Collecting additional FP category feedback for batch implementation.

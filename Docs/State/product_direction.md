@@ -7,27 +7,59 @@
 
 ## Current Objective
 
-**Improve endpoint selection (Fib confluence + best extrema), then validate with FN review.**
+**Implement FIB-based structural separation for extrema selection.**
 
-Ver3 sessions (5 completed) show prior filters working — FP volume is manageable. Remaining FPs are **75% wrong endpoint selection** (better_high/low/both). Core detection is sound; refinement needed on *which* high/low to pick.
+Ver4 sessions (5 completed, 94 FPs reviewed) confirm core detection is sound. **42% of FPs are extrema selection problems** (better_high/low/both). The algo finds swings but anchors to sub-optimal endpoints that aren't structurally significant.
 
 ---
 
-## P0: Endpoint Selection Improvement
+## P0: FIB-Based Structural Separation
 
-**Problem:** 75% of FPs are swings where algorithm picked a suboptimal high or low. The swing is real, but there's a "better" endpoint nearby.
+**Problem:** Algo picks extrema satisfying lookback rules but lacking structural significance:
+- "Random lower high in a series of lower highs" — no qualifying low separates it from highest high
+- "Random low near bottom" — not the structural low a stop would defend
 
-**Proposed Approach (confirmed with user):**
+**Root cause:** Separation between consecutive same-type swings isn't enforced in market-structure terms.
 
-### A. Fib Confluence (Primary Signal)
-Prefer highs/lows that land near fib levels of a larger swing. These are structurally significant — price respects them because participants watch them.
+### Proposed Solution
 
-**Open question:** Which larger swing to reference? Immediate parent, or multiple ancestors? Could score by "fib confluence count."
+Use FIB levels from **larger-scale swings** (already established, no lookahead) to define "meaningful separation":
 
-### B. Best Extrema in Vicinity (Tie Breaker)
-If multiple candidates, pick the highest high / lowest low in the swing zone. Simple rule that catches many "better_high/better_low" errors.
+```
+Given: High A exists at scale S
+To register High B at scale S:
+  1. There must be a Low L between A and B
+  2. L must be ≥1 FIB level away from High A (measured on scale M+ grid)
+  3. High B and L must be ≥1 FIB level apart (on any larger scale grid)
 
-**Definition:** "Vicinity" = within the swing's bar range, or X% of price range.
+For XL swings (no larger reference):
+  → Fall back to N bars or X% move (volatility-adjusted)
+```
+
+### Why This Works
+
+| Property | How Achieved |
+|----------|--------------|
+| No lookahead | Larger swings are historical — already confirmed |
+| Market-structure-aware | "Meaningful separation" = FIB unit, not arbitrary price/bars |
+| Scale-coherent | Small swings must register on larger FIB grids to matter |
+| Self-consistent | Uses existing multi-scale architecture (S→M→L→XL) |
+
+**Key insight:** Separation measured in *FIB units* is structurally meaningful. A 10-point move is noise or signal depending on where it sits on the larger swing's grid.
+
+### Status
+
+**Awaiting Architect feasibility assessment.** See `Docs/Comms/questions.md` Q-2025-12-15-2.
+
+---
+
+## P1 (Superseded): Previous Endpoint Selection Approach
+
+Previous approach focused on:
+- **Fib Confluence:** Prefer highs/lows near fib levels of larger swings
+- **Best Extrema in Vicinity:** Pick highest high / lowest low as tiebreaker
+
+These are still valid but the new FIB-based structural separation addresses the root cause more directly — enforcing that consecutive same-type swings must be separated by structurally significant moves.
 
 ---
 
