@@ -676,6 +676,54 @@ class ReferenceSwing:
 
 Note: Currently `detect_swings()` returns dictionaries. The dataclass is available for future migration to typed swing objects.
 
+#### `src/swing_analysis/reference_frame.py`
+
+**Purpose**: Oriented coordinate system for bull/bear swings, providing unified ratio calculations.
+
+**Key Class**: `ReferenceFrame`
+
+```python
+from src.swing_analysis.reference_frame import ReferenceFrame
+from decimal import Decimal
+
+# Create directly
+bull_frame = ReferenceFrame(
+    anchor0=Decimal("5000"),  # Defended pivot (low for bull)
+    anchor1=Decimal("5100"),  # Origin extremum (high for bull)
+    direction="BULL"
+)
+
+# Or create from a ReferenceSwing
+frame = ReferenceFrame.from_swing(swing)
+
+# Convert price to ratio
+ratio = frame.ratio(Decimal("5050"))  # Returns 0.5
+
+# Convert ratio to price
+price = frame.price(Decimal("0.618"))  # Returns 5061.8
+```
+
+**Ratio Interpretation**:
+
+| Ratio | Meaning |
+|-------|---------|
+| 0 | Defended pivot (stop level) |
+| 0.382 | Shallow retracement |
+| 0.5 | Mid retracement |
+| 0.618 | Golden retracement |
+| 1 | Origin extremum |
+| 2 | Completion target (2x extension) |
+| < 0 | Stop-run territory (invalidation) |
+
+**Key Properties**:
+
+- `range`: Signed swing range (positive for bull, negative for bear)
+- `ratio(price)`: Convert absolute price to ratio
+- `price(ratio)`: Convert ratio to absolute price
+- `from_swing(swing)`: Factory method to create from `ReferenceSwing`
+
+**Design Note**: The frame normalizes direction-specific logic so that ratio 0 is always the defended pivot and ratio 1 is always the origin, regardless of bull/bear direction.
+
 ---
 
 ### Ground Truth Annotator
