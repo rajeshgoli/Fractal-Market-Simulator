@@ -171,7 +171,6 @@ A **`TargetedMove`**.
 
 ### Done Criteria for "Game Piece" Definition
 *   [ ] Define the exact list of "Zones" (0-0.382, 0.382–0.618, etc.).
-*   [ ] Define the set of "Outcomes" (Clean Hit, Wick, Front-run).
 *   [ ] Define the "Handoff" protocol from Scale N to Scale N-1.
 
 This approach gives us the "Game Board" (Fibs) and the "Moves" (Grammar), satisfying both the physicist (Mandelbrot) and the information theorist (Shannon).

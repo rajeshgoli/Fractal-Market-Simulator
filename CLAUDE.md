@@ -68,11 +68,14 @@ src/
 └── data/                      # OHLC loading
 
 Docs/
-├── State/      # architect_notes.md, product_direction.md, pending_review.md
-├── Comms/      # questions.md, archive.md
-└── Reference/  # user_guide.md, interview_notes.md
+├── State/      # Current state: architect_notes.md, product_direction.md, pending_review.md
+├── Comms/      # Inter-role questions: questions.md, archive.md
+├── Reference/  # Long-lived: user_guide.md, developer_guide.md, interview_notes.md
+├── Working/    # Active one-off artifacts (proposals, explorations) → Archive when done
+├── Prompts/    # Agent prompt templates (reusable)
+└── Archive/    # Historical content by topic
 
-tests/          # 550+ tests
+tests/          # 560+ tests
 ```
 
 ## Development Guidelines
@@ -227,7 +230,9 @@ Docs/
 ├── State/       # Current state (single files, overwrite)
 ├── Comms/       # Cross-role questions
 ├── Reference/   # Long-lived docs (north star, user guide, interviews)
-└── Archive/     # Historical content
+├── Working/     # Active one-off artifacts → Archive when done
+├── Prompts/     # Agent prompt templates (reusable)
+└── Archive/     # Historical content by topic
 ```
 
 **Role Recognition:**
