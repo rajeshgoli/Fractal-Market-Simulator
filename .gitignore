@@ -82,5 +82,5 @@ validation_results/
 # Gemini Artifacts
 .gemini/
 
-# Personal motivation file (local only)
+# Local-only files
 .claude/why.md
