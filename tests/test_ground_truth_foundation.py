@@ -1217,6 +1217,207 @@ class TestAnnotationStorageStatus:
 
 
 # ============================================================================
+# AnnotationSession Skipped Scales & Version Tests (Issue #67)
+# ============================================================================
+
+class TestAnnotationSessionSkippedScales:
+    """Tests for AnnotationSession skipped_scales field."""
+
+    def test_create_session_has_empty_skipped_scales(self):
+        """Test session creation has empty skipped_scales."""
+        session = AnnotationSession.create(
+            data_file="test_data.csv",
+            resolution="1m",
+            window_size=200
+        )
+
+        assert session.skipped_scales == []
+
+    def test_mark_scale_skipped(self):
+        """Test marking scales as skipped."""
+        session = AnnotationSession.create("test.csv", "1m", 200)
+
+        assert not session.is_scale_skipped("M")
+        session.mark_scale_skipped("M")
+        assert session.is_scale_skipped("M")
+
+        # Should not duplicate
+        session.mark_scale_skipped("M")
+        assert session.skipped_scales.count("M") == 1
+
+    def test_skipped_scales_independent_of_completed(self):
+        """Test skipped and completed scales are tracked separately."""
+        session = AnnotationSession.create("test.csv", "1m", 200)
+
+        session.mark_scale_complete("XL")
+        session.mark_scale_complete("L")
+        session.mark_scale_skipped("M")
+        session.mark_scale_skipped("S")
+
+        assert session.is_scale_complete("XL")
+        assert session.is_scale_complete("L")
+        assert not session.is_scale_complete("M")
+        assert not session.is_scale_complete("S")
+
+        assert not session.is_scale_skipped("XL")
+        assert not session.is_scale_skipped("L")
+        assert session.is_scale_skipped("M")
+        assert session.is_scale_skipped("S")
+
+    def test_session_serialization_includes_skipped_scales(self):
+        """Test skipped_scales is included in to_dict."""
+        session = AnnotationSession.create("test.csv", "1m", 200)
+        session.mark_scale_skipped("M")
+        session.mark_scale_skipped("S")
+
+        data = session.to_dict()
+
+        assert 'skipped_scales' in data
+        assert data['skipped_scales'] == ["M", "S"]
+
+    def test_session_deserialization_restores_skipped_scales(self):
+        """Test skipped_scales is restored from from_dict."""
+        session = AnnotationSession.create("test.csv", "1m", 200)
+        session.mark_scale_skipped("M")
+        session.mark_scale_skipped("S")
+
+        data = session.to_dict()
+        restored = AnnotationSession.from_dict(data)
+
+        assert restored.skipped_scales == ["M", "S"]
+        assert restored.is_scale_skipped("M")
+        assert restored.is_scale_skipped("S")
+
+    def test_session_deserialization_handles_missing_skipped_scales(self):
+        """Test from_dict handles legacy data without skipped_scales field."""
+        # Simulate legacy data without skipped_scales field
+        data = {
+            'session_id': 'test-session-id',
+            'data_file': 'test.csv',
+            'resolution': '1m',
+            'window_size': 200,
+            'created_at': '2025-01-01T00:00:00+00:00',
+            'annotations': [],
+            'completed_scales': ['XL', 'L'],
+            'window_offset': 0,
+            'status': 'in_progress'
+            # No skipped_scales field
+        }
+
+        session = AnnotationSession.from_dict(data)
+
+        assert session.skipped_scales == []  # Default value
+
+
+class TestAnnotationSessionVersion:
+    """Tests for AnnotationSession version field."""
+
+    def test_create_session_has_version(self):
+        """Test session creation has current schema version."""
+        from src.ground_truth_annotator.models import REVIEW_SCHEMA_VERSION
+
+        session = AnnotationSession.create(
+            data_file="test_data.csv",
+            resolution="1m",
+            window_size=200
+        )
+
+        assert session.version == REVIEW_SCHEMA_VERSION
+
+    def test_session_serialization_includes_version(self):
+        """Test version is included in to_dict."""
+        from src.ground_truth_annotator.models import REVIEW_SCHEMA_VERSION
+
+        session = AnnotationSession.create("test.csv", "1m", 200)
+        data = session.to_dict()
+
+        assert 'version' in data
+        assert data['version'] == REVIEW_SCHEMA_VERSION
+
+    def test_session_deserialization_restores_version(self):
+        """Test version is restored from from_dict."""
+        from src.ground_truth_annotator.models import REVIEW_SCHEMA_VERSION
+
+        session = AnnotationSession.create("test.csv", "1m", 200)
+        data = session.to_dict()
+        restored = AnnotationSession.from_dict(data)
+
+        assert restored.version == REVIEW_SCHEMA_VERSION
+
+    def test_session_deserialization_handles_missing_version(self):
+        """Test from_dict handles legacy data without version field."""
+        # Simulate legacy data without version field
+        data = {
+            'session_id': 'test-session-id',
+            'data_file': 'test.csv',
+            'resolution': '1m',
+            'window_size': 200,
+            'created_at': '2025-01-01T00:00:00+00:00',
+            'annotations': [],
+            'completed_scales': [],
+            'window_offset': 0,
+            'status': 'in_progress'
+            # No version field
+        }
+
+        session = AnnotationSession.from_dict(data)
+
+        # Should default to version 3 for backward compatibility
+        assert session.version == 3
+
+    def test_version_roundtrip(self):
+        """Test version survives full roundtrip."""
+        from src.ground_truth_annotator.models import REVIEW_SCHEMA_VERSION
+
+        session = AnnotationSession.create("test.csv", "1m", 200)
+        session.mark_scale_complete("XL")
+        session.mark_scale_skipped("M")
+
+        data = session.to_dict()
+        restored = AnnotationSession.from_dict(data)
+
+        assert restored.version == session.version
+        assert restored.version == REVIEW_SCHEMA_VERSION
+
+
+class TestAnnotationStorageSkippedScales:
+    """Tests for AnnotationStorage with skipped_scales field."""
+
+    def test_skipped_scales_persistence(self, storage):
+        """Test that skipped_scales persists when updating session."""
+        session = storage.create_session(
+            data_file="test_data.csv",
+            resolution="1m",
+            window_size=200
+        )
+
+        # Update skipped_scales
+        session.mark_scale_skipped("M")
+        session.mark_scale_skipped("S")
+        storage.update_session(session)
+
+        # Reload and verify
+        loaded = storage.get_session(session.session_id)
+        assert loaded.skipped_scales == ["M", "S"]
+
+    def test_export_json_includes_skipped_scales(self, storage):
+        """Test exported JSON includes skipped_scales field."""
+        session = storage.create_session(
+            data_file="test.csv",
+            resolution="1m",
+            window_size=200
+        )
+        session.mark_scale_skipped("M")
+        storage.update_session(session)
+
+        exported = storage.export_session(session.session_id, format="json")
+        data = json.loads(exported)
+
+        assert 'skipped_scales' in data
+        assert data['skipped_scales'] == ["M"]
+
+
+# ============================================================================
 # BetterReference Model Tests (Issue #55)
 # ============================================================================
 
@@ -1371,7 +1572,7 @@ class TestReviewSessionVersion:
     def test_create_session_has_version(self, review_session):
         """Test session creation has version field."""
         assert review_session.version == REVIEW_SCHEMA_VERSION
-        assert review_session.version == 3  # v3: Replaced subsumed with new FP categories
+        assert review_session.version == 4  # v4: Added version and skipped_scales to AnnotationSession
 
     def test_version_in_to_dict(self, review_session):
         """Test version is included in to_dict."""

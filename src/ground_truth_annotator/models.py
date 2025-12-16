@@ -11,6 +11,16 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+# Schema version for backward-compatible evolution
+# v1: Initial ReviewSession schema
+# v2: Added difficulty, regime, session_comments metadata fields
+# v3: Replaced subsumed with not_prominent, better_high, better_low, better_both
+# v4: Added version and skipped_scales to AnnotationSession
+REVIEW_SCHEMA_VERSION = 4
+
+# Phase order for ReviewSession
+REVIEW_PHASES = ["matches", "fp_sample", "fn_feedback", "complete"]
+
 
 @dataclass
 class SwingAnnotation:
@@ -109,8 +119,10 @@ class AnnotationSession:
     created_at: datetime
     annotations: List[SwingAnnotation] = field(default_factory=list)
     completed_scales: List[str] = field(default_factory=list)
+    skipped_scales: List[str] = field(default_factory=list)  # Scales explicitly skipped without review
     window_offset: int = 0      # Offset into source data (for random window selection)
     status: str = "in_progress" # "in_progress" | "keep" | "discard"
+    version: int = REVIEW_SCHEMA_VERSION  # Schema version for backward compatibility
 
     @classmethod
     def create(
@@ -153,13 +165,23 @@ class AnnotationSession:
         if scale not in self.completed_scales:
             self.completed_scales.append(scale)
 
+    def mark_scale_skipped(self, scale: str) -> None:
+        """Mark a scale as explicitly skipped without review."""
+        if scale not in self.skipped_scales:
+            self.skipped_scales.append(scale)
+
     def is_scale_complete(self, scale: str) -> bool:
         """Check if a scale has been marked as complete."""
         return scale in self.completed_scales
 
+    def is_scale_skipped(self, scale: str) -> bool:
+        """Check if a scale has been explicitly skipped."""
+        return scale in self.skipped_scales
+
     def to_dict(self) -> dict:
         """Serialize to dictionary for JSON storage."""
         return {
+            'version': self.version,
             'session_id': self.session_id,
             'data_file': self.data_file,
             'resolution': self.resolution,
@@ -168,12 +190,18 @@ class AnnotationSession:
             'created_at': self.created_at.isoformat(),
             'annotations': [a.to_dict() for a in self.annotations],
             'completed_scales': self.completed_scales,
+            'skipped_scales': self.skipped_scales,
             'status': self.status
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> 'AnnotationSession':
-        """Deserialize from dictionary."""
+        """Deserialize from dictionary.
+
+        Backward compatibility:
+        - Files without 'version' field treated as v3 (pre-skip-tracking)
+        - Files without 'skipped_scales' field treated as empty list
+        """
         session = cls(
             session_id=data['session_id'],
             data_file=data['data_file'],
@@ -182,8 +210,10 @@ class AnnotationSession:
             created_at=datetime.fromisoformat(data['created_at']),
             annotations=[SwingAnnotation.from_dict(a) for a in data.get('annotations', [])],
             completed_scales=data.get('completed_scales', []),
+            skipped_scales=data.get('skipped_scales', []),
             window_offset=data.get('window_offset', 0),
-            status=data.get('status', 'in_progress')
+            status=data.get('status', 'in_progress'),
+            version=data.get('version', 3)  # Legacy sessions without version treated as v3
         )
         return session
 
@@ -291,16 +321,6 @@ class SwingFeedback:
             created_at=datetime.fromisoformat(data['created_at']),
             better_reference=better_ref
         )
-
-
-# Phase order for ReviewSession
-REVIEW_PHASES = ["matches", "fp_sample", "fn_feedback", "complete"]
-
-# Schema version for backward-compatible evolution
-# v1: Initial schema
-# v2: Added difficulty, regime, session_comments metadata fields
-# v3: Replaced subsumed with not_prominent, better_high, better_low, better_both
-REVIEW_SCHEMA_VERSION = 3
 
 
 @dataclass

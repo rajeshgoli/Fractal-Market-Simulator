@@ -683,6 +683,8 @@ class AnnotationSession:
     created_at: datetime
     annotations: List[SwingAnnotation]
     completed_scales: List[str]
+    skipped_scales: List[str]   # Scales explicitly skipped without review
+    version: int                # Schema version (REVIEW_SCHEMA_VERSION)
 
 @dataclass
 class SwingFeedback:
@@ -708,6 +710,21 @@ class ReviewSession:
     started_at: datetime
     completed_at: Optional[datetime]
 ```
+
+**Schema Versioning**:
+
+Both `AnnotationSession` and `ReviewSession` use `REVIEW_SCHEMA_VERSION` for backward compatibility:
+
+| Version | Changes |
+|---------|---------|
+| v1 | Initial ReviewSession schema |
+| v2 | Added difficulty, regime, session_comments |
+| v3 | Replaced subsumed with not_prominent, better_high, better_low, better_both |
+| v4 | Added version and skipped_scales to AnnotationSession |
+
+- Files without version field default to v3 (AnnotationSession) or v1 (ReviewSession)
+- Files without skipped_scales treated as empty list
+- `skipped_scales` tracks scales explicitly skipped without review (for "Skip to FP Review" workflow)
 
 #### `src/ground_truth_annotator/storage.py`
 

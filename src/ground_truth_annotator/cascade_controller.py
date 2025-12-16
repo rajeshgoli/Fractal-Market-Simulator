@@ -211,14 +211,41 @@ class CascadeController:
 
         return False
 
+    def skip_remaining_scales(self) -> List[str]:
+        """
+        Skip all remaining scales without review.
+
+        Marks the current scale as complete (if annotated) and all remaining
+        scales as skipped. Used for "Skip to FP Review" workflow.
+
+        Returns:
+            List of scales that were marked as skipped
+        """
+        current_scale = self.get_current_scale()
+        skipped = []
+
+        # Mark current scale as complete (user finished annotating it)
+        self._session.mark_scale_complete(current_scale)
+
+        # Mark all remaining scales as skipped
+        for i in range(self._current_scale_index + 1, len(self.SCALE_ORDER)):
+            scale = self.SCALE_ORDER[i]
+            self._session.mark_scale_skipped(scale)
+            skipped.append(scale)
+
+        # Move to end
+        self._current_scale_index = len(self.SCALE_ORDER) - 1
+
+        return skipped
+
     def is_scale_complete(self, scale: str) -> bool:
         """Check if a specific scale has been completed."""
         return self._session.is_scale_complete(scale)
 
     def is_session_complete(self) -> bool:
-        """True if all scales have been annotated."""
+        """True if all scales have been annotated or skipped."""
         return all(
-            scale in self._session.completed_scales
+            scale in self._session.completed_scales or scale in self._session.skipped_scales
             for scale in self.SCALE_ORDER
         )
 
@@ -256,6 +283,7 @@ class CascadeController:
             "compression_ratio": len(self._source_bars) / len(bars) if bars else 0,
             "annotation_count": len(annotations),
             "is_complete": self._session.is_scale_complete(scale),
+            "is_skipped": self._session.is_scale_skipped(scale),
         }
 
     def get_cascade_state(self) -> dict:
@@ -274,6 +302,7 @@ class CascadeController:
             "current_scale_index": self._current_scale_index,
             "reference_scale": reference_scale,
             "completed_scales": self._session.completed_scales.copy(),
+            "skipped_scales": self._session.skipped_scales.copy(),
             "scales_remaining": total - completed,
             "is_complete": self.is_session_complete(),
             "scale_info": {
@@ -286,7 +315,7 @@ class CascadeController:
         """
         Reset cascade state to a specific scale (for corrections).
 
-        Removes the scale from completed list and resets current index.
+        Removes the scale from completed and skipped lists, resets current index.
 
         Args:
             scale: Scale to reset to
@@ -296,9 +325,11 @@ class CascadeController:
 
         scale_index = self.SCALE_ORDER.index(scale)
 
-        # Remove this scale and all subsequent from completed
+        # Remove this scale and all subsequent from completed and skipped
         for s in self.SCALE_ORDER[scale_index:]:
             if s in self._session.completed_scales:
                 self._session.completed_scales.remove(s)
+            if s in self._session.skipped_scales:
+                self._session.skipped_scales.remove(s)
 
         self._current_scale_index = scale_index

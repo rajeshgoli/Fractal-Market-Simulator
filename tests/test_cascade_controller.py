@@ -445,3 +445,102 @@ class TestLargeDataset:
         # 50K / 50 = 1000:1 compression
         assert len(xl_bars) >= 45
         assert len(xl_bars) <= 55
+
+
+# ============================================================================
+# Skip Remaining Scales Tests (Issue #67)
+# ============================================================================
+
+class TestSkipRemainingScales:
+    """Tests for skip_remaining_scales() method."""
+
+    def test_skip_from_xl_marks_lms_as_skipped(self, cascade_controller):
+        """Skipping from XL should mark L, M, S as skipped."""
+        assert cascade_controller.get_current_scale() == "XL"
+
+        skipped = cascade_controller.skip_remaining_scales()
+
+        assert skipped == ["L", "M", "S"]
+        assert "XL" in cascade_controller.session.completed_scales
+        assert cascade_controller.session.is_scale_skipped("L")
+        assert cascade_controller.session.is_scale_skipped("M")
+        assert cascade_controller.session.is_scale_skipped("S")
+
+    def test_skip_from_l_marks_ms_as_skipped(self, cascade_controller):
+        """Skipping from L should mark M, S as skipped."""
+        cascade_controller.advance_to_next_scale()  # XL -> L
+        assert cascade_controller.get_current_scale() == "L"
+
+        skipped = cascade_controller.skip_remaining_scales()
+
+        assert skipped == ["M", "S"]
+        assert "XL" in cascade_controller.session.completed_scales
+        assert "L" in cascade_controller.session.completed_scales
+        assert cascade_controller.session.is_scale_skipped("M")
+        assert cascade_controller.session.is_scale_skipped("S")
+
+    def test_skip_from_m_marks_s_as_skipped(self, cascade_controller):
+        """Skipping from M should mark only S as skipped."""
+        cascade_controller.advance_to_next_scale()  # XL -> L
+        cascade_controller.advance_to_next_scale()  # L -> M
+        assert cascade_controller.get_current_scale() == "M"
+
+        skipped = cascade_controller.skip_remaining_scales()
+
+        assert skipped == ["S"]
+        assert "M" in cascade_controller.session.completed_scales
+        assert cascade_controller.session.is_scale_skipped("S")
+
+    def test_skip_from_s_returns_empty(self, cascade_controller):
+        """Skipping from S should return empty list (nothing to skip)."""
+        # Advance to S
+        for _ in range(3):
+            cascade_controller.advance_to_next_scale()
+        assert cascade_controller.get_current_scale() == "S"
+
+        skipped = cascade_controller.skip_remaining_scales()
+
+        assert skipped == []
+        assert "S" in cascade_controller.session.completed_scales
+
+    def test_skip_marks_session_complete(self, cascade_controller):
+        """Session should be complete after skipping."""
+        cascade_controller.skip_remaining_scales()
+
+        assert cascade_controller.is_session_complete()
+
+    def test_cascade_state_includes_skipped_scales(self, cascade_controller):
+        """Cascade state should include skipped_scales."""
+        cascade_controller.advance_to_next_scale()  # XL -> L
+        cascade_controller.skip_remaining_scales()
+
+        state = cascade_controller.get_cascade_state()
+
+        assert "skipped_scales" in state
+        assert state["skipped_scales"] == ["M", "S"]
+
+    def test_scale_info_includes_is_skipped(self, cascade_controller):
+        """Scale info should include is_skipped field."""
+        cascade_controller.advance_to_next_scale()  # XL -> L
+        cascade_controller.skip_remaining_scales()
+
+        m_info = cascade_controller.get_scale_info("M")
+        s_info = cascade_controller.get_scale_info("S")
+        xl_info = cascade_controller.get_scale_info("XL")
+
+        assert m_info["is_skipped"] is True
+        assert s_info["is_skipped"] is True
+        assert xl_info["is_skipped"] is False
+
+    def test_reset_clears_skipped_scales(self, cascade_controller):
+        """Resetting should clear skipped_scales."""
+        cascade_controller.advance_to_next_scale()  # XL -> L
+        cascade_controller.skip_remaining_scales()  # Skip M, S
+
+        assert cascade_controller.session.is_scale_skipped("M")
+        assert cascade_controller.session.is_scale_skipped("S")
+
+        cascade_controller.reset_to_scale("L")
+
+        assert not cascade_controller.session.is_scale_skipped("M")
+        assert not cascade_controller.session.is_scale_skipped("S")

@@ -113,6 +113,7 @@ class ScaleInfo(BaseModel):
     compression_ratio: float
     annotation_count: int
     is_complete: bool
+    is_skipped: bool = False
 
 
 class CascadeStateResponse(BaseModel):
@@ -121,6 +122,7 @@ class CascadeStateResponse(BaseModel):
     current_scale_index: int
     reference_scale: Optional[str]
     completed_scales: List[str]
+    skipped_scales: List[str] = []
     scales_remaining: int
     is_complete: bool
     scale_info: Dict[str, ScaleInfo]
@@ -131,6 +133,14 @@ class CascadeAdvanceResponse(BaseModel):
     success: bool
     previous_scale: str
     current_scale: str
+    is_complete: bool
+
+
+class CascadeSkipResponse(BaseModel):
+    """Response from skipping remaining scales."""
+    success: bool
+    completed_scale: str
+    skipped_scales: List[str]
     is_complete: bool
 
 
@@ -709,6 +719,7 @@ async def get_cascade_state():
         current_scale_index=cascade_state["current_scale_index"],
         reference_scale=cascade_state["reference_scale"],
         completed_scales=cascade_state["completed_scales"],
+        skipped_scales=cascade_state.get("skipped_scales", []),
         scales_remaining=cascade_state["scales_remaining"],
         is_complete=cascade_state["is_complete"],
         scale_info=scale_info_models,
@@ -745,6 +756,45 @@ async def advance_cascade():
         success=success,
         previous_scale=previous_scale,
         current_scale=current_scale,
+        is_complete=s.cascade_controller.is_session_complete(),
+    )
+
+
+@app.post("/api/cascade/skip", response_model=CascadeSkipResponse)
+async def skip_remaining_scales():
+    """Skip remaining scales and proceed to review.
+
+    Marks the current scale as complete and all remaining scales as skipped.
+    Use this for "Skip to FP Review" workflow when user wants to skip M/S
+    annotation after completing XL/L.
+    """
+    s = get_state()
+
+    if not s.cascade_controller:
+        raise HTTPException(
+            status_code=400,
+            detail="Cascade mode not enabled. Start server with --cascade flag."
+        )
+
+    completed_scale = s.cascade_controller.get_current_scale()
+    skipped_scales = s.cascade_controller.skip_remaining_scales()
+    current_scale = s.cascade_controller.get_current_scale()
+
+    # Update state's scale to match cascade
+    s.scale = current_scale
+
+    # Persist session state
+    s.storage.update_session(s.session)
+
+    # Update aggregated bars for final scale
+    if s.cascade_controller:
+        s.aggregated_bars = s.cascade_controller.get_bars_for_scale(current_scale)
+        s.aggregation_map = s.cascade_controller.get_aggregation_map(current_scale)
+
+    return CascadeSkipResponse(
+        success=True,
+        completed_scale=completed_scale,
+        skipped_scales=skipped_scales,
         is_complete=s.cascade_controller.is_session_complete(),
     )
 
