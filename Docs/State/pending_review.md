@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-16
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - **#78**: Discretization overlay in Ground Truth Annotator
+- **#79**: Discretizer validation on sample data
 
 ---
 
