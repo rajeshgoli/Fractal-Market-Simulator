@@ -2,6 +2,302 @@
 
 ---
 
+## Q-2025-12-15-2: FIB-Based Structural Separation for Extrema Selection
+
+**From:** Product
+**To:** Architect
+**Date:** December 15, 2025
+**Status:** Resolved
+
+### Context
+
+Ver4 annotation sessions show 42% of FPs are extrema selection problems (better_high/low/both). The algo finds swings in the right general area but anchors to sub-optimal endpoints that aren't "structurally significant."
+
+User observation: The algo picks "a random lower high in a series of lower highs" with no qualifying low between it and the highest high. Or it picks a low that's not the structural low — one where a stop would be "casually violated."
+
+### Questions Asked
+
+1. **Feasibility:** Is this implementable given current SwingDetector and ScaleCalibrator architecture?
+2. **Ordering:** Does detection need to run XL→L→M→S sequentially, or can scales still be processed in parallel with post-filtering?
+3. **Which FIB levels?** User said "at least one FIB level" — should this be any standard level (0.382, 0.5, 0.618, 1.0) or a minimum threshold like 0.382?
+4. **Edge cases:** What happens at window boundaries where larger swings may be incomplete?
+5. **Performance:** Any concerns with referencing larger-scale FIB grids during small-scale detection?
+
+### Resolution (Architect)
+
+**Status: FEASIBLE** — Merged into Phase 3 of endpoint selection design.
+
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| Feasibility | Yes | Current architecture has all components: multi-scale detection, FIB calculation, scale cascade |
+| Ordering | Sequential XL→L→M→S required | Smaller-scale validation needs larger-scale swings as reference |
+| FIB grid | Extended symmetric grid | Add 0.236, 0.786, 1.236, 1.786 to fill voids where reversals occur |
+| FIB threshold | 0.236 minimum | Smallest level on extended grid (captures shallow retracements) |
+| Edge cases | N-bar + X% fallback | For XL and window boundaries, use volatility-adjusted heuristic |
+| Performance | No concerns | O(N × quota) additional work, negligible vs O(N log N) detection |
+
+**Integration Decision:** Merged with existing Fib Confluence design to create unified Phase 3:
+- **3A: Structural Separation Gate** — Require ≥1 FIB level separation (0.236 minimum on extended grid)
+- **3B: Fib Confluence Scoring** — Prefer endpoints that land on FIB levels of containing swing
+
+**Extended FIB Grid:** `0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.382, 1.5, 1.618, 1.786, 2.0`
+Standard grid has gaps where valid reversals occur; extended grid provides symmetric coverage.
+
+Both are FIB-based relationships; separation is a gate, confluence is a score.
+
+**Key Change:** Detection must pass `larger_swings` context between scales:
+```python
+xl_swings = detect_swings(df, scale='XL', ...)
+l_swings = detect_swings(df, scale='L', larger_swings=xl_swings, ...)
+m_swings = detect_swings(df, scale='M', larger_swings=l_swings, ...)
+s_swings = detect_swings(df, scale='S', larger_swings=m_swings, ...)
+```
+
+**Full design:** See `Docs/State/architect_notes.md` Phase 3 section.
+
+---
+
+## Q-2025-12-15-2: Endpoint Selection Design
+
+**From:** Product
+**To:** Architect
+**Date:** December 15, 2025
+**Status:** Resolved
+
+### Context
+
+Ver3 sessions show 75% of FPs are endpoint selection issues (better_high/low/both). Core swing detection works; need to pick better endpoints.
+
+### Questions Asked
+
+1. **Fib Confluence Implementation:**
+   - Which larger swing(s) to reference? Immediate parent only, or all ancestors?
+   - Should we score by "fib confluence count"?
+   - What tolerance for "near a fib level"?
+
+2. **Best Extrema in Vicinity:**
+   - How to define "vicinity"?
+   - Post-filter or integrated?
+
+3. **Quota per Scale:**
+   - How to rank swings for quota?
+   - Is "2 biggest + 2 highest impulse" reasonable?
+
+### Resolution (Architect)
+
+**Designed three-layer approach:**
+
+#### Layer 1: Fib Confluence Scoring (Primary Signal)
+
+| Decision | Answer | Rationale |
+|----------|--------|-----------|
+| Which swing to reference? | Immediate containing swing only | Multiple ancestors adds complexity without clear benefit |
+| Score method? | Proximity to nearest fib level | Simpler than "confluence count" |
+| Tolerance? | 0.5% of swing size | Adaptive to swing magnitude |
+
+#### Layer 2: Best Extrema Adjustment (Tie Breaker)
+
+| Decision | Answer | Rationale |
+|----------|--------|-----------|
+| Vicinity definition? | lookback bars (same as detection) | Consistent with detection semantics |
+| Integration? | Post-filter | Cleaner separation of concerns |
+
+#### Layer 3: Quota per Scale (Quantity Control)
+
+| Decision | Answer | Rationale |
+|----------|--------|-----------|
+| Ranking method? | 0.6×size_rank + 0.4×impulse_rank | Size captures magnitude; impulse captures conviction |
+| Quota per scale? | XL=4, L=6, M=10, S=15 | Fewer swings at larger scales |
+
+### Implementation Phases
+
+1. **Phase 1: Best Extrema** - Quick win, ~50% FP reduction expected
+2. **Phase 2: Quota per Scale** - Replaces max_rank, removes threshold tuning
+3. **Phase 3: Fib Confluence** - Most complex, adds structural justification
+
+**Full design:** See `Docs/State/architect_notes.md`
+
+---
+
+## Q-2025-12-15-6: Too Small and Subsumed Filters
+
+**From:** Product
+**To:** Architect
+**Date:** December 15, 2025
+**Status:** Resolved
+
+### Context
+
+15 annotation sessions complete (10 ver1 + 5 ver2). Max_rank filter (#56) implemented but didn't address root cause.
+
+**Ver2 Session Data (post-max_rank):**
+
+| Category | Count | % of True FPs |
+|----------|-------|---------------|
+| too_small | 39 | **65%** |
+| subsumed | 17 | **28%** |
+| too_distant | 2 | 3% |
+| counter_trend | 1 | 2% |
+
+**93% of remaining FPs are too_small or subsumed.**
+
+### Resolution (Architect)
+
+**Designed two filters based on empirical data analysis.**
+
+#### Filter 1: Too Small (P0) — Issue #62
+
+Two parameters added to `detect_swings()`:
+- `min_candle_ratio=5.0` — Swing must be at least 5x median candle size
+- `min_range_pct=2.0` — Swing must be at least 2% of window price range
+
+**Logic:** Filter if BOTH thresholds fail (kept if either passes). This handles cases where small absolute size is significant in low-volatility windows.
+
+**Empirical basis:** Ver2 "too_small" FPs show p50=5.85% range, p25=3.15%. Threshold of 2% captures bottom quartile.
+
+#### Filter 2: Prominence (P1) — Issue #63
+
+One parameter added to `detect_swings()`:
+- `min_prominence=1.0` — Swing high/low must stand out by at least 1x median candle from nearest competing extremum
+
+**Logic:** Calculate gap between swing high/low and second-best in local window. If gap < threshold, filter out.
+
+**Empirical basis:** 74 better_reference entries show users consistently pick points that are distinctly higher/lower than adjacent extrema.
+
+### Integration Point
+
+After protection validation, before redundancy filtering:
+```
+1. Swing detection → 2. Pairing → 3. Protection → 4. Size filter → 5. Prominence filter → 6. Redundancy → 7. Ranking → 8. max_rank
+```
+
+### Validation Plan
+
+After implementation:
+1. Run 3-5 annotation sessions
+2. Target: FP rate reduced by >70%
+3. Check for regressions (new FNs from over-filtering)
+
+**Full design:** See `Docs/State/architect_notes.md`
+
+---
+
+## Q-2025-12-15-5: Phase 2 FN Investigation Priority
+
+**From:** Engineer
+**To:** Product
+**Date:** December 15, 2025
+**Status:** Resolved
+
+### Context
+
+Issue #56 Phase 1 complete:
+- `max_rank` parameter reduces FP noise (~95% of FPs addressable)
+- Relaxed matching tolerance converts ~9 FNs to matches
+
+**Remaining:** 16 true FN misses (detector genuinely doesn't output the swing)
+
+### Phase 2 Scope
+
+Investigation to understand WHY these swings aren't detected:
+1. Add debug instrumentation to track filter reasons
+2. Re-run analysis on 10 annotation sessions with debug output
+3. Categorize misses by filter type (protection check, Fibonacci zone, pairing logic)
+4. Propose fixes based on findings
+
+### Question
+
+Is Phase 2 worth pursuing now?
+
+### Resolution (Product)
+
+**Decision: Defer — Low priority, not blocking current goals.**
+
+**Reasoning:**
+
+1. **Phase 1 is sufficient for annotation goals.** The `max_rank` filter addresses ~95% of FPs. Users can annotate with far less noise. The immediate bottleneck is removed.
+
+2. **"Better Reference" data is higher leverage.** Q-2025-12-15-4 (broader detection quality) is blocked waiting for "detector found X, should have found Y" data. That data will inform both FP and FN fixes more comprehensively than Phase 2 alone.
+
+3. **16 FNs may be acceptable edge cases.** That's ~1.6/session across 10 sessions. If these are genuinely hard cases, algorithm changes may not be warranted.
+
+4. **Avoid premature optimization.** Without "better reference" data, we don't know if the 16 FNs are filter bugs (fixable), edge cases (acceptable), or symptoms of a deeper design issue (requires rethinking).
+
+**Recommended Priority Order:**
+
+1. P1.5: "Better Reference" data collection — Ship inline better-reference UX (#57)
+2. Collect 3-5 more sessions with new tooling
+3. Revisit Phase 2 IF FN data suggests filter fixes are warranted
+
+**Reactivation Trigger:** If Architect requests FN filter categorization during detection quality redesign, reactivate Phase 2 at that point.
+
+---
+
+## Q-2025-12-15-2: Reference Swing Protection Validation
+
+**From:** Product
+**To:** Architect
+**Status:** Resolved
+**Date:** December 15, 2025
+
+**Context:** User identified that `swing_detector.py` shows reference swings where the swing point has been violated by subsequent price action. Example: Bull ref 1496→1369 shown, but price traded to 1261 afterward (low violated by 108 pts).
+
+**Questions Asked:**
+1. What's the cleanest path to fix this?
+2. Option 1: Add protection check to `swing_detector.py`
+3. Option 2: Switch annotator to use `bull_reference_detector.py`
+
+**Resolution (Architect):**
+
+**Recommended Approach: Option 1 - Extend swing_detector.py**
+
+| Aspect | Option 1 | Option 2 |
+|--------|----------|----------|
+| API Change | None | Breaking (dataclass vs dict) |
+| Refactoring | ~20 lines | ~100+ lines in comparison_analyzer.py |
+| Complexity | O(N log N) maintained | O(N²) post-formation scan |
+| Risk | Low | Medium-high |
+
+**Implementation Design:**
+
+1. **Build additional sparse tables on ALL bar lows/highs** (not just swing points):
+   ```python
+   all_lows_min_table = SparseTable(lows, mode='min')
+   all_highs_max_table = SparseTable(highs, mode='max')
+   ```
+
+2. **Add protection check after structural validation:**
+   - Bull reference: After validating structure, check `all_lows_min_table.query(low_bar_index+1, len(bars))` to ensure no subsequent bar violated the swing low
+   - Bear reference: Check `all_highs_max_table.query(high_bar_index+1, len(bars))` to ensure no subsequent bar violated the swing high
+
+3. **Tolerance parameter** (matching `bull_reference_detector.py`):
+   ```python
+   def detect_swings(..., protection_tolerance: float = 0.1):
+   ```
+   - Default 10% of swing range
+   - Violation threshold: `low_price - (protection_tolerance * size)`
+
+**Complexity Analysis:**
+- Additional preprocessing: O(N log N) for two sparse tables on full bars
+- Query per candidate: O(1)
+- Total: O(N log N) maintained
+
+**Why NOT Option 2:**
+- `bull_reference_detector.py` uses different API (dataclass vs dict)
+- Would require refactoring `comparison_analyzer.py` (~100+ lines)
+- Has features we don't need (explosive classification, multiple subsumption passes)
+- Higher regression risk
+
+**Files Affected:**
+| File | Change |
+|------|--------|
+| `src/swing_analysis/swing_detector.py` | Add protection_tolerance param, build full-bar sparse tables, add post-formation check |
+| `tests/test_swing_detector.py` | Add protection validation tests |
+
+**Next Step:** Engineering to create GitHub issue and implement.
+
+---
+
 ## Q-2025-12-15-1: Trend-Aware Reference Detection
 
 **From:** Product
