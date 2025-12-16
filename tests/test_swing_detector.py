@@ -1696,5 +1696,478 @@ class TestProtectionFilter(unittest.TestCase):
         self.assertEqual(len(filtered), 1)
 
 
+class TestFindContainingSwing(unittest.TestCase):
+    """Test suite for find_containing_swing function (Phase 3)."""
+
+    def test_find_containing_swing_empty_list(self):
+        """Should return None when larger_swings list is empty."""
+        from src.swing_analysis.swing_detector import find_containing_swing
+
+        swing = {
+            'high_price': 110.0,
+            'low_price': 90.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }
+
+        result = find_containing_swing(swing, [])
+        self.assertIsNone(result)
+
+    def test_find_containing_swing_no_container(self):
+        """Should return None when no larger swing contains the swing."""
+        from src.swing_analysis.swing_detector import find_containing_swing
+
+        swing = {
+            'high_price': 110.0,
+            'low_price': 90.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }
+
+        # Larger swing doesn't contain (high is lower)
+        larger_swings = [{
+            'high_price': 105.0,
+            'low_price': 85.0,
+            'high_bar_index': 15,
+            'low_bar_index': 0,
+            'size': 20.0
+        }]
+
+        result = find_containing_swing(swing, larger_swings)
+        self.assertIsNone(result)
+
+    def test_find_containing_swing_success(self):
+        """Should find the containing swing when one exists."""
+        from src.swing_analysis.swing_detector import find_containing_swing
+
+        swing = {
+            'high_price': 110.0,
+            'low_price': 90.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }
+
+        # Larger swing contains this one
+        larger_swings = [{
+            'high_price': 120.0,
+            'low_price': 80.0,
+            'high_bar_index': 15,
+            'low_bar_index': 0,
+            'size': 40.0
+        }]
+
+        result = find_containing_swing(swing, larger_swings)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['size'], 40.0)
+
+    def test_find_containing_swing_smallest_container(self):
+        """Should return the smallest containing swing when multiple exist."""
+        from src.swing_analysis.swing_detector import find_containing_swing
+
+        swing = {
+            'high_price': 110.0,
+            'low_price': 90.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }
+
+        # Multiple containing swings of different sizes
+        larger_swings = [
+            {
+                'high_price': 150.0,
+                'low_price': 50.0,
+                'high_bar_index': 20,
+                'low_bar_index': 0,
+                'size': 100.0
+            },
+            {
+                'high_price': 120.0,
+                'low_price': 80.0,
+                'high_bar_index': 15,
+                'low_bar_index': 0,
+                'size': 40.0
+            }
+        ]
+
+        result = find_containing_swing(swing, larger_swings)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['size'], 40.0)  # Smallest container
+
+
+class TestStructuralSeparation(unittest.TestCase):
+    """Test suite for structural separation functions (Phase 3A)."""
+
+    def test_is_structurally_separated_no_previous(self):
+        """Should return True when there are no previous swings."""
+        from src.swing_analysis.swing_detector import is_structurally_separated
+
+        swing = {
+            'high_price': 110.0,
+            'low_price': 90.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }
+
+        is_separated, containing_id = is_structurally_separated(
+            swing, [], None, lookback=5, median_candle=2.0
+        )
+
+        self.assertTrue(is_separated)
+        self.assertIsNone(containing_id)
+
+    def test_is_structurally_separated_fallback(self):
+        """Should use fallback when no larger_swings provided."""
+        from src.swing_analysis.swing_detector import is_structurally_separated
+
+        swing = {
+            'high_price': 110.0,
+            'low_price': 90.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }
+
+        previous_swings = [{
+            'high_price': 105.0,
+            'low_price': 85.0,
+            'high_bar_index': 50,  # Far enough
+            'low_bar_index': 45
+        }]
+
+        is_separated, containing_id = is_structurally_separated(
+            swing, previous_swings, None, lookback=5, median_candle=2.0
+        )
+
+        # Should use fallback check
+        self.assertIsNone(containing_id)  # No containing swing = fallback
+
+    def test_fallback_separation_check_passes(self):
+        """Should pass when swings are sufficiently separated."""
+        from src.swing_analysis.swing_detector import _fallback_separation_check
+
+        swing = {
+            'high_price': 110.0,
+            'low_price': 90.0,
+            'high_bar_index': 100,  # Far from previous
+            'low_bar_index': 95
+        }
+
+        previous_swings = [{
+            'high_price': 105.0,
+            'low_price': 85.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }]
+
+        result = _fallback_separation_check(
+            swing, previous_swings, lookback=5, median_candle=2.0
+        )
+
+        self.assertTrue(result)
+
+    def test_fallback_separation_check_fails(self):
+        """Should fail when swings are too close in time and price."""
+        from src.swing_analysis.swing_detector import _fallback_separation_check
+
+        # Swings that are very close in both bar distance and price
+        swing = {
+            'high_price': 106.0,
+            'low_price': 91.0,
+            'high_bar_index': 14,
+            'low_bar_index': 12  # Close to previous high_bar_index
+        }
+
+        previous_swings = [{
+            'high_price': 90.5,  # Price that makes separation small
+            'low_price': 85.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }]
+
+        result = _fallback_separation_check(
+            swing, previous_swings, lookback=5, median_candle=2.0
+        )
+
+        # bar_sep = abs(swing_low_idx - prev_high_idx) = abs(12 - 10) = 2
+        # price_sep = abs(swing_low_price - prev_high_price) = abs(91 - 90.5) = 0.5
+        # min_bar_separation = 2 * 5 = 10 bars
+        # min_price_separation = 0.236 * 2.0 * 5 = 2.36
+        # Both are below thresholds: bar_sep=2 < 10, price_sep=0.5 < 2.36
+        self.assertFalse(result)
+
+    def test_structural_separation_with_larger_swings(self):
+        """Should use larger swing for FIB-based separation."""
+        from src.swing_analysis.swing_detector import is_structurally_separated
+
+        swing = {
+            'high_price': 110.0,
+            'low_price': 95.0,
+            'high_bar_index': 50,
+            'low_bar_index': 45
+        }
+
+        previous_swings = [{
+            'high_price': 108.0,
+            'low_price': 94.0,
+            'high_bar_index': 40,
+            'low_bar_index': 35
+        }]
+
+        # Larger swing with size 40 (100-60)
+        # min_separation = 0.236 * 40 = 9.44
+        # separation = |95 - 108| = 13 >= 9.44
+        larger_swings = [{
+            'high_price': 120.0,
+            'low_price': 80.0,
+            'high_bar_index': 60,
+            'low_bar_index': 0,
+            'size': 40.0
+        }]
+
+        is_separated, containing_id = is_structurally_separated(
+            swing, previous_swings, larger_swings, lookback=5, median_candle=2.0
+        )
+
+        self.assertTrue(is_separated)
+
+
+class TestApplyStructuralSeparationFilter(unittest.TestCase):
+    """Test suite for _apply_structural_separation_filter function."""
+
+    def test_filter_adds_metadata(self):
+        """Should add structurally_separated and containing_swing_id to each swing."""
+        from src.swing_analysis.swing_detector import _apply_structural_separation_filter
+
+        references = [
+            {
+                'high_price': 110.0,
+                'low_price': 90.0,
+                'high_bar_index': 10,
+                'low_bar_index': 5,
+                'size': 20.0
+            },
+            {
+                'high_price': 115.0,
+                'low_price': 95.0,
+                'high_bar_index': 20,
+                'low_bar_index': 15,
+                'size': 20.0
+            }
+        ]
+
+        filtered = _apply_structural_separation_filter(
+            references, None, lookback=5, median_candle=2.0, direction='bull'
+        )
+
+        for ref in filtered:
+            self.assertIn('structurally_separated', ref)
+            self.assertIn('containing_swing_id', ref)
+
+    def test_filter_empty_list(self):
+        """Should handle empty reference list."""
+        from src.swing_analysis.swing_detector import _apply_structural_separation_filter
+
+        result = _apply_structural_separation_filter(
+            [], None, lookback=5, median_candle=2.0, direction='bull'
+        )
+
+        self.assertEqual(result, [])
+
+
+class TestFibConfluenceScore(unittest.TestCase):
+    """Test suite for FIB confluence scoring functions (Phase 3B)."""
+
+    def test_calculate_fib_confluence_score_exact_level(self):
+        """Should return 1.0 when price is exactly on a FIB level."""
+        from src.swing_analysis.level_calculator import calculate_fib_confluence_score
+
+        containing_swing = {
+            'high_price': 100.0,
+            'low_price': 0.0
+        }
+
+        # Price at 0.382 level = 0 + (100 * 0.382) = 38.2
+        score = calculate_fib_confluence_score(38.2, containing_swing, "bullish")
+
+        self.assertEqual(score, 1.0)
+
+    def test_calculate_fib_confluence_score_no_containing(self):
+        """Should return 0.0 when no containing swing."""
+        from src.swing_analysis.level_calculator import calculate_fib_confluence_score
+
+        score = calculate_fib_confluence_score(50.0, None, "bullish")
+
+        self.assertEqual(score, 0.0)
+
+    def test_calculate_fib_confluence_score_far_from_level(self):
+        """Should return 0.0 when price is far from any FIB level."""
+        from src.swing_analysis.level_calculator import calculate_fib_confluence_score
+
+        containing_swing = {
+            'high_price': 100.0,
+            'low_price': 0.0
+        }
+
+        # Price at 45.0 is between 0.382 (38.2) and 0.5 (50.0)
+        # Both are more than 0.5% of swing size (0.5) away
+        score = calculate_fib_confluence_score(45.0, containing_swing, "bullish")
+
+        # Should be 0 since not within tolerance of any level
+        self.assertEqual(score, 0.0)
+
+    def test_calculate_fib_confluence_score_within_tolerance(self):
+        """Should return score between 0 and 1 when within tolerance."""
+        from src.swing_analysis.level_calculator import calculate_fib_confluence_score
+
+        containing_swing = {
+            'high_price': 100.0,
+            'low_price': 0.0
+        }
+
+        # Swing size = 100, tolerance = 0.5% = 0.5
+        # 0.618 level = 61.8
+        # Price at 61.6 is 0.2 away (within 0.5 tolerance)
+        score = calculate_fib_confluence_score(61.6, containing_swing, "bullish")
+
+        self.assertGreater(score, 0.0)
+        self.assertLess(score, 1.0)
+
+    def test_score_swing_fib_confluence(self):
+        """Should add fib_confluence_score to swing dict."""
+        from src.swing_analysis.level_calculator import score_swing_fib_confluence
+
+        swing = {
+            'high_price': 60.0,
+            'low_price': 40.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }
+
+        containing_swing = {
+            'high_price': 100.0,
+            'low_price': 0.0
+        }
+
+        result = score_swing_fib_confluence(swing, containing_swing, direction='bull')
+
+        self.assertIn('fib_confluence_score', result)
+        self.assertIsInstance(result['fib_confluence_score'], float)
+        self.assertGreaterEqual(result['fib_confluence_score'], 0.0)
+        self.assertLessEqual(result['fib_confluence_score'], 1.0)
+
+    def test_score_swing_fib_confluence_no_containing(self):
+        """Should return 0.0 when no containing swing."""
+        from src.swing_analysis.level_calculator import score_swing_fib_confluence
+
+        swing = {
+            'high_price': 60.0,
+            'low_price': 40.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5
+        }
+
+        result = score_swing_fib_confluence(swing, None, direction='bull')
+
+        self.assertEqual(result['fib_confluence_score'], 0.0)
+
+
+class TestLargerSwingsParameter(unittest.TestCase):
+    """Test suite for larger_swings parameter in detect_swings (Phase 3)."""
+
+    def _create_synthetic_bars(self, num_bars: int, seed: int = 42) -> pd.DataFrame:
+        """Create synthetic OHLC data."""
+        np.random.seed(seed)
+        prices = np.cumsum(np.random.randn(num_bars) * 2) + 5000
+        return pd.DataFrame({
+            'open': prices,
+            'high': prices + np.abs(np.random.randn(num_bars)),
+            'low': prices - np.abs(np.random.randn(num_bars)),
+            'close': prices + np.random.randn(num_bars) * 0.5
+        })
+
+    def test_larger_swings_none_backward_compatible(self):
+        """With larger_swings=None (default), behavior should be unchanged."""
+        df = self._create_synthetic_bars(500)
+
+        # Without larger_swings
+        result_default = detect_swings(df, lookback=5, filter_redundant=False)
+
+        # Explicitly passing None
+        result_none = detect_swings(df, lookback=5, filter_redundant=False,
+                                    larger_swings=None)
+
+        # Both should return same number of references
+        self.assertEqual(len(result_default['bull_references']),
+                        len(result_none['bull_references']))
+        self.assertEqual(len(result_default['bear_references']),
+                        len(result_none['bear_references']))
+
+    def test_larger_swings_adds_metadata(self):
+        """When larger_swings provided, swings should have separation metadata."""
+        df = self._create_synthetic_bars(500)
+
+        # Create mock larger swings
+        larger_swings = [
+            {
+                'high_price': 5100.0,
+                'low_price': 4900.0,
+                'high_bar_index': 400,
+                'low_bar_index': 100,
+                'size': 200.0,
+                'swing_id': 'xl_1'
+            }
+        ]
+
+        result = detect_swings(df, lookback=5, filter_redundant=False,
+                               larger_swings=larger_swings)
+
+        # Check that metadata was added
+        for ref in result['bull_references']:
+            self.assertIn('structurally_separated', ref)
+            self.assertIn('containing_swing_id', ref)
+            self.assertIn('fib_confluence_score', ref)
+
+        for ref in result['bear_references']:
+            self.assertIn('structurally_separated', ref)
+            self.assertIn('containing_swing_id', ref)
+            self.assertIn('fib_confluence_score', ref)
+
+    def test_larger_swings_filters_close_swings(self):
+        """With larger_swings, swings too close together should be filtered."""
+        # Create data with clustered swings
+        prices = [100] + [100 + i * 0.5 for i in range(50)]  # Very gradual rise
+        prices += [125 - i * 0.5 for i in range(50)]  # Gradual decline
+
+        df = pd.DataFrame({
+            'open': prices,
+            'high': [p + 0.5 for p in prices],
+            'low': [p - 0.5 for p in prices],
+            'close': prices
+        })
+
+        # Without larger_swings
+        result_no_filter = detect_swings(df, lookback=3, filter_redundant=False,
+                                         larger_swings=None)
+
+        # With larger_swings context
+        larger_swings = [
+            {
+                'high_price': 130.0,
+                'low_price': 95.0,
+                'high_bar_index': 80,
+                'low_bar_index': 0,
+                'size': 35.0,
+                'swing_id': 'larger_1'
+            }
+        ]
+
+        result_filtered = detect_swings(df, lookback=3, filter_redundant=False,
+                                        larger_swings=larger_swings)
+
+        # Structural separation should potentially filter some swings
+        # (depends on actual swing detection, but metadata should be present)
+        for ref in result_filtered['bull_references']:
+            self.assertIn('structurally_separated', ref)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

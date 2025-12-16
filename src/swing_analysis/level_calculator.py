@@ -1,12 +1,19 @@
 from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional, Dict, Any
 
 @dataclass
 class Level:
     multiplier: Decimal
     price: Decimal
     level_type: str
+
+
+# Extended FIB ratios for confluence scoring (includes standard + extensions)
+CONFLUENCE_FIB_RATIOS = [
+    0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0,
+    1.236, 1.382, 1.5, 1.618, 1.786, 2.0
+]
 
 def calculate_levels(
     high: Decimal,
@@ -89,5 +96,105 @@ def calculate_levels(
 
     # Sort by multiplier
     levels.sort(key=lambda x: x.multiplier)
-    
+
     return levels
+
+
+def calculate_fib_confluence_score(
+    endpoint_price: float,
+    containing_swing: Dict[str, Any],
+    direction: str = "bullish",
+    tolerance_pct: float = 0.005
+) -> float:
+    """
+    Score how close a price is to any FIB level of the containing swing.
+
+    Endpoints that land on FIB levels of larger swings are structurally
+    significant - price respects them because market participants watch them.
+
+    Args:
+        endpoint_price: The price to score
+        containing_swing: Dict with 'high_price' and 'low_price' keys
+        direction: "bullish" or "bearish" for level calculation
+        tolerance_pct: How close to a level counts as "on" the level (default 0.5%)
+
+    Returns:
+        Score from 0.0 (no confluence) to 1.0 (exactly on level)
+    """
+    if not containing_swing:
+        return 0.0
+
+    high = containing_swing.get('high_price', 0)
+    low = containing_swing.get('low_price', 0)
+    swing_size = high - low
+
+    if swing_size <= 0:
+        return 0.0
+
+    # Calculate tolerance in price units
+    tolerance = tolerance_pct * swing_size
+
+    # Calculate FIB level prices using extended ratios
+    fib_prices = []
+    for ratio in CONFLUENCE_FIB_RATIOS:
+        if direction == "bullish":
+            level_price = low + (swing_size * ratio)
+        else:
+            level_price = high - (swing_size * ratio)
+        fib_prices.append(level_price)
+
+    # Find minimum distance to any FIB level
+    min_distance = float('inf')
+    for level_price in fib_prices:
+        distance = abs(endpoint_price - level_price)
+        min_distance = min(min_distance, distance)
+
+    # Convert to score (1.0 = on level, 0.0 = beyond tolerance)
+    if min_distance <= tolerance:
+        return 1.0 - (min_distance / tolerance)
+    else:
+        return 0.0
+
+
+def score_swing_fib_confluence(
+    swing: Dict[str, Any],
+    containing_swing: Optional[Dict[str, Any]],
+    direction: str = "bull"
+) -> Dict[str, Any]:
+    """
+    Add FIB confluence scores to a swing dictionary.
+
+    Calculates scores for both the high and low endpoints of the swing.
+
+    Args:
+        swing: Swing dictionary with 'high_price' and 'low_price' keys
+        containing_swing: The larger-scale swing containing this one
+        direction: "bull" or "bear"
+
+    Returns:
+        Updated swing dictionary with 'fib_confluence_score' added
+    """
+    if not containing_swing:
+        swing['fib_confluence_score'] = 0.0
+        return swing
+
+    # Map direction to calculate_levels direction
+    calc_direction = "bullish" if direction == "bull" else "bearish"
+
+    # Score both endpoints
+    high_score = calculate_fib_confluence_score(
+        swing.get('high_price', 0),
+        containing_swing,
+        calc_direction
+    )
+    low_score = calculate_fib_confluence_score(
+        swing.get('low_price', 0),
+        containing_swing,
+        calc_direction
+    )
+
+    # Use average of both endpoint scores
+    # (Both endpoints landing on FIB levels is stronger than just one)
+    swing['fib_confluence_score'] = (high_score + low_score) / 2
+
+    return swing

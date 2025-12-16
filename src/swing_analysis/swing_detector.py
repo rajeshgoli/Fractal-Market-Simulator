@@ -1,10 +1,18 @@
 import bisect
 import math
 from decimal import Decimal
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 import pandas as pd
-from .level_calculator import calculate_levels, Level
+from .level_calculator import calculate_levels, Level, score_swing_fib_confluence
+
+
+# Extended FIB grid for structural separation (symmetric)
+# Standard levels have asymmetric gaps; extended grid fills voids where valid reversals occur
+SEPARATION_FIB_LEVELS = [
+    0.236, 0.382, 0.5, 0.618, 0.786, 1.0,
+    1.236, 1.382, 1.5, 1.618, 1.786, 2.0
+]
 
 
 class SparseTable:
@@ -594,6 +602,213 @@ def _apply_size_filter(references: List[Dict[str, Any]], median_candle: float,
     return filtered
 
 
+def find_containing_swing(
+    swing: Dict[str, Any],
+    larger_swings: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """
+    Find the smallest swing from larger_swings that contains this swing.
+
+    A containing swing has:
+    - high >= swing.high
+    - low <= swing.low
+    - bar_index range overlaps
+
+    Args:
+        swing: The swing to find a container for
+        larger_swings: List of swings at a larger scale
+
+    Returns:
+        The smallest containing swing, or None if no container found
+    """
+    if not larger_swings:
+        return None
+
+    swing_high = swing.get('high_price', 0)
+    swing_low = swing.get('low_price', 0)
+    swing_start = min(swing.get('high_bar_index', 0), swing.get('low_bar_index', 0))
+    swing_end = max(swing.get('high_bar_index', 0), swing.get('low_bar_index', 0))
+
+    candidates = []
+    for ls in larger_swings:
+        ls_high = ls.get('high_price', 0)
+        ls_low = ls.get('low_price', 0)
+        ls_start = min(ls.get('high_bar_index', 0), ls.get('low_bar_index', 0))
+        ls_end = max(ls.get('high_bar_index', 0), ls.get('low_bar_index', 0))
+
+        # Check if larger swing contains this swing
+        if (ls_high >= swing_high and
+            ls_low <= swing_low and
+            ls_start <= swing_start and
+            ls_end >= swing_end):
+            candidates.append(ls)
+
+    if not candidates:
+        return None
+
+    # Return smallest containing swing (most relevant context)
+    return min(candidates, key=lambda s: s.get('size', float('inf')))
+
+
+def _fallback_separation_check(
+    swing: Dict[str, Any],
+    previous_swings: List[Dict[str, Any]],
+    lookback: int,
+    median_candle: float
+) -> bool:
+    """
+    Fallback separation check when no larger swing exists (XL scale or window edges).
+
+    Uses N-bar separation and X% move criteria instead of FIB-based separation.
+
+    Args:
+        swing: The swing to check
+        previous_swings: List of previous swings of the same direction
+        lookback: Lookback parameter from detection
+        median_candle: Median candle height in the window
+
+    Returns:
+        True if swing is sufficiently separated, False otherwise
+    """
+    if not previous_swings:
+        return True  # No previous swings = automatically separated
+
+    # Minimum separation thresholds
+    min_bar_separation = 2 * lookback  # Non-overlapping detection windows
+    min_price_separation = 0.236 * median_candle * lookback  # FIB-equivalent (smallest level)
+
+    swing_low_idx = swing.get('low_bar_index', 0)
+    swing_high_idx = swing.get('high_bar_index', 0)
+    swing_low_price = swing.get('low_price', 0)
+    swing_high_price = swing.get('high_price', 0)
+
+    for prev in previous_swings:
+        prev_high_idx = prev.get('high_bar_index', 0)
+        prev_low_idx = prev.get('low_bar_index', 0)
+        prev_high_price = prev.get('high_price', 0)
+        prev_low_price = prev.get('low_price', 0)
+
+        # Check separation between swing endpoints
+        # For bull references (high->low), check separation from previous low to current high
+        bar_sep = abs(swing_low_idx - prev_high_idx)
+        price_sep = abs(swing_low_price - prev_high_price)
+
+        # Too close in both time and price = not separated
+        if bar_sep < min_bar_separation and price_sep < min_price_separation:
+            return False
+
+    return True
+
+
+def is_structurally_separated(
+    swing: Dict[str, Any],
+    previous_swings: List[Dict[str, Any]],
+    larger_swings: Optional[List[Dict[str, Any]]],
+    lookback: int,
+    median_candle: float
+) -> Tuple[bool, Optional[str]]:
+    """
+    Check if swing is structurally separated from previous swings.
+
+    For High B to register after High A:
+    1. There must be a Low L between A and B
+    2. L must be >= 1 FIB level from High A (on larger-scale grid)
+    3. High B and L must be >= 1 FIB level apart
+
+    Uses extended FIB grid (includes 0.236, 0.786, 1.236, 1.786) for
+    better coverage of structural reversals.
+
+    Args:
+        swing: The swing to validate
+        previous_swings: Previous swings of the same direction to check against
+        larger_swings: Swings from the next larger scale (for FIB grid reference)
+        lookback: Lookback parameter from detection
+        median_candle: Median candle height
+
+    Returns:
+        Tuple of (is_separated: bool, containing_swing_id: Optional[str])
+    """
+    if not previous_swings:
+        return True, None  # No previous swings = automatically separated
+
+    if not larger_swings:
+        # XL or window edge: use fallback
+        return _fallback_separation_check(swing, previous_swings, lookback, median_candle), None
+
+    # Get FIB grid from immediate larger swing
+    containing = find_containing_swing(swing, larger_swings)
+    if not containing:
+        return _fallback_separation_check(swing, previous_swings, lookback, median_candle), None
+
+    containing_id = containing.get('swing_id')
+    swing_size = containing.get('size', 0)
+    if swing_size <= 0:
+        return _fallback_separation_check(swing, previous_swings, lookback, median_candle), None
+
+    # Minimum separation = 0.236 * containing swing size (smallest FIB level)
+    min_separation = 0.236 * swing_size
+
+    swing_low_price = swing.get('low_price', 0)
+    swing_high_price = swing.get('high_price', 0)
+
+    for prev in previous_swings:
+        prev_high_price = prev.get('high_price', 0)
+        prev_low_price = prev.get('low_price', 0)
+
+        # Check separation between swing endpoints
+        # For bull references: compare current low to previous high
+        separation = abs(swing_low_price - prev_high_price)
+        if separation < min_separation:
+            return False, containing_id  # Not structurally distinct
+
+    return True, containing_id
+
+
+def _apply_structural_separation_filter(
+    references: List[Dict[str, Any]],
+    larger_swings: Optional[List[Dict[str, Any]]],
+    lookback: int,
+    median_candle: float,
+    direction: str
+) -> List[Dict[str, Any]]:
+    """
+    Filter swings that are not structurally separated from each other.
+
+    Processes references in order (by detection) and filters those that
+    are too close to previously accepted swings.
+
+    Args:
+        references: List of reference swing dictionaries
+        larger_swings: Swings from the next larger scale
+        lookback: Lookback parameter
+        median_candle: Median candle height
+        direction: 'bull' or 'bear'
+
+    Returns:
+        Filtered list of references with structural separation data added
+    """
+    if not references:
+        return references
+
+    filtered = []
+    accepted_swings = []  # Track accepted swings for separation checks
+
+    for ref in references:
+        is_separated, containing_id = is_structurally_separated(
+            ref, accepted_swings, larger_swings, lookback, median_candle
+        )
+
+        # Add structural separation metadata
+        ref['structurally_separated'] = is_separated
+        ref['containing_swing_id'] = containing_id
+
+        if is_separated:
+            filtered.append(ref)
+            accepted_swings.append(ref)
+
+    return filtered
+
+
 def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = True,
                   quantization: float = 0.25, max_pair_distance: Optional[int] = None,
                   protection_tolerance: float = 0.1, max_rank: Optional[int] = None,
@@ -601,7 +816,8 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                   min_range_pct: Optional[float] = None,
                   min_prominence: Optional[float] = None,
                   adjust_extrema: bool = True,
-                  quota: Optional[int] = None) -> Dict[str, Any]:
+                  quota: Optional[int] = None,
+                  larger_swings: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """
     Identifies swing highs and lows and pairs them to find valid reference swings.
 
@@ -631,9 +847,18 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         quota: If set, limit output to top N swings per direction using combined
             size+impulse ranking. Adds impulse, size_rank, impulse_rank, and
             combined_score fields to output. Takes precedence over max_rank.
+        larger_swings: Optional list of swings from the next larger scale (e.g., XL swings
+            when detecting L swings). Used for structural separation gate (Phase 3).
+            When provided, swings must be >= 0.236 FIB level apart from previous swings
+            relative to the containing larger swing. If None, fallback separation check
+            uses N-bar and X% move criteria instead.
 
     Returns:
         A dictionary containing current price, detected swing points, and valid reference swings.
+        When larger_swings is provided, each swing includes:
+        - structurally_separated: bool indicating if swing passed separation gate
+        - containing_swing_id: ID of the containing larger-scale swing (if found)
+        - fib_confluence_score: score (0.0-1.0) for proximity to FIB levels (if scored)
     """
     # Validate input DataFrame
     if df.empty:
@@ -862,7 +1087,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             bear_references, median_candle, price_range, min_candle_ratio, min_range_pct
         )
 
-    # 6. Apply Prominence Filter (after size, before redundancy)
+    # 6. Apply Prominence Filter (after size, before structural separation)
     if min_prominence is not None:
         bull_references = _apply_prominence_filter(
             bull_references, highs, lows, lookback, median_candle, min_prominence, 'bull'
@@ -871,19 +1096,39 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             bear_references, highs, lows, lookback, median_candle, min_prominence, 'bear'
         )
 
-    # 7. Filter Redundant Swings (Optional)
+    # 7. Structural Separation Gate (Phase 3) - uses larger_swings context
+    # Filters swings that are not structurally distinct (< 0.236 FIB level apart)
+    if larger_swings is not None:
+        bull_references = _apply_structural_separation_filter(
+            bull_references, larger_swings, lookback, median_candle, 'bull'
+        )
+        bear_references = _apply_structural_separation_filter(
+            bear_references, larger_swings, lookback, median_candle, 'bear'
+        )
+
+    # 8. Filter Redundant Swings (Optional)
     if filter_redundant:
         quant_dec = Decimal(str(quantization))
         bull_references = filter_swings(bull_references, "bullish", quant_dec)
         bear_references = filter_swings(bear_references, "bearish", quant_dec)
 
-    # 8. Apply Quota Filter (takes precedence over max_rank)
+    # 9. Fib Confluence Scoring (Phase 3B) - score proximity to FIB levels
+    # Only applied when larger_swings context is provided
+    if larger_swings is not None:
+        for ref in bull_references:
+            containing = find_containing_swing(ref, larger_swings)
+            score_swing_fib_confluence(ref, containing, direction='bull')
+        for ref in bear_references:
+            containing = find_containing_swing(ref, larger_swings)
+            score_swing_fib_confluence(ref, containing, direction='bear')
+
+    # 10. Apply Quota Filter (takes precedence over max_rank)
     # Quota uses combined size+impulse ranking for better swing selection
     if quota is not None:
         bull_references = _apply_quota(bull_references, quota)
         bear_references = _apply_quota(bear_references, quota)
 
-    # 9. Sort and Rank
+    # 11. Sort and Rank
     # Sort by size descending (or by combined_score if quota was applied)
     if quota is not None:
         # Quota already sorted by combined_score, keep that order
@@ -902,7 +1147,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         for idx, ref in enumerate(bear_references):
             ref["rank"] = idx + 1
 
-    # 10. Filter by max_rank (optional, deprecated in favor of quota)
+    # 12. Filter by max_rank (optional, deprecated in favor of quota)
     # Only applied if quota is not set
     if quota is None and max_rank is not None:
         bull_references = bull_references[:max_rank]

@@ -6,7 +6,7 @@ to identify false negatives, false positives, and matching swings.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -196,6 +196,9 @@ class ComparisonAnalyzer:
         """
         Run system detection and compare all scales.
 
+        Detection runs sequentially from XL to S, passing larger-scale
+        swings as context for structural separation (Phase 3).
+
         Args:
             session: Annotation session with user annotations
             bars: Source bars to run detection on
@@ -207,16 +210,57 @@ class ComparisonAnalyzer:
         if scales is None:
             scales = ["XL", "L", "M", "S"]
 
-        # Run system detection
-        system_swings = self._run_system_detection(bars)
+        # Define scale order for sequential processing (largest to smallest)
+        scale_order = ["XL", "L", "M", "S"]
 
+        # Run detection sequentially, passing larger-scale swings as context
+        swings_by_scale = {}
+        larger_swings = None
+
+        for scale in scale_order:
+            if scale in scales:
+                quota = self.SCALE_QUOTAS.get(scale)
+                # Pass larger_swings from previous scale for structural separation
+                scale_swings = self._run_system_detection(
+                    bars, quota=quota, larger_swings=larger_swings
+                )
+                swings_by_scale[scale] = scale_swings
+
+                # Convert detected swings to format usable as larger_swings context
+                larger_swings = self._swings_to_larger_context(scale_swings)
+
+        # Compare each scale
         results = {}
         for scale in scales:
             user_annotations = session.get_annotations_by_scale(scale)
+            system_swings = swings_by_scale.get(scale, [])
             result = self.compare_scale(user_annotations, system_swings, scale)
             results[scale] = result
 
         return results
+
+    def _swings_to_larger_context(self, swings: List[DetectedSwing]) -> List[Dict[str, Any]]:
+        """
+        Convert DetectedSwing objects to dict format for larger_swings parameter.
+
+        Args:
+            swings: List of DetectedSwing objects
+
+        Returns:
+            List of dicts with keys: high_price, low_price, high_bar_index,
+            low_bar_index, size, swing_id
+        """
+        context = []
+        for i, swing in enumerate(swings):
+            context.append({
+                'swing_id': f'{swing.direction}_{i}',
+                'high_price': swing.high_price,
+                'low_price': swing.low_price,
+                'high_bar_index': swing.start_index if swing.direction == 'bull' else swing.end_index,
+                'low_bar_index': swing.end_index if swing.direction == 'bull' else swing.start_index,
+                'size': swing.size,
+            })
+        return context
 
     def _swings_match(
         self,
@@ -250,7 +294,12 @@ class ComparisonAnalyzer:
 
         return start_match and end_match
 
-    def _run_system_detection(self, bars: List[Bar], quota: Optional[int] = None) -> List[DetectedSwing]:
+    def _run_system_detection(
+        self,
+        bars: List[Bar],
+        quota: Optional[int] = None,
+        larger_swings: Optional[List[Dict[str, Any]]] = None
+    ) -> List[DetectedSwing]:
         """
         Run the swing detector on bars and normalize output.
 
@@ -259,6 +308,10 @@ class ComparisonAnalyzer:
             quota: Optional quota to limit output (uses combined size+impulse ranking).
                    If None, returns all detected swings. For scale-specific quotas,
                    use SCALE_QUOTAS class attribute.
+            larger_swings: Optional list of swings from the next larger scale.
+                   Used for structural separation gate (Phase 3). When provided,
+                   swings must be >= 0.236 FIB level apart from previous swings
+                   relative to the containing larger swing.
 
         Returns list of DetectedSwing objects for comparison.
         """
@@ -279,6 +332,7 @@ class ComparisonAnalyzer:
         # - min_range_pct: 2.5 (up from 2.0) - swing must be 2.5% of price range
         # - min_prominence: 1.5 (up from 1.0) - swing point must stand out by 1.5x median candle
         # - quota: uses combined size+impulse ranking (replaces max_rank)
+        # - larger_swings: swings from next larger scale for structural separation (Phase 3)
         result = detect_swings(
             df,
             lookback=5,
@@ -287,7 +341,8 @@ class ComparisonAnalyzer:
             min_candle_ratio=6.0,
             min_range_pct=2.5,
             min_prominence=1.5,
-            quota=quota
+            quota=quota,
+            larger_swings=larger_swings
         )
 
         detected_swings = []
