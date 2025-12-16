@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-15
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-*No pending changes.*
+- **#68** - Phase 3 FIB-aware endpoint selection (structural separation + confluence)
 
 ---
 
