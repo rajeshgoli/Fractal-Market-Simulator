@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from .csv_utils import escape_csv_field
 from .models import (
     AnnotationSession, SwingAnnotation, ReviewSession, SwingFeedback,
     REVIEW_SCHEMA_VERSION
@@ -712,8 +713,7 @@ class ReviewStorage:
         all_feedback = review.match_feedback + review.fp_feedback + review.fn_feedback
 
         for fb in all_feedback:
-            # Escape commas in comment
-            comment = (fb.comment or "").replace(",", ";").replace("\n", " ")
+            comment = escape_csv_field(fb.comment or "")
             line = (
                 f"{fb.feedback_id},{fb.swing_type},{fb.verdict},"
                 f"{fb.category or ''},{comment},{fb.created_at.isoformat()}"

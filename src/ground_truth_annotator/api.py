@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from .cascade_controller import CascadeController
 from .comparison_analyzer import ComparisonAnalyzer, ComparisonResult
+from .csv_utils import escape_csv_field
 from .models import AnnotationSession, SwingAnnotation
 from .review_controller import ReviewController
 from .storage import AnnotationStorage, ReviewStorage
@@ -145,19 +146,12 @@ class CascadeStateResponse(BaseModel):
     scale_info: Dict[str, ScaleInfo]
 
 
-class CascadeAdvanceResponse(BaseModel):
-    """Response from advancing cascade."""
+class CascadeTransitionResponse(BaseModel):
+    """Response from cascade state change (advance or skip)."""
     success: bool
-    previous_scale: str
-    current_scale: str
-    is_complete: bool
-
-
-class CascadeSkipResponse(BaseModel):
-    """Response from skipping remaining scales."""
-    success: bool
-    completed_scale: str
-    skipped_scales: List[str]
+    previous_scale: str  # Scale before transition
+    current_scale: str   # Scale after transition
+    skipped_scales: List[str] = []  # Empty for advance, populated for skip
     is_complete: bool
 
 
@@ -716,7 +710,7 @@ async def get_cascade_state():
     )
 
 
-@app.post("/api/cascade/advance", response_model=CascadeAdvanceResponse)
+@app.post("/api/cascade/advance", response_model=CascadeTransitionResponse)
 async def advance_cascade():
     """Mark current scale complete and advance to next scale."""
     s = get_state()
@@ -742,7 +736,7 @@ async def advance_cascade():
         s.aggregated_bars = s.cascade_controller.get_bars_for_scale(current_scale)
         s.aggregation_map = s.cascade_controller.get_aggregation_map(current_scale)
 
-    return CascadeAdvanceResponse(
+    return CascadeTransitionResponse(
         success=success,
         previous_scale=previous_scale,
         current_scale=current_scale,
@@ -750,7 +744,7 @@ async def advance_cascade():
     )
 
 
-@app.post("/api/cascade/skip", response_model=CascadeSkipResponse)
+@app.post("/api/cascade/skip", response_model=CascadeTransitionResponse)
 async def skip_remaining_scales():
     """Skip remaining scales and proceed to review.
 
@@ -766,7 +760,7 @@ async def skip_remaining_scales():
             detail="Cascade mode not enabled. Start server with --cascade flag."
         )
 
-    completed_scale = s.cascade_controller.get_current_scale()
+    previous_scale = s.cascade_controller.get_current_scale()
     skipped_scales = s.cascade_controller.skip_remaining_scales()
     current_scale = s.cascade_controller.get_current_scale()
 
@@ -781,9 +775,10 @@ async def skip_remaining_scales():
         s.aggregated_bars = s.cascade_controller.get_bars_for_scale(current_scale)
         s.aggregation_map = s.cascade_controller.get_aggregation_map(current_scale)
 
-    return CascadeSkipResponse(
+    return CascadeTransitionResponse(
         success=True,
-        completed_scale=completed_scale,
+        previous_scale=previous_scale,
+        current_scale=current_scale,
         skipped_scales=skipped_scales,
         is_complete=s.cascade_controller.is_session_complete(),
     )
@@ -1324,7 +1319,7 @@ async def export_review(format: str = Query("json")):
         # Matches
         for m in matches:
             fb = m.get("feedback") or {}
-            comment = (fb.get("comment") or "").replace(",", ";").replace("\n", " ")
+            comment = escape_csv_field(fb.get("comment") or "")
             lines.append(
                 f"match,{m['annotation']['annotation_id']},{m['scale']},"
                 f"{m['annotation']['direction']},{m['annotation']['start_source_index']},"
@@ -1335,7 +1330,7 @@ async def export_review(format: str = Query("json")):
         # False positives
         for fp in fps:
             fb = fp.get("feedback") or {}
-            comment = (fb.get("comment") or "").replace(",", ";").replace("\n", " ")
+            comment = escape_csv_field(fb.get("comment") or "")
             lines.append(
                 f"false_positive,fp_{fp['sample_index']},{fp['scale']},"
                 f"{fp['system_swing']['direction']},{fp['system_swing']['start_index']},"
@@ -1346,7 +1341,7 @@ async def export_review(format: str = Query("json")):
         # False negatives
         for fn in fns:
             fb = fn.get("feedback") or {}
-            comment = (fb.get("comment") or "").replace(",", ";").replace("\n", " ")
+            comment = escape_csv_field(fb.get("comment") or "")
             lines.append(
                 f"false_negative,{fn['annotation']['annotation_id']},{fn['scale']},"
                 f"{fn['annotation']['direction']},{fn['annotation']['start_source_index']},"
