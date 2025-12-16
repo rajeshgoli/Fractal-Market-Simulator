@@ -888,6 +888,54 @@ event.effort      # EffortAnnotation (dwell_bars, test_count)
 event.parent_context  # ParentContext (larger scale swing state)
 ```
 
+#### `src/discretization/io.py`
+
+**Purpose**: Persistence layer for reading and writing discretization logs. JSON format for development; Parquet can be added later if needed.
+
+**Key Functions**:
+
+```python
+from src.discretization import write_log, read_log, compare_configs, config_compatible
+
+# Write log to JSON file
+write_log(log, Path("output/events.json"))
+
+# Read log from JSON file (validates by default)
+log = read_log(Path("output/events.json"))
+
+# Read without validation
+log = read_log(path, validate=False, warn_config_diff=False)
+
+# Compare configs between two logs
+diffs = compare_configs(log1, log2)
+# Returns: ["level_set_version differs: v1.0 vs v1.1", ...]
+
+# Check if log is compatible with expected config
+from src.discretization import get_default_config
+if config_compatible(log, get_default_config()):
+    print("Log uses current config")
+```
+
+**File Format**:
+
+```json
+{
+  "schema_version": "1.0",
+  "meta": {
+    "instrument": "ES",
+    "source_resolution": "1m",
+    "date_range_start": "2024-01-01T00:00:00Z",
+    "date_range_end": "2024-01-31T23:59:00Z",
+    "created_at": "2025-12-15T12:00:00Z",
+    "config": { ... }
+  },
+  "swings": [...],
+  "events": [...]
+}
+```
+
+**Config Compatibility**: When reading logs, the `warn_config_diff` parameter (default `True`) logs a warning if the log was produced with a different configuration than current defaults. Use `config_compatible()` to programmatically check compatibility based on `level_set` and `level_set_version`.
+
 ---
 
 ### Ground Truth Annotator

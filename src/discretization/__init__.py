@@ -33,6 +33,15 @@ from .discretizer import (
     DISCRETIZER_VERSION,
 )
 
+from .io import (
+    write_log,
+    read_log,
+    compare_configs,
+    compare_configs_detail,
+    config_compatible,
+    get_default_config,
+)
+
 __all__ = [
     # Discretizer
     "Discretizer",
@@ -57,4 +66,11 @@ __all__ = [
     "ValidationError",
     # Schema version
     "SCHEMA_VERSION",
+    # I/O
+    "write_log",
+    "read_log",
+    "compare_configs",
+    "compare_configs_detail",
+    "config_compatible",
+    "get_default_config",
 ]
