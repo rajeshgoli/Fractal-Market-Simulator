@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-16
 
@@ -12,6 +12,16 @@
 - **Issue:** #73
 - **Type:** Feature
 - **Files:** `src/swing_analysis/reference_frame.py`, `tests/test_reference_frame.py`
+
+### 2025-12-16 - Discretization level set constants
+- **Issue:** #74
+- **Type:** Feature
+- **Files:** `src/swing_analysis/constants.py`, `tests/test_constants.py`
+
+### 2025-12-16 - DiscretizationEvent schema
+- **Issue:** #75
+- **Type:** Feature
+- **Files:** `src/discretization/schema.py`, `src/discretization/__init__.py`, `tests/test_discretization_schema.py`
 
 ---
 

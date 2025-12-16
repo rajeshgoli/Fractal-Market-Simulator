@@ -124,6 +124,9 @@ fractal-market-simulator/
 │   │   ├── swing_state_manager.py       # Active swing tracking
 │   │   ├── event_detector.py            # Structural event detection
 │   │   └── swing_detector.py            # O(N log N) vectorized swing detection
+│   ├── discretization/
+│   │   ├── schema.py               # Event schema and validation
+│   │   └── __init__.py
 │   └── ground_truth_annotator/
 │       ├── main.py                 # CLI entry point
 │       ├── api.py                  # FastAPI endpoints
@@ -723,6 +726,86 @@ price = frame.price(Decimal("0.618"))  # Returns 5061.8
 - `from_swing(swing)`: Factory method to create from `ReferenceSwing`
 
 **Design Note**: The frame normalizes direction-specific logic so that ratio 0 is always the defended pivot and ratio 1 is always the origin, regardless of bull/bear direction.
+
+---
+
+### Discretization
+
+#### `src/discretization/schema.py`
+
+**Purpose**: Defines the canonical event schema for discretization output - converting continuous OHLC + detected swings into a log of structural events.
+
+**Design Principle**: "Log everything; filter later. Don't embed assumptions about what matters into the discretizer."
+
+**Key Dataclasses**:
+
+```python
+# Configuration (for corpus comparability)
+@dataclass
+class DiscretizationConfig:
+    level_set: List[float]                    # Fib levels to track
+    level_set_version: str                    # e.g., "v1.0"
+    crossing_semantics: Literal["close_cross", "open_close_cross", "wick_touch"]
+    crossing_tolerance_pct: float             # Tolerance for level crossing
+    invalidation_thresholds: Dict[str, float] # Per-scale thresholds
+    swing_detector_version: str
+    discretizer_version: str
+
+# Core event
+@dataclass
+class DiscretizationEvent:
+    bar: int                                  # Source bar index
+    timestamp: str                            # ISO 8601
+    swing_id: str                             # Reference to SwingEntry
+    event_type: EventType                     # LEVEL_CROSS, COMPLETION, etc.
+    data: Dict[str, Any]                      # Event-specific fields
+    effort: Optional[EffortAnnotation]        # Wyckoff-style effort
+    shock: Optional[ShockAnnotation]          # Tail/impulsive behavior
+    parent_context: Optional[ParentContext]   # Cross-scale state
+
+# Complete log
+@dataclass
+class DiscretizationLog:
+    meta: DiscretizationMeta                  # Provenance + config
+    swings: List[SwingEntry]                  # Registered swings
+    events: List[DiscretizationEvent]         # Ordered event list
+```
+
+**Event Types**:
+
+| Event | Meaning | Required Data Fields |
+|-------|---------|---------------------|
+| `LEVEL_CROSS` | Price crossed a Fib level | from_ratio, to_ratio, level_crossed, direction |
+| `LEVEL_TEST` | Price approached but didn't cross | level, result (REJECT/WICK_THROUGH) |
+| `COMPLETION` | Ratio crossed 2.0 | completion_ratio |
+| `INVALIDATION` | Ratio crossed below threshold | invalidation_ratio, threshold |
+| `SWING_FORMED` | New swing detected | swing_id, scale, direction |
+| `SWING_TERMINATED` | Swing ended | termination_type (COMPLETED/INVALIDATED) |
+
+**Side-Channels**:
+
+| Annotation | Purpose | Fields |
+|------------|---------|--------|
+| `EffortAnnotation` | Wyckoff effort vs result | dwell_bars, test_count, max_probe_r |
+| `ShockAnnotation` | Tail/impulsive behavior | levels_jumped, range_multiple, gap_multiple, is_gap |
+| `ParentContext` | Cross-scale state snapshot | scale, swing_id, band, direction, ratio |
+
+**Validation**:
+
+```python
+from src.discretization import validate_log, DiscretizationLog
+
+log = DiscretizationLog.from_dict(data)
+errors = validate_log(log)
+if errors:
+    print(f"Validation failed: {errors}")
+```
+
+The `validate_log()` function checks:
+- All event swing_ids reference existing swings
+- Events are ordered by bar index
+- Required config fields are present
+- Event data matches event_type requirements
 
 ---
 
