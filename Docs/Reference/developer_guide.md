@@ -116,7 +116,8 @@ fractal-market-simulator/
 │   ├── data/
 │   │   └── ohlc_loader.py          # CSV data loading
 │   ├── swing_analysis/
-│   │   ├── bull_reference_detector.py   # Bar dataclass, reference detection
+│   │   ├── bull_reference_detector.py   # Bar dataclass, thin wrapper detectors
+│   │   ├── reference_detector.py        # DirectionalReferenceDetector base
 │   │   ├── level_calculator.py          # Fibonacci level computation
 │   │   ├── scale_calibrator.py          # Auto-calibrate scale boundaries
 │   │   ├── bar_aggregator.py            # Multi-timeframe bar aggregation
@@ -128,6 +129,7 @@ fractal-market-simulator/
 │       ├── api.py                  # FastAPI endpoints
 │       ├── models.py               # SwingAnnotation, AnnotationSession
 │       ├── storage.py              # JSON-backed persistence
+│       ├── csv_utils.py            # CSV field escaping utilities
 │       ├── comparison_analyzer.py  # Compare annotations vs system detection
 │       ├── cascade_controller.py   # XL→L→M→S scale progression
 │       ├── review_controller.py    # Review Mode workflow
@@ -312,9 +314,28 @@ bars = loader.load_data("market_data.csv")
 
 ### Swing Analysis
 
+#### `src/swing_analysis/reference_detector.py`
+
+**Purpose**: Unified reference swing detection parameterized by direction.
+
+**Key Class**: `DirectionalReferenceDetector`
+
+```python
+from src.swing_analysis.reference_detector import DirectionalReferenceDetector
+
+# Create detector for bull swings (completed bear legs being countered)
+bull_detector = DirectionalReferenceDetector("bull", config)
+swings = bull_detector.detect(bars, current_price)
+
+# Or for bear swings (completed bull legs being countered)
+bear_detector = DirectionalReferenceDetector("bear", config)
+```
+
+Detects swing highs/lows and pairs them into valid reference swings. Uses lookback validation to ensure swings are structural (not noise).
+
 #### `src/swing_analysis/bull_reference_detector.py`
 
-**Purpose**: Core Bar dataclass and reference swing detection.
+**Purpose**: Bar dataclass definition and thin wrapper detectors for backward compatibility.
 
 **Key Dataclass**: `Bar`
 
@@ -329,9 +350,9 @@ class Bar:
     close: Decimal
 ```
 
-**Key Class**: `BullReferenceDetector`
+**Wrapper Classes**: `BullReferenceDetector`, `BearReferenceDetector`
 
-Detects swing highs/lows and pairs them into valid reference swings. Uses lookback validation to ensure swings are structural (not noise).
+Thin wrappers around `DirectionalReferenceDetector` maintaining the original API for backward compatibility.
 
 #### `src/swing_analysis/level_calculator.py`
 
