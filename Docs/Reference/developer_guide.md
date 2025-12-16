@@ -137,9 +137,13 @@ fractal-market-simulator/
 │       ├── cascade_controller.py   # XL→L→M→S scale progression
 │       ├── review_controller.py    # Review Mode workflow
 │       └── static/index.html       # Two-click annotation UI
+├── scripts/                        # Development utilities
+│   ├── validate_discretizer.py    # Discretizer validation on sample data
+│   └── compare_discretizers.py    # Sanity comparison vs old event_detector
 ├── tests/                          # Test suite (550+ tests)
 ├── Docs/                           # Documentation
 └── test_data/                      # Sample data files
+    └── discretization_validation/ # Validation output logs
 ```
 
 ---
