@@ -634,6 +634,48 @@ The `detect_swings()` function applies filters in a specific order. Understandin
 | `filter_swings()` | Fibonacci band redundancy filtering |
 | `get_level_band()` | Determine which Fib band a price falls into |
 
+**ReferenceSwing Dataclass:**
+
+A typed dataclass for representing detected reference swings:
+
+```python
+@dataclass
+class ReferenceSwing:
+    # Required fields
+    high_price: float
+    high_bar_index: int
+    low_price: float
+    low_bar_index: int
+    size: float
+    direction: Literal["bull", "bear"]
+
+    # Level calculations
+    level_0382: float = 0.0
+    level_2x: float = 0.0
+
+    # Ranking (computed during filtering)
+    rank: int = 0
+    impulse: float = 0.0
+    size_rank: Optional[int] = None
+    impulse_rank: Optional[int] = None
+    combined_score: Optional[float] = None
+
+    # Structural properties
+    structurally_separated: bool = False
+    containing_swing_id: Optional[str] = None
+    fib_confluence_score: float = 0.0
+
+    @property
+    def span(self) -> int:
+        """Number of bars in the swing."""
+        return abs(self.high_bar_index - self.low_bar_index) + 1
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for backward compatibility."""
+```
+
+Note: Currently `detect_swings()` returns dictionaries. The dataclass is available for future migration to typed swing objects.
+
 ---
 
 ### Ground Truth Annotator
