@@ -65,15 +65,14 @@ For detailed technical architecture, see `Docs/State/architect_notes.md`.
 src/
 ├── swing_analysis/            # Core detection algorithms
 ├── ground_truth_annotator/    # Two-click annotation tool
-├── data/                      # OHLC loading
-└── examples/                  # Demo scripts
+└── data/                      # OHLC loading
 
 Docs/
 ├── State/      # architect_notes.md, product_direction.md, pending_review.md
 ├── Comms/      # questions.md, archive.md
 └── Reference/  # user_guide.md, interview_notes.md
 
-tests/          # 300+ tests
+tests/          # 550+ tests
 ```
 
 ## Development Guidelines

@@ -114,8 +114,7 @@ The system follows a pipeline architecture with clear separation of concerns:
 fractal-market-simulator/
 ├── src/
 │   ├── data/
-│   │   ├── ohlc_loader.py          # CSV data loading
-│   │   └── loader.py               # Historical data with date filtering
+│   │   └── ohlc_loader.py          # CSV data loading
 │   ├── swing_analysis/
 │   │   ├── bull_reference_detector.py   # Bar dataclass, reference detection
 │   │   ├── level_calculator.py          # Fibonacci level computation
@@ -133,7 +132,7 @@ fractal-market-simulator/
 │       ├── cascade_controller.py   # XL→L→M→S scale progression
 │       ├── review_controller.py    # Review Mode workflow
 │       └── static/index.html       # Two-click annotation UI
-├── tests/                          # Test suite (388+ tests)
+├── tests/                          # Test suite (550+ tests)
 ├── Docs/                           # Documentation
 └── test_data/                      # Sample data files
 ```
@@ -309,28 +308,6 @@ bars = loader.load_data("market_data.csv")
 - Gap detection between bars
 - Data validation (OHLC consistency)
 
-#### `src/data/loader.py`
-
-**Purpose**: Load historical data with date range filtering for validation.
-
-**Key Functions**:
-
-```python
-from src.data.loader import load_historical_data, get_data_summary
-
-# Load with date filtering
-bars = load_historical_data(
-    symbol="ES",
-    resolution="1m",
-    start_date=datetime(2024, 10, 10),
-    end_date=datetime(2024, 10, 11)
-)
-
-# Discover available data
-summary = get_data_summary(symbol="ES")
-# Returns: {resolution: {files: [...], date_range: (start, end)}}
-```
-
 ---
 
 ### Swing Analysis
@@ -477,7 +454,7 @@ events = detector.detect_events(current_bar, active_swings)
 
 **Purpose**: Legacy swing detection using pandas. Used for batch analysis and historical swing identification.
 
-**Key Function**: `detect_swings(df, lookback=5, filter_redundant=True, protection_tolerance=0.1, max_rank=None, min_candle_ratio=None, min_range_pct=None, min_prominence=None, adjust_extrema=True, quota=None)`
+**Key Function**: `detect_swings(df, lookback=5, filter_redundant=True, protection_tolerance=0.1, min_candle_ratio=None, min_range_pct=None, min_prominence=None, adjust_extrema=True, quota=None)`
 
 Uses `SparseTable` for O(1) range minimum/maximum queries to validate swing structure efficiently.
 
@@ -515,13 +492,7 @@ Uses `SparseTable` for O(1) range minimum/maximum queries to validate swing stru
 - **Impulse calculation**: `size / span` - measures how quickly the swing formed
 - **Output fields added**: `impulse`, `size_rank`, `impulse_rank`, `combined_score`
 - **Scale-specific quotas**: Recommended values - XL=4, L=6, M=10, S=15
-- Takes precedence over `max_rank` when both are set
 - Set to `None` (default) to disable
-
-**Max Rank** (deprecated in favor of quota):
-- `max_rank`: Limits output to top N swings by size per direction
-- Still works for backward compatibility when quota is not set
-- Prefer `quota` for better swing selection using combined size+impulse ranking
 
 #### Filter Pipeline Reference
 
@@ -588,25 +559,17 @@ The `detect_swings()` function applies filters in a specific order. Understandin
 └─────────────────────────────────────────────────────────────────────┘
                                    ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│ 8. QUOTA FILTER (quota)                    ← REPLACES MAX_RANK      │
+│ 8. QUOTA FILTER (quota)                                             │
 │    _apply_quota()                                                   │
 │    - Ranks swings by combined score (0.6×size + 0.4×impulse)        │
 │    - Returns top N swings by combined score                         │
 │    - Adds impulse, size_rank, impulse_rank, combined_score fields   │
-│    - Takes precedence over max_rank when set                        │
 └─────────────────────────────────────────────────────────────────────┘
                                    ↓
 ┌─────────────────────────────────────────────────────────────────────┐
 │ 9. RANKING                                                          │
 │    - Sort by combined_score (if quota) or size descending           │
 │    - Assign rank 1, 2, 3... to each reference                       │
-└─────────────────────────────────────────────────────────────────────┘
-                                   ↓
-┌─────────────────────────────────────────────────────────────────────┐
-│ 10. MAX RANK FILTER (max_rank) — DEPRECATED                         │
-│    - Limit output to top N swings per direction                     │
-│    - Only applied if quota is not set (backward compatibility)      │
-│    - Prefer quota for combined size+impulse ranking                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 

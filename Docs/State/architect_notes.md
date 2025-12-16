@@ -1,5 +1,25 @@
 # Architect Notes
 
+## Onboarding
+
+Read in order:
+1. **`.claude/why.md`** — North Star
+2. **This document** — Current state and active designs
+3. **`Docs/Reference/developer_guide.md`** — Implementation details as needed
+
+**Core architectural decisions:**
+- Multi-scale (S/M/L/XL) with independent processing
+- Fibonacci-based structural analysis (not arbitrary thresholds)
+- Resolution-agnostic (1m to 1mo)
+- Ground truth annotation as validation mechanism
+
+**Known debt** (detail in `Docs/Proposals/architecture_simplification_proposal.md`):
+- Bull/BearReferenceDetector duplication (~600 LOC)
+- 351-line `detect_swings()` function
+- Custom SparseTable vs scipy
+
+---
+
 ## Current Phase: Phase 3 Design Complete
 
 **Status:** Phases 1-2 implemented. Phase 3 designed, ready for implementation.
@@ -117,14 +137,14 @@ Current Pipeline:
 5. Prominence filter
 6. Redundancy filtering  ← FIB SCORING HERE (needs larger-scale swings)
 7. Ranking
-8. max_rank filter
+8. Quota filter
 
 Modified Pipeline:
 1-5. (unchanged)
 6. Calculate fib confluence score for each swing
 7. Redundancy filtering (can use score as tiebreaker)
 8. Ranking (incorporate fib score)
-9. max_rank filter / quota
+9. Quota filter
 ```
 
 **Key insight:** Fib scoring requires knowledge of larger-scale swings. The annotator already runs detection at multiple scales. The scoring should happen at the annotation layer, not in the core detector.
@@ -254,12 +274,10 @@ def apply_quota(swings: list, scale: str, direction: str) -> list:
 
 #### Integration Point
 
-Replaces `max_rank` filter:
-
 ```
 ...
 8. Redundancy filtering
-9. **Quota filter** (replaces max_rank)
+9. **Quota filter**
 10. Final ranking assignment
 ```
 
@@ -431,7 +449,7 @@ Per scale:
 7. Structural separation gate ← Phase 3A (uses larger-scale swings)
 8. Redundancy filtering
 9. Fib confluence scoring ← Phase 3B
-10. Quota filter ← Phase 2 (replaces max_rank)
+10. Quota filter ← Phase 2
 11. Final ranking
 ```
 
