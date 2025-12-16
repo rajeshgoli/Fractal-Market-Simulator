@@ -162,50 +162,38 @@ If this is clear, begin.
 > "Once you make a decision, the universe conspires to make it happen."
 > — Ralph Waldo Emerson
 
-Complex design problems require countless decisions. Each of us interprets problems differently, informed by our own biases and experiences. When multiple agents or experts deliberate on a problem like discretization, differing assumptions can lead to proposals that talk past each other. Tenets create a common framework for making decisions, surfacing disagreements early rather than burying them in implementation details.
+Complex design problems require countless decisions. Each of us interprets problems differently, informed by our own biases and experiences. When multiple agents or experts deliberate on a problem, differing assumptions can lead to proposals that talk past each other. Tenets create a common framework for making decisions, surfacing disagreements early rather than burying them in implementation details.
 
 ### What is a tenet?
 
 A tenet is a belief that accelerates decision-making by clarifying what matters and what doesn't. Good tenets act as tie-breakers when data alone cannot resolve a choice.
 
-A good tenet concisely articulates a single idea. Consider this example relevant to our work:
+A good tenet concisely articulates a single idea. Consider:
 
-> "We optimize for interpretability over predictive power. An understandable model that we can improve beats a black box we cannot debug."
+> "We optimize for speed. Speed enables us to learn quickly, pivot if needed, and scale quickly."
 
-This tenet doesn't say interpretability is the only thing that matters—it says when forced to choose, we favor interpretability. It acknowledges the tradeoff and takes a stance. A similar tenet, "progress over perfection," makes imperfection permissible, avoiding endless planning cycles in pursuit of an unattainable ideal.
+This tenet doesn't say speed is the only thing that matters—it says when forced to choose, we favor speed. It acknowledges the tradeoff and takes a stance. A similar tenet, "progress over perfection," makes imperfection permissible, avoiding endless planning cycles in pursuit of an unattainable ideal.
 
 ### Good tenets have defensible opposites
 
 To be effective, a tenet needs an opposite that a reasonable person could defend. This prevents obvious statements from becoming tenets. Consider:
 
-- **Bad tenet:** "We will build accurate models." (Who would argue for inaccurate models?)
-- **Good tenet:** "We prefer simple models that capture 80% of behavior over complex models that capture 95%."
+- **Bad tenet:** "We will deliver value." (Who would argue for not delivering value?)
+- **Good tenet:** "We prefer simple solutions that solve 80% of the problem over complex solutions that solve 95%."
 
-The second tenet has a defensible opposite—someone could reasonably argue that the extra 15% accuracy justifies additional complexity. That tension is what makes it useful.
+The second tenet has a defensible opposite—someone could reasonably argue that the extra 15% coverage justifies additional complexity. That tension is what makes it useful.
 
 Generic mantras ("think outside the box") and specific decisions ("use Python") also make poor tenets. They don't help with the countless smaller decisions that follow.
-
-### Tenets relevant to this project
-
-Here are examples of tenets that could guide discretization proposals:
-
-> "Falsifiability first. Every design choice should produce testable predictions we can check against real market data."
-
-> "Structure over statistics. We encode market structure (swings, levels, completions) explicitly rather than letting models discover implicit patterns."
-
-> "Lossy is acceptable; wrong is not. We accept losing micro-level path information, but the discretized representation must preserve the causal relationships in our theory."
-
-Notice how each creates useful tension. The first prevents untestable speculation. The second guides choices about representation. The third clarifies what information loss is acceptable.
 
 ### Tenets create productive tension
 
 There will typically be tensions between tenets. Consider two complementary tenets:
 
-> "We optimize for interpretability."
+> "We optimize for speed."
 
-> "We seek discriminator indistinguishability from real markets."
+> "We optimize for correctness."
 
-Do we sacrifice some interpretability to achieve better fidelity? Or accept lower fidelity to maintain understanding? The answer depends on context. Tenets don't eliminate judgment—they focus it on the right questions.
+Do we ship faster with known limitations, or slower with higher confidence? The answer depends on context. Tenets don't eliminate judgment—they focus it on the right questions.
 
 When your expert panel debates, these tensions should surface. That's the point. Unresolved tensions in tenets become unresolved tensions in implementation.
 
