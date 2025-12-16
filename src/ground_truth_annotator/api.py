@@ -31,8 +31,15 @@ from .models import AnnotationSession, SwingAnnotation
 from .review_controller import ReviewController
 from .storage import AnnotationStorage, ReviewStorage
 from ..data.ohlc_loader import load_ohlc
+from ..discretization import (
+    Discretizer,
+    DiscretizerConfig,
+    DiscretizationLog,
+    EventType,
+)
 from ..swing_analysis.bar_aggregator import BarAggregator
 from ..swing_analysis.bull_reference_detector import Bar
+from ..swing_analysis.swing_detector import detect_swings, ReferenceSwing
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +303,65 @@ class NextSessionResponse(BaseModel):
     redirect_url: str
 
 
+# ============================================================================
+# Discretization API Models
+# ============================================================================
+
+
+class DiscretizationEventResponse(BaseModel):
+    """A discretization event for API response."""
+    bar: int
+    timestamp: str
+    swing_id: str
+    event_type: str
+    data: dict
+    effort: Optional[dict] = None
+    shock: Optional[dict] = None
+    parent_context: Optional[dict] = None
+
+
+class DiscretizationSwingResponse(BaseModel):
+    """A discretization swing entry for API response."""
+    swing_id: str
+    scale: str
+    direction: str
+    anchor0: float
+    anchor1: float
+    anchor0_bar: int
+    anchor1_bar: int
+    formed_at_bar: int
+    status: str
+    terminated_at_bar: Optional[int] = None
+    termination_reason: Optional[str] = None
+
+
+class DiscretizationRunResponse(BaseModel):
+    """Response from running discretization."""
+    success: bool
+    event_count: int
+    swing_count: int
+    scales_processed: List[str]
+    message: str
+
+
+class DiscretizationStateResponse(BaseModel):
+    """Current discretization state."""
+    has_log: bool
+    event_count: int
+    swing_count: int
+    scales: List[str]
+    config: Optional[dict] = None
+
+
+class DiscretizationFilterParams(BaseModel):
+    """Filter parameters for discretization events."""
+    scale: Optional[str] = None
+    event_type: Optional[str] = None
+    shock_threshold: Optional[float] = None  # Minimum range_multiple
+    levels_jumped_min: Optional[int] = None
+    is_gap: Optional[bool] = None
+
+
 @dataclass
 class AppState:
     """Application state."""
@@ -323,6 +389,8 @@ class AppState:
     # Background precomputation tracking
     precompute_in_progress: bool = False
     precompute_thread: Optional[threading.Thread] = None
+    # Discretization state
+    discretization_log: Optional[DiscretizationLog] = None
 
 
 # Global state
@@ -1406,6 +1474,317 @@ async def start_next_session():
         offset=new_offset,
         redirect_url="/"
     )
+
+
+# ============================================================================
+# Discretization Endpoints
+# ============================================================================
+
+
+def _run_discretization(s: AppState) -> DiscretizationLog:
+    """Run discretization on current window with detected swings."""
+    # Convert source bars to DataFrame for discretizer
+    bar_data = []
+    for bar in s.source_bars:
+        bar_data.append({
+            'timestamp': bar.timestamp,
+            'open': bar.open,
+            'high': bar.high,
+            'low': bar.low,
+            'close': bar.close,
+        })
+
+    df = pd.DataFrame(bar_data)
+    df.set_index(pd.RangeIndex(start=0, stop=len(df)), inplace=True)
+
+    # Detect swings at all scales
+    swings_by_scale: Dict[str, List[ReferenceSwing]] = {}
+    scales = ["XL", "L", "M", "S"]
+
+    for scale in scales:
+        # Use default detection parameters
+        result = detect_swings(df, lookback=5, filter_redundant=True)
+
+        # Convert to ReferenceSwing objects
+        swing_list = []
+        for ref in result.get('bull_references', []):
+            swing = ReferenceSwing(
+                high_price=ref['high_price'],
+                high_bar_index=ref['high_bar_index'],
+                low_price=ref['low_price'],
+                low_bar_index=ref['low_bar_index'],
+                size=ref['size'],
+                direction='bull',
+            )
+            swing_list.append(swing)
+
+        for ref in result.get('bear_references', []):
+            swing = ReferenceSwing(
+                high_price=ref['high_price'],
+                high_bar_index=ref['high_bar_index'],
+                low_price=ref['low_price'],
+                low_bar_index=ref['low_bar_index'],
+                size=ref['size'],
+                direction='bear',
+            )
+            swing_list.append(swing)
+
+        if swing_list:
+            swings_by_scale[scale] = swing_list
+
+    # Run discretization
+    config = DiscretizerConfig()
+    discretizer = Discretizer(config)
+    log = discretizer.discretize(
+        ohlc=df,
+        swings=swings_by_scale,
+        instrument="unknown",
+        source_resolution=f"{s.resolution_minutes}m",
+    )
+
+    return log
+
+
+@app.get("/api/discretization/state", response_model=DiscretizationStateResponse)
+async def get_discretization_state():
+    """Get current discretization state."""
+    s = get_state()
+
+    if s.discretization_log is None:
+        return DiscretizationStateResponse(
+            has_log=False,
+            event_count=0,
+            swing_count=0,
+            scales=[],
+            config=None,
+        )
+
+    log = s.discretization_log
+    scales = list(set(swing.scale for swing in log.swings))
+
+    return DiscretizationStateResponse(
+        has_log=True,
+        event_count=len(log.events),
+        swing_count=len(log.swings),
+        scales=scales,
+        config=log.meta.config.to_dict() if log.meta else None,
+    )
+
+
+@app.post("/api/discretization/run", response_model=DiscretizationRunResponse)
+async def run_discretization():
+    """
+    Run discretization on current window.
+
+    Detects swings on the source bars and runs the discretizer to produce
+    an event log with level crossings, completions, invalidations, etc.
+    """
+    s = get_state()
+
+    try:
+        log = _run_discretization(s)
+        s.discretization_log = log
+
+        scales = list(set(swing.scale for swing in log.swings))
+
+        return DiscretizationRunResponse(
+            success=True,
+            event_count=len(log.events),
+            swing_count=len(log.swings),
+            scales_processed=scales,
+            message=f"Discretization complete: {len(log.events)} events, {len(log.swings)} swings",
+        )
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        logger.error(f"Discretization failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Discretization failed: {e}")
+
+
+@app.get("/api/discretization/swings", response_model=List[DiscretizationSwingResponse])
+async def get_discretization_swings(
+    scale: Optional[str] = Query(None, description="Filter by scale (XL, L, M, S)"),
+    status: Optional[str] = Query(None, description="Filter by status (active, completed, invalidated)"),
+):
+    """Get all swings from the discretization log."""
+    s = get_state()
+
+    if s.discretization_log is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No discretization log. Run POST /api/discretization/run first."
+        )
+
+    swings = s.discretization_log.swings
+
+    # Apply filters
+    if scale:
+        swings = [sw for sw in swings if sw.scale == scale]
+    if status:
+        swings = [sw for sw in swings if sw.status == status]
+
+    return [
+        DiscretizationSwingResponse(
+            swing_id=sw.swing_id,
+            scale=sw.scale,
+            direction=sw.direction,
+            anchor0=sw.anchor0,
+            anchor1=sw.anchor1,
+            anchor0_bar=sw.anchor0_bar,
+            anchor1_bar=sw.anchor1_bar,
+            formed_at_bar=sw.formed_at_bar,
+            status=sw.status,
+            terminated_at_bar=sw.terminated_at_bar,
+            termination_reason=sw.termination_reason,
+        )
+        for sw in swings
+    ]
+
+
+@app.get("/api/discretization/events", response_model=List[DiscretizationEventResponse])
+async def get_discretization_events(
+    scale: Optional[str] = Query(None, description="Filter by swing scale"),
+    event_type: Optional[str] = Query(None, description="Filter by event type (LEVEL_CROSS, COMPLETION, etc.)"),
+    shock_threshold: Optional[float] = Query(None, description="Minimum range_multiple for shock"),
+    levels_jumped_min: Optional[int] = Query(None, description="Minimum levels_jumped"),
+    is_gap: Optional[bool] = Query(None, description="Filter for gap events only"),
+    bar_start: Optional[int] = Query(None, description="Filter events from bar index"),
+    bar_end: Optional[int] = Query(None, description="Filter events up to bar index"),
+):
+    """
+    Get discretization events with optional filters.
+
+    Filters can be combined. Shock-related filters (shock_threshold, levels_jumped_min, is_gap)
+    filter based on the shock annotation attached to events.
+    """
+    s = get_state()
+
+    if s.discretization_log is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No discretization log. Run POST /api/discretization/run first."
+        )
+
+    log = s.discretization_log
+    events = log.events
+
+    # Build swing lookup for scale filtering
+    swing_scales = {sw.swing_id: sw.scale for sw in log.swings}
+
+    # Apply filters
+    filtered = []
+    for event in events:
+        # Scale filter
+        if scale:
+            swing_scale = swing_scales.get(event.swing_id)
+            if swing_scale != scale:
+                continue
+
+        # Event type filter
+        if event_type:
+            if event.event_type.value != event_type:
+                continue
+
+        # Bar range filter
+        if bar_start is not None and event.bar < bar_start:
+            continue
+        if bar_end is not None and event.bar > bar_end:
+            continue
+
+        # Shock-based filters
+        if shock_threshold is not None:
+            if event.shock is None or event.shock.range_multiple < shock_threshold:
+                continue
+
+        if levels_jumped_min is not None:
+            if event.shock is None or event.shock.levels_jumped < levels_jumped_min:
+                continue
+
+        if is_gap is not None:
+            if event.shock is None or event.shock.is_gap != is_gap:
+                continue
+
+        filtered.append(event)
+
+    return [
+        DiscretizationEventResponse(
+            bar=ev.bar,
+            timestamp=ev.timestamp,
+            swing_id=ev.swing_id,
+            event_type=ev.event_type.value,
+            data=ev.data,
+            effort=ev.effort.to_dict() if ev.effort else None,
+            shock=ev.shock.to_dict() if ev.shock else None,
+            parent_context=ev.parent_context.to_dict() if ev.parent_context else None,
+        )
+        for ev in filtered
+    ]
+
+
+@app.get("/api/discretization/levels")
+async def get_discretization_levels(swing_id: str = Query(..., description="Swing ID to get levels for")):
+    """
+    Get Fibonacci levels for a specific swing.
+
+    Returns the price levels from the swing's reference frame for overlay display.
+    """
+    s = get_state()
+
+    if s.discretization_log is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No discretization log. Run POST /api/discretization/run first."
+        )
+
+    # Find the swing
+    swing = None
+    for sw in s.discretization_log.swings:
+        if sw.swing_id == swing_id:
+            swing = sw
+            break
+
+    if swing is None:
+        raise HTTPException(status_code=404, detail=f"Swing {swing_id} not found")
+
+    # Calculate levels from anchor points
+    anchor0 = swing.anchor0  # Defended pivot
+    anchor1 = swing.anchor1  # Origin extremum
+    swing_range = anchor1 - anchor0
+
+    # Standard discretization levels
+    from ..swing_analysis.constants import DISCRETIZATION_LEVELS
+
+    levels = []
+    for ratio in DISCRETIZATION_LEVELS:
+        price = anchor0 + swing_range * ratio
+        levels.append({
+            "ratio": ratio,
+            "price": price,
+            "label": str(ratio),
+        })
+
+    return {
+        "swing_id": swing_id,
+        "scale": swing.scale,
+        "direction": swing.direction,
+        "anchor0": anchor0,
+        "anchor1": anchor1,
+        "levels": levels,
+    }
+
+
+@app.get("/discretization", response_class=HTMLResponse)
+async def discretization_page():
+    """Serve the Discretization View UI."""
+    module_dir = Path(__file__).parent
+    page_path = module_dir / "static" / "discretization.html"
+
+    if not page_path.exists():
+        return HTMLResponse(
+            content="<h1>Discretization View</h1><p>discretization.html not found. Place discretization.html in static/</p>",
+            status_code=200
+        )
+
+    with open(page_path, 'r') as f:
+        return HTMLResponse(content=f.read())
 
 
 def init_app(

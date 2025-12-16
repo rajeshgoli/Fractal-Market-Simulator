@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-16
 
@@ -8,25 +8,7 @@
 
 ## Pending Changes
 
-### 2025-12-16 - Discretizer core implementation
-- **Issue:** #76
-- **Type:** Feature
-- **Files:** `src/discretization/discretizer.py`, `src/discretization/__init__.py`, `tests/test_discretizer.py`, `Docs/Reference/developer_guide.md`
-
-### 2025-12-16 - ReferenceFrame coordinate system
-- **Issue:** #73
-- **Type:** Feature
-- **Files:** `src/swing_analysis/reference_frame.py`, `tests/test_reference_frame.py`
-
-### 2025-12-16 - Discretization level set constants
-- **Issue:** #74
-- **Type:** Feature
-- **Files:** `src/swing_analysis/constants.py`, `tests/test_constants.py`
-
-### 2025-12-16 - DiscretizationEvent schema
-- **Issue:** #75
-- **Type:** Feature
-- **Files:** `src/discretization/schema.py`, `src/discretization/__init__.py`, `tests/test_discretization_schema.py`
+- **#78**: Discretization overlay in Ground Truth Annotator
 
 ---
 
@@ -34,8 +16,8 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 16 | #73, #74, #75, #76, #77 — Discretization core implementation | All Accepted |
 | Dec 16 | #68, #69, #70, #71 — Phase 3 + Architecture Overhaul | All Accepted |
-| Dec 15 | #65, #66, #67 reviewed | All Accepted — Phase 1 & 2 complete |
 | Dec 15 | Q-2025-12-15-2: FIB structural separation feasibility | Feasible → Merged into Phase 3 |
 | Dec 15 | Q-2025-12-15-2: Endpoint selection design | Designed → Ready for implementation |
 | Dec 15 | #64: FP category refinements, filter tightening, --start-date parameter | Accepted |

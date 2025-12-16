@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discretization View</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #0f3460;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent-bull: #26a69a;
+            --accent-bear: #ef5350;
+            --accent-blue: #2196f3;
+            --accent-purple: #9c27b0;
+            --accent-orange: #ff9800;
+            --accent-yellow: #ffeb3b;
+            --accent-green: #4caf50;
+            --border-color: #333;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+
+        .header-info {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9rem;
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+        }
+
+        .info-value {
+            font-weight: 600;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+        }
+
+        .chart-area {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .chart-container {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .chart-title {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .main-chart {
+            width: 100%;
+            height: 550px;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Filters */
+        .filter-group {
+            margin-bottom: 15px;
+        }
+
+        .filter-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .filter-select, .filter-input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .filter-select:focus, .filter-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-group input {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+
+        .legend-marker {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .legend-marker.level-cross-up {
+            color: var(--accent-blue);
+        }
+
+        .legend-marker.level-cross-down {
+            color: var(--accent-orange);
+        }
+
+        .legend-marker.completion {
+            color: var(--accent-green);
+        }
+
+        .legend-marker.invalidation {
+            color: var(--accent-bear);
+        }
+
+        .legend-marker.swing-formed {
+            color: var(--accent-purple);
+        }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .stat-item {
+            background: var(--bg-card);
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* Swing list */
+        .swing-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .swing-item {
+            background: var(--bg-card);
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            border-left: 3px solid;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .swing-item:hover {
+            opacity: 0.9;
+        }
+
+        .swing-item.bull {
+            border-left-color: var(--accent-bull);
+        }
+
+        .swing-item.bear {
+            border-left-color: var(--accent-bear);
+        }
+
+        .swing-item.active {
+            border-left-color: var(--accent-blue);
+            background: rgba(33, 150, 243, 0.2);
+        }
+
+        .swing-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .swing-scale {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .swing-status {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: var(--bg-primary);
+        }
+
+        .swing-details {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: fixed;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            max-width: 300px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            display: none;
+        }
+
+        .tooltip.visible {
+            display: block;
+        }
+
+        .tooltip-header {
+            font-weight: 600;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 0.85rem;
+        }
+
+        .tooltip-label {
+            color: var(--text-secondary);
+        }
+
+        .tooltip-section {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .tooltip-section-title {
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: var(--accent-blue);
+            margin-bottom: 4px;
+        }
+
+        /* Nav */
+        .nav-link {
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--accent-bull);
+        }
+
+        .toast.error {
+            border-color: var(--accent-bear);
+        }
+
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <h1>Discretization View</h1>
+                <a href="/" class="nav-link">&larr; Back to Annotator</a>
+            </div>
+            <div class="header-info">
+                <div class="info-item">
+                    <span class="info-label">Events:</span>
+                    <span class="info-value" id="event-count">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Swings:</span>
+                    <span class="info-value" id="swing-count">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Bars:</span>
+                    <span class="info-value" id="bar-count">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="chart-area">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <span class="chart-title">Price Chart with Discretization Events</span>
+                        <button class="btn btn-primary" id="run-btn" onclick="runDiscretization()">
+                            Run Discretization
+                        </button>
+                    </div>
+                    <div class="main-chart" id="chart"></div>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <!-- Filters -->
+                <div class="card">
+                    <div class="card-title">Filters</div>
+
+                    <div class="filter-group">
+                        <label class="filter-label">Scale</label>
+                        <select class="filter-select" id="filter-scale" onchange="applyFilters()">
+                            <option value="">All Scales</option>
+                            <option value="XL">XL</option>
+                            <option value="L">L</option>
+                            <option value="M">M</option>
+                            <option value="S">S</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label">Event Type</label>
+                        <select class="filter-select" id="filter-event-type" onchange="applyFilters()">
+                            <option value="">All Events</option>
+                            <option value="LEVEL_CROSS">Level Cross</option>
+                            <option value="COMPLETION">Completion</option>
+                            <option value="INVALIDATION">Invalidation</option>
+                            <option value="SWING_FORMED">Swing Formed</option>
+                            <option value="SWING_TERMINATED">Swing Terminated</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label">Shock Threshold (range_multiple)</label>
+                        <input type="number" class="filter-input" id="filter-shock"
+                               placeholder="e.g., 2.0" step="0.1" onchange="applyFilters()">
+                    </div>
+
+                    <div class="filter-group">
+                        <label class="filter-label">Min Levels Jumped</label>
+                        <input type="number" class="filter-input" id="filter-levels-jumped"
+                               placeholder="e.g., 3" min="1" onchange="applyFilters()">
+                    </div>
+
+                    <div class="filter-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="filter-gaps" onchange="applyFilters()">
+                            <label for="filter-gaps">Show gaps only</label>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-secondary" onclick="clearFilters()">Clear Filters</button>
+                </div>
+
+                <!-- Legend -->
+                <div class="card">
+                    <div class="card-title">Legend</div>
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-marker level-cross-up">&#9650;</div>
+                            <span>Level Cross (Up)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-marker level-cross-down">&#9660;</div>
+                            <span>Level Cross (Down)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-marker completion">&#9733;</div>
+                            <span>Completion</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-marker invalidation">&#10005;</div>
+                            <span>Invalidation</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-marker swing-formed">&#9679;</div>
+                            <span>Swing Formed</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="card">
+                    <div class="card-title">Statistics</div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-crossings">0</div>
+                            <div class="stat-label">Level Crosses</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-completions">0</div>
+                            <div class="stat-label">Completions</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-invalidations">0</div>
+                            <div class="stat-label">Invalidations</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-shocks">0</div>
+                            <div class="stat-label">Shock Events</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Swings -->
+                <div class="card">
+                    <div class="card-title">Active Swings</div>
+                    <div class="swing-list" id="swing-list">
+                        <div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 20px;">
+                            Run discretization to see swings
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        // State
+        let chart = null;
+        let candleSeries = null;
+        let bars = [];
+        let allEvents = [];
+        let allSwings = [];
+        let filteredEvents = [];
+        let markers = [];
+        let levelLines = [];
+        let selectedSwingId = null;
+
+        // Event type colors and shapes
+        const EVENT_STYLES = {
+            LEVEL_CROSS: {
+                up: { color: '#2196f3', shape: 'arrowUp' },
+                down: { color: '#ff9800', shape: 'arrowDown' }
+            },
+            COMPLETION: { color: '#4caf50', shape: 'circle' },
+            INVALIDATION: { color: '#ef5350', shape: 'square' },
+            SWING_FORMED: { color: '#9c27b0', shape: 'circle' },
+            SWING_TERMINATED: { color: '#666', shape: 'square' },
+            LEVEL_TEST: { color: '#ffeb3b', shape: 'circle' }
+        };
+
+        // Initialize chart
+        function initChart() {
+            const container = document.getElementById('chart');
+            chart = LightweightCharts.createChart(container, {
+                layout: {
+                    background: { type: 'solid', color: '#16213e' },
+                    textColor: '#a0a0a0',
+                },
+                grid: {
+                    vertLines: { color: '#333' },
+                    horzLines: { color: '#333' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#333',
+                },
+                timeScale: {
+                    borderColor: '#333',
+                    timeVisible: true,
+                },
+            });
+
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+            });
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                chart.applyOptions({ width: container.clientWidth });
+            });
+
+            // Click handler for tooltip
+            chart.subscribeCrosshairMove((param) => {
+                if (!param.time) {
+                    hideTooltip();
+                    return;
+                }
+
+                // Find events at this bar
+                const bar = bars.find(b => b.timestamp === param.time);
+                if (!bar) return;
+
+                const eventsAtBar = filteredEvents.filter(e => e.bar === bar.index);
+                if (eventsAtBar.length > 0) {
+                    showTooltip(eventsAtBar, param.point);
+                } else {
+                    hideTooltip();
+                }
+            });
+        }
+
+        // Load bars
+        async function loadBars() {
+            try {
+                const response = await fetch('/api/bars');
+                const data = await response.json();
+
+                bars = data.map((b, i) => ({
+                    index: i,
+                    timestamp: b.timestamp,
+                    time: b.timestamp,
+                    open: b.open,
+                    high: b.high,
+                    low: b.low,
+                    close: b.close,
+                }));
+
+                candleSeries.setData(bars);
+                document.getElementById('bar-count').textContent = bars.length;
+
+                // Check if discretization already exists
+                await checkDiscretizationState();
+            } catch (error) {
+                console.error('Failed to load bars:', error);
+                showToast('Failed to load bars', true);
+            }
+        }
+
+        // Check discretization state
+        async function checkDiscretizationState() {
+            try {
+                const response = await fetch('/api/discretization/state');
+                const state = await response.json();
+
+                if (state.has_log) {
+                    await loadDiscretizationData();
+                }
+            } catch (error) {
+                console.error('Failed to check discretization state:', error);
+            }
+        }
+
+        // Run discretization
+        async function runDiscretization() {
+            const btn = document.getElementById('run-btn');
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+
+            try {
+                const response = await fetch('/api/discretization/run', {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Discretization failed');
+                }
+
+                const result = await response.json();
+                showToast(result.message);
+
+                await loadDiscretizationData();
+            } catch (error) {
+                console.error('Discretization failed:', error);
+                showToast('Discretization failed', true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run Discretization';
+            }
+        }
+
+        // Load discretization data
+        async function loadDiscretizationData() {
+            try {
+                // Load events
+                const eventsResponse = await fetch('/api/discretization/events');
+                allEvents = await eventsResponse.json();
+
+                // Load swings
+                const swingsResponse = await fetch('/api/discretization/swings');
+                allSwings = await swingsResponse.json();
+
+                // Update UI
+                document.getElementById('event-count').textContent = allEvents.length;
+                document.getElementById('swing-count').textContent = allSwings.length;
+
+                // Apply filters and render
+                applyFilters();
+                renderSwingList();
+                updateStats();
+            } catch (error) {
+                console.error('Failed to load discretization data:', error);
+            }
+        }
+
+        // Apply filters
+        function applyFilters() {
+            const scale = document.getElementById('filter-scale').value;
+            const eventType = document.getElementById('filter-event-type').value;
+            const shockThreshold = parseFloat(document.getElementById('filter-shock').value) || null;
+            const levelsJumpedMin = parseInt(document.getElementById('filter-levels-jumped').value) || null;
+            const gapsOnly = document.getElementById('filter-gaps').checked;
+
+            // Build query params
+            const params = new URLSearchParams();
+            if (scale) params.append('scale', scale);
+            if (eventType) params.append('event_type', eventType);
+            if (shockThreshold) params.append('shock_threshold', shockThreshold);
+            if (levelsJumpedMin) params.append('levels_jumped_min', levelsJumpedMin);
+            if (gapsOnly) params.append('is_gap', 'true');
+
+            // For now, filter locally for responsiveness
+            filteredEvents = allEvents.filter(event => {
+                // Build swing lookup
+                const swing = allSwings.find(s => s.swing_id === event.swing_id);
+
+                if (scale && swing && swing.scale !== scale) return false;
+                if (eventType && event.event_type !== eventType) return false;
+                if (shockThreshold && (!event.shock || event.shock.range_multiple < shockThreshold)) return false;
+                if (levelsJumpedMin && (!event.shock || event.shock.levels_jumped < levelsJumpedMin)) return false;
+                if (gapsOnly && (!event.shock || !event.shock.is_gap)) return false;
+
+                return true;
+            });
+
+            renderMarkers();
+            updateStats();
+        }
+
+        // Clear filters
+        function clearFilters() {
+            document.getElementById('filter-scale').value = '';
+            document.getElementById('filter-event-type').value = '';
+            document.getElementById('filter-shock').value = '';
+            document.getElementById('filter-levels-jumped').value = '';
+            document.getElementById('filter-gaps').checked = false;
+            applyFilters();
+        }
+
+        // Render markers on chart
+        function renderMarkers() {
+            const markerData = filteredEvents.map(event => {
+                const bar = bars.find(b => b.index === event.bar);
+                if (!bar) return null;
+
+                let style = EVENT_STYLES[event.event_type] || { color: '#666', shape: 'circle' };
+                let shape = style.shape;
+                let color = style.color;
+                let size = 1;
+
+                // Handle LEVEL_CROSS direction
+                if (event.event_type === 'LEVEL_CROSS') {
+                    const direction = event.data?.direction || 'up';
+                    style = EVENT_STYLES.LEVEL_CROSS[direction];
+                    shape = style.shape;
+                    color = style.color;
+                }
+
+                // Shock visualization - larger markers for impulsive moves
+                if (event.shock) {
+                    if (event.shock.range_multiple > 2.0) {
+                        size = 2;
+                    }
+                    if (event.shock.range_multiple > 3.0) {
+                        color = '#ef5350'; // Red highlight for extreme shock
+                    }
+                    if (event.shock.levels_jumped >= 3) {
+                        size = 3;
+                    }
+                }
+
+                // Position marker above or below based on event type
+                const position = (event.event_type === 'LEVEL_CROSS' && event.data?.direction === 'down')
+                    ? 'belowBar' : 'aboveBar';
+
+                return {
+                    time: bar.timestamp,
+                    position: position,
+                    color: color,
+                    shape: shape,
+                    size: size,
+                    text: getMarkerText(event),
+                };
+            }).filter(m => m !== null);
+
+            candleSeries.setMarkers(markerData);
+        }
+
+        // Get marker text for event
+        function getMarkerText(event) {
+            if (event.event_type === 'LEVEL_CROSS') {
+                const level = event.data?.level_crossed;
+                return level !== undefined ? level.toFixed(3) : '';
+            }
+            if (event.event_type === 'COMPLETION') {
+                return 'C';
+            }
+            if (event.event_type === 'INVALIDATION') {
+                return 'X';
+            }
+            return '';
+        }
+
+        // Render swing list
+        function renderSwingList() {
+            const container = document.getElementById('swing-list');
+
+            if (allSwings.length === 0) {
+                container.innerHTML = `
+                    <div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 20px;">
+                        No swings detected
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = allSwings.map(swing => `
+                <div class="swing-item ${swing.direction.toLowerCase()} ${swing.swing_id === selectedSwingId ? 'active' : ''}"
+                     onclick="selectSwing('${swing.swing_id}')">
+                    <div class="swing-header">
+                        <span class="swing-scale">${swing.scale} ${swing.direction}</span>
+                        <span class="swing-status">${swing.status}</span>
+                    </div>
+                    <div class="swing-details">
+                        Bars ${swing.anchor0_bar} - ${swing.anchor1_bar}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Select swing and show its levels
+        async function selectSwing(swingId) {
+            selectedSwingId = swingId;
+            renderSwingList();
+
+            // Clear existing level lines
+            levelLines.forEach(line => candleSeries.removePriceLine(line));
+            levelLines = [];
+
+            try {
+                const response = await fetch(`/api/discretization/levels?swing_id=${swingId}`);
+                const data = await response.json();
+
+                // Draw level lines
+                data.levels.forEach(level => {
+                    const color = getLevelColor(level.ratio);
+                    const line = candleSeries.createPriceLine({
+                        price: level.price,
+                        color: color,
+                        lineWidth: 1,
+                        lineStyle: 2, // dashed
+                        axisLabelVisible: true,
+                        title: level.label,
+                    });
+                    levelLines.push(line);
+                });
+            } catch (error) {
+                console.error('Failed to load swing levels:', error);
+            }
+        }
+
+        // Get color for Fib level
+        function getLevelColor(ratio) {
+            if (ratio < 0) return '#ef5350'; // Invalidation zone
+            if (ratio === 0) return '#9c27b0'; // Defended pivot
+            if (ratio < 1) return '#2196f3'; // Retracement zone
+            if (ratio === 1) return '#9c27b0'; // Origin
+            if (ratio < 2) return '#ff9800'; // Extension zone
+            return '#4caf50'; // Completion zone
+        }
+
+        // Update stats
+        function updateStats() {
+            const crossings = filteredEvents.filter(e => e.event_type === 'LEVEL_CROSS').length;
+            const completions = filteredEvents.filter(e => e.event_type === 'COMPLETION').length;
+            const invalidations = filteredEvents.filter(e => e.event_type === 'INVALIDATION').length;
+            const shocks = filteredEvents.filter(e => e.shock && e.shock.range_multiple > 2.0).length;
+
+            document.getElementById('stat-crossings').textContent = crossings;
+            document.getElementById('stat-completions').textContent = completions;
+            document.getElementById('stat-invalidations').textContent = invalidations;
+            document.getElementById('stat-shocks').textContent = shocks;
+        }
+
+        // Show tooltip
+        function showTooltip(events, point) {
+            const tooltip = document.getElementById('tooltip');
+            const event = events[0]; // Show first event details
+
+            let html = `
+                <div class="tooltip-header">${event.event_type}</div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Bar:</span>
+                    <span>${event.bar}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Time:</span>
+                    <span>${new Date(event.timestamp).toLocaleString()}</span>
+                </div>
+            `;
+
+            // Event-specific data
+            if (event.event_type === 'LEVEL_CROSS') {
+                html += `
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Level:</span>
+                        <span>${event.data.level_crossed}</span>
+                    </div>
+                    <div class="tooltip-row">
+                        <span class="tooltip-label">Direction:</span>
+                        <span>${event.data.direction}</span>
+                    </div>
+                `;
+            }
+
+            // Effort annotation
+            if (event.effort) {
+                html += `
+                    <div class="tooltip-section">
+                        <div class="tooltip-section-title">Effort</div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Dwell bars:</span>
+                            <span>${event.effort.dwell_bars}</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Test count:</span>
+                            <span>${event.effort.test_count}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Shock annotation
+            if (event.shock) {
+                html += `
+                    <div class="tooltip-section">
+                        <div class="tooltip-section-title">Shock</div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Levels jumped:</span>
+                            <span>${event.shock.levels_jumped}</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Range multiple:</span>
+                            <span>${event.shock.range_multiple.toFixed(2)}x</span>
+                        </div>
+                        ${event.shock.is_gap ? '<div class="tooltip-row"><span class="tooltip-label">Gap:</span><span>Yes</span></div>' : ''}
+                    </div>
+                `;
+            }
+
+            // Parent context
+            if (event.parent_context) {
+                html += `
+                    <div class="tooltip-section">
+                        <div class="tooltip-section-title">Parent Context</div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Scale:</span>
+                            <span>${event.parent_context.scale}</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Band:</span>
+                            <span>${event.parent_context.band}</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span class="tooltip-label">Ratio:</span>
+                            <span>${event.parent_context.ratio.toFixed(3)}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Multiple events indicator
+            if (events.length > 1) {
+                html += `
+                    <div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-secondary);">
+                        +${events.length - 1} more events at this bar
+                    </div>
+                `;
+            }
+
+            tooltip.innerHTML = html;
+            tooltip.style.left = `${point.x + 20}px`;
+            tooltip.style.top = `${point.y + 20}px`;
+            tooltip.classList.add('visible');
+        }
+
+        // Hide tooltip
+        function hideTooltip() {
+            document.getElementById('tooltip').classList.remove('visible');
+        }
+
+        // Show toast
+        function showToast(message, isError = false) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = 'toast' + (isError ? ' error' : '');
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            initChart();
+            await loadBars();
+        });
+    </script>
+</body>
+</html>
