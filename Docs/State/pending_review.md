@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-15
 
 ---
 
 ## Pending Changes
+
+### 2025-12-15 - Schema Versioning & Skipped Scales
+- **Issue:** #67
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/models.py`, `src/ground_truth_annotator/cascade_controller.py`, `src/ground_truth_annotator/api.py`, `tests/test_ground_truth_foundation.py`, `tests/test_cascade_controller.py`, `Docs/Reference/developer_guide.md`
 
 ### 2025-12-15 - Quota-based Swing Filtering
 - **Issue:** #66
