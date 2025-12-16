@@ -1346,12 +1346,6 @@
 
         // Skip remaining scales and go to review
         async function skipToReview() {
-            // Confirm with user
-            const currentScale = document.getElementById('current-scale-label')?.textContent || 'current';
-            if (!confirm(`Skip remaining scales after ${currentScale} and proceed to Review Mode?\n\nSkipped scales will be marked as "skipped" (not "reviewed with no annotations").`)) {
-                return;
-            }
-
             try {
                 const response = await fetch('/api/cascade/skip', {
                     method: 'POST'
