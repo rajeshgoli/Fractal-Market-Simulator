@@ -477,17 +477,6 @@ The sidebar shows real-time counts:
 - Invalidations
 - Shock Events (range_multiple > 2.0)
 
-### API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/discretization` | GET | Serve discretization UI |
-| `/api/discretization/state` | GET | Check if discretization has been run |
-| `/api/discretization/run` | POST | Run discretization on current window |
-| `/api/discretization/events` | GET | Get all events (with optional filters) |
-| `/api/discretization/swings` | GET | Get all detected swings |
-| `/api/discretization/levels` | GET | Get Fib levels for a specific swing |
-
 ### What to Assess
 
 When viewing the discretization overlay, consider:

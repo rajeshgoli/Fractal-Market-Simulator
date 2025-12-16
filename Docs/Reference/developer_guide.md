@@ -1280,6 +1280,60 @@ Tolerance is calculated as: `max(5, int(duration * tolerance_pct))`
 | `/api/review/summary` | GET | Get review statistics |
 | `/api/review/export` | GET | Export feedback as JSON or CSV |
 
+#### Discretization API (`/api/discretization/*`)
+
+**Purpose**: Run discretization on the current window and retrieve structural events for visualization.
+
+**Endpoints**:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/discretization` | GET | Serve discretization UI |
+| `/api/discretization/state` | GET | Check if discretization has been run |
+| `/api/discretization/run` | POST | Run discretization on current window |
+| `/api/discretization/events` | GET | Get all events (with optional filters) |
+| `/api/discretization/swings` | GET | Get all detected swings |
+| `/api/discretization/levels` | GET | Get Fib levels for a specific swing |
+
+**Query Parameters for `/api/discretization/events`**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `scale` | string | Filter by swing scale (XL, L, M, S) |
+| `event_type` | string | Filter by event type (LEVEL_CROSS, COMPLETION, etc.) |
+| `shock_threshold` | float | Minimum `range_multiple` for shock filter |
+| `levels_jumped_min` | int | Minimum `levels_jumped` for shock filter |
+| `is_gap` | bool | Filter for gap events only |
+| `bar_start` | int | Filter events from bar index |
+| `bar_end` | int | Filter events up to bar index |
+
+**Response Models**:
+
+```python
+class DiscretizationEventResponse(BaseModel):
+    bar: int
+    timestamp: str
+    swing_id: str
+    event_type: str
+    data: dict
+    effort: Optional[dict]
+    shock: Optional[dict]
+    parent_context: Optional[dict]
+
+class DiscretizationSwingResponse(BaseModel):
+    swing_id: str
+    scale: str
+    direction: str
+    anchor0: float
+    anchor1: float
+    anchor0_bar: int
+    anchor1_bar: int
+    status: str
+    formed_at_bar: int
+    terminated_at_bar: Optional[int]
+    termination_reason: Optional[str]
+```
+
 **Request/Response Models** (defined in `api.py`):
 
 ```python
