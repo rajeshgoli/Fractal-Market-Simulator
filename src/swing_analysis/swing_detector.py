@@ -811,7 +811,7 @@ def _apply_structural_separation_filter(
 
 def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = True,
                   quantization: float = 0.25, max_pair_distance: Optional[int] = None,
-                  protection_tolerance: float = 0.1, max_rank: Optional[int] = None,
+                  protection_tolerance: float = 0.1,
                   min_candle_ratio: Optional[float] = None,
                   min_range_pct: Optional[float] = None,
                   min_prominence: Optional[float] = None,
@@ -831,9 +831,6 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             This limits reference swing detection to swings within this bar distance.
         protection_tolerance: Fraction of swing size that the swing point can be violated
             before the reference is invalidated. Default 0.1 (10%). Set to None to disable.
-        max_rank: If set, only return top N swings per direction (bull and bear).
-            Reduces noise from secondary structures. Default None returns all swings.
-            DEPRECATED: Use quota instead for combined size+impulse ranking.
         min_candle_ratio: Minimum swing size as multiple of median candle height.
             Swings smaller than this are filtered. Uses OR logic with min_range_pct.
         min_range_pct: Minimum swing size as percentage of window price range.
@@ -846,7 +843,7 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             original endpoint detection behavior.
         quota: If set, limit output to top N swings per direction using combined
             size+impulse ranking. Adds impulse, size_rank, impulse_rank, and
-            combined_score fields to output. Takes precedence over max_rank.
+            combined_score fields to output.
         larger_swings: Optional list of swings from the next larger scale (e.g., XL swings
             when detecting L swings). Used for structural separation gate (Phase 3).
             When provided, swings must be >= 0.236 FIB level apart from previous swings
@@ -1146,12 +1143,6 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
         bear_references.sort(key=lambda x: x["size"], reverse=True)
         for idx, ref in enumerate(bear_references):
             ref["rank"] = idx + 1
-
-    # 12. Filter by max_rank (optional, deprecated in favor of quota)
-    # Only applied if quota is not set
-    if quota is None and max_rank is not None:
-        bull_references = bull_references[:max_rank]
-        bear_references = bear_references[:max_rank]
 
     return {
         "current_price": current_price,

@@ -396,111 +396,6 @@ class TestSwingDetectorLargeDataset(unittest.TestCase):
         print(f"100K bars: {elapsed:.3f}s -> Extrapolated 6M: {extrapolated_6m:.1f}s")
 
 
-class TestMaxRankParameter(unittest.TestCase):
-    """Test max_rank parameter for filtering secondary structures."""
-
-    def _create_synthetic_bars(self, num_bars: int, seed: int = 42) -> pd.DataFrame:
-        """Create synthetic OHLC data with multiple swing patterns."""
-        np.random.seed(seed)
-        prices = np.cumsum(np.random.randn(num_bars) * 2) + 5000
-        return pd.DataFrame({
-            'open': prices,
-            'high': prices + np.abs(np.random.randn(num_bars)),
-            'low': prices - np.abs(np.random.randn(num_bars)),
-            'close': prices + np.random.randn(num_bars) * 0.5
-        })
-
-    def test_max_rank_none_returns_all(self):
-        """With max_rank=None (default), all swings are returned."""
-        df = self._create_synthetic_bars(1000)
-
-        result_all = detect_swings(df, lookback=5, filter_redundant=False, max_rank=None)
-        result_default = detect_swings(df, lookback=5, filter_redundant=False)
-
-        # Both should return the same number of references
-        self.assertEqual(len(result_all['bull_references']), len(result_default['bull_references']))
-        self.assertEqual(len(result_all['bear_references']), len(result_default['bear_references']))
-
-    def test_max_rank_limits_output(self):
-        """max_rank=N limits output to top N swings per direction."""
-        df = self._create_synthetic_bars(1000)
-
-        # Get baseline (unfiltered)
-        result_all = detect_swings(df, lookback=5, filter_redundant=False, max_rank=None)
-
-        # Test with max_rank=2
-        result_top2 = detect_swings(df, lookback=5, filter_redundant=False, max_rank=2)
-
-        # Should have at most 2 per direction
-        self.assertLessEqual(len(result_top2['bull_references']), 2)
-        self.assertLessEqual(len(result_top2['bear_references']), 2)
-
-        # Should have fewer than unfiltered (if there were more than 2)
-        if len(result_all['bull_references']) > 2:
-            self.assertEqual(len(result_top2['bull_references']), 2)
-        if len(result_all['bear_references']) > 2:
-            self.assertEqual(len(result_top2['bear_references']), 2)
-
-    def test_max_rank_one_returns_largest(self):
-        """max_rank=1 returns only the largest swing per direction."""
-        df = self._create_synthetic_bars(500)
-
-        result_all = detect_swings(df, lookback=5, filter_redundant=False, max_rank=None)
-        result_top1 = detect_swings(df, lookback=5, filter_redundant=False, max_rank=1)
-
-        # Should have at most 1 per direction
-        self.assertLessEqual(len(result_top1['bull_references']), 1)
-        self.assertLessEqual(len(result_top1['bear_references']), 1)
-
-        # The one returned should be rank 1 (largest)
-        for ref in result_top1['bull_references']:
-            self.assertEqual(ref['rank'], 1)
-        for ref in result_top1['bear_references']:
-            self.assertEqual(ref['rank'], 1)
-
-    def test_max_rank_preserves_ranking(self):
-        """Returned swings should have correct rank values."""
-        df = self._create_synthetic_bars(1000)
-
-        result = detect_swings(df, lookback=5, filter_redundant=False, max_rank=3)
-
-        # Check bull references are in descending size order with correct ranks
-        bull_refs = result['bull_references']
-        for i, ref in enumerate(bull_refs):
-            self.assertEqual(ref['rank'], i + 1)
-            if i > 0:
-                self.assertLessEqual(ref['size'], bull_refs[i - 1]['size'])
-
-        # Check bear references
-        bear_refs = result['bear_references']
-        for i, ref in enumerate(bear_refs):
-            self.assertEqual(ref['rank'], i + 1)
-            if i > 0:
-                self.assertLessEqual(ref['size'], bear_refs[i - 1]['size'])
-
-    def test_max_rank_with_filtering(self):
-        """max_rank works correctly with structural filtering enabled."""
-        df = self._create_synthetic_bars(1000)
-
-        # With filtering enabled
-        result_filtered = detect_swings(df, lookback=5, filter_redundant=True, max_rank=2)
-
-        # Should still respect max_rank
-        self.assertLessEqual(len(result_filtered['bull_references']), 2)
-        self.assertLessEqual(len(result_filtered['bear_references']), 2)
-
-    def test_max_rank_larger_than_total(self):
-        """max_rank larger than total swings returns all available."""
-        df = self._create_synthetic_bars(100)  # Small dataset
-
-        result_all = detect_swings(df, lookback=5, filter_redundant=False, max_rank=None)
-        result_large = detect_swings(df, lookback=5, filter_redundant=False, max_rank=1000)
-
-        # Should return the same results
-        self.assertEqual(len(result_all['bull_references']), len(result_large['bull_references']))
-        self.assertEqual(len(result_all['bear_references']), len(result_large['bear_references']))
-
-
 class TestSwingPointProtection(unittest.TestCase):
     """Test swing point protection validation"""
 
@@ -866,7 +761,7 @@ class TestSizeFilter(unittest.TestCase):
         self.assertEqual(result['bear_references'], [])
 
     def test_size_filter_integration_with_other_filters(self):
-        """Size filter should work correctly with redundancy and max_rank filters."""
+        """Size filter should work correctly with redundancy filter."""
         prices = (
             [100, 105, 110, 120, 130, 140, 135, 125, 115, 105, 100] +
             [102, 106, 112, 120, 130, 145, 155, 150, 140, 125, 110, 100] +
@@ -881,8 +776,7 @@ class TestSizeFilter(unittest.TestCase):
 
         # All filters enabled
         result = detect_swings(df, lookback=2, filter_redundant=True,
-                               min_candle_ratio=3.0, min_range_pct=1.0,
-                               max_rank=5)
+                               min_candle_ratio=3.0, min_range_pct=1.0)
 
         # Should return valid results with all filters applied
         self.assertIn('bull_references', result)
@@ -1072,7 +966,7 @@ class TestProminenceFilter(unittest.TestCase):
         # All filters enabled
         result = detect_swings(df, lookback=2, filter_redundant=True,
                                min_candle_ratio=3.0, min_range_pct=1.0,
-                               min_prominence=1.0, max_rank=5)
+                               min_prominence=1.0)
 
         # Should return valid results with all filters applied
         self.assertIn('bull_references', result)
@@ -1317,8 +1211,7 @@ class TestBestExtremaAdjustment(unittest.TestCase):
                                protection_tolerance=0.1,
                                min_candle_ratio=2.0,
                                min_range_pct=1.0,
-                               min_prominence=1.0,
-                               max_rank=5)
+                               min_prominence=1.0)
 
         # Should return valid results with proper ranking
         self.assertIn('bull_references', result)
@@ -1504,36 +1397,6 @@ class TestQuotaFilter(unittest.TestCase):
                 current = result['bear_references'][i]['combined_score']
                 next_score = result['bear_references'][i + 1]['combined_score']
                 self.assertLessEqual(current, next_score)
-
-    def test_quota_takes_precedence_over_max_rank(self):
-        """quota should take precedence over max_rank when both are set."""
-        df = self._create_synthetic_bars(1000)
-
-        # With both quota=3 and max_rank=5, quota should win
-        result = detect_swings(df, lookback=5, filter_redundant=False, quota=3, max_rank=5)
-
-        # Should respect quota (3), not max_rank (5)
-        self.assertLessEqual(len(result['bull_references']), 3)
-        self.assertLessEqual(len(result['bear_references']), 3)
-
-    def test_quota_backward_compatibility_with_max_rank(self):
-        """max_rank should still work when quota is not set."""
-        df = self._create_synthetic_bars(1000)
-
-        # Get baseline
-        result_all = detect_swings(df, lookback=5, filter_redundant=False)
-
-        # With only max_rank
-        result_max_rank = detect_swings(df, lookback=5, filter_redundant=False, max_rank=2)
-
-        # Should have at most 2 per direction (max_rank behavior)
-        self.assertLessEqual(len(result_max_rank['bull_references']), 2)
-        self.assertLessEqual(len(result_max_rank['bear_references']), 2)
-
-        # Should NOT have quota fields when only max_rank is used
-        for ref in result_max_rank['bull_references']:
-            self.assertNotIn('impulse', ref)
-            self.assertNotIn('combined_score', ref)
 
     def test_quota_with_filtering(self):
         """quota works correctly with structural filtering enabled."""

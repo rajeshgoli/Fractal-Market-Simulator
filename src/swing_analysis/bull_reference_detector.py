@@ -36,14 +36,6 @@ import csv
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Set, Optional, Tuple
-from enum import Enum
-
-
-class SwingType(Enum):
-    ORDINARY = "ordinary"
-    EXPLOSIVE = "explosive"
-    SWING_HIGH = "swing_high"
-    SWING_LOW = "swing_low"
 
 
 @dataclass
