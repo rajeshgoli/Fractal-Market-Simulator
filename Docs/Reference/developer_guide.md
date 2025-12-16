@@ -807,6 +807,87 @@ The `validate_log()` function checks:
 - Required config fields are present
 - Event data matches event_type requirements
 
+#### `src/discretization/discretizer.py`
+
+**Purpose**: Batch processor that converts OHLC + detected swings into structural event log.
+
+**Design Principles**:
+- Batch-only (no streaming state between calls)
+- Per-scale independence (no cross-scale coupling in core logic)
+- Config-driven levels and semantics (corpus comparability)
+- No lookahead (uses only data up to current bar)
+
+**Key Classes**:
+
+```python
+from src.discretization import Discretizer, DiscretizerConfig
+
+# Create with default config
+discretizer = Discretizer()
+
+# Or with custom config
+config = DiscretizerConfig(
+    level_set=[0.0, 0.382, 0.5, 0.618, 1.0, 2.0],
+    crossing_semantics="close_cross",
+    crossing_tolerance_pct=0.001,
+    invalidation_thresholds={"S": -0.10, "M": -0.10, "L": -0.15, "XL": -0.15},
+    rolling_window_sizes={"S": 20, "M": 50, "L": 100, "XL": 200},
+)
+discretizer = Discretizer(config)
+
+# Process OHLC and swings
+log = discretizer.discretize(
+    ohlc=ohlc_df,                    # DataFrame with timestamp, open, high, low, close
+    swings={"XL": [...], "M": [...]}, # Dict[scale, List[ReferenceSwing]]
+    instrument="ES",
+    source_resolution="1m",
+)
+
+# Access results
+for event in log.events:
+    print(f"Bar {event.bar}: {event.event_type.value}")
+```
+
+**DiscretizerConfig Parameters**:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `level_set` | `DISCRETIZATION_LEVELS` | Fibonacci levels to track |
+| `level_set_version` | `"v1.0"` | Version identifier for corpus comparability |
+| `crossing_semantics` | `"close_cross"` | How crossings are detected |
+| `crossing_tolerance_pct` | `0.001` | Tolerance as fraction of swing size |
+| `invalidation_thresholds` | `{"S": -0.10, ...}` | Per-scale invalidation ratios |
+| `rolling_window_sizes` | `{"S": 20, ...}` | Per-scale windows for range_multiple |
+| `gap_threshold_pct` | `0.005` | Gap detection threshold (fraction of price) |
+
+**Crossing Semantics**:
+
+| Mode | Description |
+|------|-------------|
+| `close_cross` | Level crossed when bar close moves past level (default) |
+| `open_close_cross` | Level crossed when bar opens on one side, closes on other |
+| `wick_touch` | Level crossed if wick touches it |
+
+**Multi-Level Jump Handling**: If price jumps from 0.3 to 1.5 in one bar, the discretizer logs `LEVEL_CROSS` events for all intermediate levels (0.382, 0.5, 0.618, 1.0) with the same bar timestamp. All events share the same `ShockAnnotation` with `levels_jumped` set to the count.
+
+**Example Output**:
+
+```python
+# Log structure
+log.meta          # DiscretizationMeta with config, instrument, date range
+log.swings        # List[SwingEntry] - all registered swings
+log.events        # List[DiscretizationEvent] - ordered event stream
+
+# Event with side-channels
+event = log.events[0]
+event.bar         # Source bar index
+event.event_type  # EventType.LEVEL_CROSS, COMPLETION, etc.
+event.data        # Event-specific data
+event.shock       # ShockAnnotation (levels_jumped, range_multiple, is_gap)
+event.effort      # EffortAnnotation (dwell_bars, test_count)
+event.parent_context  # ParentContext (larger scale swing state)
+```
+
 ---
 
 ### Ground Truth Annotator

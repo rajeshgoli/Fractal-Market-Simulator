@@ -27,8 +27,18 @@ from .schema import (
     SCHEMA_VERSION,
 )
 
+from .discretizer import (
+    Discretizer,
+    DiscretizerConfig,
+    DISCRETIZER_VERSION,
+)
+
 __all__ = [
-    # Configuration
+    # Discretizer
+    "Discretizer",
+    "DiscretizerConfig",
+    "DISCRETIZER_VERSION",
+    # Configuration (schema)
     "DiscretizationConfig",
     # Metadata
     "DiscretizationMeta",

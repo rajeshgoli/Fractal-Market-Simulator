@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-16
 
 ---
 
 ## Pending Changes
+
+### 2025-12-16 - Discretizer core implementation
+- **Issue:** #76
+- **Type:** Feature
+- **Files:** `src/discretization/discretizer.py`, `src/discretization/__init__.py`, `tests/test_discretizer.py`, `Docs/Reference/developer_guide.md`
 
 ### 2025-12-16 - ReferenceFrame coordinate system
 - **Issue:** #73
