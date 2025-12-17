@@ -5,8 +5,9 @@ import { Sidebar } from '../components/Sidebar';
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { ExplanationPanel } from '../components/ExplanationPanel';
+import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
-import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings, fetchSession } from '../lib/api';
+import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings, fetchSession, fetchDetectedSwings } from '../lib/api';
 import { INITIAL_FILTERS, LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
@@ -14,6 +15,7 @@ import {
   AggregationScale,
   DiscretizationEvent,
   DiscretizationSwing,
+  DetectedSwing,
   parseResolutionToMinutes,
   getAggregationLabel,
   getAggregationMinutes,
@@ -39,6 +41,7 @@ export const Replay: React.FC = () => {
   const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
   const [events, setEvents] = useState<DiscretizationEvent[]>([]);
   const [swings, setSwings] = useState<Record<string, DiscretizationSwing>>({});
+  const [detectedSwings, setDetectedSwings] = useState<DetectedSwing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -275,6 +278,42 @@ export const Replay: React.FC = () => {
     syncChartsToPositionRef.current = syncChartsToPosition;
   }, [syncChartsToPosition]);
 
+  // Fetch detected swings when playback position changes
+  // Use debouncing to avoid too many API calls during fast playback
+  const lastFetchedPositionRef = useRef<number>(-1);
+  const fetchSwingsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const currentPos = playback.currentPosition;
+
+    // Skip if position hasn't changed significantly (within 5 bars)
+    if (Math.abs(currentPos - lastFetchedPositionRef.current) < 5) {
+      return;
+    }
+
+    // Clear any pending fetch
+    if (fetchSwingsDebounceRef.current) {
+      clearTimeout(fetchSwingsDebounceRef.current);
+    }
+
+    // Debounce the fetch (100ms delay)
+    fetchSwingsDebounceRef.current = setTimeout(async () => {
+      try {
+        const result = await fetchDetectedSwings(currentPos + 1, 2);
+        setDetectedSwings(result.swings);
+        lastFetchedPositionRef.current = currentPos;
+      } catch (err) {
+        console.error('Failed to fetch detected swings:', err);
+      }
+    }, 100);
+
+    return () => {
+      if (fetchSwingsDebounceRef.current) {
+        clearTimeout(fetchSwingsDebounceRef.current);
+      }
+    };
+  }, [playback.currentPosition]);
+
   // Handle chart ready callbacks - create marker plugins
   const handleChart1Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
     chart1Ref.current = chart;
@@ -365,6 +404,18 @@ export const Replay: React.FC = () => {
             onChart2AggregationChange={handleChart2AggregationChange}
             onChart1Ready={handleChart1Ready}
             onChart2Ready={handleChart2Ready}
+          />
+
+          {/* Swing Overlays - render price lines on charts */}
+          <SwingOverlay
+            series={series1Ref.current}
+            swings={detectedSwings}
+            currentPosition={playback.currentPosition}
+          />
+          <SwingOverlay
+            series={series2Ref.current}
+            swings={detectedSwings}
+            currentPosition={playback.currentPosition}
           />
 
           {/* Playback Controls */}

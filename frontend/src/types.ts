@@ -121,6 +121,32 @@ export enum PlaybackState {
   LINGERING = 'LINGERING',
 }
 
+// Detected swing for Replay View visualization
+export interface DetectedSwing {
+  id: string;
+  direction: 'bull' | 'bear';
+  high_price: number;
+  high_bar_index: number;
+  low_price: number;
+  low_bar_index: number;
+  size: number;
+  rank: number;
+  // Fib levels for overlay
+  fib_0: number;    // Defended pivot (0)
+  fib_0382: number; // First retracement (0.382)
+  fib_1: number;    // Origin extremum (1.0)
+  fib_2: number;    // Completion target (2.0)
+}
+
+// Swing colors by rank (1-indexed)
+export const SWING_COLORS: Record<number, string> = {
+  1: '#3B82F6', // Blue (biggest)
+  2: '#10B981', // Green
+  3: '#F59E0B', // Orange
+  4: '#8B5CF6', // Purple
+  5: '#EC4899', // Pink
+};
+
 // Aggregation scale options (timeframes not S/M/L/XL)
 export const AGGREGATION_OPTIONS = [
   { value: 'S', label: '5m', minutes: 5 },

@@ -1209,3 +1209,75 @@ class TestReviewFlowIntegration:
         # Export should work
         export = cascade_client.get("/api/review/export?format=json").json()
         assert "summary" in export
+
+
+class TestWindowedSwingsEndpoint:
+    """Tests for /api/swings/windowed endpoint."""
+
+    def test_windowed_swings_returns_response(self, client):
+        """Test that windowed swings endpoint returns valid response."""
+        response = client.get("/api/swings/windowed?bar_end=100")
+        assert response.status_code == 200
+        data = response.json()
+        assert "bar_end" in data
+        assert "swing_count" in data
+        assert "swings" in data
+        assert data["bar_end"] == 100
+
+    def test_windowed_swings_with_small_bar_end_returns_empty(self, client):
+        """Test that small bar_end returns empty list (need minimum bars)."""
+        response = client.get("/api/swings/windowed?bar_end=5")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["swing_count"] == 0
+        assert data["swings"] == []
+
+    def test_windowed_swings_returns_detected_swings(self, client):
+        """Test that swings are detected and returned with correct structure."""
+        response = client.get("/api/swings/windowed?bar_end=200&top_n=2")
+        assert response.status_code == 200
+        data = response.json()
+
+        # May or may not have swings depending on data
+        if data["swing_count"] > 0:
+            swing = data["swings"][0]
+            # Check required fields
+            assert "id" in swing
+            assert "direction" in swing
+            assert "high_price" in swing
+            assert "high_bar_index" in swing
+            assert "low_price" in swing
+            assert "low_bar_index" in swing
+            assert "size" in swing
+            assert "rank" in swing
+            # Check Fib level fields
+            assert "fib_0" in swing
+            assert "fib_0382" in swing
+            assert "fib_1" in swing
+            assert "fib_2" in swing
+            # Check direction is valid
+            assert swing["direction"] in ["bull", "bear"]
+
+    def test_windowed_swings_top_n_limits_results(self, client):
+        """Test that top_n parameter limits number of swings returned."""
+        response = client.get("/api/swings/windowed?bar_end=300&top_n=1")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["swing_count"] <= 1
+
+    def test_windowed_swings_fib_levels_calculated_correctly(self, client):
+        """Test that Fib levels are calculated correctly based on direction."""
+        response = client.get("/api/swings/windowed?bar_end=300&top_n=5")
+        assert response.status_code == 200
+        data = response.json()
+
+        for swing in data["swings"]:
+            swing_range = swing["high_price"] - swing["low_price"]
+            if swing["direction"] == "bull":
+                # Bull: low is pivot (fib_0), high is origin (fib_1)
+                assert abs(swing["fib_0"] - swing["low_price"]) < 0.01
+                assert abs(swing["fib_1"] - swing["high_price"]) < 0.01
+            else:
+                # Bear: high is pivot (fib_0), low is origin (fib_1)
+                assert abs(swing["fib_0"] - swing["high_price"]) < 0.01
+                assert abs(swing["fib_1"] - swing["low_price"]) < 0.01

@@ -1824,6 +1824,156 @@ async def get_discretization_levels(swing_id: str = Query(..., description="Swin
     }
 
 
+# ============================================================================
+# Swing Detection Endpoints (for Replay View)
+# ============================================================================
+
+
+class DetectedSwingResponse(BaseModel):
+    """A detected swing for Replay View visualization."""
+    id: str  # Generated ID for reference
+    direction: str  # "bull" or "bear"
+    high_price: float
+    high_bar_index: int
+    low_price: float
+    low_bar_index: int
+    size: float
+    rank: int
+    # Fib levels for overlay
+    fib_0: float  # Defended pivot (0)
+    fib_0382: float  # First retracement
+    fib_1: float  # Origin extremum (1.0)
+    fib_2: float  # Completion target (2.0)
+
+
+class SwingsWindowedResponse(BaseModel):
+    """Response from windowed swing detection."""
+    bar_end: int
+    swing_count: int
+    swings: List[DetectedSwingResponse]
+
+
+@app.get("/api/swings/windowed", response_model=SwingsWindowedResponse)
+async def get_windowed_swings(
+    bar_end: int = Query(..., description="Source bar index to detect swings up to"),
+    top_n: int = Query(2, description="Number of top swings to return"),
+):
+    """
+    Run swing detection on bars[0:bar_end] and return top N swings.
+
+    Used by Replay View to show detected swings as playback progresses.
+    Returns swings with Fib levels for chart overlay.
+    """
+    s = get_state()
+
+    # Validate bar_end
+    if bar_end < 10:
+        # Need minimum bars for detection
+        return SwingsWindowedResponse(bar_end=bar_end, swing_count=0, swings=[])
+    if bar_end > len(s.source_bars):
+        bar_end = len(s.source_bars)
+
+    # Slice source bars to current position
+    bars_subset = s.source_bars[:bar_end]
+
+    # Convert to DataFrame for detect_swings
+    bar_data = []
+    for bar in bars_subset:
+        bar_data.append({
+            'timestamp': bar.timestamp,
+            'open': bar.open,
+            'high': bar.high,
+            'low': bar.low,
+            'close': bar.close,
+        })
+
+    df = pd.DataFrame(bar_data)
+    df.set_index(pd.RangeIndex(start=0, stop=len(df)), inplace=True)
+
+    # Run swing detection
+    result = detect_swings(
+        df,
+        lookback=5,
+        filter_redundant=True,
+        current_bar_index=bar_end - 1,  # Pass current bar for proper detection
+    )
+
+    # Combine bull and bear references, sort by size, take top N
+    all_swings = []
+
+    for ref in result.get('bull_references', []):
+        # Calculate Fib levels for bull (low is pivot, high is origin)
+        swing_range = ref['high_price'] - ref['low_price']
+        fib_0 = ref['low_price']  # Defended pivot
+        fib_0382 = ref['low_price'] + swing_range * 0.382
+        fib_1 = ref['high_price']  # Origin
+        fib_2 = ref['low_price'] + swing_range * 2.0  # Completion target
+
+        all_swings.append({
+            'direction': 'bull',
+            'high_price': ref['high_price'],
+            'high_bar_index': ref['high_bar_index'],
+            'low_price': ref['low_price'],
+            'low_bar_index': ref['low_bar_index'],
+            'size': ref['size'],
+            'rank': ref.get('rank', 0),
+            'fib_0': fib_0,
+            'fib_0382': fib_0382,
+            'fib_1': fib_1,
+            'fib_2': fib_2,
+        })
+
+    for ref in result.get('bear_references', []):
+        # Calculate Fib levels for bear (high is pivot, low is origin)
+        swing_range = ref['high_price'] - ref['low_price']
+        fib_0 = ref['high_price']  # Defended pivot
+        fib_0382 = ref['high_price'] - swing_range * 0.382
+        fib_1 = ref['low_price']  # Origin
+        fib_2 = ref['high_price'] - swing_range * 2.0  # Completion target
+
+        all_swings.append({
+            'direction': 'bear',
+            'high_price': ref['high_price'],
+            'high_bar_index': ref['high_bar_index'],
+            'low_price': ref['low_price'],
+            'low_bar_index': ref['low_bar_index'],
+            'size': ref['size'],
+            'rank': ref.get('rank', 0),
+            'fib_0': fib_0,
+            'fib_0382': fib_0382,
+            'fib_1': fib_1,
+            'fib_2': fib_2,
+        })
+
+    # Sort by size descending, take top N
+    all_swings.sort(key=lambda x: x['size'], reverse=True)
+    top_swings = all_swings[:top_n]
+
+    # Convert to response models with IDs
+    swing_responses = []
+    for i, swing in enumerate(top_swings):
+        swing_responses.append(DetectedSwingResponse(
+            id=f"swing-{bar_end}-{i}",
+            direction=swing['direction'],
+            high_price=swing['high_price'],
+            high_bar_index=swing['high_bar_index'],
+            low_price=swing['low_price'],
+            low_bar_index=swing['low_bar_index'],
+            size=swing['size'],
+            rank=i + 1,
+            fib_0=swing['fib_0'],
+            fib_0382=swing['fib_0382'],
+            fib_1=swing['fib_1'],
+            fib_2=swing['fib_2'],
+        ))
+
+    return SwingsWindowedResponse(
+        bar_end=bar_end,
+        swing_count=len(swing_responses),
+        swings=swing_responses,
+    )
+
+
 @app.get("/replay", response_class=HTMLResponse)
 async def replay_page():
     """Serve the Replay View UI - React frontend."""
