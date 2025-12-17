@@ -630,8 +630,10 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `ChartArea.tsx` | Two stacked lightweight-charts |
 | `SwingOverlay.tsx` | Fib level rendering on charts |
 | `PlaybackControls.tsx` | Play/pause/step transport |
-| `ExplanationPanel.tsx` | Swing detail display during pause |
-| `usePlayback.ts` | Playback state machine hook |
+| `ExplanationPanel.tsx` | Calibration report and swing details |
+| `usePlayback.ts` | Legacy playback (calibration scrubbing) |
+| `useForwardPlayback.ts` | Forward-only playback after calibration |
+| `useSwingDisplay.ts` | Scale filtering and swing ranking |
 
 **Stack:** React 19, lightweight-charts v5, Tailwind CSS 4, Vite 7
 
