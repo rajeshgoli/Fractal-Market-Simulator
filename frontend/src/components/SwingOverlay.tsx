@@ -1,14 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { ISeriesApi, CreatePriceLineOptions, IPriceLine, LineStyle, ISeriesMarkersPluginApi, Time, SeriesMarker } from 'lightweight-charts';
-import { DetectedSwing, SWING_COLORS, BarData } from '../types';
+import { ISeriesApi, CreatePriceLineOptions, IPriceLine, LineStyle } from 'lightweight-charts';
+import { DetectedSwing, SWING_COLORS } from '../types';
 
 interface SwingOverlayProps {
   series: ISeriesApi<'Candlestick'> | null;
   swings: DetectedSwing[];
   currentPosition: number;
   highlightedSwing?: DetectedSwing;
-  markersPlugin?: ISeriesMarkersPluginApi<Time> | null;
-  bars?: BarData[];
 }
 
 // Fib level configuration - show HIGH/LOW labels for the swing endpoints
@@ -40,46 +38,19 @@ function getLevelLabel(levelKey: string, direction: 'bull' | 'bear'): string {
 }
 
 /**
- * Find the aggregated bar that contains a given source bar index.
- * Returns the bar's timestamp for placing markers.
- */
-function findBarTimestamp(bars: BarData[], sourceIndex: number): number | null {
-  // Binary search for the bar containing this source index
-  for (const bar of bars) {
-    if (sourceIndex >= bar.source_start_index && sourceIndex <= bar.source_end_index) {
-      return bar.timestamp;
-    }
-  }
-  // Fallback: find closest bar
-  if (bars.length === 0) return null;
-
-  // Find bar with closest source_end_index
-  let closest = bars[0];
-  for (const bar of bars) {
-    if (bar.source_end_index <= sourceIndex) {
-      closest = bar;
-    } else {
-      break;
-    }
-  }
-  return closest.timestamp;
-}
-
-/**
- * SwingOverlay renders swing markers and Fib levels on a chart.
+ * SwingOverlay renders Fib levels as horizontal price lines on a chart.
  *
  * For each detected swing, it shows:
- * - HIGH/LOW markers at the actual swing anchor bar positions
  * - Fib levels (0, 0.382, 1, 2) as horizontal price lines
  * - Bull swings use solid lines, bear swings use dashed lines
+ *
+ * Note: Swing HIGH/LOW markers are rendered separately via the markers plugin in Replay.tsx
  */
 export const SwingOverlay: React.FC<SwingOverlayProps> = ({
   series,
   swings,
   currentPosition,
   highlightedSwing,
-  markersPlugin,
-  bars,
 }) => {
   // Track created price lines so we can remove them on update
   const priceLinesRef = useRef<IPriceLine[]>([]);
@@ -133,7 +104,7 @@ export const SwingOverlay: React.FC<SwingOverlayProps> = ({
     return lines;
   }, [series]);
 
-  // Update price lines and markers when swings change
+  // Update price lines when swings change
   useEffect(() => {
     if (!series) return;
 
@@ -165,53 +136,11 @@ export const SwingOverlay: React.FC<SwingOverlayProps> = ({
 
     priceLinesRef.current = allLines;
 
-    // Create markers for swing high/low points if plugin and bars available
-    if (markersPlugin && bars && bars.length > 0) {
-      const markers: SeriesMarker<Time>[] = [];
-
-      for (const swing of visibleSwings) {
-        const color = SWING_COLORS[swing.rank] || SWING_COLORS[1];
-
-        // Find timestamps for high and low bars
-        const highTimestamp = findBarTimestamp(bars, swing.high_bar_index);
-        const lowTimestamp = findBarTimestamp(bars, swing.low_bar_index);
-
-        // Add HIGH marker
-        if (highTimestamp !== null) {
-          markers.push({
-            time: highTimestamp as Time,
-            position: 'aboveBar',
-            color,
-            shape: 'arrowDown',
-            text: 'H',
-          });
-        }
-
-        // Add LOW marker
-        if (lowTimestamp !== null) {
-          markers.push({
-            time: lowTimestamp as Time,
-            position: 'belowBar',
-            color,
-            shape: 'arrowUp',
-            text: 'L',
-          });
-        }
-      }
-
-      // Sort markers by time (required by lightweight-charts)
-      markers.sort((a, b) => (a.time as number) - (b.time as number));
-      markersPlugin.setMarkers(markers);
-    }
-
     // Cleanup on unmount
     return () => {
       clearPriceLines();
-      if (markersPlugin) {
-        markersPlugin.setMarkers([]);
-      }
     };
-  }, [series, swings, currentPosition, highlightedSwing, clearPriceLines, createSwingLines, markersPlugin, bars]);
+  }, [series, swings, currentPosition, highlightedSwing, clearPriceLines, createSwingLines]);
 
   // This component doesn't render any DOM elements
   // It only manages price lines on the chart via side effects

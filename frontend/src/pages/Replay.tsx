@@ -16,6 +16,7 @@ import {
   DiscretizationEvent,
   DiscretizationSwing,
   DetectedSwing,
+  SWING_COLORS,
   parseResolutionToMinutes,
   getAggregationLabel,
   getAggregationMinutes,
@@ -97,13 +98,9 @@ export const Replay: React.FC = () => {
   const series1Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const series2Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
-  // Marker plugin refs for position indicators
+  // Marker plugin refs (single plugin per chart for all markers)
   const markers1Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markers2Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
-
-  // Marker plugin refs for swing high/low markers
-  const swingMarkers1Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
-  const swingMarkers2Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   // Ref to hold the latest syncChartsToPosition function (avoids stale closure in callback)
   const syncChartsToPositionRef = useRef<(sourceIndex: number) => void>(() => {});
@@ -261,34 +258,101 @@ export const Replay: React.FC = () => {
     return bars.length - 1;
   }, []);
 
-  // Update position marker using the markers plugin
-  const updatePositionMarker = useCallback((
+  // Find the aggregated bar timestamp that contains a given source bar index
+  const findBarTimestamp = useCallback((bars: BarData[], sourceIndex: number): number | null => {
+    for (const bar of bars) {
+      if (sourceIndex >= bar.source_start_index && sourceIndex <= bar.source_end_index) {
+        return bar.timestamp;
+      }
+    }
+    // Fallback: find closest bar
+    if (bars.length === 0) return null;
+
+    let closest = bars[0];
+    for (const bar of bars) {
+      if (bar.source_end_index <= sourceIndex) {
+        closest = bar;
+      } else {
+        break;
+      }
+    }
+    return closest.timestamp;
+  }, []);
+
+  // Update all markers (position + swing markers) using a single markers plugin
+  const updateAllMarkers = useCallback((
     markersPlugin: ISeriesMarkersPluginApi<Time> | null,
     bars: BarData[],
-    sourceIndex: number
+    sourceIndex: number,
+    swings: DetectedSwing[],
+    highlighted?: DetectedSwing
   ) => {
     if (!markersPlugin || bars.length === 0) return;
 
+    const markers: SeriesMarker<Time>[] = [];
+
+    // Add position marker
     const aggIndex = findAggBarForSourceIndex(bars, sourceIndex);
-    if (aggIndex < 0 || aggIndex >= bars.length) return;
+    if (aggIndex >= 0 && aggIndex < bars.length) {
+      const bar = bars[aggIndex];
+      markers.push({
+        time: bar.timestamp as Time,
+        position: 'aboveBar',
+        color: '#f7d63e',
+        shape: 'arrowDown',
+        text: '',
+      });
+    }
 
-    const bar = bars[aggIndex];
-    const marker: SeriesMarker<Time> = {
-      time: bar.timestamp as Time,
-      position: 'aboveBar',
-      color: '#f7d63e',
-      shape: 'arrowDown',
-      text: '',
-    };
-    markersPlugin.setMarkers([marker]);
-  }, [findAggBarForSourceIndex]);
+    // Determine which swings to show markers for
+    let visibleSwings: DetectedSwing[];
+    if (highlighted) {
+      visibleSwings = [highlighted];
+    } else {
+      visibleSwings = swings.filter(swing => {
+        const maxBarIndex = Math.max(swing.high_bar_index, swing.low_bar_index);
+        return maxBarIndex <= sourceIndex;
+      });
+    }
 
-  // Sync charts to current position
+    // Add swing HIGH/LOW markers
+    for (const swing of visibleSwings) {
+      const color = SWING_COLORS[swing.rank] || SWING_COLORS[1];
+
+      // Find timestamps for high and low bars
+      const highTimestamp = findBarTimestamp(bars, swing.high_bar_index);
+      const lowTimestamp = findBarTimestamp(bars, swing.low_bar_index);
+
+      // Add HIGH marker
+      if (highTimestamp !== null) {
+        markers.push({
+          time: highTimestamp as Time,
+          position: 'aboveBar',
+          color,
+          shape: 'arrowDown',
+          text: 'H',
+        });
+      }
+
+      // Add LOW marker
+      if (lowTimestamp !== null) {
+        markers.push({
+          time: lowTimestamp as Time,
+          position: 'belowBar',
+          color,
+          shape: 'arrowUp',
+          text: 'L',
+        });
+      }
+    }
+
+    // Sort markers by time (required by lightweight-charts)
+    markers.sort((a, b) => (a.time as number) - (b.time as number));
+    markersPlugin.setMarkers(markers);
+  }, [findAggBarForSourceIndex, findBarTimestamp]);
+
+  // Sync charts to current position (scrolling only - markers handled separately)
   const syncChartsToPosition = useCallback((sourceIndex: number) => {
-    // Always update position markers regardless of scrolling
-    updatePositionMarker(markers1Ref.current, chart1Bars, sourceIndex);
-    updatePositionMarker(markers2Ref.current, chart2Bars, sourceIndex);
-
     const syncChart = (
       chart: IChartApi | null,
       bars: BarData[],
@@ -304,7 +368,7 @@ export const Replay: React.FC = () => {
         const rangeSize = visibleRange.to - visibleRange.from;
         const margin = rangeSize * 0.1;
         if (aggIndex >= visibleRange.from + margin && aggIndex <= visibleRange.to - margin) {
-          return; // Already visible - no scroll needed (but marker already updated above)
+          return; // Already visible - no scroll needed
         }
       }
 
@@ -329,7 +393,25 @@ export const Replay: React.FC = () => {
 
     syncChart(chart1Ref.current, chart1Bars);
     syncChart(chart2Ref.current, chart2Bars);
-  }, [chart1Bars, chart2Bars, findAggBarForSourceIndex, updatePositionMarker]);
+  }, [chart1Bars, chart2Bars, findAggBarForSourceIndex]);
+
+  // Update all chart markers when position or swings change
+  useEffect(() => {
+    updateAllMarkers(
+      markers1Ref.current,
+      chart1Bars,
+      playback.currentPosition,
+      detectedSwings,
+      highlightedSwing
+    );
+    updateAllMarkers(
+      markers2Ref.current,
+      chart2Bars,
+      playback.currentPosition,
+      detectedSwings,
+      highlightedSwing
+    );
+  }, [playback.currentPosition, detectedSwings, highlightedSwing, chart1Bars, chart2Bars, updateAllMarkers]);
 
   // Keep the ref updated with the latest syncChartsToPosition
   useEffect(() => {
@@ -377,14 +459,12 @@ export const Replay: React.FC = () => {
     chart1Ref.current = chart;
     series1Ref.current = series;
     markers1Ref.current = createSeriesMarkers(series, []);
-    swingMarkers1Ref.current = createSeriesMarkers(series, []);
   }, []);
 
   const handleChart2Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
     chart2Ref.current = chart;
     series2Ref.current = series;
     markers2Ref.current = createSeriesMarkers(series, []);
-    swingMarkers2Ref.current = createSeriesMarkers(series, []);
   }, []);
 
   // Toggle filter
@@ -486,22 +566,18 @@ export const Replay: React.FC = () => {
             onChart2Ready={handleChart2Ready}
           />
 
-          {/* Swing Overlays - render price lines and markers on charts */}
+          {/* Swing Overlays - render Fib level price lines on charts */}
           <SwingOverlay
             series={series1Ref.current}
             swings={detectedSwings}
             currentPosition={playback.currentPosition}
             highlightedSwing={highlightedSwing}
-            markersPlugin={swingMarkers1Ref.current}
-            bars={chart1Bars}
           />
           <SwingOverlay
             series={series2Ref.current}
             swings={detectedSwings}
             currentPosition={playback.currentPosition}
             highlightedSwing={highlightedSwing}
-            markersPlugin={swingMarkers2Ref.current}
-            bars={chart2Bars}
           />
 
           {/* Playback Controls */}
