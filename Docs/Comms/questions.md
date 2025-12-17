@@ -33,6 +33,8 @@ User tested Replay View. UI is polished but replay model is fundamentally wrong 
 - Scale toggles: XL, L, M, S
 - Active swings dropdown: 1-5 (default 2)
 - Calibration report in report area
+- Speed control with aggregation dropdown: "Speed: [10x ▼] per [1H ▼] bar"
+- Active swings marked on chart with high/low points, distinct colors per swing
 
 ### Questions
 

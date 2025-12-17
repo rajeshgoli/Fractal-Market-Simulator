@@ -39,6 +39,8 @@ Current behavior: preload all bars, then scrub through them. User sees entire fu
 
 1x = 1 source bar/sec (5m), which is too slow at 1H/4H aggregation. Speed should be relative to chart timeframe, not raw data.
 
+**UX decision:** Add aggregation dropdown next to speed control (e.g., "Speed: [10x ▼] per [1H ▼] bar"). This keeps playback controls grouped together rather than splitting them across charts.
+
 ### UI Changes Requested
 
 **New "Scale Calibration" section** (below left controls):
@@ -53,8 +55,14 @@ Current behavior: preload all bars, then scrub through them. User sees entire fu
 **Navigation:**
 - `<<` / `>>` = previous/next **event** (not bar)
 
+**Speed control:**
+- Add aggregation dropdown next to speed: "Speed: [10x ▼] per [1H ▼] bar"
+- Keeps playback controls grouped together
+
 **Display during playback:**
 - Show only biggest N swings (per dropdown)
+- Mark high and low of each active swing on chart
+- Use distinct colors per swing (if showing 2 swings, use 2 different colors)
 - Fib levels: 0, 0.382, 1, 2 for persistent swings
 - Event-triggered swings: those + the level being crossed
 

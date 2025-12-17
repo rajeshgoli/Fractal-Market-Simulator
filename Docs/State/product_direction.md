@@ -43,6 +43,8 @@ Current model: preload all bars, then scrub through. User sees entire future upf
 
 1x = 1 source bar/sec (5m), too slow at 1H/4H. Speed should be relative to chart aggregation.
 
+**UX decision:** Add aggregation dropdown next to speed control: "Speed: [10x ▼] per [1H ▼] bar"
+
 ### UI Changes Required
 
 **New "Scale Calibration" section** (below left controls):
@@ -57,8 +59,13 @@ Current model: preload all bars, then scrub through. User sees entire future upf
 **Navigation:**
 - `<<` / `>>` = previous/next **event** (not bar)
 
+**Speed control:**
+- Add aggregation dropdown next to speed: "Speed: [10x ▼] per [1H ▼] bar"
+
 **Display during playback:**
 - Show only biggest N swings (per dropdown setting)
+- Mark high and low of each active swing on chart
+- Use distinct colors per swing (if showing 2 swings, use 2 different colors)
 - Fib levels: 0, 0.382, 1, 2 for persistent swings
 - Event-triggered swings: those + the level being crossed
 
@@ -70,7 +77,8 @@ Current model: preload all bars, then scrub through. User sees entire future upf
 - [ ] Forward-only playback: new bars appear beyond calibration window
 - [ ] Events surface in real-time during playback
 - [ ] `<<` / `>>` navigate by event, not bar
-- [ ] Speed relative to chart aggregation
+- [ ] Speed control with aggregation dropdown: "Speed: [10x ▼] per [1H ▼] bar"
+- [ ] Active swings have high/low marked on chart with distinct colors per swing
 - [ ] Scale toggles and active swing count dropdown work
 
 **Spec:** `Docs/Working/replay_view_spec.md` (to be updated)
