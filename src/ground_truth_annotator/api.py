@@ -1523,7 +1523,11 @@ async def start_next_session():
 
 
 def _run_discretization(s: AppState) -> DiscretizationLog:
-    """Run discretization on current window with detected swings."""
+    """Run discretization on current window with detected swings.
+
+    Each swing is assigned to exactly one scale - the LARGEST scale it qualifies for
+    based on size thresholds. This prevents the same swing from appearing at multiple scales.
+    """
     # Convert source bars to DataFrame for discretizer
     bar_data = []
     for bar in s.source_bars:
@@ -1538,52 +1542,73 @@ def _run_discretization(s: AppState) -> DiscretizationLog:
     df = pd.DataFrame(bar_data)
     df.set_index(pd.RangeIndex(start=0, stop=len(df)), inplace=True)
 
-    # Detect swings at all scales
-    swings_by_scale: Dict[str, List[ReferenceSwing]] = {}
-    scales = ["XL", "L", "M", "S"]
+    # Detect swings once (not per scale)
+    result = detect_swings(df, lookback=5, filter_redundant=True)
 
-    for scale in scales:
-        # Use default detection parameters
-        result = detect_swings(df, lookback=5, filter_redundant=True)
+    # Scale thresholds - swing assigned to LARGEST scale where size >= threshold
+    # Note: Scales ordered from largest to smallest for assignment priority
+    scale_thresholds = [
+        ("XL", 100),
+        ("L", 40),
+        ("M", 15),
+        ("S", 0),
+    ]
 
-        # Convert to ReferenceSwing objects
-        swing_list = []
-        for ref in result.get('bull_references', []):
-            swing = ReferenceSwing(
-                high_price=ref['high_price'],
-                high_bar_index=ref['high_bar_index'],
-                low_price=ref['low_price'],
-                low_bar_index=ref['low_bar_index'],
-                size=ref['size'],
-                direction='bull',
-                structurally_separated=ref.get('structurally_separated', False),
-                containing_swing_id=ref.get('containing_swing_id'),
-                separation_is_anchor=ref.get('separation_is_anchor', False),
-                separation_distance_fib=ref.get('separation_distance_fib'),
-                separation_minimum_fib=ref.get('separation_minimum_fib'),
-                separation_from_swing_id=ref.get('separation_from_swing_id'),
-            )
-            swing_list.append(swing)
+    def assign_scale(size: float) -> str:
+        """Assign swing to the largest scale it qualifies for."""
+        for scale, threshold in scale_thresholds:
+            if size >= threshold:
+                return scale
+        return "S"  # Default to smallest scale
 
-        for ref in result.get('bear_references', []):
-            swing = ReferenceSwing(
-                high_price=ref['high_price'],
-                high_bar_index=ref['high_bar_index'],
-                low_price=ref['low_price'],
-                low_bar_index=ref['low_bar_index'],
-                size=ref['size'],
-                direction='bear',
-                structurally_separated=ref.get('structurally_separated', False),
-                containing_swing_id=ref.get('containing_swing_id'),
-                separation_is_anchor=ref.get('separation_is_anchor', False),
-                separation_distance_fib=ref.get('separation_distance_fib'),
-                separation_minimum_fib=ref.get('separation_minimum_fib'),
-                separation_from_swing_id=ref.get('separation_from_swing_id'),
-            )
-            swing_list.append(swing)
+    # Initialize swings_by_scale with empty lists
+    swings_by_scale: Dict[str, List[ReferenceSwing]] = {
+        "XL": [],
+        "L": [],
+        "M": [],
+        "S": [],
+    }
 
-        if swing_list:
-            swings_by_scale[scale] = swing_list
+    # Process bull references - assign each to exactly one scale
+    for ref in result.get('bull_references', []):
+        swing = ReferenceSwing(
+            high_price=ref['high_price'],
+            high_bar_index=ref['high_bar_index'],
+            low_price=ref['low_price'],
+            low_bar_index=ref['low_bar_index'],
+            size=ref['size'],
+            direction='bull',
+            structurally_separated=ref.get('structurally_separated', False),
+            containing_swing_id=ref.get('containing_swing_id'),
+            separation_is_anchor=ref.get('separation_is_anchor', False),
+            separation_distance_fib=ref.get('separation_distance_fib'),
+            separation_minimum_fib=ref.get('separation_minimum_fib'),
+            separation_from_swing_id=ref.get('separation_from_swing_id'),
+        )
+        scale = assign_scale(ref['size'])
+        swings_by_scale[scale].append(swing)
+
+    # Process bear references - assign each to exactly one scale
+    for ref in result.get('bear_references', []):
+        swing = ReferenceSwing(
+            high_price=ref['high_price'],
+            high_bar_index=ref['high_bar_index'],
+            low_price=ref['low_price'],
+            low_bar_index=ref['low_bar_index'],
+            size=ref['size'],
+            direction='bear',
+            structurally_separated=ref.get('structurally_separated', False),
+            containing_swing_id=ref.get('containing_swing_id'),
+            separation_is_anchor=ref.get('separation_is_anchor', False),
+            separation_distance_fib=ref.get('separation_distance_fib'),
+            separation_minimum_fib=ref.get('separation_minimum_fib'),
+            separation_from_swing_id=ref.get('separation_from_swing_id'),
+        )
+        scale = assign_scale(ref['size'])
+        swings_by_scale[scale].append(swing)
+
+    # Remove empty scales from the dict
+    swings_by_scale = {k: v for k, v in swings_by_scale.items() if v}
 
     # Run discretization
     config = DiscretizerConfig()

@@ -97,9 +97,13 @@ export const Replay: React.FC = () => {
   const series1Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const series2Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
-  // Marker plugin refs
+  // Marker plugin refs for position indicators
   const markers1Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markers2Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+
+  // Marker plugin refs for swing high/low markers
+  const swingMarkers1Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const swingMarkers2Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   // Ref to hold the latest syncChartsToPosition function (avoids stale closure in callback)
   const syncChartsToPositionRef = useRef<(sourceIndex: number) => void>(() => {});
@@ -373,12 +377,14 @@ export const Replay: React.FC = () => {
     chart1Ref.current = chart;
     series1Ref.current = series;
     markers1Ref.current = createSeriesMarkers(series, []);
+    swingMarkers1Ref.current = createSeriesMarkers(series, []);
   }, []);
 
   const handleChart2Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
     chart2Ref.current = chart;
     series2Ref.current = series;
     markers2Ref.current = createSeriesMarkers(series, []);
+    swingMarkers2Ref.current = createSeriesMarkers(series, []);
   }, []);
 
   // Toggle filter
@@ -480,18 +486,22 @@ export const Replay: React.FC = () => {
             onChart2Ready={handleChart2Ready}
           />
 
-          {/* Swing Overlays - render price lines on charts */}
+          {/* Swing Overlays - render price lines and markers on charts */}
           <SwingOverlay
             series={series1Ref.current}
             swings={detectedSwings}
             currentPosition={playback.currentPosition}
             highlightedSwing={highlightedSwing}
+            markersPlugin={swingMarkers1Ref.current}
+            bars={chart1Bars}
           />
           <SwingOverlay
             series={series2Ref.current}
             swings={detectedSwings}
             currentPosition={playback.currentPosition}
             highlightedSwing={highlightedSwing}
+            markersPlugin={swingMarkers2Ref.current}
+            bars={chart2Bars}
           />
 
           {/* Playback Controls */}

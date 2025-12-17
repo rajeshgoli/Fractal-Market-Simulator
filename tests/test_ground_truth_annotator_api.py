@@ -1281,3 +1281,78 @@ class TestWindowedSwingsEndpoint:
                 # Bear: high is pivot (fib_0), low is origin (fib_1)
                 assert abs(swing["fib_0"] - swing["high_price"]) < 0.01
                 assert abs(swing["fib_1"] - swing["low_price"]) < 0.01
+
+
+class TestDiscretizationScaleAssignment:
+    """Tests for swing scale assignment during discretization."""
+
+    def test_discretization_run_succeeds(self, client):
+        """Test that discretization runs without error."""
+        response = client.post("/api/discretization/run")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    def test_discretization_swings_have_unique_scales(self, client):
+        """Test that each swing appears at exactly one scale (no duplicates across scales)."""
+        # Run discretization
+        client.post("/api/discretization/run")
+
+        # Get all swings
+        response = client.get("/api/discretization/swings")
+        assert response.status_code == 200
+        swings = response.json()
+
+        # Track swings by their (high_bar, low_bar, direction) signature
+        # Each unique swing should only appear once
+        seen_signatures = {}
+        for swing in swings:
+            # Create a unique signature for this swing
+            signature = (
+                swing["anchor0_bar"],
+                swing["anchor1_bar"],
+                swing["direction"],
+            )
+            if signature in seen_signatures:
+                # This swing already appeared at another scale - fail!
+                existing_scale = seen_signatures[signature]
+                pytest.fail(
+                    f"Swing at bars ({swing['anchor0_bar']}, {swing['anchor1_bar']}) "
+                    f"appears at both {existing_scale} and {swing['scale']} scales"
+                )
+            seen_signatures[signature] = swing["scale"]
+
+    def test_discretization_scale_thresholds_respected(self, client):
+        """Test that swings are assigned to scales based on size thresholds."""
+        # Run discretization
+        client.post("/api/discretization/run")
+
+        # Get all swings
+        response = client.get("/api/discretization/swings")
+        assert response.status_code == 200
+        swings = response.json()
+
+        # Scale thresholds (from _run_discretization)
+        thresholds = {
+            "XL": 100,
+            "L": 40,
+            "M": 15,
+            "S": 0,
+        }
+
+        for swing in swings:
+            scale = swing["scale"]
+            size = abs(swing["anchor1"] - swing["anchor0"])  # Approximate size
+
+            # Check swing is at the correct scale based on its size
+            if scale == "XL":
+                assert size >= thresholds["XL"], f"XL swing has size {size} < 100"
+            elif scale == "L":
+                assert size >= thresholds["L"], f"L swing has size {size} < 40"
+                assert size < thresholds["XL"], f"L swing has size {size} >= 100 (should be XL)"
+            elif scale == "M":
+                assert size >= thresholds["M"], f"M swing has size {size} < 15"
+                assert size < thresholds["L"], f"M swing has size {size} >= 40 (should be L)"
+            elif scale == "S":
+                assert size >= thresholds["S"], f"S swing has size {size} < 0"
+                assert size < thresholds["M"], f"S swing has size {size} >= 15 (should be M)"
