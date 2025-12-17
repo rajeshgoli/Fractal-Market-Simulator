@@ -327,12 +327,3 @@ class TestDiscretizationLevels:
                 assert "label" in level
 
 
-class TestDiscretizationPage:
-    """Tests for GET /discretization."""
-
-    def test_discretization_page_exists(self, initialized_app):
-        """Discretization page is served."""
-        response = initialized_app.get("/discretization")
-        assert response.status_code == 200
-        assert "text/html" in response.headers["content-type"]
-        assert "Discretization View" in response.text

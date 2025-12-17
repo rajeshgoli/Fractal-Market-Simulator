@@ -2,7 +2,7 @@
 #
 # Core market structure detection and analysis algorithms.
 
-from .bull_reference_detector import Bar, BullReferenceDetector, BearReferenceDetector
+from .bull_reference_detector import Bar
 from .swing_detector import detect_swings, ReferenceSwing
 from .level_calculator import calculate_levels
 from .scale_calibrator import ScaleCalibrator

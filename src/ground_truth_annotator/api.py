@@ -1824,26 +1824,9 @@ async def get_discretization_levels(swing_id: str = Query(..., description="Swin
     }
 
 
-@app.get("/discretization", response_class=HTMLResponse)
-async def discretization_page():
-    """Serve the Discretization View UI."""
-    module_dir = Path(__file__).parent
-    page_path = module_dir / "static" / "discretization.html"
-
-    if not page_path.exists():
-        return HTMLResponse(
-            content="<h1>Discretization View</h1><p>discretization.html not found. Place discretization.html in static/</p>",
-            status_code=200
-        )
-
-    with open(page_path, 'r') as f:
-        return HTMLResponse(content=f.read())
-
-
 @app.get("/replay", response_class=HTMLResponse)
 async def replay_page():
     """Serve the Replay View UI - React frontend."""
-    # First try the React build
     project_root = Path(__file__).parent.parent.parent
     react_index = project_root / "frontend" / "dist" / "index.html"
 
@@ -1851,34 +1834,10 @@ async def replay_page():
         with open(react_index, 'r') as f:
             return HTMLResponse(content=f.read())
 
-    # Fallback to vanilla HTML for development or if build doesn't exist
-    module_dir = Path(__file__).parent
-    page_path = module_dir / "static" / "replay.html"
-
-    if not page_path.exists():
-        return HTMLResponse(
-            content="<h1>Replay View</h1><p>React build or replay.html not found. Run 'npm run build' in frontend/</p>",
-            status_code=200
-        )
-
-    with open(page_path, 'r') as f:
-        return HTMLResponse(content=f.read())
-
-
-@app.get("/replay-legacy", response_class=HTMLResponse)
-async def replay_legacy_page():
-    """Serve the legacy vanilla JS Replay View UI."""
-    module_dir = Path(__file__).parent
-    page_path = module_dir / "static" / "replay.html"
-
-    if not page_path.exists():
-        return HTMLResponse(
-            content="<h1>Replay View (Legacy)</h1><p>replay.html not found.</p>",
-            status_code=200
-        )
-
-    with open(page_path, 'r') as f:
-        return HTMLResponse(content=f.read())
+    return HTMLResponse(
+        content="<h1>Replay View</h1><p>React build not found. Run 'npm run build' in frontend/</p>",
+        status_code=200
+    )
 
 
 def init_app(

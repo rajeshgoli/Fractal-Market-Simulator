@@ -32,10 +32,9 @@ Both preserve:
 Author: Generated for Market Simulator Project
 """
 
-import csv
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Dict, Set, Optional, Tuple
+from typing import Dict
 
 
 @dataclass
@@ -215,193 +214,18 @@ class DetectorConfig:
     # Swing detection
     swing_lookback: int = 1  # bars to look back/forward for swing detection
     min_swing_range: float = 20.0  # minimum range in points to consider
-    
+
     # Retracement validity
     min_retracement: float = 0.382  # minimum retracement for valid reference
     max_retracement: float = 2.0  # maximum (2x extension)
-    
+
     # Protection levels
     low_violation_tolerance: float = 0.1  # as fraction of range (for bull swings)
     high_violation_tolerance: float = 0.1  # as fraction of range (for bear swings)
-    
+
     # Explosive classification
     explosive_speed_threshold: float = 100.0  # points per bar
     explosive_speed_multiplier: float = 2.0  # relative to group average
-    
+
     # Subsumption
     recent_duration_threshold: int = 3  # bars - keep if within this of low
-
-
-class BearReferenceDetector:
-    """
-    Detects bear reference swings from OHLC data.
-
-    This is a thin wrapper around DirectionalReferenceDetector for backward compatibility.
-
-    Usage:
-        detector = BearReferenceDetector(config)
-        bars = detector.load_csv("data.csv")
-        swings = detector.detect(bars, current_price)
-    """
-
-    def __init__(self, config: Optional[DetectorConfig] = None):
-        from .reference_detector import DirectionalReferenceDetector
-        self._impl = DirectionalReferenceDetector("bear", config)
-        self.config = self._impl.config
-
-    def load_csv(self, filepath: str, last_n_bars: Optional[int] = None) -> List[Bar]:
-        """Load OHLC data from CSV file."""
-        return self._impl.load_csv(filepath, last_n_bars)
-
-    def detect(self, bars: List[Bar], current_price: Optional[float] = None) -> List[BearReferenceSwing]:
-        """Detect all valid bear reference swings."""
-        return self._impl.detect(bars, current_price)
-
-    def print_analysis(self, swings: List[BearReferenceSwing], current_price: float) -> None:
-        """Print a formatted analysis of detected bear swings."""
-        self._impl.print_analysis(swings, current_price)
-
-
-class BullReferenceDetector:
-    """
-    Detects bull reference swings from OHLC data.
-
-    This is a thin wrapper around DirectionalReferenceDetector for backward compatibility.
-
-    Usage:
-        detector = BullReferenceDetector(config)
-        bars = detector.load_csv("data.csv")
-        swings = detector.detect(bars, current_price)
-    """
-
-    def __init__(self, config: Optional[DetectorConfig] = None):
-        from .reference_detector import DirectionalReferenceDetector
-        self._impl = DirectionalReferenceDetector("bull", config)
-        self.config = self._impl.config
-
-    def load_csv(self, filepath: str, last_n_bars: Optional[int] = None) -> List[Bar]:
-        """Load OHLC data from CSV file."""
-        return self._impl.load_csv(filepath, last_n_bars)
-
-    def detect(self, bars: List[Bar], current_price: Optional[float] = None) -> List[BullReferenceSwing]:
-        """Detect all valid bull reference swings."""
-        return self._impl.detect(bars, current_price)
-
-    def print_analysis(self, swings: List[BullReferenceSwing], current_price: float) -> None:
-        """Print a formatted analysis of detected swings."""
-        self._impl.print_analysis(swings, current_price)
-
-
-class ReferenceSwingDetector:
-    """
-    Unified interface for detecting both bull and bear reference swings.
-    
-    Usage:
-        detector = ReferenceSwingDetector(config)
-        bars = detector.load_csv("data.csv")
-        bull_swings, bear_swings = detector.detect_all(bars, current_price)
-    """
-    
-    def __init__(self, config: Optional[DetectorConfig] = None):
-        self.config = config or DetectorConfig()
-        self.bull_detector = BullReferenceDetector(self.config)
-        self.bear_detector = BearReferenceDetector(self.config)
-    
-    def load_csv(self, filepath: str, last_n_bars: Optional[int] = None) -> List[Bar]:
-        """Load OHLC data from CSV file"""
-        return self.bull_detector.load_csv(filepath, last_n_bars)
-    
-    def detect_all(self, bars: List[Bar], current_price: Optional[float] = None) -> Tuple[List[BullReferenceSwing], List[BearReferenceSwing]]:
-        """
-        Detect both bull and bear reference swings.
-        
-        Returns:
-            Tuple of (bull_swings, bear_swings)
-        """
-        bull_swings = self.bull_detector.detect(bars, current_price)
-        bear_swings = self.bear_detector.detect(bars, current_price)
-        return bull_swings, bear_swings
-    
-    def detect_bull(self, bars: List[Bar], current_price: Optional[float] = None) -> List[BullReferenceSwing]:
-        """Detect only bull reference swings"""
-        return self.bull_detector.detect(bars, current_price)
-    
-    def detect_bear(self, bars: List[Bar], current_price: Optional[float] = None) -> List[BearReferenceSwing]:
-        """Detect only bear reference swings"""
-        return self.bear_detector.detect(bars, current_price)
-    
-    def print_analysis(self, bull_swings: List[BullReferenceSwing], bear_swings: List[BearReferenceSwing], current_price: float) -> None:
-        """Print comprehensive analysis of both bull and bear swings"""
-        self.bull_detector.print_analysis(bull_swings, current_price)
-        print()
-        self.bear_detector.print_analysis(bear_swings, current_price)
-
-
-def main():
-    """Example usage demonstrating both bull and bear detection"""
-    # Configuration
-    config = DetectorConfig(
-        swing_lookback=1,  # Use 1 for daily data, higher for 1-min
-        min_swing_range=20.0,  # Minimum 20 points
-        explosive_speed_threshold=100.0,
-    )
-    
-    # Initialize unified detector
-    detector = ReferenceSwingDetector(config)
-    
-    # Load data - update path as needed
-    bars = detector.load_csv('test.csv', last_n_bars=150)
-    
-    if not bars:
-        print("No data loaded")
-        return
-    
-    current_price = bars[-1].close
-    
-    print(f"Loaded {len(bars)} bars")
-    print(f"Date range: {bars[0].date.date()} to {bars[-1].date.date()}")
-    print(f"Current price: {current_price:.2f}")
-    print()
-    
-    # Detect both bull and bear swings
-    bull_swings, bear_swings = detector.detect_all(bars, current_price)
-    
-    # Print analysis for both
-    detector.print_analysis(bull_swings, bear_swings, current_price)
-    
-    # Print combined level clustering analysis
-    print("\n" + "=" * 80)
-    print("COMBINED LEVEL CLUSTERING ANALYSIS")
-    print("=" * 80)
-    
-    # Collect all key levels from both bull and bear swings
-    all_levels = []
-    for swing in bull_swings:
-        for level_name in ['1', '1.382', '1.5', '1.618', '2']:
-            all_levels.append({
-                'price': swing.levels[level_name],
-                'level': level_name,
-                'swing_range': swing.range,
-                'swing_type': 'bull'
-            })
-    
-    for swing in bear_swings:
-        for level_name in ['1', '1.382', '1.5', '1.618', '2']:
-            all_levels.append({
-                'price': swing.levels[level_name],
-                'level': level_name,
-                'swing_range': swing.range,
-                'swing_type': 'bear'
-            })
-    
-    # Sort by price
-    all_levels.sort(key=lambda x: x['price'])
-    
-    # Find clusters (levels within 20 points of each other)
-    print("\nKey levels (sorted by price):")
-    for level in all_levels:
-        print(f"  {level['price']:.2f} ({level['level']} of {level['swing_range']:.0f}pt {level['swing_type']} swing)")
-
-
-if __name__ == "__main__":
-    main()
