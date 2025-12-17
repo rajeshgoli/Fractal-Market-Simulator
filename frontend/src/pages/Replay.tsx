@@ -607,6 +607,18 @@ export const Replay: React.FC = () => {
     syncChartsToPositionRef.current = syncChartsToPosition;
   }, [syncChartsToPosition]);
 
+  // Scroll charts to calibration end when entering CALIBRATED phase
+  useEffect(() => {
+    if (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) {
+      // Wait a tick for chart refs to be ready
+      const timeout = setTimeout(() => {
+        const calibrationEndIndex = calibrationData.calibration_bar_count - 1;
+        syncChartsToPositionRef.current(calibrationEndIndex);
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [calibrationPhase, calibrationData]);
+
   // Fetch detected swings when playback position changes
   // Use debouncing to avoid too many API calls during fast playback
   const lastFetchedPositionRef = useRef<number>(-1);
