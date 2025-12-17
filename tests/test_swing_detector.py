@@ -2137,5 +2137,120 @@ class TestReferenceSwingDataclass(unittest.TestCase):
         self.assertEqual(swing.fib_confluence_score, 0.0)
 
 
+class TestCurrentBarIndexParameter(unittest.TestCase):
+    """Tests for current_bar_index parameter in detect_swings()"""
+
+    def _create_trending_data(self, num_bars: int = 200) -> pd.DataFrame:
+        """Create data with clear uptrend followed by downtrend."""
+        prices = []
+        # Uptrend: bars 0-49 (100 -> 150)
+        for i in range(50):
+            prices.append(100 + i)
+        # Peak area: bars 50-59 (around 150)
+        for i in range(10):
+            prices.append(150)
+        # Downtrend: bars 60-109 (150 -> 100)
+        for i in range(50):
+            prices.append(150 - i)
+        # Bottom area: bars 110-119 (around 100)
+        for i in range(10):
+            prices.append(100)
+        # Recovery: bars 120-169 (100 -> 130)
+        for i in range(50):
+            prices.append(100 + i * 0.6)
+        # Add more bars: 170-199 (stable around 130)
+        for i in range(30):
+            prices.append(130)
+
+        return pd.DataFrame({
+            'open': prices,
+            'high': [p + 2 for p in prices],
+            'low': [p - 2 for p in prices],
+            'close': prices
+        })
+
+    def test_default_behavior_uses_last_bar(self):
+        """Without current_bar_index, should use last bar's close."""
+        df = self._create_trending_data()
+        last_close = df.iloc[-1]['close']
+
+        result = detect_swings(df, lookback=5, filter_redundant=False)
+
+        self.assertEqual(result['current_price'], last_close)
+
+    def test_current_bar_index_uses_specified_bar(self):
+        """With current_bar_index, should use that bar's close."""
+        df = self._create_trending_data()
+        target_idx = 55  # Peak area
+
+        result = detect_swings(df, lookback=5, filter_redundant=False,
+                               current_bar_index=target_idx)
+
+        expected_price = df.iloc[target_idx]['close']
+        self.assertEqual(result['current_price'], expected_price)
+
+    def test_current_bar_index_affects_swing_detection(self):
+        """Different current_bar_index should yield different swings detected."""
+        df = self._create_trending_data()
+
+        # At peak (bar 55): price ~150, should find bull refs at that level
+        result_peak = detect_swings(df, lookback=5, filter_redundant=False,
+                                    current_bar_index=55)
+
+        # At bottom (bar 115): price ~100, should find different refs
+        result_bottom = detect_swings(df, lookback=5, filter_redundant=False,
+                                      current_bar_index=115)
+
+        # Using last bar (bar 199): price ~130
+        result_end = detect_swings(df, lookback=5, filter_redundant=False)
+
+        # All three should have current_price set correctly
+        self.assertAlmostEqual(result_peak['current_price'], 150, delta=5)
+        self.assertAlmostEqual(result_bottom['current_price'], 100, delta=5)
+        self.assertAlmostEqual(result_end['current_price'], 130, delta=5)
+
+        # The swing counts may differ because price range checks filter differently
+        # What's important is the current_price is correctly set
+        # and the system doesn't crash with any valid index
+
+    def test_current_bar_index_zero(self):
+        """Should work with bar index 0."""
+        df = self._create_trending_data()
+
+        result = detect_swings(df, lookback=5, filter_redundant=False,
+                               current_bar_index=0)
+
+        self.assertEqual(result['current_price'], df.iloc[0]['close'])
+
+    def test_current_bar_index_last_bar_explicit(self):
+        """Explicit last bar index should match default behavior."""
+        df = self._create_trending_data()
+        last_idx = len(df) - 1
+
+        result_default = detect_swings(df, lookback=5, filter_redundant=False)
+        result_explicit = detect_swings(df, lookback=5, filter_redundant=False,
+                                        current_bar_index=last_idx)
+
+        self.assertEqual(result_default['current_price'],
+                        result_explicit['current_price'])
+        self.assertEqual(len(result_default['bull_references']),
+                        len(result_explicit['bull_references']))
+        self.assertEqual(len(result_default['bear_references']),
+                        len(result_explicit['bear_references']))
+
+    def test_current_bar_index_middle_of_data(self):
+        """Test with bar in middle of dataset - typical replay use case."""
+        df = self._create_trending_data()
+        mid_idx = len(df) // 2
+
+        result = detect_swings(df, lookback=5, filter_redundant=False,
+                               current_bar_index=mid_idx)
+
+        self.assertEqual(result['current_price'], df.iloc[mid_idx]['close'])
+        # Should not crash and should return valid structure
+        self.assertIn('bull_references', result)
+        self.assertIn('bear_references', result)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

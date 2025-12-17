@@ -909,7 +909,8 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                   min_prominence: Optional[float] = None,
                   adjust_extrema: bool = True,
                   quota: Optional[int] = None,
-                  larger_swings: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+                  larger_swings: Optional[List[Dict[str, Any]]] = None,
+                  current_bar_index: Optional[int] = None) -> Dict[str, Any]:
     """
     Identifies swing highs and lows and pairs them to find valid reference swings.
 
@@ -941,6 +942,12 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             When provided, swings must be >= 0.236 FIB level apart from previous swings
             relative to the containing larger swing. If None, fallback separation check
             uses N-bar and X% move criteria instead.
+        current_bar_index: Optional bar index to use for current_price reference.
+            When provided, uses the close of bar at this index for price range validity
+            checks. When None (default), uses the last bar's close. Useful for:
+            - Historical replay: Use playback position price
+            - Calibration: Use calibration window end price
+            - Live detection: Default behavior (last bar)
 
     Returns:
         A dictionary containing current price, detected swing points, and valid reference swings.
@@ -958,8 +965,12 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             "bull_references": [],
             "bear_references": []
         }
-        
-    current_price = float(df.iloc[-1]['close'])
+
+    # Use specified bar index or default to last bar
+    if current_bar_index is not None:
+        current_price = float(df.iloc[current_bar_index]['close'])
+    else:
+        current_price = float(df.iloc[-1]['close'])
 
     # 1. Detect Swing Points (vectorized)
     # Extract numpy arrays for fast operations
