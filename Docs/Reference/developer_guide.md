@@ -1334,6 +1334,27 @@ class DiscretizationSwingResponse(BaseModel):
     termination_reason: Optional[str]
 ```
 
+#### Replay View (`/replay`)
+
+**Purpose**: Split-chart interface for temporal debugging with independent aggregation per chart.
+
+**Endpoints**:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/replay` | GET | Serve Replay View UI |
+
+**Features**:
+- Two stacked charts with independent aggregation selectors
+- Time synchronization via shared source bar index
+- Playback controls (play/pause, step, speed control)
+- Aggregation options: Source (1:1), S, M, L, XL
+
+**Implementation** (`replay.html`):
+- Uses lightweight-charts for both chart instances
+- `findBarContainingSourceIndex()` maps source bars to aggregated bars
+- Playback driven by `currentSourceBarIndex` which both charts track
+
 **Request/Response Models** (defined in `api.py`):
 
 ```python

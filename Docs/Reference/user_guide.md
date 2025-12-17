@@ -487,3 +487,53 @@ When viewing the discretization overlay, consider:
 
 This assessment informs whether to proceed to hypothesis validation or refine swing detection further.
 
+## Replay View
+
+The Replay View provides a split-chart interface for temporal debugging. Compare price action at different aggregation levels simultaneously while stepping through time.
+
+### Accessing the View
+
+Navigate to http://127.0.0.1:8000/replay while the annotator is running, or click **"Replay"** in the header navigation.
+
+### Layout
+
+- **Top Chart**: Overview chart (default: L aggregation)
+- **Bottom Chart**: Detail chart (default: S aggregation)
+- **Playback Controls**: Step through bars, play/pause, speed control
+
+### Aggregation Options
+
+Each chart has an independent aggregation selector:
+
+| Option | Description |
+|--------|-------------|
+| Source (1:1) | Raw source bars without aggregation |
+| S | Small-scale aggregation |
+| M | Medium-scale aggregation |
+| L | Large-scale aggregation |
+| XL | Extra-large aggregation |
+
+### Time Synchronization
+
+Both charts stay time-synchronized:
+- Advancing position moves both charts to the corresponding bar
+- Each chart maps the shared source bar index to its own aggregated bar
+- Independent zoom allows different zoom levels per chart
+
+### Playback Controls
+
+| Control | Description |
+|---------|-------------|
+| Step &larr; | Move back one source bar |
+| Play/Pause | Start/stop automatic playback |
+| Step &rarr; | Move forward one source bar |
+| Speed | 0.5x, 1x, 2x, 5x, 10x playback speed |
+| Reset | Return to first bar |
+
+### Use Cases
+
+1. **Multi-timeframe analysis**: View the same moment at different aggregation levels
+2. **Swing verification**: Step through to verify swing formations
+3. **Event debugging**: Correlate discretization events with price action
+4. **Structure identification**: Compare larger and smaller scale structures
+
