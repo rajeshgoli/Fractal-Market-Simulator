@@ -238,6 +238,33 @@ class TestDiscretizationEvents:
         for event in response.json():
             assert 10 <= event["bar"] <= 50
 
+    def test_events_filter_bar_start_only(self, initialized_app):
+        """Events can be filtered with only bar_start (open-ended to right)."""
+        initialized_app.post("/api/discretization/run")
+
+        response = initialized_app.get("/api/discretization/events?bar_start=20")
+        assert response.status_code == 200
+        for event in response.json():
+            assert event["bar"] >= 20
+
+    def test_events_filter_bar_end_only(self, initialized_app):
+        """Events can be filtered with only bar_end (open-ended to left)."""
+        initialized_app.post("/api/discretization/run")
+
+        response = initialized_app.get("/api/discretization/events?bar_end=30")
+        assert response.status_code == 200
+        for event in response.json():
+            assert event["bar"] <= 30
+
+    def test_events_filter_bar_range_empty(self, initialized_app):
+        """Out-of-range bar queries return empty list."""
+        initialized_app.post("/api/discretization/run")
+
+        # Use a very high bar range that won't have any events
+        response = initialized_app.get("/api/discretization/events?bar_start=999999&bar_end=999999")
+        assert response.status_code == 200
+        assert response.json() == []
+
     def test_events_structure(self, initialized_app):
         """Events have expected structure."""
         initialized_app.post("/api/discretization/run")
