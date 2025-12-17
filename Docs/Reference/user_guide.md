@@ -33,6 +33,9 @@ The Replay View provides a split-chart interface for temporal debugging. Compare
 ### Quick Start
 
 ```bash
+# Build the React frontend (one-time or after changes)
+cd frontend && npm run build && cd ..
+
 # Start the server
 source venv/bin/activate
 python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --resolution 5m --window 10000
@@ -43,21 +46,27 @@ open http://127.0.0.1:8000/replay
 
 ### Layout
 
-- **Top Chart**: Overview chart (default: L aggregation)
-- **Bottom Chart**: Detail chart (default: S aggregation)
-- **Playback Controls**: Step through bars, play/pause, speed control
+The Replay View uses a React + Tailwind frontend with these components:
+
+- **Header**: Navigation menu (hamburger), timestamp display, source bar count
+- **Sidebar**: Event filter toggles with descriptions
+- **Top Chart**: Overview chart (default: L aggregation / 1H)
+- **Bottom Chart**: Detail chart (default: S aggregation / 5m)
+- **Playback Controls**: Transport buttons with SVG timer wheel
+- **Explanation Panel**: 3-column layout for swing details
 
 ### Aggregation Options
 
-Each chart has an independent aggregation selector:
+Each chart has an independent aggregation selector dropdown showing timeframe labels:
 
-| Option | Description |
-|--------|-------------|
-| Source (1:1) | Raw source bars without aggregation |
-| S | Small-scale aggregation |
-| M | Medium-scale aggregation |
-| L | Large-scale aggregation |
-| XL | Extra-large aggregation |
+| Option | Label | Description |
+|--------|-------|-------------|
+| S | 5m | Small-scale aggregation |
+| M | 15m | Medium-scale aggregation |
+| L | 1H | Large-scale aggregation |
+| XL | 4H | Extra-large aggregation |
+
+Note: Source (1:1) raw bars are available in the legacy view at `/replay-legacy`.
 
 ### Time Synchronization
 

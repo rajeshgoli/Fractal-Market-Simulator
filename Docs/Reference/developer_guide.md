@@ -1342,18 +1342,56 @@ class DiscretizationSwingResponse(BaseModel):
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/replay` | GET | Serve Replay View UI |
+| `/replay` | GET | Serve React Replay View UI |
+| `/replay-legacy` | GET | Serve legacy vanilla JS Replay View |
 
 **Features**:
-- Two stacked charts with independent aggregation selectors
+- React + Tailwind frontend (built with Vite)
+- Two stacked charts with aggregation selectors (5m/15m/1H/4H labels)
 - Time synchronization via shared source bar index
-- Playback controls (play/pause, step, speed control)
-- Aggregation options: Source (1:1), S, M, L, XL
+- Playback controls with SVG timer wheel for linger countdown
+- Event filter toggles in collapsible sidebar
+- 3-column explanation panel for swing details
 
-**Implementation** (`replay.html`):
-- Uses lightweight-charts for both chart instances
-- `findBarContainingSourceIndex()` maps source bars to aggregated bars
-- Playback driven by `currentSourceBarIndex` which both charts track
+**React Frontend (`frontend/`)**:
+
+```
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── Header.tsx          # Navigation menu, timestamp
+│   │   ├── Sidebar.tsx         # Event filter toggles
+│   │   ├── ChartArea.tsx       # Dual lightweight-charts
+│   │   ├── PlaybackControls.tsx # Transport + timer wheel
+│   │   ├── ExplanationPanel.tsx # 3-column swing details
+│   │   └── ui/                 # Toggle, Badge primitives
+│   ├── hooks/
+│   │   └── usePlayback.ts      # Playback state machine
+│   ├── lib/
+│   │   └── api.ts              # API client functions
+│   ├── pages/
+│   │   └── Replay.tsx          # Main page component
+│   ├── types.ts                # TypeScript types
+│   └── constants.ts            # Filter defaults, speeds
+├── tailwind.config.js          # Designer color palette
+└── vite.config.ts              # Dev proxy to :8000
+```
+
+**Development Workflow**:
+
+```bash
+# Hot-reload development (proxies API to Python server)
+cd frontend && npm run dev  # Starts on :3000
+
+# Production build (served by Python server)
+cd frontend && npm run build  # Outputs to frontend/dist/
+```
+
+**Implementation Notes**:
+- Uses lightweight-charts v5 API (`chart.addSeries(CandlestickSeries, options)`)
+- `usePlayback` hook manages play/pause/step/linger state machine
+- Sidebar filters stored in React state, control which events trigger linger
+- Charts sync via `onPositionChange` callback from usePlayback
 
 **Request/Response Models** (defined in `api.py`):
 
