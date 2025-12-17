@@ -9,6 +9,7 @@ interface UseForwardPlaybackOptions {
   playbackIntervalMs: number;
   onNewBars?: (bars: BarData[]) => void;
   onSwingStateChange?: (state: ReplaySwingState) => void;
+  onRefreshAggregatedBars?: () => void;  // Called after advance to refresh chart bars
 }
 
 interface UseForwardPlaybackReturn {
@@ -47,6 +48,7 @@ export function useForwardPlayback({
   playbackIntervalMs,
   onNewBars,
   onSwingStateChange,
+  onRefreshAggregatedBars,
 }: UseForwardPlaybackOptions): UseForwardPlaybackReturn {
   // Playback state
   const [playbackState, setPlaybackState] = useState<PlaybackState>(PlaybackState.STOPPED);
@@ -221,6 +223,9 @@ export function useForwardPlayback({
         setVisibleBars(prev => [...prev, ...newBarData]);
         setCurrentPosition(response.current_bar_index);
         onNewBars?.(newBarData);
+
+        // Signal parent to refresh aggregated bars (backend now controls visibility)
+        onRefreshAggregatedBars?.();
       }
 
       // Update swing state
@@ -240,7 +245,7 @@ export function useForwardPlayback({
     } finally {
       advancePendingRef.current = false;
     }
-  }, [calibrationBarCount, currentPosition, endOfData, clearTimers, enterLinger, onNewBars, onSwingStateChange]);
+  }, [calibrationBarCount, currentPosition, endOfData, clearTimers, enterLinger, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
 
   // Ref to hold the latest advanceBar function
   const advanceBarRef = useRef<() => Promise<void>>(async () => {});
@@ -483,6 +488,7 @@ export function useForwardPlayback({
             setVisibleBars(prev => [...prev, ...newBarData]);
             setCurrentPosition(response.current_bar_index);
             onNewBars?.(newBarData);
+            onRefreshAggregatedBars?.();
           }
           break;
         }
@@ -502,6 +508,7 @@ export function useForwardPlayback({
           setVisibleBars(prev => [...prev, ...newBarData]);
           setCurrentPosition(response.current_bar_index);
           onNewBars?.(newBarData);
+          onRefreshAggregatedBars?.();
         }
 
         // Update swing state
@@ -521,7 +528,7 @@ export function useForwardPlayback({
     }
 
     advancePendingRef.current = false;
-  }, [endOfData, playbackState, exitLinger, clearTimers, calibrationBarCount, currentPosition, enterLinger, onNewBars, onSwingStateChange]);
+  }, [endOfData, playbackState, exitLinger, clearTimers, calibrationBarCount, currentPosition, enterLinger, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
 
   // Cleanup on unmount
   useEffect(() => {

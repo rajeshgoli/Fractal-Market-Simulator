@@ -391,6 +391,9 @@ class AppState:
     precompute_thread: Optional[threading.Thread] = None
     # Discretization state
     discretization_log: Optional[DiscretizationLog] = None
+    # Replay playback state (backend-controlled data boundary)
+    playback_index: Optional[int] = None  # Current visible bar index (None = full dataset)
+    calibration_bar_count: Optional[int] = None  # Bars loaded for calibration
 
 
 # Global state
@@ -464,14 +467,35 @@ async def health():
 
 
 @app.get("/api/bars", response_model=List[BarResponse])
-async def get_bars(scale: Optional[str] = Query(None, description="Scale to get bars for (XL, L, M, S)")):
+async def get_bars(
+    scale: Optional[str] = Query(None, description="Scale to get bars for (XL, L, M, S)"),
+    limit: Optional[int] = Query(None, description="Limit to first N source bars (for calibration window)")
+):
     """
     Get aggregated bars for chart display.
 
     Returns bars aggregated to the target count for efficient visualization.
     Scale options: S (source), M (~800 bars), L (~200 bars), XL (~50 bars)
+
+    If limit is specified, only bars derived from the first N source bars are returned.
+    This is used during calibration to avoid loading bars beyond the calibration window.
+
+    When playback_index is set (via /api/replay/calibrate or /api/replay/advance),
+    it takes precedence over limit for determining the maximum visible source bar.
     """
     s = get_state()
+
+    # Compute effective limit based on playback_index (backend-controlled data boundary)
+    # playback_index is the last visible bar index, so effective_limit = playback_index + 1
+    effective_limit = limit
+    if s.playback_index is not None:
+        playback_limit = s.playback_index + 1
+        if effective_limit is not None:
+            effective_limit = min(effective_limit, playback_limit)
+        else:
+            effective_limit = playback_limit
+    # Use effective_limit instead of limit for all filtering below
+    limit = effective_limit
 
     # If scale specified and cascade controller available, use cascade bars
     if scale and s.cascade_controller:
@@ -484,6 +508,9 @@ async def get_bars(scale: Optional[str] = Query(None, description="Scale to get 
         bars = []
         for agg_bar in scale_bars:
             source_start, source_end = agg_map.get(agg_bar.index, (agg_bar.index, agg_bar.index))
+            # Apply limit: only include bars where source_end_index < limit
+            if limit is not None and source_end > limit - 1:
+                break
             bars.append(BarResponse(
                 index=agg_bar.index,
                 timestamp=agg_bar.timestamp,
@@ -505,7 +532,8 @@ async def get_bars(scale: Optional[str] = Query(None, description="Scale to get 
         if scale.upper() == "S" or target is None:
             # S scale: return source bars directly with 1:1 mapping
             bars = []
-            for i, src_bar in enumerate(s.source_bars):
+            source_bars_to_use = s.source_bars[:limit] if limit is not None else s.source_bars
+            for i, src_bar in enumerate(source_bars_to_use):
                 bars.append(BarResponse(
                     index=i,
                     timestamp=src_bar.timestamp,
@@ -519,12 +547,22 @@ async def get_bars(scale: Optional[str] = Query(None, description="Scale to get 
             return bars
         else:
             # Aggregate to target bar count
-            agg_bars = s.aggregator.aggregate_to_target_bars(target)
-            bars_per_candle = len(s.source_bars) // target if len(s.source_bars) > target else 1
+            # If limit specified, create a temporary aggregator for the limited source bars
+            if limit is not None:
+                from src.swing_analysis.bar_aggregator import BarAggregator
+                limited_bars = s.source_bars[:limit]
+                temp_aggregator = BarAggregator(limited_bars)
+                agg_bars = temp_aggregator.aggregate_to_target_bars(target)
+                source_bar_count = limit
+            else:
+                agg_bars = s.aggregator.aggregate_to_target_bars(target)
+                source_bar_count = len(s.source_bars)
+
+            bars_per_candle = source_bar_count // target if source_bar_count > target else 1
             bars = []
             for i, agg_bar in enumerate(agg_bars):
                 source_start = i * bars_per_candle
-                source_end = min(source_start + bars_per_candle - 1, len(s.source_bars) - 1)
+                source_end = min(source_start + bars_per_candle - 1, source_bar_count - 1)
                 bars.append(BarResponse(
                     index=i,
                     timestamp=agg_bar.timestamp,
@@ -2273,6 +2311,10 @@ async def calibrate_replay(
         for scale in ["XL", "L", "M", "S"]
     }
 
+    # Set playback state for backend-controlled data boundary
+    s.calibration_bar_count = actual_bar_count
+    s.playback_index = actual_bar_count - 1  # Last visible bar index
+
     return CalibrationResponse(
         calibration_bar_count=actual_bar_count,
         current_price=current_price,
@@ -2739,6 +2781,9 @@ async def advance_replay(request: ReplayAdvanceRequest):
             swing_state_response.M.append(swing_response)
         else:
             swing_state_response.S.append(swing_response)
+
+    # Update playback_index for backend-controlled data boundary
+    s.playback_index = final_bar_index
 
     return ReplayAdvanceResponse(
         new_bars=new_bars,
