@@ -4,48 +4,43 @@ Questions between roles. When resolved, move to `archive.md` with resolution.
 
 ---
 
-## Q-2025-12-17-1: Replay View Architecture Redesign
+## 2024-12-17: Replay View Playback Architecture (Issue #112)
 
-**From:** Product
+**From:** Engineer
 **To:** Architect
-**Date:** 2025-12-17
+**Issue:** #112
 
 ### Context
 
-User tested Replay View. UI is polished but replay model is fundamentally wrong for the intended purpose (causal evaluation of swing detection).
+The Replay View playback is not working as expected. Currently:
+1. All source bars are loaded at startup via `fetchBars('S')`
+2. Calibration analyzes the first N bars
+3. During playback, the frontend filters pre-loaded bars based on position
+4. The `/api/replay/advance` endpoint is called but new bars come from the same pre-loaded dataset
 
-### Issues to Address
+### Problem
 
-1. **No swings detected** — 10K 5m bars yields zero swings. Bug or missing scale/salience input?
+The algorithm has already "seen" all bars at startup, including those meant for playback. This defeats the purpose of incremental playback - there's no true streaming of unseen data. The filtering approach just hides bars that were already processed.
 
-2. **Look-ahead bias** — Current preload-and-scrub model shows entire future upfront. Need calibration-first, forward-only playback:
-   - Calibration window establishes active swings
-   - Play advances *beyond* window with new bars appearing
-   - Events surface in real-time
-   - Keep loading data until CSV exhausted
+### User's Expected Behavior
 
-3. **Speed reference** — Currently tied to source resolution (5m). Should be relative to chart aggregation.
+1. Calibrate on full 10k bars using the complete calibration window
+2. During playback, load 1 bar at a time BEYOND calibration from the backend
+3. Re-run detection incrementally as each new bar arrives
+4. **No look-ahead** - the algorithm must not have seen playback bars during calibration
 
-4. **Navigation** — `<<` / `>>` should jump to previous/next event, not bar.
+### Question for Architect
 
-### New UI Elements
+This appears to require architectural changes:
 
-- Scale toggles: XL, L, M, S
-- Active swings dropdown: 1-5 (default 2)
-- Calibration report in report area
-- Speed control with aggregation dropdown: "Speed: [10x ▼] per [1H ▼] bar"
-- Active swings marked on chart with high/low points, distinct colors per swing
+1. **Data loading:** Should the frontend only load calibration bars initially? Or should the backend limit what it returns based on a "playback window"?
 
-### Questions
+2. **Incremental detection:** The `/api/replay/advance` endpoint already re-runs detection per bar. Is this the right approach, or should detection state be maintained and updated incrementally?
 
-1. What's causing zero swing detection? Is there a calibration threshold issue or bug?
-2. How should we architect the forward-only playback with progressive data loading?
-3. Any concerns with the calibration → playback model from a technical standpoint?
+3. **Chart data:** Currently `chart1Bars` and `chart2Bars` (aggregated bars) are loaded once at startup. How should these be handled during playback - fetched incrementally or computed from new source bars?
 
-### Reference
+4. **State management:** Where should the "current playback position" boundary be enforced - frontend filtering, backend API, or both?
 
-- User feedback: `Docs/Reference/interview_notes.md` (Dec 17 entry)
-- Updated requirements: `Docs/State/product_direction.md` (P0 section)
-- Original spec: `Docs/Working/replay_view_spec.md`
+Please provide architectural guidance on how to restructure this for true incremental playback without look-ahead.
 
 ---
