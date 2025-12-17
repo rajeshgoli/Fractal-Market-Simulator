@@ -21,6 +21,52 @@ import {
   getAggregationMinutes,
 } from '../types';
 
+/**
+ * Convert a discretization swing to a DetectedSwing for chart overlay.
+ * Needed because discretization swings and windowed detected swings use different ID formats.
+ */
+function discretizationSwingToDetected(swing: DiscretizationSwing): DetectedSwing {
+  const isBull = swing.direction.toUpperCase() === 'BULL';
+
+  // For bull: anchor0 is low (defended pivot), anchor1 is high (origin)
+  // For bear: anchor0 is high (defended pivot), anchor1 is low (origin)
+  const highPrice = isBull ? swing.anchor1 : swing.anchor0;
+  const lowPrice = isBull ? swing.anchor0 : swing.anchor1;
+  const highBarIndex = isBull ? swing.anchor1_bar : swing.anchor0_bar;
+  const lowBarIndex = isBull ? swing.anchor0_bar : swing.anchor1_bar;
+
+  const swingRange = highPrice - lowPrice;
+
+  // Calculate Fib levels
+  let fib_0: number, fib_0382: number, fib_1: number, fib_2: number;
+  if (isBull) {
+    fib_0 = lowPrice;  // Defended pivot
+    fib_0382 = lowPrice + swingRange * 0.382;
+    fib_1 = highPrice;  // Origin
+    fib_2 = lowPrice + swingRange * 2.0;  // Completion target
+  } else {
+    fib_0 = highPrice;  // Defended pivot
+    fib_0382 = highPrice - swingRange * 0.382;
+    fib_1 = lowPrice;  // Origin
+    fib_2 = highPrice - swingRange * 2.0;  // Completion target
+  }
+
+  return {
+    id: swing.swing_id,
+    direction: isBull ? 'bull' : 'bear',
+    high_price: highPrice,
+    high_bar_index: highBarIndex,
+    low_price: lowPrice,
+    low_bar_index: lowBarIndex,
+    size: swingRange,
+    rank: 1,  // Highlighted swing gets rank 1 (primary color)
+    fib_0,
+    fib_0382,
+    fib_1,
+    fib_2,
+  };
+}
+
 export const Replay: React.FC = () => {
   // UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -101,6 +147,14 @@ export const Replay: React.FC = () => {
       syncChartsToPositionRef.current(position);
     }, []),
   });
+
+  // Compute highlighted swing for linger state (converts discretization swing to DetectedSwing)
+  const highlightedSwing = useMemo((): DetectedSwing | undefined => {
+    if (!playback.lingerSwingId) return undefined;
+    const swing = swings[playback.lingerSwingId];
+    if (!swing) return undefined;
+    return discretizationSwingToDetected(swing);
+  }, [playback.lingerSwingId, swings]);
 
   // Load initial data
   useEffect(() => {
@@ -339,6 +393,26 @@ export const Replay: React.FC = () => {
     setFilters(INITIAL_FILTERS);
   }, []);
 
+  // Keyboard shortcuts for swing navigation during linger
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle when lingering with multiple events
+      if (!playback.isLingering || !playback.lingerQueuePosition) return;
+      if (playback.lingerQueuePosition.total <= 1) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        playback.navigatePrevEvent();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        playback.navigateNextEvent();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [playback.isLingering, playback.lingerQueuePosition, playback.navigatePrevEvent, playback.navigateNextEvent]);
+
   // Get current timestamp for header
   const currentTimestamp = sourceBars[playback.currentPosition]?.timestamp
     ? new Date(sourceBars[playback.currentPosition].timestamp * 1000).toISOString()
@@ -411,13 +485,13 @@ export const Replay: React.FC = () => {
             series={series1Ref.current}
             swings={detectedSwings}
             currentPosition={playback.currentPosition}
-            highlightedSwingId={playback.lingerSwingId}
+            highlightedSwing={highlightedSwing}
           />
           <SwingOverlay
             series={series2Ref.current}
             swings={detectedSwings}
             currentPosition={playback.currentPosition}
-            highlightedSwingId={playback.lingerSwingId}
+            highlightedSwing={highlightedSwing}
           />
 
           {/* Playback Controls */}
@@ -441,6 +515,8 @@ export const Replay: React.FC = () => {
               lingerTotalTime={LINGER_DURATION_MS / 1000}
               lingerEventType={playback.lingerEventType}
               lingerQueuePosition={playback.lingerQueuePosition}
+              onNavigatePrev={playback.navigatePrevEvent}
+              onNavigateNext={playback.navigateNextEvent}
             />
           </div>
 

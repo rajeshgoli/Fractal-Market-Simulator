@@ -28,6 +28,8 @@ interface UsePlaybackReturn {
   stepBack: () => void;
   jumpToStart: () => void;
   jumpToEnd: () => void;
+  navigatePrevEvent: () => void;
+  navigateNextEvent: () => void;
 }
 
 // Helper to convert event data to SwingData for the explanation panel
@@ -154,84 +156,106 @@ export function usePlayback({
     onPositionChange?.(pos);
   }, [onPositionChange]);
 
+  // Ref to hold showCurrentEvent function (avoids stale closures in timer callbacks)
+  const showCurrentEventRef = useRef<() => void>(() => {});
+
+  // Show the event at current index in the queue
+  const showCurrentEvent = useCallback(() => {
+    const event = eventQueueRef.current[eventIndexRef.current];
+    if (!event) return;
+
+    setLingerEventType(event.event_type);
+    setLingerSwingId(event.swing_id);
+    setLingerQueuePosition(
+      eventQueueRef.current.length > 1
+        ? { current: eventIndexRef.current + 1, total: eventQueueRef.current.length }
+        : undefined
+    );
+
+    // Update swing explanation if SWING_FORMED
+    if (event.event_type === 'SWING_FORMED') {
+      const swingData = eventToSwingData(event, swings);
+      if (swingData?.previousSwingId) {
+        const prevSwing = swings[swingData.previousSwingId];
+        if (prevSwing) {
+          setPreviousSwing({
+            id: swingData.previousSwingId,
+            scale: prevSwing.scale,
+            direction: prevSwing.direction,
+            highPrice: prevSwing.direction === 'BULL' ? prevSwing.anchor1 : prevSwing.anchor0,
+            lowPrice: prevSwing.direction === 'BULL' ? prevSwing.anchor0 : prevSwing.anchor1,
+            highBar: prevSwing.direction === 'BULL' ? prevSwing.anchor1_bar : prevSwing.anchor0_bar,
+            lowBar: prevSwing.direction === 'BULL' ? prevSwing.anchor0_bar : prevSwing.anchor1_bar,
+            highTime: '',
+            lowTime: '',
+            size: 0,
+            sizePct: 0,
+          });
+        }
+      }
+      setCurrentSwing(swingData);
+    } else {
+      setCurrentSwing(null);
+      setPreviousSwing(null);
+    }
+
+    // Clear existing timers before starting new ones
+    if (lingerTimerRef.current) {
+      clearTimeout(lingerTimerRef.current);
+      lingerTimerRef.current = null;
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    // Start linger timer
+    lingerStartRef.current = Date.now();
+    setLingerTimeLeft(LINGER_DURATION_MS / 1000);
+
+    // Animate timer wheel
+    const animateTimer = () => {
+      if (lingerStartRef.current === null) return;
+      const elapsed = Date.now() - lingerStartRef.current;
+      const remaining = Math.max(0, (LINGER_DURATION_MS - elapsed) / 1000);
+      setLingerTimeLeft(remaining);
+
+      if (remaining > 0) {
+        animationFrameRef.current = requestAnimationFrame(animateTimer);
+      }
+    };
+    animationFrameRef.current = requestAnimationFrame(animateTimer);
+
+    // Set auto-advance timer
+    lingerTimerRef.current = window.setTimeout(() => {
+      eventIndexRef.current++;
+      if (eventIndexRef.current < eventQueueRef.current.length) {
+        showCurrentEventRef.current();
+      } else {
+        // Resume playback - use refs to avoid stale closure
+        exitLingerRef.current();
+        startPlaybackRef.current();
+      }
+    }, LINGER_DURATION_MS);
+  }, [swings]);
+
+  // Keep showCurrentEventRef updated
+  useEffect(() => {
+    showCurrentEventRef.current = showCurrentEvent;
+  }, [showCurrentEvent]);
+
+  // Refs for exitLinger and startPlayback (for use in timer callbacks)
+  const exitLingerRef = useRef<() => void>(() => {});
+  const startPlaybackRef = useRef<() => void>(() => {});
+
   // Enter linger state
   const enterLinger = useCallback((eventsToShow: DiscretizationEvent[]) => {
     clearTimers();
     setPlaybackState(PlaybackState.LINGERING);
     eventQueueRef.current = eventsToShow;
     eventIndexRef.current = 0;
-
-    const showCurrentEvent = () => {
-      const event = eventQueueRef.current[eventIndexRef.current];
-      if (!event) return;
-
-      setLingerEventType(event.event_type);
-      setLingerSwingId(event.swing_id);
-      setLingerQueuePosition(
-        eventQueueRef.current.length > 1
-          ? { current: eventIndexRef.current + 1, total: eventQueueRef.current.length }
-          : undefined
-      );
-
-      // Update swing explanation if SWING_FORMED
-      if (event.event_type === 'SWING_FORMED') {
-        const swingData = eventToSwingData(event, swings);
-        if (swingData?.previousSwingId) {
-          const prevSwing = swings[swingData.previousSwingId];
-          if (prevSwing) {
-            setPreviousSwing({
-              id: swingData.previousSwingId,
-              scale: prevSwing.scale,
-              direction: prevSwing.direction,
-              highPrice: prevSwing.direction === 'BULL' ? prevSwing.anchor1 : prevSwing.anchor0,
-              lowPrice: prevSwing.direction === 'BULL' ? prevSwing.anchor0 : prevSwing.anchor1,
-              highBar: prevSwing.direction === 'BULL' ? prevSwing.anchor1_bar : prevSwing.anchor0_bar,
-              lowBar: prevSwing.direction === 'BULL' ? prevSwing.anchor0_bar : prevSwing.anchor1_bar,
-              highTime: '',
-              lowTime: '',
-              size: 0,
-              sizePct: 0,
-            });
-          }
-        }
-        setCurrentSwing(swingData);
-      } else {
-        setCurrentSwing(null);
-        setPreviousSwing(null);
-      }
-
-      // Start linger timer
-      lingerStartRef.current = Date.now();
-      setLingerTimeLeft(LINGER_DURATION_MS / 1000);
-
-      // Animate timer wheel
-      const animateTimer = () => {
-        if (lingerStartRef.current === null) return;
-        const elapsed = Date.now() - lingerStartRef.current;
-        const remaining = Math.max(0, (LINGER_DURATION_MS - elapsed) / 1000);
-        setLingerTimeLeft(remaining);
-
-        if (remaining > 0) {
-          animationFrameRef.current = requestAnimationFrame(animateTimer);
-        }
-      };
-      animationFrameRef.current = requestAnimationFrame(animateTimer);
-
-      // Set auto-advance timer
-      lingerTimerRef.current = window.setTimeout(() => {
-        eventIndexRef.current++;
-        if (eventIndexRef.current < eventQueueRef.current.length) {
-          showCurrentEvent();
-        } else {
-          // Resume playback
-          exitLinger();
-          startPlayback();
-        }
-      }, LINGER_DURATION_MS);
-    };
-
-    showCurrentEvent();
-  }, [clearTimers, swings]);
+    showCurrentEventRef.current();
+  }, [clearTimers]);
 
   // Exit linger state
   const exitLinger = useCallback(() => {
@@ -351,6 +375,33 @@ export function usePlayback({
     }
   }, [clearTimers, exitLinger, sourceBars.length, updatePosition]);
 
+  // Keep refs updated for use in timer callbacks
+  useEffect(() => {
+    exitLingerRef.current = exitLinger;
+  }, [exitLinger]);
+
+  useEffect(() => {
+    startPlaybackRef.current = startPlayback;
+  }, [startPlayback]);
+
+  // Navigate to previous event in linger queue
+  const navigatePrevEvent = useCallback(() => {
+    if (playbackState !== PlaybackState.LINGERING) return;
+    if (eventIndexRef.current <= 0) return;
+
+    eventIndexRef.current--;
+    showCurrentEventRef.current();
+  }, [playbackState]);
+
+  // Navigate to next event in linger queue
+  const navigateNextEvent = useCallback(() => {
+    if (playbackState !== PlaybackState.LINGERING) return;
+    if (eventIndexRef.current >= eventQueueRef.current.length - 1) return;
+
+    eventIndexRef.current++;
+    showCurrentEventRef.current();
+  }, [playbackState]);
+
   // Restart interval when playbackIntervalMs changes during playback
   useEffect(() => {
     if (playbackState === PlaybackState.PLAYING && playbackIntervalRef.current) {
@@ -385,5 +436,7 @@ export function usePlayback({
     stepBack,
     jumpToStart,
     jumpToEnd,
+    navigatePrevEvent,
+    navigateNextEvent,
   };
 }

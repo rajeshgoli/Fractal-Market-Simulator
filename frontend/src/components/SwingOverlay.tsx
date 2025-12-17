@@ -6,7 +6,7 @@ interface SwingOverlayProps {
   series: ISeriesApi<'Candlestick'> | null;
   swings: DetectedSwing[];
   currentPosition: number;
-  highlightedSwingId?: string;
+  highlightedSwing?: DetectedSwing;
 }
 
 // Fib level configuration
@@ -30,7 +30,7 @@ export const SwingOverlay: React.FC<SwingOverlayProps> = ({
   series,
   swings,
   currentPosition,
-  highlightedSwingId,
+  highlightedSwing,
 }) => {
   // Track created price lines so we can remove them on update
   const priceLinesRef = useRef<IPriceLine[]>([]);
@@ -91,16 +91,18 @@ export const SwingOverlay: React.FC<SwingOverlayProps> = ({
     // Clear existing lines
     clearPriceLines();
 
-    // Filter swings to only show those visible up to current position
-    let visibleSwings = swings.filter(swing => {
-      // Only show swings where both points are before current position
-      const maxBarIndex = Math.max(swing.high_bar_index, swing.low_bar_index);
-      return maxBarIndex <= currentPosition;
-    });
-
     // When a specific swing is highlighted (during linger), only show that swing
-    if (highlightedSwingId) {
-      visibleSwings = visibleSwings.filter(swing => swing.id === highlightedSwingId);
+    // Use the highlighted swing directly since it comes from discretization (different ID format)
+    let visibleSwings: DetectedSwing[];
+    if (highlightedSwing) {
+      visibleSwings = [highlightedSwing];
+    } else {
+      // Filter swings to only show those visible up to current position
+      visibleSwings = swings.filter(swing => {
+        // Only show swings where both points are before current position
+        const maxBarIndex = Math.max(swing.high_bar_index, swing.low_bar_index);
+        return maxBarIndex <= currentPosition;
+      });
     }
 
     // Create lines for each visible swing
@@ -118,7 +120,7 @@ export const SwingOverlay: React.FC<SwingOverlayProps> = ({
     return () => {
       clearPriceLines();
     };
-  }, [series, swings, currentPosition, highlightedSwingId, clearPriceLines, createSwingLines]);
+  }, [series, swings, currentPosition, highlightedSwing, clearPriceLines, createSwingLines]);
 
   // This component doesn't render any DOM elements
   // It only manages price lines on the chart via side effects

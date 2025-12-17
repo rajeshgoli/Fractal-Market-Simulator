@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock, ChevronDown } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PLAYBACK_SPEEDS } from '../constants';
 import { PlaybackState, AggregationScale } from '../types';
 
@@ -27,6 +27,8 @@ interface PlaybackControlsProps {
   lingerTotalTime: number;
   lingerEventType?: string;
   lingerQueuePosition?: { current: number; total: number };
+  onNavigatePrev?: () => void;
+  onNavigateNext?: () => void;
 }
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
@@ -48,6 +50,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   lingerTotalTime,
   lingerEventType,
   lingerQueuePosition,
+  onNavigatePrev,
+  onNavigateNext,
 }) => {
   const isPlaying = playbackState === PlaybackState.PLAYING;
 
@@ -195,15 +199,49 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       <div className="hidden md:flex flex-1 justify-center">
         {isLingering ? (
           <div className="flex items-center gap-2 text-trading-orange bg-trading-orange/10 px-4 py-1.5 rounded-full border border-trading-orange/20 animate-fade-in">
+            {/* Previous button - only show when multiple events */}
+            {lingerQueuePosition && lingerQueuePosition.total > 1 && (
+              <button
+                onClick={onNavigatePrev}
+                disabled={lingerQueuePosition.current <= 1}
+                className={`p-0.5 rounded transition-colors ${
+                  lingerQueuePosition.current <= 1
+                    ? 'text-trading-orange/30 cursor-not-allowed'
+                    : 'text-trading-orange hover:text-white hover:bg-trading-orange/30'
+                }`}
+                aria-label="Previous swing"
+                title="Previous swing (←)"
+              >
+                <ChevronLeft size={16} />
+              </button>
+            )}
+
             <Clock size={14} />
             <span className="text-xs font-semibold uppercase tracking-wide">
               {lingerEventType || 'EVENT'} ({Math.ceil(lingerTimeLeft)}s)
-              {lingerQueuePosition && lingerQueuePosition.total > 1 && (
-                <span className="ml-1 text-trading-orange/70">
+            </span>
+
+            {/* Queue position and next button - only show when multiple events */}
+            {lingerQueuePosition && lingerQueuePosition.total > 1 && (
+              <>
+                <span className="text-xs font-mono text-trading-orange/70">
                   [{lingerQueuePosition.current}/{lingerQueuePosition.total}]
                 </span>
-              )}
-            </span>
+                <button
+                  onClick={onNavigateNext}
+                  disabled={lingerQueuePosition.current >= lingerQueuePosition.total}
+                  className={`p-0.5 rounded transition-colors ${
+                    lingerQueuePosition.current >= lingerQueuePosition.total
+                      ? 'text-trading-orange/30 cursor-not-allowed'
+                      : 'text-trading-orange hover:text-white hover:bg-trading-orange/30'
+                  }`}
+                  aria-label="Next swing"
+                  title="Next swing (→)"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="h-8" /> /* Spacer */
