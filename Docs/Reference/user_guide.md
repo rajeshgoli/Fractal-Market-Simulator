@@ -522,13 +522,43 @@ Both charts stay time-synchronized:
 
 ### Playback Controls
 
-| Control | Description |
-|---------|-------------|
-| Step &larr; | Move back one source bar |
-| Play/Pause | Start/stop automatic playback |
-| Step &rarr; | Move forward one source bar |
-| Speed | 0.5x, 1x, 2x, 5x, 10x playback speed |
-| Reset | Return to first bar |
+| Control | Icon | Description |
+|---------|------|-------------|
+| Jump to Start | \|◄ | Go to first bar |
+| Step Back | ◄ | Move back one source bar |
+| Play/Pause | ▶/⏸ | Start/stop automatic playback |
+| Step Forward | ► | Move forward one source bar |
+| Jump to End | ►\| | Go to last bar |
+| Speed | - | 0.5x, 1x, 2x, 5x, 10x playback speed |
+
+The bar position indicator shows current position (e.g., "Bar: 1234 / 50000").
+
+### Event-Driven Linger
+
+When significant events occur during playback, the view auto-pauses to let you absorb the information:
+
+**Linger Behavior:**
+- Playback pauses when a configured event fires at the current bar
+- A 30-second timer wheel appears around the pause button
+- Timer countdown displays remaining seconds
+- When timer completes, playback auto-resumes
+- Click Play to skip ahead and resume immediately
+- Click Pause to freeze the timer
+
+**Event Filters (Sidebar):**
+
+Configure which events trigger linger via checkboxes:
+
+| Event Type | Default | Notes |
+|------------|---------|-------|
+| SWING_FORMED | ON | New swing detected at scale |
+| COMPLETION | ON | Ratio reached 2.0 |
+| INVALIDATION | ON | Ratio crossed below threshold |
+| LEVEL_CROSS | OFF | Too frequent for practical use |
+| SWING_TERMINATED | OFF | Redundant with completion/invalidation |
+
+**Multiple Events:**
+When multiple events occur at the same bar, they are queued and shown sequentially. The indicator displays queue position (e.g., "1/3").
 
 ### Use Cases
 
