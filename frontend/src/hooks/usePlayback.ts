@@ -30,6 +30,7 @@ interface UsePlaybackReturn {
   jumpToEnd: () => void;
   navigatePrevEvent: () => void;
   navigateNextEvent: () => void;
+  dismissLinger: () => void;
 }
 
 // Helper to convert event data to SwingData for the explanation panel
@@ -402,6 +403,13 @@ export function usePlayback({
     showCurrentEventRef.current();
   }, [playbackState]);
 
+  // Dismiss linger and resume playback
+  const dismissLinger = useCallback(() => {
+    if (playbackState !== PlaybackState.LINGERING) return;
+    exitLinger();
+    startPlayback();
+  }, [playbackState, exitLinger, startPlayback]);
+
   // Restart interval when playbackIntervalMs changes during playback
   useEffect(() => {
     if (playbackState === PlaybackState.PLAYING && playbackIntervalRef.current) {
@@ -438,5 +446,6 @@ export function usePlayback({
     jumpToEnd,
     navigatePrevEvent,
     navigateNextEvent,
+    dismissLinger,
   };
 }

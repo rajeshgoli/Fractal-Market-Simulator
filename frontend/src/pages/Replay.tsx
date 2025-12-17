@@ -603,6 +603,7 @@ export const Replay: React.FC = () => {
               lingerQueuePosition={playback.lingerQueuePosition}
               onNavigatePrev={playback.navigatePrevEvent}
               onNavigateNext={playback.navigateNextEvent}
+              onDismissLinger={playback.dismissLinger}
             />
           </div>
 

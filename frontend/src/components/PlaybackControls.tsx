@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { PLAYBACK_SPEEDS } from '../constants';
 import { PlaybackState, AggregationScale } from '../types';
 
@@ -29,6 +29,7 @@ interface PlaybackControlsProps {
   lingerQueuePosition?: { current: number; total: number };
   onNavigatePrev?: () => void;
   onNavigateNext?: () => void;
+  onDismissLinger?: () => void;
 }
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
@@ -52,6 +53,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   lingerQueuePosition,
   onNavigatePrev,
   onNavigateNext,
+  onDismissLinger,
 }) => {
   const isPlaying = playbackState === PlaybackState.PLAYING;
 
@@ -242,6 +244,16 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                 </button>
               </>
             )}
+
+            {/* Dismiss button */}
+            <button
+              onClick={onDismissLinger}
+              className="p-0.5 rounded transition-colors text-trading-orange hover:text-white hover:bg-trading-orange/30 ml-1"
+              aria-label="Dismiss and continue"
+              title="Dismiss and continue"
+            >
+              <X size={14} />
+            </button>
           </div>
         ) : (
           <div className="h-8" /> /* Spacer */
