@@ -339,8 +339,12 @@ export const Replay: React.FC = () => {
         setSwings(swingMap);
 
         // Run calibration
+        // Reserve at least 10% of bars (min 100) for playback beyond calibration
+        // This ensures there are always bars to stream during forward playback
         setCalibrationPhase(CalibrationPhase.CALIBRATING);
-        const calibration = await fetchCalibration(Math.min(10000, source.length));
+        const reserveForPlayback = Math.max(100, Math.floor(source.length * 0.1));
+        const maxCalibrationBars = Math.max(1000, source.length - reserveForPlayback);
+        const calibration = await fetchCalibration(Math.min(10000, maxCalibrationBars));
         setCalibrationData(calibration);
 
         // Store calibration bars for forward playback (first N bars up to calibration_bar_count)
