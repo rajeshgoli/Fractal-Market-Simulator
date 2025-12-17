@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-16
 
@@ -8,25 +8,7 @@
 
 ## Pending Changes
 
-### 2025-12-16 - Replay View: Swing explanation panel
-- **Issue:** #87
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/static/replay.html`, `Docs/Reference/user_guide.md`
-
-### 2025-12-16 - Replay View: Event-driven linger with timer wheel
-- **Issue:** #86
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/static/replay.html`
-
-### 2025-12-16 - Replay View: Playback controls
-- **Issue:** #85
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/static/replay.html`
-
-### 2025-12-16 - Replay View: Split chart with independent aggregation
-- **Issue:** #84
-- **Type:** Feature
-- **Files:** `src/ground_truth_annotator/api.py`, `src/ground_truth_annotator/static/replay.html`, `src/ground_truth_annotator/static/index.html`
+- **#91** - Replay View redesign: React + Tailwind adoption
 
 ---
 
@@ -34,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 16 | #84, #85, #86, #87, #89 — Replay View: split view, playback, linger, explanation, bug fixes | All Accepted |
 | Dec 16 | #78, #79, #81, #82, #83 — Discretization overlay, validation, ground truth consolidation, explanation data, windowed API | All Accepted |
 | Dec 16 | Replay View Spec (`Docs/Working/replay_view_spec.md`) | Feasible → Issues #82-#87 created |
 | Dec 16 | #73, #74, #75, #76, #77 — Discretization core implementation | All Accepted |

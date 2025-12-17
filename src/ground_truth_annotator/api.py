@@ -1842,13 +1842,38 @@ async def discretization_page():
 
 @app.get("/replay", response_class=HTMLResponse)
 async def replay_page():
-    """Serve the Replay View UI with split charts."""
+    """Serve the Replay View UI - React frontend."""
+    # First try the React build
+    project_root = Path(__file__).parent.parent.parent.parent
+    react_index = project_root / "frontend" / "dist" / "index.html"
+
+    if react_index.exists():
+        with open(react_index, 'r') as f:
+            return HTMLResponse(content=f.read())
+
+    # Fallback to vanilla HTML for development or if build doesn't exist
     module_dir = Path(__file__).parent
     page_path = module_dir / "static" / "replay.html"
 
     if not page_path.exists():
         return HTMLResponse(
-            content="<h1>Replay View</h1><p>replay.html not found. Place replay.html in static/</p>",
+            content="<h1>Replay View</h1><p>React build or replay.html not found. Run 'npm run build' in frontend/</p>",
+            status_code=200
+        )
+
+    with open(page_path, 'r') as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.get("/replay-legacy", response_class=HTMLResponse)
+async def replay_legacy_page():
+    """Serve the legacy vanilla JS Replay View UI."""
+    module_dir = Path(__file__).parent
+    page_path = module_dir / "static" / "replay.html"
+
+    if not page_path.exists():
+        return HTMLResponse(
+            content="<h1>Replay View (Legacy)</h1><p>replay.html not found.</p>",
             status_code=200
         )
 
@@ -1995,7 +2020,24 @@ def init_app(
     logger.info(f"Initialized annotator with {len(source_bars)} bars, scale={scale}")
 
 
-# Mount static files directory
+# Mount React frontend assets (from Vite build)
+project_root = Path(__file__).parent.parent.parent.parent
+react_dist_dir = project_root / "frontend" / "dist"
+react_assets_dir = react_dist_dir / "assets"
+if react_assets_dir.exists():
+    app.mount("/assets", StaticFiles(directory=str(react_assets_dir)), name="react-assets")
+
+# Serve vite.svg (React favicon)
+@app.get("/vite.svg")
+async def vite_svg():
+    """Serve vite.svg for React frontend."""
+    svg_path = react_dist_dir / "vite.svg"
+    if svg_path.exists():
+        from fastapi.responses import FileResponse
+        return FileResponse(str(svg_path), media_type="image/svg+xml")
+    return HTMLResponse(content="", status_code=404)
+
+# Mount static files directory (legacy vanilla JS)
 module_dir = Path(__file__).parent
 static_dir = module_dir / "static"
 if static_dir.exists():
