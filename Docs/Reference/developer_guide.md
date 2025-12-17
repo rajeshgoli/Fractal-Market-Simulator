@@ -56,7 +56,9 @@ frontend/                           # React + Vite Replay View
 │   │   ├── SwingOverlay.tsx        # Fib level rendering
 │   │   ├── PlaybackControls.tsx    # Transport controls
 │   │   └── ExplanationPanel.tsx    # Swing detail display
-│   └── hooks/usePlayback.ts        # Playback state machine
+│   └── hooks/
+│       ├── usePlayback.ts          # Legacy playback (calibration scrubbing)
+│       └── useForwardPlayback.ts   # Forward-only playback (after calibration)
 └── package.json
 
 tests/                              # 780 tests
@@ -489,6 +491,9 @@ python -m src.ground_truth_annotator.main \
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/replay/calibrate` | GET | Run calibration on first N bars |
+| `/api/replay/advance` | POST | Advance playback beyond calibration window |
+
+**GET /api/replay/calibrate:**
 
 Query params:
 - `bar_count`: Number of bars for calibration window (default: 10000)
@@ -500,6 +505,31 @@ Returns:
 - `active_swings_by_scale`: Dict of scale → list of active swings
 - `scale_thresholds`: Dict of scale → size threshold
 - `stats_by_scale`: Dict of scale → {total_swings, active_swings}
+
+**POST /api/replay/advance:**
+
+Request body:
+```json
+{
+  "calibration_bar_count": 10000,
+  "current_bar_index": 9999,
+  "advance_by": 1
+}
+```
+
+Returns:
+- `new_bars`: List of new OHLC bars to append
+- `events`: List of events that occurred (SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED, LEVEL_CROSS)
+- `swing_state`: Current swing state by scale (XL, L, M, S)
+- `current_bar_index`: New position after advance
+- `current_price`: Price at new position
+- `end_of_data`: Boolean indicating if end of data reached
+
+Event diffing logic compares previous vs new swing state to detect:
+- New swings appearing (SWING_FORMED)
+- Swings disappearing due to pivot violation (SWING_INVALIDATED)
+- Swings reaching 2.0 extension (SWING_COMPLETED)
+- Price crossing significant Fib levels (LEVEL_CROSS)
 
 ---
 

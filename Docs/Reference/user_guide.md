@@ -72,6 +72,33 @@ A swing is "active" at calibration end if:
 
 The currently selected active swing displays on both charts with Fib levels.
 
+### Forward-Only Playback
+
+After pressing Play (or Space/Enter) in the calibrated state, playback enters **forward-only mode**:
+
+**How it works:**
+- Playback advances **beyond** the calibration window
+- Each bar is fetched incrementally (not pre-loaded)
+- Swing detection runs in real-time as new bars arrive
+- Chart right edge extends as new data loads
+
+**Real-time Event Types:**
+| Event | Description |
+|-------|-------------|
+| SWING_FORMED | New swing detected at current bar |
+| SWING_INVALIDATED | Swing's defended pivot violated |
+| SWING_COMPLETED | Swing reached 2.0 Fib extension |
+| LEVEL_CROSS | Price crossed significant Fib level (0.382, 0.5, 0.618, 1.0, 1.382, 1.618) |
+
+**Event Behavior:**
+- Events trigger auto-pause with linger timer
+- Navigate between events with arrow keys when multiple occur
+- Dismiss linger to resume playback
+
+**Limitations:**
+- Step Back is disabled in forward-only mode (can't un-see data)
+- Use Jump to Start to reset and re-watch from calibration end
+
 ### Aggregation Options
 
 Each chart has an independent aggregation selector:
