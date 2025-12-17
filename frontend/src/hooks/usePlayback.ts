@@ -109,6 +109,7 @@ export function usePlayback({
   const animationFrameRef = useRef<number | null>(null);
   const eventQueueRef = useRef<DiscretizationEvent[]>([]);
   const eventIndexRef = useRef(0);
+  const advanceBarRef = useRef<() => void>(() => {});
 
   // Index events by bar for fast lookup
   const eventsByBar = useRef<Map<number, DiscretizationEvent[]>>(new Map());
@@ -261,6 +262,11 @@ export function usePlayback({
     }
   }, [currentPosition, sourceBars.length, updatePosition, getEnabledEventsAtBar, enterLinger, clearTimers]);
 
+  // Keep advanceBarRef.current updated to avoid stale closures in setInterval
+  useEffect(() => {
+    advanceBarRef.current = advanceBar;
+  }, [advanceBar]);
+
   // Start playback
   const startPlayback = useCallback(() => {
     if (playbackState === PlaybackState.LINGERING) {
@@ -274,9 +280,9 @@ export function usePlayback({
 
     setPlaybackState(PlaybackState.PLAYING);
     playbackIntervalRef.current = window.setInterval(() => {
-      advanceBar();
+      advanceBarRef.current();
     }, playbackSpeed);
-  }, [playbackState, currentPosition, sourceBars.length, updatePosition, playbackSpeed, advanceBar, exitLinger]);
+  }, [playbackState, currentPosition, sourceBars.length, updatePosition, playbackSpeed, exitLinger]);
 
   // Pause playback
   const pause = useCallback(() => {
@@ -349,10 +355,10 @@ export function usePlayback({
     if (playbackState === PlaybackState.PLAYING && playbackIntervalRef.current) {
       clearInterval(playbackIntervalRef.current);
       playbackIntervalRef.current = window.setInterval(() => {
-        advanceBar();
+        advanceBarRef.current();
       }, ms);
     }
-  }, [playbackState, advanceBar]);
+  }, [playbackState]);
 
   // Cleanup on unmount
   useEffect(() => {

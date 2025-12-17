@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-16
 
@@ -8,6 +8,8 @@
 
 ## Pending Changes
 
+- **#96** - Fix React Replay View: chart updates during playback, position markers
+- **#98** - Fix flaky test: test_performance_scaling_is_nlogn
 - **#97** - Remove dead code: reference detectors, legacy HTML views (~3,700 LOC)
 - **#91** - Replay View redesign: React + Tailwind adoption
 

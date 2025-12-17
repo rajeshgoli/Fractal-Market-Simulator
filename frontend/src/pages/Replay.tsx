@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { IChartApi, ISeriesApi } from 'lightweight-charts';
+import { IChartApi, ISeriesApi, createSeriesMarkers, SeriesMarker, Time, ISeriesMarkersPluginApi } from 'lightweight-charts';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
 import { ChartArea } from '../components/ChartArea';
@@ -40,14 +40,21 @@ export const Replay: React.FC = () => {
   const series1Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const series2Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
-  // Playback hook
+  // Marker plugin refs
+  const markers1Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const markers2Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+
+  // Ref to hold the latest syncChartsToPosition function (avoids stale closure in callback)
+  const syncChartsToPositionRef = useRef<(sourceIndex: number) => void>(() => {});
+
+  // Playback hook - uses ref to avoid stale closure issue
   const playback = usePlayback({
     sourceBars,
     events,
     swings,
     filters,
     onPositionChange: useCallback((position: number) => {
-      syncChartsToPosition(position);
+      syncChartsToPositionRef.current(position);
     }, []),
   });
 
@@ -138,8 +145,34 @@ export const Replay: React.FC = () => {
     return bars.length - 1;
   }, []);
 
+  // Update position marker using the markers plugin
+  const updatePositionMarker = useCallback((
+    markersPlugin: ISeriesMarkersPluginApi<Time> | null,
+    bars: BarData[],
+    sourceIndex: number
+  ) => {
+    if (!markersPlugin || bars.length === 0) return;
+
+    const aggIndex = findAggBarForSourceIndex(bars, sourceIndex);
+    if (aggIndex < 0 || aggIndex >= bars.length) return;
+
+    const bar = bars[aggIndex];
+    const marker: SeriesMarker<Time> = {
+      time: bar.timestamp as Time,
+      position: 'aboveBar',
+      color: '#f7d63e',
+      shape: 'arrowDown',
+      text: '',
+    };
+    markersPlugin.setMarkers([marker]);
+  }, [findAggBarForSourceIndex]);
+
   // Sync charts to current position
   const syncChartsToPosition = useCallback((sourceIndex: number) => {
+    // Always update position markers regardless of scrolling
+    updatePositionMarker(markers1Ref.current, chart1Bars, sourceIndex);
+    updatePositionMarker(markers2Ref.current, chart2Bars, sourceIndex);
+
     const syncChart = (
       chart: IChartApi | null,
       bars: BarData[],
@@ -155,7 +188,7 @@ export const Replay: React.FC = () => {
         const rangeSize = visibleRange.to - visibleRange.from;
         const margin = rangeSize * 0.1;
         if (aggIndex >= visibleRange.from + margin && aggIndex <= visibleRange.to - margin) {
-          return; // Already visible
+          return; // Already visible - no scroll needed (but marker already updated above)
         }
       }
 
@@ -180,17 +213,24 @@ export const Replay: React.FC = () => {
 
     syncChart(chart1Ref.current, chart1Bars);
     syncChart(chart2Ref.current, chart2Bars);
-  }, [chart1Bars, chart2Bars, findAggBarForSourceIndex]);
+  }, [chart1Bars, chart2Bars, findAggBarForSourceIndex, updatePositionMarker]);
 
-  // Handle chart ready callbacks
+  // Keep the ref updated with the latest syncChartsToPosition
+  useEffect(() => {
+    syncChartsToPositionRef.current = syncChartsToPosition;
+  }, [syncChartsToPosition]);
+
+  // Handle chart ready callbacks - create marker plugins
   const handleChart1Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
     chart1Ref.current = chart;
     series1Ref.current = series;
+    markers1Ref.current = createSeriesMarkers(series, []);
   }, []);
 
   const handleChart2Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
     chart2Ref.current = chart;
     series2Ref.current = series;
+    markers2Ref.current = createSeriesMarkers(series, []);
   }, []);
 
   // Toggle filter
