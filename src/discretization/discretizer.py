@@ -24,6 +24,7 @@ from statistics import median
 from typing import Any, Deque, Dict, List, Literal, Optional, Tuple
 import uuid
 
+import numpy as np
 import pandas as pd
 
 from .schema import (
@@ -81,6 +82,12 @@ class DiscretizerConfig:
 
     # Gap detection threshold (as fraction of price)
     gap_threshold_pct: float = 0.005  # 0.5% of price
+
+    # Scale thresholds (minimum size to qualify for scale)
+    # Format: {"S": 0, "M": 15, "L": 40, "XL": 100} = size >= threshold for that scale
+    scale_thresholds: Dict[str, float] = field(
+        default_factory=lambda: {"S": 0, "M": 15, "L": 40, "XL": 100}
+    )
 
     # Version tracking
     swing_detector_version: str = DEFAULT_SWING_DETECTOR_VERSION
@@ -352,6 +359,11 @@ class Discretizer:
                     active_swings[swing_id] = state
                     active_by_scale[scale] = state
 
+                    # Build explanation data for SWING_FORMED event
+                    explanation = self._build_swing_explanation(
+                        swing, scale, ohlc, bar_idx
+                    )
+
                     # Log SWING_FORMED event
                     events.append(
                         DiscretizationEvent(
@@ -365,6 +377,7 @@ class Discretizer:
                                 "direction": direction.lower(),
                                 "anchor0": anchor0,
                                 "anchor1": anchor1,
+                                "explanation": explanation,
                             },
                         )
                     )
@@ -658,11 +671,84 @@ class Discretizer:
 
     def _format_timestamp(self, ts: Any) -> str:
         """Format timestamp to ISO 8601."""
-        if isinstance(ts, (int, float)):
-            return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        if isinstance(ts, (int, float, np.integer, np.floating)):
+            return datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
         elif isinstance(ts, datetime):
             return ts.isoformat()
         elif isinstance(ts, str):
             return ts
         else:
             return str(ts)
+
+    def _build_swing_explanation(
+        self,
+        swing: ReferenceSwing,
+        scale: str,
+        ohlc: pd.DataFrame,
+        formed_bar: int,
+    ) -> Dict[str, Any]:
+        """
+        Build explanation data for a SWING_FORMED event.
+
+        Args:
+            swing: The ReferenceSwing being formed
+            scale: The scale (S, M, L, XL)
+            ohlc: OHLC DataFrame for timestamp lookups
+            formed_bar: Bar index where swing was formed
+
+        Returns:
+            Dict with high/low details, size info, scale_reason, is_anchor, and separation
+        """
+        # Get high/low bar data
+        high_bar = swing.high_bar_index
+        low_bar = swing.low_bar_index
+        high_price = swing.high_price
+        low_price = swing.low_price
+
+        # Look up timestamps from OHLC data
+        high_timestamp = ""
+        low_timestamp = ""
+        if high_bar in ohlc.index:
+            high_timestamp = self._format_timestamp(ohlc.loc[high_bar, "timestamp"])
+        if low_bar in ohlc.index:
+            low_timestamp = self._format_timestamp(ohlc.loc[low_bar, "timestamp"])
+
+        # Calculate size
+        size_pts = swing.size
+
+        # Calculate size_pct as percentage of the starting price (anchor1)
+        # For bull: anchor1 is high, for bear: anchor1 is low
+        reference_price = max(high_price, low_price)  # Use higher price as reference
+        size_pct = (size_pts / reference_price * 100) if reference_price > 0 else 0.0
+
+        # Build scale_reason
+        threshold = self.config.scale_thresholds.get(scale, 0)
+        scale_reason = f"Size {size_pts:.1f} >= {scale} threshold {threshold}"
+
+        # Check if anchor (first swing at scale, or no separation data)
+        # is_anchor means no previous swing to compare against
+        is_anchor = swing.separation_is_anchor
+
+        # Build separation details (null if is_anchor)
+        separation: Optional[Dict[str, Any]] = None
+        if not is_anchor:
+            separation = {
+                "from_swing_id": swing.separation_from_swing_id,
+                "distance_fib": swing.separation_distance_fib,
+                "minimum_fib": swing.separation_minimum_fib,
+                "containing_swing_id": swing.containing_swing_id,
+            }
+
+        return {
+            "high_bar": high_bar,
+            "high_price": high_price,
+            "high_timestamp": high_timestamp,
+            "low_bar": low_bar,
+            "low_price": low_price,
+            "low_timestamp": low_timestamp,
+            "size_pts": size_pts,
+            "size_pct": round(size_pct, 4),
+            "scale_reason": scale_reason,
+            "is_anchor": is_anchor,
+            "separation": separation,
+        }

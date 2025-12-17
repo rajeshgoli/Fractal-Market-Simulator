@@ -857,3 +857,261 @@ class TestIntegration:
         # Should have events for both swings
         swing_ids_with_events = {e.swing_id for e in log.events}
         assert len(swing_ids_with_events) >= 2
+
+
+# =============================================================================
+# SWING_FORMED Explanation Tests (#82)
+# =============================================================================
+
+
+class TestSwingFormedExplanation:
+    """Tests for SWING_FORMED event explanation data (#82)."""
+
+    def test_explanation_field_present(self):
+        """SWING_FORMED event should include explanation field."""
+        discretizer = Discretizer()
+
+        swing = make_swing(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),  # Bar 0
+            (1001, 108, 108, 100, 102),  # Bar 1: swing forms
+            (1002, 102, 105, 101, 104),  # Bar 2
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+
+        formed_events = [e for e in log.events if e.event_type == EventType.SWING_FORMED]
+        assert len(formed_events) == 1
+
+        # Explanation field should be present
+        assert "explanation" in formed_events[0].data
+        explanation = formed_events[0].data["explanation"]
+        assert explanation is not None
+
+    def test_explanation_high_low_fields(self):
+        """Explanation should include high/low bar indices, prices, and timestamps."""
+        discretizer = Discretizer()
+
+        swing = make_swing(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),
+            (1001, 1001, 108, 100, 102),
+            (1002, 102, 105, 101, 104),
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+        formed = [e for e in log.events if e.event_type == EventType.SWING_FORMED][0]
+        explanation = formed.data["explanation"]
+
+        # High fields
+        assert "high_bar" in explanation
+        assert explanation["high_bar"] == 0
+        assert "high_price" in explanation
+        assert explanation["high_price"] == 110
+        assert "high_timestamp" in explanation
+        assert explanation["high_timestamp"] != ""
+
+        # Low fields
+        assert "low_bar" in explanation
+        assert explanation["low_bar"] == 1
+        assert "low_price" in explanation
+        assert explanation["low_price"] == 100
+        assert "low_timestamp" in explanation
+        assert explanation["low_timestamp"] != ""
+
+    def test_explanation_size_fields(self):
+        """Explanation should include size_pts and size_pct."""
+        discretizer = Discretizer()
+
+        swing = make_swing(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),
+            (1001, 108, 108, 100, 102),
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+        formed = [e for e in log.events if e.event_type == EventType.SWING_FORMED][0]
+        explanation = formed.data["explanation"]
+
+        # Size fields
+        assert "size_pts" in explanation
+        assert explanation["size_pts"] == 10  # 110 - 100
+
+        assert "size_pct" in explanation
+        assert explanation["size_pct"] > 0  # Should be ~9.09% (10/110 * 100)
+
+    def test_explanation_scale_reason(self):
+        """Explanation should include scale_reason with actual threshold values."""
+        config = DiscretizerConfig(scale_thresholds={"M": 5, "L": 25})
+        discretizer = Discretizer(config)
+
+        swing = make_swing(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),
+            (1001, 108, 108, 100, 102),
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+        formed = [e for e in log.events if e.event_type == EventType.SWING_FORMED][0]
+        explanation = formed.data["explanation"]
+
+        # scale_reason should show the threshold
+        assert "scale_reason" in explanation
+        assert "M threshold 5" in explanation["scale_reason"]
+        assert "Size 10" in explanation["scale_reason"]
+
+    def test_explanation_is_anchor_first_swing(self):
+        """First swing should be marked as anchor (is_anchor=True)."""
+        discretizer = Discretizer()
+
+        # Create a swing with anchor flag set
+        swing = ReferenceSwing(
+            high_price=110,
+            low_price=100,
+            high_bar_index=0,
+            low_bar_index=1,
+            size=10,
+            direction="bull",
+            separation_is_anchor=True,  # First swing is anchor
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),
+            (1001, 108, 108, 100, 102),
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+        formed = [e for e in log.events if e.event_type == EventType.SWING_FORMED][0]
+        explanation = formed.data["explanation"]
+
+        # is_anchor should be True
+        assert "is_anchor" in explanation
+        assert explanation["is_anchor"] is True
+
+        # separation should be null for anchor
+        assert "separation" in explanation
+        assert explanation["separation"] is None
+
+    def test_explanation_separation_for_non_anchor(self):
+        """Non-anchor swing should include separation details."""
+        discretizer = Discretizer()
+
+        # Create a swing with separation details
+        swing = ReferenceSwing(
+            high_price=110,
+            low_price=100,
+            high_bar_index=0,
+            low_bar_index=1,
+            size=10,
+            direction="bull",
+            separation_is_anchor=False,
+            separation_from_swing_id="prev-123",
+            separation_distance_fib=0.35,
+            separation_minimum_fib=0.236,
+            containing_swing_id="container-456",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),
+            (1001, 108, 108, 100, 102),
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+        formed = [e for e in log.events if e.event_type == EventType.SWING_FORMED][0]
+        explanation = formed.data["explanation"]
+
+        # is_anchor should be False
+        assert explanation["is_anchor"] is False
+
+        # separation should have all details
+        assert explanation["separation"] is not None
+        separation = explanation["separation"]
+
+        assert separation["from_swing_id"] == "prev-123"
+        assert separation["distance_fib"] == 0.35
+        assert separation["minimum_fib"] == 0.236
+        assert separation["containing_swing_id"] == "container-456"
+
+    def test_explanation_bear_swing(self):
+        """Bear swing should also include explanation data."""
+        discretizer = Discretizer()
+
+        swing = make_swing(
+            high_price=110,
+            low_price=100,
+            high_bar=1,
+            low_bar=0,
+            direction="bear",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 105, 100, 102),
+            (1001, 102, 110, 102, 108),
+            (1002, 108, 109, 106, 107),
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+
+        formed_events = [e for e in log.events if e.event_type == EventType.SWING_FORMED]
+        assert len(formed_events) == 1
+
+        explanation = formed_events[0].data["explanation"]
+        assert explanation is not None
+        assert explanation["high_bar"] == 1
+        assert explanation["low_bar"] == 0
+        assert explanation["high_price"] == 110
+        assert explanation["low_price"] == 100
+
+    def test_explanation_timestamps_iso8601(self):
+        """Timestamps in explanation should be ISO 8601 formatted."""
+        discretizer = Discretizer()
+
+        swing = make_swing(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        # Use Unix timestamps
+        ohlc = make_ohlc([
+            (1609459200, 105, 110, 105, 108),  # 2021-01-01 00:00:00 UTC
+            (1609459260, 108, 108, 100, 102),  # 2021-01-01 00:01:00 UTC
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+        formed = [e for e in log.events if e.event_type == EventType.SWING_FORMED][0]
+        explanation = formed.data["explanation"]
+
+        # Timestamps should be ISO 8601 format
+        assert "2021-01-01" in explanation["high_timestamp"]
+        assert "2021-01-01" in explanation["low_timestamp"]

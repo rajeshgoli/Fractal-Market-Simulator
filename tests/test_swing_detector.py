@@ -1671,12 +1671,13 @@ class TestStructuralSeparation(unittest.TestCase):
             'low_bar_index': 5
         }
 
-        is_separated, containing_id = is_structurally_separated(
+        details = is_structurally_separated(
             swing, [], None, lookback=5, median_candle=2.0
         )
 
-        self.assertTrue(is_separated)
-        self.assertIsNone(containing_id)
+        self.assertTrue(details.is_separated)
+        self.assertTrue(details.is_anchor)  # First swing is anchor
+        self.assertIsNone(details.containing_swing_id)
 
     def test_is_structurally_separated_fallback(self):
         """Should use fallback when no larger_swings provided."""
@@ -1696,12 +1697,13 @@ class TestStructuralSeparation(unittest.TestCase):
             'low_bar_index': 45
         }]
 
-        is_separated, containing_id = is_structurally_separated(
+        details = is_structurally_separated(
             swing, previous_swings, None, lookback=5, median_candle=2.0
         )
 
         # Should use fallback check
-        self.assertIsNone(containing_id)  # No containing swing = fallback
+        self.assertIsNone(details.containing_swing_id)  # No containing swing = fallback
+        self.assertFalse(details.is_anchor)  # Not first swing
 
     def test_fallback_separation_check_passes(self):
         """Should pass when swings are sufficiently separated."""
@@ -1769,6 +1771,7 @@ class TestStructuralSeparation(unittest.TestCase):
         }
 
         previous_swings = [{
+            'swing_id': 'prev-1',  # Add swing_id for separation tracking
             'high_price': 108.0,
             'low_price': 94.0,
             'high_bar_index': 40,
@@ -1779,6 +1782,7 @@ class TestStructuralSeparation(unittest.TestCase):
         # min_separation = 0.236 * 40 = 9.44
         # separation = |95 - 108| = 13 >= 9.44
         larger_swings = [{
+            'swing_id': 'larger-1',
             'high_price': 120.0,
             'low_price': 80.0,
             'high_bar_index': 60,
@@ -1786,11 +1790,15 @@ class TestStructuralSeparation(unittest.TestCase):
             'size': 40.0
         }]
 
-        is_separated, containing_id = is_structurally_separated(
+        details = is_structurally_separated(
             swing, previous_swings, larger_swings, lookback=5, median_candle=2.0
         )
 
-        self.assertTrue(is_separated)
+        self.assertTrue(details.is_separated)
+        self.assertFalse(details.is_anchor)  # Not first swing
+        self.assertIsNotNone(details.containing_swing_id)  # Has containing swing
+        self.assertEqual(details.minimum_fib, 0.236)  # FIB threshold used
+        self.assertIsNotNone(details.distance_fib)  # Distance was computed
 
 
 class TestApplyStructuralSeparationFilter(unittest.TestCase):
@@ -1822,8 +1830,14 @@ class TestApplyStructuralSeparationFilter(unittest.TestCase):
         )
 
         for ref in filtered:
+            # Original fields
             self.assertIn('structurally_separated', ref)
             self.assertIn('containing_swing_id', ref)
+            # New separation detail fields (#82)
+            self.assertIn('separation_is_anchor', ref)
+            self.assertIn('separation_from_swing_id', ref)
+            self.assertIn('separation_distance_fib', ref)
+            self.assertIn('separation_minimum_fib', ref)
 
     def test_filter_empty_list(self):
         """Should handle empty reference list."""

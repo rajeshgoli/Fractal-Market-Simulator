@@ -1515,6 +1515,12 @@ def _run_discretization(s: AppState) -> DiscretizationLog:
                 low_bar_index=ref['low_bar_index'],
                 size=ref['size'],
                 direction='bull',
+                structurally_separated=ref.get('structurally_separated', False),
+                containing_swing_id=ref.get('containing_swing_id'),
+                separation_is_anchor=ref.get('separation_is_anchor', False),
+                separation_distance_fib=ref.get('separation_distance_fib'),
+                separation_minimum_fib=ref.get('separation_minimum_fib'),
+                separation_from_swing_id=ref.get('separation_from_swing_id'),
             )
             swing_list.append(swing)
 
@@ -1526,6 +1532,12 @@ def _run_discretization(s: AppState) -> DiscretizationLog:
                 low_bar_index=ref['low_bar_index'],
                 size=ref['size'],
                 direction='bear',
+                structurally_separated=ref.get('structurally_separated', False),
+                containing_swing_id=ref.get('containing_swing_id'),
+                separation_is_anchor=ref.get('separation_is_anchor', False),
+                separation_distance_fib=ref.get('separation_distance_fib'),
+                separation_minimum_fib=ref.get('separation_minimum_fib'),
+                separation_from_swing_id=ref.get('separation_from_swing_id'),
             )
             swing_list.append(swing)
 

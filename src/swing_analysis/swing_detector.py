@@ -11,6 +11,17 @@ from .level_calculator import calculate_levels, Level, score_swing_fib_confluenc
 
 
 @dataclass
+class SeparationDetails:
+    """Details about structural separation between swings."""
+    is_separated: bool
+    is_anchor: bool  # True if first swing (no previous to compare)
+    containing_swing_id: Optional[str] = None
+    from_swing_id: Optional[str] = None  # The swing we measured separation from
+    distance_fib: Optional[float] = None  # Actual distance in FIB terms
+    minimum_fib: Optional[float] = None   # Threshold used (0.236)
+
+
+@dataclass
 class ReferenceSwing:
     """
     A detected reference swing with all computed properties.
@@ -42,6 +53,12 @@ class ReferenceSwing:
     structurally_separated: bool = False
     containing_swing_id: Optional[str] = None
     fib_confluence_score: float = 0.0
+
+    # Separation details (for explanation in SWING_FORMED events)
+    separation_is_anchor: bool = False  # True if first swing (no previous to compare)
+    separation_distance_fib: Optional[float] = None  # Actual distance in fib terms
+    separation_minimum_fib: Optional[float] = None   # Threshold used (0.236)
+    separation_from_swing_id: Optional[str] = None   # Swing we measured from
 
     @property
     def span(self) -> int:
@@ -741,7 +758,7 @@ def is_structurally_separated(
     larger_swings: Optional[List[Dict[str, Any]]],
     lookback: int,
     median_candle: float
-) -> Tuple[bool, Optional[str]]:
+) -> SeparationDetails:
     """
     Check if swing is structurally separated from previous swings.
 
@@ -761,42 +778,76 @@ def is_structurally_separated(
         median_candle: Median candle height
 
     Returns:
-        Tuple of (is_separated: bool, containing_swing_id: Optional[str])
+        SeparationDetails with is_separated, is_anchor, containing_swing_id,
+        from_swing_id, distance_fib, and minimum_fib fields.
     """
     if not previous_swings:
-        return True, None  # No previous swings = automatically separated
+        # No previous swings = automatically separated (anchor swing)
+        return SeparationDetails(is_separated=True, is_anchor=True)
 
     if not larger_swings:
         # XL or window edge: use fallback
-        return _fallback_separation_check(swing, previous_swings, lookback, median_candle), None
+        is_sep = _fallback_separation_check(swing, previous_swings, lookback, median_candle)
+        return SeparationDetails(is_separated=is_sep, is_anchor=False)
 
     # Get FIB grid from immediate larger swing
     containing = find_containing_swing(swing, larger_swings)
     if not containing:
-        return _fallback_separation_check(swing, previous_swings, lookback, median_candle), None
+        is_sep = _fallback_separation_check(swing, previous_swings, lookback, median_candle)
+        return SeparationDetails(is_separated=is_sep, is_anchor=False)
 
     containing_id = containing.get('swing_id')
     swing_size = containing.get('size', 0)
     if swing_size <= 0:
-        return _fallback_separation_check(swing, previous_swings, lookback, median_candle), None
+        is_sep = _fallback_separation_check(swing, previous_swings, lookback, median_candle)
+        return SeparationDetails(is_separated=is_sep, is_anchor=False, containing_swing_id=containing_id)
 
     # Minimum separation = 0.236 * containing swing size (smallest FIB level)
-    min_separation = 0.236 * swing_size
+    minimum_fib = 0.236
+    min_separation = minimum_fib * swing_size
 
     swing_low_price = swing.get('low_price', 0)
     swing_high_price = swing.get('high_price', 0)
 
+    # Track the closest previous swing for reporting
+    closest_prev_id = None
+    min_distance_fib = float('inf')
+
     for prev in previous_swings:
+        prev_id = prev.get('swing_id')
         prev_high_price = prev.get('high_price', 0)
         prev_low_price = prev.get('low_price', 0)
 
         # Check separation between swing endpoints
         # For bull references: compare current low to previous high
         separation = abs(swing_low_price - prev_high_price)
-        if separation < min_separation:
-            return False, containing_id  # Not structurally distinct
+        distance_fib = separation / swing_size if swing_size > 0 else 0
 
-    return True, containing_id
+        # Track the closest one
+        if distance_fib < min_distance_fib:
+            min_distance_fib = distance_fib
+            closest_prev_id = prev_id
+
+        if separation < min_separation:
+            # Not structurally distinct - return details about the failing check
+            return SeparationDetails(
+                is_separated=False,
+                is_anchor=False,
+                containing_swing_id=containing_id,
+                from_swing_id=prev_id,
+                distance_fib=distance_fib,
+                minimum_fib=minimum_fib,
+            )
+
+    # Passed all separation checks
+    return SeparationDetails(
+        is_separated=True,
+        is_anchor=False,
+        containing_swing_id=containing_id,
+        from_swing_id=closest_prev_id,
+        distance_fib=min_distance_fib if min_distance_fib != float('inf') else None,
+        minimum_fib=minimum_fib,
+    )
 
 
 def _apply_structural_separation_filter(
@@ -829,15 +880,21 @@ def _apply_structural_separation_filter(
     accepted_swings = []  # Track accepted swings for separation checks
 
     for ref in references:
-        is_separated, containing_id = is_structurally_separated(
+        details = is_structurally_separated(
             ref, accepted_swings, larger_swings, lookback, median_candle
         )
 
         # Add structural separation metadata
-        ref['structurally_separated'] = is_separated
-        ref['containing_swing_id'] = containing_id
+        ref['structurally_separated'] = details.is_separated
+        ref['containing_swing_id'] = details.containing_swing_id
 
-        if is_separated:
+        # Add separation explanation details
+        ref['separation_is_anchor'] = details.is_anchor
+        ref['separation_from_swing_id'] = details.from_swing_id
+        ref['separation_distance_fib'] = details.distance_fib
+        ref['separation_minimum_fib'] = details.minimum_fib
+
+        if details.is_separated:
             filtered.append(ref)
             accepted_swings.append(ref)
 

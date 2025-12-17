@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-16
 
@@ -11,6 +11,8 @@
 - **#78**: Discretization overlay in Ground Truth Annotator
 - **#79**: Discretizer validation on sample data
 - **#81**: Consolidate annotation sessions into ground_truth.json
+- **#82**: SWING_FORMED event explanation data
+- **#83**: Windowed events API tests
 
 ---
 
