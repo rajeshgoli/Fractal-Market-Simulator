@@ -1082,8 +1082,10 @@
                         // Add small margin (10%) so we scroll before bar hits edge
                         const rangeSize = visibleRange.to - visibleRange.from;
                         const margin = rangeSize * 0.1;
-                        if (aggBarIndex >= visibleRange.from + margin &&
-                            aggBarIndex <= visibleRange.to - margin) {
+                        const inRange = aggBarIndex >= visibleRange.from + margin &&
+                                       aggBarIndex <= visibleRange.to - margin;
+                        console.log(`Chart${chartNum} sync: aggBar=${aggBarIndex}, visible=${visibleRange.from.toFixed(0)}-${visibleRange.to.toFixed(0)}, inRange=${inRange}`);
+                        if (inRange) {
                             // Current bar is visible with margin, don't scroll
                             return;
                         }
