@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { PlaybackState, BarData } from '../types';
 import { advanceReplay, ReplayEvent, ReplaySwingState } from '../lib/api';
 import { LINGER_DURATION_MS } from '../constants';
@@ -22,12 +22,20 @@ interface UseForwardPlaybackReturn {
   lingerQueuePosition: { current: number; total: number } | undefined;
   currentSwingState: ReplaySwingState | null;
   endOfData: boolean;
+  // Event navigation
+  allEvents: ReplayEvent[];
+  currentEventIndex: number;  // 0-based index of current event, -1 if before first event
+  hasPreviousEvent: boolean;
+  hasNextEvent: boolean;
+  // Controls
   play: () => void;
   pause: () => void;
   togglePlayPause: () => void;
   stepForward: () => void;
   stepBack: () => void;
   jumpToStart: () => void;
+  jumpToPreviousEvent: () => void;
+  jumpToNextEvent: () => void;
   navigatePrevEvent: () => void;
   navigateNextEvent: () => void;
   dismissLinger: () => void;
@@ -54,6 +62,9 @@ export function useForwardPlayback({
 
   // Swing state
   const [currentSwingState, setCurrentSwingState] = useState<ReplaySwingState | null>(null);
+
+  // Event tracking for navigation
+  const [allEvents, setAllEvents] = useState<ReplayEvent[]>([]);
 
   // Refs for timers and queue
   const playbackIntervalRef = useRef<number | null>(null);
@@ -216,8 +227,10 @@ export function useForwardPlayback({
       setCurrentSwingState(response.swing_state);
       onSwingStateChange?.(response.swing_state);
 
-      // Check for events - trigger linger
+      // Accumulate events for navigation
       if (response.events.length > 0) {
+        setAllEvents(prev => [...prev, ...response.events]);
+        // Trigger linger
         enterLinger(response.events);
       }
     } catch (err) {
@@ -327,6 +340,7 @@ export function useForwardPlayback({
     setCurrentPosition(calibrationBarCount - 1);
     setEndOfData(false);
     setCurrentSwingState(null);
+    setAllEvents([]); // Reset events when resetting to start
   }, [clearTimers, exitLinger, calibrationBars, calibrationBarCount]);
 
   // Navigate to previous event in linger queue
@@ -354,6 +368,161 @@ export function useForwardPlayback({
     startPlayback();
   }, [playbackState, exitLinger, startPlayback]);
 
+  // Compute current event index (index of last event at or before current position)
+  const currentEventIndex = useMemo(() => {
+    if (allEvents.length === 0) return -1;
+    // Find the last event at or before currentPosition
+    for (let i = allEvents.length - 1; i >= 0; i--) {
+      if (allEvents[i].bar_index <= currentPosition) {
+        return i;
+      }
+    }
+    return -1;
+  }, [allEvents, currentPosition]);
+
+  // Check if there are events before current position
+  const hasPreviousEvent = useMemo(() => {
+    if (allEvents.length === 0) return false;
+    // Find events before the current event
+    if (currentEventIndex <= 0) {
+      // If at first event or before any event, check if there's any event at a previous bar
+      const currentEventBar = currentEventIndex >= 0 ? allEvents[currentEventIndex].bar_index : currentPosition;
+      return allEvents.some(e => e.bar_index < currentEventBar);
+    }
+    return true;
+  }, [allEvents, currentEventIndex, currentPosition]);
+
+  // Check if there could be more events (not at end of data)
+  const hasNextEvent = !endOfData;
+
+  // Jump to previous event
+  const jumpToPreviousEvent = useCallback(async () => {
+    if (allEvents.length === 0) return;
+
+    // Exit linger if active
+    if (playbackState === PlaybackState.LINGERING) {
+      exitLinger();
+    }
+    if (playbackState === PlaybackState.PLAYING) {
+      isPlayingRef.current = false;
+      clearTimers();
+    }
+    setPlaybackState(PlaybackState.PAUSED);
+
+    // Find the bar index of the previous event
+    let targetBarIndex: number | null = null;
+
+    if (currentEventIndex >= 0) {
+      // Current position is at or after an event
+      const currentEventBar = allEvents[currentEventIndex].bar_index;
+
+      if (currentPosition > currentEventBar) {
+        // We're past the current event's bar, jump to it
+        targetBarIndex = currentEventBar;
+      } else if (currentEventIndex > 0) {
+        // We're at the current event's bar, jump to previous event
+        targetBarIndex = allEvents[currentEventIndex - 1].bar_index;
+      }
+    }
+
+    if (targetBarIndex !== null && targetBarIndex >= 0) {
+      // Reset visible bars to show bars up to target
+      // We need to recalculate how many bars from calibration
+      const newVisibleBars = calibrationBars.slice(0, Math.min(targetBarIndex + 1, calibrationBars.length));
+      setVisibleBars(newVisibleBars);
+      setCurrentPosition(targetBarIndex);
+
+      // Find events at this bar for linger display
+      const eventsAtBar = allEvents.filter(e => e.bar_index === targetBarIndex);
+      if (eventsAtBar.length > 0) {
+        enterLinger(eventsAtBar);
+      }
+    }
+  }, [allEvents, currentEventIndex, currentPosition, playbackState, exitLinger, clearTimers, calibrationBars, enterLinger]);
+
+  // Jump to next event (advance until an event occurs)
+  const jumpToNextEvent = useCallback(async () => {
+    if (endOfData) return;
+
+    // Exit linger if active
+    if (playbackState === PlaybackState.LINGERING) {
+      exitLinger();
+    }
+    if (playbackState === PlaybackState.PLAYING) {
+      isPlayingRef.current = false;
+      clearTimers();
+    }
+    setPlaybackState(PlaybackState.PAUSED);
+
+    // Advance bars until we hit an event or end of data
+    let foundEvent = false;
+    let iterations = 0;
+    const maxIterations = 1000; // Safety limit
+
+    while (!foundEvent && iterations < maxIterations) {
+      iterations++;
+      advancePendingRef.current = true;
+
+      try {
+        const response = await advanceReplay(calibrationBarCount, currentPosition + iterations - 1, 1);
+
+        if (response.end_of_data) {
+          setEndOfData(true);
+          // Still update position to show we reached the end
+          if (response.new_bars.length > 0) {
+            const newBarData: BarData[] = response.new_bars.map(bar => ({
+              index: bar.index,
+              timestamp: bar.timestamp,
+              open: bar.open,
+              high: bar.high,
+              low: bar.low,
+              close: bar.close,
+              source_start_index: bar.index,
+              source_end_index: bar.index,
+            }));
+            setVisibleBars(prev => [...prev, ...newBarData]);
+            setCurrentPosition(response.current_bar_index);
+            onNewBars?.(newBarData);
+          }
+          break;
+        }
+
+        // Append new bars
+        if (response.new_bars.length > 0) {
+          const newBarData: BarData[] = response.new_bars.map(bar => ({
+            index: bar.index,
+            timestamp: bar.timestamp,
+            open: bar.open,
+            high: bar.high,
+            low: bar.low,
+            close: bar.close,
+            source_start_index: bar.index,
+            source_end_index: bar.index,
+          }));
+          setVisibleBars(prev => [...prev, ...newBarData]);
+          setCurrentPosition(response.current_bar_index);
+          onNewBars?.(newBarData);
+        }
+
+        // Update swing state
+        setCurrentSwingState(response.swing_state);
+        onSwingStateChange?.(response.swing_state);
+
+        // Check for events
+        if (response.events.length > 0) {
+          setAllEvents(prev => [...prev, ...response.events]);
+          enterLinger(response.events);
+          foundEvent = true;
+        }
+      } catch (err) {
+        console.error('Failed to advance replay:', err);
+        break;
+      }
+    }
+
+    advancePendingRef.current = false;
+  }, [endOfData, playbackState, exitLinger, clearTimers, calibrationBarCount, currentPosition, enterLinger, onNewBars, onSwingStateChange]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -372,12 +541,20 @@ export function useForwardPlayback({
     lingerQueuePosition,
     currentSwingState,
     endOfData,
+    // Event navigation
+    allEvents,
+    currentEventIndex,
+    hasPreviousEvent,
+    hasNextEvent,
+    // Controls
     play: startPlayback,
     pause,
     togglePlayPause,
     stepForward,
     stepBack,
     jumpToStart,
+    jumpToPreviousEvent,
+    jumpToNextEvent,
     navigatePrevEvent,
     navigateNextEvent,
     dismissLinger,

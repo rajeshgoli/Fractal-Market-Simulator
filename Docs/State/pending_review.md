@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-17
 
 ---
 
 ## Pending Changes
+
+### 2025-12-17 - Implement event-based navigation for Replay View v2
+- **Issue:** #104
+- **Type:** Feature
+- **Files:** useForwardPlayback.ts, PlaybackControls.tsx, Replay.tsx, user_guide.md
 
 ### 2025-12-17 - Implement forward-only playback for Replay View v2
 - **Issue:** #102

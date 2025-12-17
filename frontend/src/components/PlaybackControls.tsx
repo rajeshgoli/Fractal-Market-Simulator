@@ -15,6 +15,14 @@ interface PlaybackControlsProps {
   onStepForward: () => void;
   onJumpToStart: () => void;
   onJumpToEnd: () => void;
+  // Event navigation
+  onJumpToPreviousEvent?: () => void;
+  onJumpToNextEvent?: () => void;
+  hasPreviousEvent?: boolean;
+  hasNextEvent?: boolean;
+  currentEventIndex?: number;  // 0-based, -1 if no events yet
+  totalEvents?: number;
+  // Bar counter
   currentBar: number;
   totalBars: number;
   speedMultiplier: number;
@@ -39,6 +47,12 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onStepForward,
   onJumpToStart,
   onJumpToEnd,
+  onJumpToPreviousEvent,
+  onJumpToNextEvent,
+  hasPreviousEvent = false,
+  hasNextEvent = true,
+  currentEventIndex = -1,
+  totalEvents = 0,
   currentBar,
   totalBars,
   speedMultiplier,
@@ -81,10 +95,15 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             <SkipBack size={18} />
           </button>
           <button
-            onClick={onStepBack}
-            className="p-2 text-app-muted hover:text-white hover:bg-app-card rounded-full transition-colors"
-            aria-label="Step Back"
-            title="Step Back"
+            onClick={onJumpToPreviousEvent || onStepBack}
+            disabled={onJumpToPreviousEvent ? !hasPreviousEvent : false}
+            className={`p-2 rounded-full transition-colors ${
+              onJumpToPreviousEvent && !hasPreviousEvent
+                ? 'text-app-muted/30 cursor-not-allowed'
+                : 'text-app-muted hover:text-white hover:bg-app-card'
+            }`}
+            aria-label="Previous Event"
+            title={onJumpToPreviousEvent ? "Previous Event ([)" : "Step Back"}
           >
             <Rewind size={18} />
           </button>
@@ -138,10 +157,15 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           </div>
 
           <button
-            onClick={onStepForward}
-            className="p-2 text-app-muted hover:text-white hover:bg-app-card rounded-full transition-colors"
-            aria-label="Step Forward"
-            title="Step Forward"
+            onClick={onJumpToNextEvent || onStepForward}
+            disabled={onJumpToNextEvent ? !hasNextEvent : false}
+            className={`p-2 rounded-full transition-colors ${
+              onJumpToNextEvent && !hasNextEvent
+                ? 'text-app-muted/30 cursor-not-allowed'
+                : 'text-app-muted hover:text-white hover:bg-app-card'
+            }`}
+            aria-label="Next Event"
+            title={onJumpToNextEvent ? "Next Event (])" : "Step Forward"}
           >
             <FastForward size={18} />
           </button>
@@ -260,8 +284,28 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         )}
       </div>
 
-      {/* Right: Bar Counter */}
+      {/* Right: Event Counter and Bar Counter */}
       <div className="flex items-center gap-4">
+        {/* Event Counter - only show if we have event navigation */}
+        {onJumpToNextEvent && (
+          <div className="text-right">
+            <span className="text-[10px] text-app-muted uppercase tracking-wider block">Event</span>
+            <div className="font-mono text-sm tabular-nums text-app-text">
+              {totalEvents > 0 ? (
+                <>
+                  <span className="text-trading-blue font-bold">{currentEventIndex + 1}</span>
+                  <span className="text-app-muted mx-1">/</span>
+                  {totalEvents}
+                  {!hasNextEvent && <span className="text-trading-orange ml-1 text-xs">(end)</span>}
+                </>
+              ) : (
+                <span className="text-app-muted">--</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Bar Counter */}
         <div className="text-right">
           <span className="text-[10px] text-app-muted uppercase tracking-wider block">Current Bar</span>
           <div className="font-mono text-sm tabular-nums text-app-text">

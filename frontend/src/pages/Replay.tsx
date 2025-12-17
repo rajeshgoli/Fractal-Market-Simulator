@@ -610,7 +610,7 @@ export const Replay: React.FC = () => {
     setFilters(INITIAL_FILTERS);
   }, []);
 
-  // Keyboard shortcuts for swing navigation during linger and calibration
+  // Keyboard shortcuts for navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Calibration mode: [ and ] for swing cycling, Space/Enter to start playback
@@ -628,17 +628,56 @@ export const Replay: React.FC = () => {
         return;
       }
 
-      // Playing mode: use forward playback for linger navigation
+      // Playing mode: event navigation and linger navigation
       if (calibrationPhase === CalibrationPhase.PLAYING) {
-        if (!forwardPlayback.isLingering || !forwardPlayback.lingerQueuePosition) return;
-        if (forwardPlayback.lingerQueuePosition.total <= 1) return;
+        // Linger queue navigation (when multiple events at same bar)
+        if (forwardPlayback.isLingering && forwardPlayback.lingerQueuePosition && forwardPlayback.lingerQueuePosition.total > 1) {
+          // Arrow keys navigate within linger queue
+          if (e.key === 'ArrowLeft' && !e.shiftKey) {
+            e.preventDefault();
+            forwardPlayback.navigatePrevEvent();
+            return;
+          } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+            e.preventDefault();
+            forwardPlayback.navigateNextEvent();
+            return;
+          }
+        }
 
-        if (e.key === 'ArrowLeft') {
+        // Event navigation: [ / ] or Arrow keys jump between events
+        // Shift + [ / ] for fine control (bar-by-bar)
+        if (e.key === '[') {
           e.preventDefault();
-          forwardPlayback.navigatePrevEvent();
-        } else if (e.key === 'ArrowRight') {
+          if (e.shiftKey) {
+            // Fine control: step back one bar
+            forwardPlayback.stepBack();
+          } else {
+            // Jump to previous event
+            forwardPlayback.jumpToPreviousEvent();
+          }
+        } else if (e.key === ']') {
           e.preventDefault();
-          forwardPlayback.navigateNextEvent();
+          if (e.shiftKey) {
+            // Fine control: step forward one bar
+            forwardPlayback.stepForward();
+          } else {
+            // Jump to next event
+            forwardPlayback.jumpToNextEvent();
+          }
+        } else if (e.key === 'ArrowLeft' && !forwardPlayback.isLingering) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            forwardPlayback.stepBack();
+          } else {
+            forwardPlayback.jumpToPreviousEvent();
+          }
+        } else if (e.key === 'ArrowRight' && !forwardPlayback.isLingering) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            forwardPlayback.stepForward();
+          } else {
+            forwardPlayback.jumpToNextEvent();
+          }
         }
         return;
       }
@@ -667,6 +706,10 @@ export const Replay: React.FC = () => {
     forwardPlayback.lingerQueuePosition,
     forwardPlayback.navigatePrevEvent,
     forwardPlayback.navigateNextEvent,
+    forwardPlayback.jumpToPreviousEvent,
+    forwardPlayback.jumpToNextEvent,
+    forwardPlayback.stepBack,
+    forwardPlayback.stepForward,
     playback.isLingering,
     playback.lingerQueuePosition,
     playback.navigatePrevEvent,
@@ -772,6 +815,13 @@ export const Replay: React.FC = () => {
               onStepForward={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.stepForward : playback.stepForward}
               onJumpToStart={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.jumpToStart : playback.jumpToStart}
               onJumpToEnd={playback.jumpToEnd}
+              // Event navigation (only in PLAYING phase)
+              onJumpToPreviousEvent={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.jumpToPreviousEvent : undefined}
+              onJumpToNextEvent={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.jumpToNextEvent : undefined}
+              hasPreviousEvent={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.hasPreviousEvent : false}
+              hasNextEvent={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.hasNextEvent : true}
+              currentEventIndex={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentEventIndex : -1}
+              totalEvents={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.allEvents.length : 0}
               currentBar={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition}
               totalBars={sourceBars.length}
               speedMultiplier={speedMultiplier}

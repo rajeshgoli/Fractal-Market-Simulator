@@ -123,12 +123,20 @@ Both charts stay time-synchronized:
 
 | Control | Icon | Description |
 |---------|------|-------------|
-| Jump to Start | \|◀ | Go to first bar |
-| Step Back | ◀ | Move back one source bar |
+| Jump to Start | \|◀ | Go to first bar (reset to calibration end) |
+| Previous Event | ◀◀ | Jump to previous event |
 | Play/Pause | ▶/⏸ | Start/stop automatic playback |
-| Step Forward | ▶ | Move forward one source bar |
+| Next Event | ▶▶ | Jump to next event |
 | Jump to End | ▶\| | Go to last bar |
 | Speed | dropdown | 1x, 2x, 5x, 10x, 20x playback speed |
+
+**Event Navigation:**
+- The ◀◀ and ▶▶ buttons navigate by **event**, not bar
+- Events include SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED (LEVEL_CROSS configurable via filters)
+- Button disabled when no previous/next event available
+- Event counter shows current position: "Event 5/23"
+
+**Fine Control:** Use keyboard shortcuts with Shift modifier for bar-by-bar movement.
 
 **Speed is aggregation-relative:** "2x per 1H" means 2 aggregated bars per second at the L (1H) aggregation level, which translates to 24 source bars per second if source resolution is 5m.
 
@@ -472,5 +480,9 @@ This file is version-controlled and represents accumulated ground truth data.
 | `[` | Calibrated | Previous active swing |
 | `]` | Calibrated | Next active swing |
 | `Space` | Playing | Play/Pause |
-| `←` | Linger | Previous event |
-| `→` | Linger | Next event |
+| `[` or `←` | Playing | Jump to previous event |
+| `]` or `→` | Playing | Jump to next event |
+| `Shift+[` | Playing | Step back one bar (fine control) |
+| `Shift+]` | Playing | Step forward one bar (fine control) |
+| `←` | Linger (multi-event) | Previous event in queue |
+| `→` | Linger (multi-event) | Next event in queue |
