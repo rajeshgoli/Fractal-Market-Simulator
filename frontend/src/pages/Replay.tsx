@@ -503,6 +503,43 @@ export const Replay: React.FC = () => {
     markersPlugin.setMarkers(markers);
   }, [findAggBarForSourceIndex, findBarTimestamp]);
 
+  // Get the current playback position based on phase
+  const currentPlaybackPosition = useMemo(() => {
+    return calibrationPhase === CalibrationPhase.PLAYING
+      ? forwardPlayback.currentPosition
+      : playback.currentPosition;
+  }, [calibrationPhase, forwardPlayback.currentPosition, playback.currentPosition]);
+
+  // Filter chart bars to only show bars up to current playback position
+  // This ensures bars beyond calibration window aren't visible until streamed
+  const filteredChart1Bars = useMemo(() => {
+    if (calibrationPhase === CalibrationPhase.NOT_STARTED ||
+        calibrationPhase === CalibrationPhase.CALIBRATING) {
+      return chart1Bars;
+    }
+
+    // Get the max source index to show
+    const maxSourceIndex = calibrationPhase === CalibrationPhase.CALIBRATED
+      ? (calibrationData?.calibration_bar_count || 0) - 1
+      : forwardPlayback.currentPosition;
+
+    // Filter to only include bars that end at or before the max source index
+    return chart1Bars.filter(bar => bar.source_end_index <= maxSourceIndex);
+  }, [calibrationPhase, chart1Bars, calibrationData, forwardPlayback.currentPosition]);
+
+  const filteredChart2Bars = useMemo(() => {
+    if (calibrationPhase === CalibrationPhase.NOT_STARTED ||
+        calibrationPhase === CalibrationPhase.CALIBRATING) {
+      return chart2Bars;
+    }
+
+    const maxSourceIndex = calibrationPhase === CalibrationPhase.CALIBRATED
+      ? (calibrationData?.calibration_bar_count || 0) - 1
+      : forwardPlayback.currentPosition;
+
+    return chart2Bars.filter(bar => bar.source_end_index <= maxSourceIndex);
+  }, [calibrationPhase, chart2Bars, calibrationData, forwardPlayback.currentPosition]);
+
   // Sync charts to current position (scrolling only - markers handled separately)
   const syncChartsToPosition = useCallback((sourceIndex: number) => {
     const syncChart = (
@@ -543,34 +580,27 @@ export const Replay: React.FC = () => {
       chart.timeScale().setVisibleLogicalRange({ from, to });
     };
 
-    syncChart(chart1Ref.current, chart1Bars);
-    syncChart(chart2Ref.current, chart2Bars);
-  }, [chart1Bars, chart2Bars, findAggBarForSourceIndex]);
-
-  // Get the current playback position based on phase
-  const currentPlaybackPosition = useMemo(() => {
-    return calibrationPhase === CalibrationPhase.PLAYING
-      ? forwardPlayback.currentPosition
-      : playback.currentPosition;
-  }, [calibrationPhase, forwardPlayback.currentPosition, playback.currentPosition]);
+    syncChart(chart1Ref.current, filteredChart1Bars);
+    syncChart(chart2Ref.current, filteredChart2Bars);
+  }, [filteredChart1Bars, filteredChart2Bars, findAggBarForSourceIndex]);
 
   // Update all chart markers when position or swings change
   useEffect(() => {
     updateAllMarkers(
       markers1Ref.current,
-      chart1Bars,
+      filteredChart1Bars,
       currentPlaybackPosition,
       detectedSwings,
       highlightedSwing
     );
     updateAllMarkers(
       markers2Ref.current,
-      chart2Bars,
+      filteredChart2Bars,
       currentPlaybackPosition,
       detectedSwings,
       highlightedSwing
     );
-  }, [currentPlaybackPosition, detectedSwings, highlightedSwing, chart1Bars, chart2Bars, updateAllMarkers]);
+  }, [currentPlaybackPosition, detectedSwings, highlightedSwing, filteredChart1Bars, filteredChart2Bars, updateAllMarkers]);
 
   // Keep the ref updated with the latest syncChartsToPosition
   useEffect(() => {
@@ -810,8 +840,8 @@ export const Replay: React.FC = () => {
         <main className="flex-1 flex flex-col min-w-0">
           {/* Charts Area */}
           <ChartArea
-            chart1Data={chart1Bars}
-            chart2Data={chart2Bars}
+            chart1Data={filteredChart1Bars}
+            chart2Data={filteredChart2Bars}
             chart1Aggregation={chart1Aggregation}
             chart2Aggregation={chart2Aggregation}
             onChart1AggregationChange={handleChart1AggregationChange}
