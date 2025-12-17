@@ -49,10 +49,9 @@ open http://127.0.0.1:8000/replay
 
 | Tool | Purpose | Access |
 |------|---------|--------|
-| **Discretization View** | Visualize structural events overlaid on price | `/discretization` |
 | **Ground Truth Annotator** | Expert swing annotation with Review Mode | `/` |
 
-See [User Guide](Docs/Reference/user_guide.md) for detailed documentation on all tools.
+See [User Guide](Docs/Reference/user_guide.md) for detailed documentation.
 
 ### Quick Start
 
