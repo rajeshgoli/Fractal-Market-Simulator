@@ -1,10 +1,29 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  /* App colors */
+  --color-app-bg: #1a1a2e;
+  --color-app-secondary: #16213e;
+  --color-app-card: #0f3460;
+  --color-app-text: #eaeaea;
+  --color-app-muted: #a0a0a0;
+  --color-app-border: #333333;
+
+  /* Trading colors */
+  --color-trading-bull: #26a69a;
+  --color-trading-bear: #ef5350;
+  --color-trading-blue: #2196f3;
+  --color-trading-purple: #9c27b0;
+  --color-trading-orange: #ff9800;
+
+  /* Fonts */
+  --font-mono: "SF Mono", Monaco, "Cascadia Code", monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
 
 body {
-  background-color: #1a1a2e;
-  color: #eaeaea;
+  background-color: var(--color-app-bg);
+  color: var(--color-app-text);
   margin: 0;
   padding: 0;
 }
@@ -15,14 +34,14 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #16213e;
+  background: var(--color-app-secondary);
 }
 ::-webkit-scrollbar-thumb {
-  background: #0f3460;
+  background: var(--color-app-card);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2196f3;
+  background: var(--color-trading-blue);
 }
 
 /* Tabular nums for fixed-width numbers */
