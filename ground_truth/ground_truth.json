@@ -2,7 +2,7 @@
   "metadata": {
     "schema_version": 1,
     "created_at": "2025-12-16T22:18:04.249087+00:00",
-    "last_updated": "2025-12-16T22:21:13.299225+00:00"
+    "last_updated": "2025-12-17T05:59:07.374853+00:00"
   },
   "sessions": [
     {
@@ -15720,6 +15720,534 @@
         "fn_feedback": [],
         "fp_sample_indices": [],
         "started_at": "2025-12-16T22:21:13.297065+00:00",
+        "completed_at": null,
+        "difficulty": null,
+        "regime": null,
+        "session_comments": null
+      }
+    },
+    {
+      "finalized_at": "2025-12-16T23:33:04.619211+00:00",
+      "original_filename": "2025-dec-16-1533-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "63cb5202-9b04-4a44-b8ff-d8d09bf08df1",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-16T23:33:04.615507+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-16T23:33:04.670009+00:00",
+      "original_filename": "2025-dec-16-1533-ver4-trending_market",
+      "session": {
+        "version": 4,
+        "session_id": "d289800d-941b-462a-a509-b7b787e8e44d",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-16T23:33:04.667062+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-16T23:33:04.823280+00:00",
+      "original_filename": "2025-dec-16-1533-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "e96f5b61-09e4-4868-b702-cf1ec4b43484",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-16T23:33:04.816406+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      },
+      "review": {
+        "review_id": "174ce1ca-a50b-461f-a769-5efa913ece0d",
+        "session_id": "e96f5b61-09e4-4868-b702-cf1ec4b43484",
+        "version": 4,
+        "phase": "matches",
+        "match_feedback": [],
+        "fp_feedback": [],
+        "fn_feedback": [],
+        "fp_sample_indices": [],
+        "started_at": "2025-12-16T23:33:04.821114+00:00",
+        "completed_at": null,
+        "difficulty": null,
+        "regime": null,
+        "session_comments": null
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T00:52:14.343304+00:00",
+      "original_filename": "2025-dec-16-1652-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "e88eeab0-9813-43b9-901c-091757191c20",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T00:52:14.339629+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T00:52:14.395371+00:00",
+      "original_filename": "2025-dec-16-1652-ver4-trending_market",
+      "session": {
+        "version": 4,
+        "session_id": "dafcf65a-31ef-4943-995d-57ba4754436f",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T00:52:14.392302+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T00:52:14.549558+00:00",
+      "original_filename": "2025-dec-16-1652-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "427d5182-fb2e-4bf9-a31b-84ec9b07bcbe",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T00:52:14.542772+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      },
+      "review": {
+        "review_id": "6ad85348-47dd-494c-b285-6647c1e4e66e",
+        "session_id": "427d5182-fb2e-4bf9-a31b-84ec9b07bcbe",
+        "version": 4,
+        "phase": "matches",
+        "match_feedback": [],
+        "fp_feedback": [],
+        "fn_feedback": [],
+        "fp_sample_indices": [],
+        "started_at": "2025-12-17T00:52:14.547427+00:00",
+        "completed_at": null,
+        "difficulty": null,
+        "regime": null,
+        "session_comments": null
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:00:25.863234+00:00",
+      "original_filename": "2025-dec-16-1700-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "dca309a3-29fc-40cb-91bc-b03078ffbe3a",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:00:25.859067+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:00:25.923696+00:00",
+      "original_filename": "2025-dec-16-1700-ver4-trending_market",
+      "session": {
+        "version": 4,
+        "session_id": "97fe55a7-36fa-44c8-bded-dc458bef16c9",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:00:25.919623+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:00:26.113861+00:00",
+      "original_filename": "2025-dec-16-1700-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "3a5ccde8-492a-405f-ae32-025afceec133",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:00:26.106274+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      },
+      "review": {
+        "review_id": "7783f9ff-b0b2-4bcd-8be0-96831d157079",
+        "session_id": "3a5ccde8-492a-405f-ae32-025afceec133",
+        "version": 4,
+        "phase": "matches",
+        "match_feedback": [],
+        "fp_feedback": [],
+        "fn_feedback": [],
+        "fp_sample_indices": [],
+        "started_at": "2025-12-17T01:00:26.111167+00:00",
+        "completed_at": null,
+        "difficulty": null,
+        "regime": null,
+        "session_comments": null
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:04:11.658007+00:00",
+      "original_filename": "2025-dec-16-1704-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "975d79f3-4b7e-4791-8b3f-17161e34f8cd",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:04:11.653684+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:04:11.717385+00:00",
+      "original_filename": "2025-dec-16-1704-ver4-trending_market",
+      "session": {
+        "version": 4,
+        "session_id": "2b461879-0101-480c-a806-a4e35a33c1cf",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:04:11.713620+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:04:11.874813+00:00",
+      "original_filename": "2025-dec-16-1704-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "52c6f379-81ec-40b0-a31e-67f205d8f10f",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:04:11.867831+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      },
+      "review": {
+        "review_id": "f4f212fd-738f-4ea5-9ecc-8f992858a55e",
+        "session_id": "52c6f379-81ec-40b0-a31e-67f205d8f10f",
+        "version": 4,
+        "phase": "matches",
+        "match_feedback": [],
+        "fp_feedback": [],
+        "fn_feedback": [],
+        "fp_sample_indices": [],
+        "started_at": "2025-12-17T01:04:11.872594+00:00",
+        "completed_at": null,
+        "difficulty": null,
+        "regime": null,
+        "session_comments": null
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:12:03.351308+00:00",
+      "original_filename": "2025-dec-16-1712-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "aa7cd73a-7d50-4c2f-9148-fd12a11d9fe0",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:12:03.347462+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:12:03.403456+00:00",
+      "original_filename": "2025-dec-16-1712-ver4-trending_market",
+      "session": {
+        "version": 4,
+        "session_id": "1084c413-03ee-4ea8-8f21-853f6a605519",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:12:03.400168+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:12:03.558152+00:00",
+      "original_filename": "2025-dec-16-1712-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "a3f0176c-cf15-4726-a084-3eb97e52d315",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:12:03.551051+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      },
+      "review": {
+        "review_id": "428e2c3f-439c-4a1b-87d5-22e88ab46d7d",
+        "session_id": "a3f0176c-cf15-4726-a084-3eb97e52d315",
+        "version": 4,
+        "phase": "matches",
+        "match_feedback": [],
+        "fp_feedback": [],
+        "fn_feedback": [],
+        "fp_sample_indices": [],
+        "started_at": "2025-12-17T01:12:03.555937+00:00",
+        "completed_at": null,
+        "difficulty": null,
+        "regime": null,
+        "session_comments": null
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:17:10.625358+00:00",
+      "original_filename": "2025-dec-16-1717-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "d5d06e9b-b060-448a-878d-e341fd37f56e",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:17:10.621514+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:17:10.675725+00:00",
+      "original_filename": "2025-dec-16-1717-ver4-trending_market",
+      "session": {
+        "version": 4,
+        "session_id": "7af80618-cd87-49e2-81a5-7ef24fa5f7ec",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:17:10.672829+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:17:10.830465+00:00",
+      "original_filename": "2025-dec-16-1717-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "499d059a-5fc3-4e95-a6fb-a845643bb393",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:17:10.822556+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      },
+      "review": {
+        "review_id": "44e845d0-6da9-4cac-a80d-d51caf605642",
+        "session_id": "499d059a-5fc3-4e95-a6fb-a845643bb393",
+        "version": 4,
+        "phase": "matches",
+        "match_feedback": [],
+        "fp_feedback": [],
+        "fn_feedback": [],
+        "fp_sample_indices": [],
+        "started_at": "2025-12-17T01:17:10.827698+00:00",
+        "completed_at": null,
+        "difficulty": null,
+        "regime": null,
+        "session_comments": null
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:49:38.442358+00:00",
+      "original_filename": "2025-dec-16-1749-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "4e0a5600-e0a8-4ab6-9d1c-cb732621ad69",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:49:38.438605+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:49:38.494453+00:00",
+      "original_filename": "2025-dec-16-1749-ver4-trending_market",
+      "session": {
+        "version": 4,
+        "session_id": "21b12a7d-5cea-4443-b681-d8a153a2fbd4",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:49:38.491458+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T01:49:38.649237+00:00",
+      "original_filename": "2025-dec-16-1749-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "af5509c6-053f-4f75-990b-a4ec6a9b3d6a",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T01:49:38.642237+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      },
+      "review": {
+        "review_id": "365b958d-d94d-46d8-8c3e-49de1703769c",
+        "session_id": "af5509c6-053f-4f75-990b-a4ec6a9b3d6a",
+        "version": 4,
+        "phase": "matches",
+        "match_feedback": [],
+        "fp_feedback": [],
+        "fn_feedback": [],
+        "fp_sample_indices": [],
+        "started_at": "2025-12-17T01:49:38.646942+00:00",
+        "completed_at": null,
+        "difficulty": null,
+        "regime": null,
+        "session_comments": null
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T05:59:07.154476+00:00",
+      "original_filename": "2025-dec-16-2159-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "9c084b05-8b33-462f-a22b-705040a55498",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T05:59:07.150351+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T05:59:07.217799+00:00",
+      "original_filename": "2025-dec-16-2159-ver4-trending_market",
+      "session": {
+        "version": 4,
+        "session_id": "b10e05c1-276c-4de8-b200-288a8d353683",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T05:59:07.214441+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      }
+    },
+    {
+      "finalized_at": "2025-12-17T05:59:07.374850+00:00",
+      "original_filename": "2025-dec-16-2159-ver4",
+      "session": {
+        "version": 4,
+        "session_id": "cd29288b-02dd-436d-b0ab-5e0a2d8b5a00",
+        "data_file": "test_data/test.csv",
+        "resolution": "1m",
+        "window_size": 500,
+        "window_offset": 0,
+        "created_at": "2025-12-17T05:59:07.367597+00:00",
+        "annotations": [],
+        "completed_scales": [],
+        "skipped_scales": [],
+        "status": "keep"
+      },
+      "review": {
+        "review_id": "42c9e0d0-26ae-40e9-b980-35f724137d14",
+        "session_id": "cd29288b-02dd-436d-b0ab-5e0a2d8b5a00",
+        "version": 4,
+        "phase": "matches",
+        "match_feedback": [],
+        "fp_feedback": [],
+        "fn_feedback": [],
+        "fp_sample_indices": [],
+        "started_at": "2025-12-17T05:59:07.372502+00:00",
         "completed_at": null,
         "difficulty": null,
         "regime": null,

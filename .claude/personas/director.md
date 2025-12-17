@@ -113,6 +113,7 @@ Review GitHub issues and/or product_direction.md
 Verify / Diagnose
     ↓
 Check user_guide.md + developer_guide.md are current (call out discrepancies)
+Update architect_notes.md Onboarding section (known debt, core decisions)
     ↓
 Update architect_notes.md (rewrite, forward-looking)
     ↓

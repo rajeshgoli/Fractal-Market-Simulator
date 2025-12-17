@@ -25,38 +25,48 @@ Read in order:
 
 ---
 
-## Current Phase: Replay View
+## Current Phase: Hypothesis Baseline
 
-**Active work stream:** Replay View (#84-#87) — Temporal debugging tool for swing detection validation
+**Replay View complete.** All issues (#84-#87, #89) implemented and accepted.
 
-### Issue Status
+### Next Work Stream
 
-| Issue | Component | Status | Priority |
-|-------|-----------|--------|----------|
-| #82 | SWING_FORMED explanation enrichment | **Complete** | — |
-| #83 | Windowed events API | **Complete** | — |
-| #84 | Split view + aggregation | **Next** | P1 |
-| #85 | Playback controls | Pending | P1 |
-| #86 | Event-driven linger + timer | Pending | P2 |
-| #87 | Swing explanation panel | Pending | P2 |
+**Hypothesis Baseline (#80)** — Measure baseline statistics:
 
-**Critical path:** #84 → #86 → #87 (backend dependencies resolved)
+| Hypothesis | What it tests |
+|------------|---------------|
+| H1: Completion conditional on band | P(completion \| ext_high) >> P(completion \| mid_retrace) |
+| H2: Frustration rule | P(invalidation \| test_count > 3) elevated |
+| H3: Void transit time | Decision corridor (1.382-1.618) traversed faster |
+| H4: Downward causality | L behavior differs based on XL band |
+| H5: Shock clustering | Shocks cluster in time (not uniform) |
 
-### Architecture Assessment
+**Owner:** Product → define priority and success criteria
 
-Spec: `Docs/Working/replay_view_spec.md`
-Analysis: `Docs/Working/replay_view_architecture.md`
+---
 
-**Key decisions:**
+## Completed: Replay View (#84-#89)
+
+**Status:** All issues accepted and complete.
+
+| Issue | Component | Status |
+|-------|-----------|--------|
+| #82 | SWING_FORMED explanation enrichment | Complete |
+| #83 | Windowed events API | Complete |
+| #84 | Split view + aggregation | Complete |
+| #85 | Playback controls | Complete |
+| #86 | Event-driven linger + timer | Complete |
+| #87 | Swing explanation panel | Complete |
+| #89 | UX bug fixes (labels, zoom, reset) | Complete |
+
+**Key implementation details:**
 - Timer duration: 30 seconds (longer dwell aids comprehension)
 - Multiple events at same bar: Queue, show sequentially
 - Explanation generation: At discretization time, not API read time
 - Split view: Two independent lightweight-charts instances with shared time sync
+- Aggregation labels: "5m (source)", "~1H", "~4H", "~1D" (approximations, not exact timeframes)
 
-**Dependencies:**
-- Leverages existing discretization.html (~1100 LOC reusable)
-- Uses existing API endpoints (`/api/discretization/*`)
-- Uses `BarAggregator` for chart aggregation
+**Note on aggregation labels:** Spec requested "5m, 15m, 1H, 4H, 1D" but implementation uses scale-based approximations. This is acceptable since actual aggregation depends on source resolution. The tilde prefix (~) honestly indicates approximation. 15m omitted because system uses S/M/L/XL scale hierarchy, not fixed timeframes.
 
 ---
 
@@ -83,14 +93,15 @@ Analysis: `Docs/Working/replay_view_architecture.md`
 | Swing Detector | Healthy | Phase 1-3 complete |
 | Ground Truth Annotator | Healthy | Two-click annotation + Review Mode |
 | Discretization Pipeline | Healthy | Core complete, visual overlay done |
+| Replay View | Healthy | Split view, playback, linger, explanations |
 | Test Suite | Healthy | 733 tests passing (1 flaky perf test) |
-| Documentation | Current | user_guide.md and developer_guide.md updated |
+| Documentation | Needs update | user_guide.md aggregation section outdated |
 
 ---
 
 ## Architecture Highlights
 
-### Replay View (New)
+### Replay View
 
 **Purpose:** Trust-building tool that shows *why* swings are detected.
 
@@ -99,6 +110,7 @@ Analysis: `Docs/Working/replay_view_architecture.md`
 - **Event-driven linger** — Auto-pause on SWING_FORMED to explain detection
 - **30s timer wheel** — Visual countdown before auto-resume
 - **Explanation panel** — Shows endpoints, size, scale reason, separation details
+- **Chart markers** — Current swing bright, previous swing dimmed
 
 ### Discretization Pipeline
 
@@ -130,29 +142,13 @@ Unified coordinate system for bull/bear swings:
 
 ---
 
-## Follow-On Work
-
-### After Replay View
-
-**Hypothesis Baseline (#80)** — Measure baseline statistics:
-
-| Hypothesis | What it tests |
-|------------|---------------|
-| H1: Completion conditional on band | P(completion \| ext_high) >> P(completion \| mid_retrace) |
-| H2: Frustration rule | P(invalidation \| test_count > 3) elevated |
-| H3: Void transit time | Decision corridor (1.382-1.618) traversed faster |
-| H4: Downward causality | L behavior differs based on XL band |
-| H5: Shock clustering | Shocks cluster in time (not uniform) |
-
----
-
 ## Documentation Status
 
-| Document | Status |
-|----------|--------|
-| `Docs/Reference/user_guide.md` | Current |
-| `Docs/Reference/developer_guide.md` | Current (discretization section added) |
-| `CLAUDE.md` | Current |
+| Document | Status | Action Needed |
+|----------|--------|---------------|
+| `Docs/Reference/user_guide.md` | **Outdated** | Update aggregation table (lines 54-61) to match actual UI labels |
+| `Docs/Reference/developer_guide.md` | Current | - |
+| `CLAUDE.md` | Current | - |
 
 ---
 
@@ -170,6 +166,7 @@ Unified coordinate system for bull/bear swings:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 16 | #84, #85, #86, #87, #89 — Replay View complete | All Accepted |
 | Dec 16 | #78, #79, #81, #82, #83 — Discretization overlay, validation, ground truth consolidation, explanation data, windowed API | All Accepted |
 | Dec 16 | Replay View spec assessment | Feasible → Issues #82-#87 created |
 | Dec 16 | #73, #74, #75, #76, #77 — Discretization core implementation | All Accepted |
