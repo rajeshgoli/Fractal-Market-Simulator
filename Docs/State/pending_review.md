@@ -1,12 +1,22 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-16
 
 ---
 
 ## Pending Changes
+
+### 2025-12-16 - Replay View: Event-driven linger with timer wheel
+- **Issue:** #86
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/static/replay.html`
+
+### 2025-12-16 - Replay View: Playback controls
+- **Issue:** #85
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/static/replay.html`
 
 ### 2025-12-16 - Replay View: Split chart with independent aggregation
 - **Issue:** #84
