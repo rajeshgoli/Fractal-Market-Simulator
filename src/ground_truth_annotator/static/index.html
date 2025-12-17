@@ -80,6 +80,22 @@
             font-weight: 600;
         }
 
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            margin-left: 20px;
+        }
+
+        .nav-link {
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+
         .cascade-progress {
             display: flex;
             gap: 8px;
@@ -492,7 +508,13 @@
 <body>
     <div class="container">
         <header>
-            <h1>Ground Truth Annotator</h1>
+            <div style="display: flex; align-items: center;">
+                <h1>Ground Truth Annotator</h1>
+                <div class="nav-links">
+                    <a href="/discretization" class="nav-link">Discretization</a>
+                    <a href="/replay" class="nav-link">Replay</a>
+                </div>
+            </div>
             <div class="session-info">
                 <div class="cascade-progress" id="cascade-progress">
                     <!-- Populated dynamically -->

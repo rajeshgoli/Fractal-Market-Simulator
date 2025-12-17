@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-16
 
@@ -8,7 +8,10 @@
 
 ## Pending Changes
 
-*(No pending changes)*
+### 2025-12-16 - Replay View: Split chart with independent aggregation
+- **Issue:** #84
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/api.py`, `src/ground_truth_annotator/static/replay.html`, `src/ground_truth_annotator/static/index.html`
 
 ---
 

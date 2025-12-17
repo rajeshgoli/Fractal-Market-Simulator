@@ -1799,6 +1799,22 @@ async def discretization_page():
         return HTMLResponse(content=f.read())
 
 
+@app.get("/replay", response_class=HTMLResponse)
+async def replay_page():
+    """Serve the Replay View UI with split charts."""
+    module_dir = Path(__file__).parent
+    page_path = module_dir / "static" / "replay.html"
+
+    if not page_path.exists():
+        return HTMLResponse(
+            content="<h1>Replay View</h1><p>replay.html not found. Place replay.html in static/</p>",
+            status_code=200
+        )
+
+    with open(page_path, 'r') as f:
+        return HTMLResponse(content=f.read())
+
+
 def init_app(
     data_file: str,
     storage_dir: str = "annotation_sessions",

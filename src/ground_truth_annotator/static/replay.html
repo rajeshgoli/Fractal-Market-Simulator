@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Replay View</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #0f3460;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent-bull: #26a69a;
+            --accent-bear: #ef5350;
+            --accent-blue: #2196f3;
+            --accent-purple: #9c27b0;
+            --accent-orange: #ff9800;
+            --border-color: #333;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+
+        .header-info {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9rem;
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+        }
+
+        .info-value {
+            font-weight: 600;
+        }
+
+        .nav-link {
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+
+        .chart-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .chart-panel {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .chart-title {
+            font-size: 1rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .control-select {
+            padding: 6px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .control-select:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 350px;
+        }
+
+        .playback-controls {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .playback-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+
+        .bar-indicator {
+            font-family: monospace;
+            background: var(--bg-card);
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--accent-bull);
+        }
+
+        .toast.error {
+            border-color: var(--accent-bear);
+        }
+
+        @media (max-width: 1200px) {
+            .chart-container {
+                height: 280px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <h1>Replay View</h1>
+                <a href="/" class="nav-link">&larr; Back to Annotator</a>
+            </div>
+            <div class="header-info">
+                <div class="info-item">
+                    <span class="info-label">Source Bars:</span>
+                    <span class="info-value" id="source-bar-count">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Current Position:</span>
+                    <span class="info-value" id="current-position">-</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="chart-stack">
+            <!-- Top Chart Panel -->
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <div class="chart-title">
+                        <span>Chart 1</span>
+                        <span id="chart1-bar-count" style="font-size: 0.8rem; color: var(--text-secondary);"></span>
+                    </div>
+                    <div class="chart-controls">
+                        <div class="control-group">
+                            <label class="control-label">Aggregation:</label>
+                            <select class="control-select" id="chart1-aggregation" onchange="changeAggregation(1)">
+                                <option value="">Source (1:1)</option>
+                                <option value="S">S</option>
+                                <option value="M">M</option>
+                                <option value="L" selected>L</option>
+                                <option value="XL">XL</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-container" id="chart1"></div>
+            </div>
+
+            <!-- Bottom Chart Panel -->
+            <div class="chart-panel">
+                <div class="chart-header">
+                    <div class="chart-title">
+                        <span>Chart 2</span>
+                        <span id="chart2-bar-count" style="font-size: 0.8rem; color: var(--text-secondary);"></span>
+                    </div>
+                    <div class="chart-controls">
+                        <div class="control-group">
+                            <label class="control-label">Aggregation:</label>
+                            <select class="control-select" id="chart2-aggregation" onchange="changeAggregation(2)">
+                                <option value="">Source (1:1)</option>
+                                <option value="S" selected>S</option>
+                                <option value="M">M</option>
+                                <option value="L">L</option>
+                                <option value="XL">XL</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-container" id="chart2"></div>
+            </div>
+
+            <!-- Playback Controls -->
+            <div class="playback-controls">
+                <button class="btn btn-secondary" onclick="stepBack()" title="Step Back">&larr; Step</button>
+                <button class="btn btn-primary" id="play-btn" onclick="togglePlayback()">Play</button>
+                <button class="btn btn-secondary" onclick="stepForward()" title="Step Forward">Step &rarr;</button>
+
+                <div class="playback-info">
+                    <span class="control-label">Bar:</span>
+                    <span class="bar-indicator" id="bar-position">0 / 0</span>
+                </div>
+
+                <div class="speed-control">
+                    <label class="control-label">Speed:</label>
+                    <select class="control-select" id="playback-speed">
+                        <option value="2000">0.5x</option>
+                        <option value="1000" selected>1x</option>
+                        <option value="500">2x</option>
+                        <option value="200">5x</option>
+                        <option value="100">10x</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-secondary" onclick="resetPlayback()">Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let chart1 = null;
+        let chart2 = null;
+        let candleSeries1 = null;
+        let candleSeries2 = null;
+        let chart1Bars = [];
+        let chart2Bars = [];
+        let sourceBars = [];  // Track source bars for position sync
+        let currentSourceBarIndex = 0;  // Position in source bars
+        let isPlaying = false;
+        let playbackInterval = null;
+
+        // Initialize both charts
+        function initCharts() {
+            const chartOptions = {
+                layout: {
+                    background: { type: 'solid', color: '#16213e' },
+                    textColor: '#a0a0a0',
+                },
+                grid: {
+                    vertLines: { color: '#333' },
+                    horzLines: { color: '#333' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#333',
+                },
+                timeScale: {
+                    borderColor: '#333',
+                    timeVisible: true,
+                },
+            };
+
+            // Chart 1 (top)
+            const container1 = document.getElementById('chart1');
+            chart1 = LightweightCharts.createChart(container1, chartOptions);
+            candleSeries1 = chart1.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+            });
+
+            // Chart 2 (bottom)
+            const container2 = document.getElementById('chart2');
+            chart2 = LightweightCharts.createChart(container2, chartOptions);
+            candleSeries2 = chart2.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderDownColor: '#ef5350',
+                borderUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+                wickUpColor: '#26a69a',
+            });
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                chart1.applyOptions({ width: container1.clientWidth });
+                chart2.applyOptions({ width: container2.clientWidth });
+            });
+        }
+
+        // Load bars for a specific chart
+        async function loadBars(chartNum, scale = null) {
+            try {
+                const url = scale ? `/api/bars?scale=${scale}` : '/api/bars';
+                const response = await fetch(url);
+                const data = await response.json();
+
+                const bars = data.map((b, i) => ({
+                    index: i,
+                    timestamp: b.timestamp,
+                    time: b.timestamp,
+                    open: b.open,
+                    high: b.high,
+                    low: b.low,
+                    close: b.close,
+                    source_start_index: b.source_start_index,
+                    source_end_index: b.source_end_index,
+                }));
+
+                if (chartNum === 1) {
+                    chart1Bars = bars;
+                    candleSeries1.setData(bars);
+                    document.getElementById('chart1-bar-count').textContent = `(${bars.length} bars)`;
+                } else {
+                    chart2Bars = bars;
+                    candleSeries2.setData(bars);
+                    document.getElementById('chart2-bar-count').textContent = `(${bars.length} bars)`;
+                }
+
+                return bars;
+            } catch (error) {
+                console.error(`Failed to load bars for chart ${chartNum}:`, error);
+                showToast(`Failed to load bars for chart ${chartNum}`, true);
+                return [];
+            }
+        }
+
+        // Load source bars to track total count
+        async function loadSourceBars() {
+            try {
+                const response = await fetch('/api/bars');
+                sourceBars = await response.json();
+                document.getElementById('source-bar-count').textContent = sourceBars.length;
+                updateBarPosition();
+            } catch (error) {
+                console.error('Failed to load source bars:', error);
+            }
+        }
+
+        // Change aggregation for a chart
+        async function changeAggregation(chartNum) {
+            const select = document.getElementById(`chart${chartNum}-aggregation`);
+            const scale = select.value || null;
+            await loadBars(chartNum, scale);
+            syncChartToPosition(chartNum);
+        }
+
+        // Find the aggregated bar that contains a source bar index
+        function findBarContainingSourceIndex(bars, sourceIndex) {
+            for (let i = 0; i < bars.length; i++) {
+                const bar = bars[i];
+                if (bar.source_start_index !== undefined &&
+                    sourceIndex >= bar.source_start_index &&
+                    sourceIndex <= bar.source_end_index) {
+                    return i;
+                }
+            }
+            // Fallback: return last bar if source index is beyond range
+            return bars.length - 1;
+        }
+
+        // Sync a chart's visible range to the current source bar position
+        function syncChartToPosition(chartNum) {
+            const bars = chartNum === 1 ? chart1Bars : chart2Bars;
+            const chart = chartNum === 1 ? chart1 : chart2;
+
+            if (bars.length === 0) return;
+
+            // Find which aggregated bar contains the current source position
+            const aggBarIndex = findBarContainingSourceIndex(bars, currentSourceBarIndex);
+
+            if (aggBarIndex >= 0 && aggBarIndex < bars.length) {
+                const bar = bars[aggBarIndex];
+                // Scroll to show the current bar
+                chart.timeScale().scrollToPosition(-bars.length + aggBarIndex + 10, false);
+            }
+        }
+
+        // Sync both charts to the current position
+        function syncBothCharts() {
+            syncChartToPosition(1);
+            syncChartToPosition(2);
+        }
+
+        // Update the bar position display
+        function updateBarPosition() {
+            const total = sourceBars.length || 0;
+            document.getElementById('bar-position').textContent = `${currentSourceBarIndex + 1} / ${total}`;
+
+            if (currentSourceBarIndex < sourceBars.length) {
+                const bar = sourceBars[currentSourceBarIndex];
+                const date = new Date(bar.timestamp * 1000);
+                document.getElementById('current-position').textContent = date.toLocaleString();
+            }
+        }
+
+        // Step forward one bar
+        function stepForward() {
+            if (currentSourceBarIndex < sourceBars.length - 1) {
+                currentSourceBarIndex++;
+                updateBarPosition();
+                syncBothCharts();
+            }
+        }
+
+        // Step back one bar
+        function stepBack() {
+            if (currentSourceBarIndex > 0) {
+                currentSourceBarIndex--;
+                updateBarPosition();
+                syncBothCharts();
+            }
+        }
+
+        // Toggle playback
+        function togglePlayback() {
+            if (isPlaying) {
+                stopPlayback();
+            } else {
+                startPlayback();
+            }
+        }
+
+        // Start playback
+        function startPlayback() {
+            if (currentSourceBarIndex >= sourceBars.length - 1) {
+                currentSourceBarIndex = 0;  // Reset if at end
+            }
+
+            isPlaying = true;
+            document.getElementById('play-btn').textContent = 'Pause';
+
+            const speed = parseInt(document.getElementById('playback-speed').value);
+            playbackInterval = setInterval(() => {
+                if (currentSourceBarIndex < sourceBars.length - 1) {
+                    stepForward();
+                } else {
+                    stopPlayback();
+                }
+            }, speed);
+        }
+
+        // Stop playback
+        function stopPlayback() {
+            isPlaying = false;
+            document.getElementById('play-btn').textContent = 'Play';
+            if (playbackInterval) {
+                clearInterval(playbackInterval);
+                playbackInterval = null;
+            }
+        }
+
+        // Reset playback to beginning
+        function resetPlayback() {
+            stopPlayback();
+            currentSourceBarIndex = 0;
+            updateBarPosition();
+            syncBothCharts();
+        }
+
+        // Show toast notification
+        function showToast(message, isError = false) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = 'toast' + (isError ? ' error' : '');
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCharts();
+
+            // Load source bars first
+            await loadSourceBars();
+
+            // Load bars for both charts with their initial aggregation settings
+            const scale1 = document.getElementById('chart1-aggregation').value || null;
+            const scale2 = document.getElementById('chart2-aggregation').value || null;
+
+            await Promise.all([
+                loadBars(1, scale1),
+                loadBars(2, scale2)
+            ]);
+
+            // Initial sync
+            syncBothCharts();
+        });
+
+        // Listen for playback speed changes
+        document.getElementById('playback-speed').addEventListener('change', () => {
+            if (isPlaying) {
+                stopPlayback();
+                startPlayback();
+            }
+        });
+    </script>
+</body>
+</html>
