@@ -627,11 +627,10 @@
                         <div class="control-group">
                             <label class="control-label">Aggregation:</label>
                             <select class="control-select" id="chart1-aggregation" onchange="changeAggregation(1)">
-                                <option value="">5m</option>
-                                <option value="S">15m</option>
-                                <option value="M">1H</option>
-                                <option value="L" selected>4H</option>
-                                <option value="XL">1D</option>
+                                <option value="S">5m (source)</option>
+                                <option value="M">~1H</option>
+                                <option value="L" selected>~4H</option>
+                                <option value="XL">~1D</option>
                             </select>
                         </div>
                     </div>
@@ -650,11 +649,10 @@
                         <div class="control-group">
                             <label class="control-label">Aggregation:</label>
                             <select class="control-select" id="chart2-aggregation" onchange="changeAggregation(2)">
-                                <option value="">5m</option>
-                                <option value="S" selected>15m</option>
-                                <option value="M">1H</option>
-                                <option value="L">4H</option>
-                                <option value="XL">1D</option>
+                                <option value="S" selected>5m (source)</option>
+                                <option value="M">~1H</option>
+                                <option value="L">~4H</option>
+                                <option value="XL">~1D</option>
                             </select>
                         </div>
                     </div>
@@ -1046,8 +1044,8 @@
                 // For small bar counts (like XL/1D), fit all content
                 chart.timeScale().fitContent();
             } else {
-                // For larger bar counts, sync to current position
-                syncChartToPosition(chartNum);
+                // For larger bar counts, force center on current position
+                syncChartToPosition(chartNum, true);  // forceCenter=true
             }
         }
 
@@ -1066,7 +1064,8 @@
         }
 
         // Sync a chart's visible range to the current source bar position
-        function syncChartToPosition(chartNum) {
+        // Only scrolls if current bar is outside visible range (preserves manual adjustments)
+        function syncChartToPosition(chartNum, forceCenter = false) {
             const bars = chartNum === 1 ? chart1Bars : chart2Bars;
             const chart = chartNum === 1 ? chart1 : chart2;
 
@@ -1076,6 +1075,21 @@
             const aggBarIndex = findBarContainingSourceIndex(bars, currentSourceBarIndex);
 
             if (aggBarIndex >= 0 && aggBarIndex < bars.length) {
+                // Check if current bar is already visible (unless force centering)
+                if (!forceCenter) {
+                    const visibleRange = chart.timeScale().getVisibleLogicalRange();
+                    if (visibleRange) {
+                        // Add small margin (10%) so we scroll before bar hits edge
+                        const rangeSize = visibleRange.to - visibleRange.from;
+                        const margin = rangeSize * 0.1;
+                        if (aggBarIndex >= visibleRange.from + margin &&
+                            aggBarIndex <= visibleRange.to - margin) {
+                            // Current bar is visible with margin, don't scroll
+                            return;
+                        }
+                    }
+                }
+
                 // Show ~100 bars centered on current position
                 const barsToShow = 100;
                 const halfWindow = Math.floor(barsToShow / 2);
@@ -1100,9 +1114,9 @@
         }
 
         // Sync both charts to the current position
-        function syncBothCharts() {
-            syncChartToPosition(1);
-            syncChartToPosition(2);
+        function syncBothCharts(forceCenter = false) {
+            syncChartToPosition(1, forceCenter);
+            syncChartToPosition(2, forceCenter);
         }
 
         // Update the bar position display
@@ -1354,7 +1368,7 @@
             stopPlayback();
             currentSourceBarIndex = 0;
             updateBarPosition();
-            syncBothCharts();
+            syncBothCharts(true);  // Force center on jump
         }
 
         // Jump to end (last bar)
@@ -1363,7 +1377,7 @@
             if (sourceBars.length > 0) {
                 currentSourceBarIndex = sourceBars.length - 1;
                 updateBarPosition();
-                syncBothCharts();
+                syncBothCharts(true);  // Force center on jump
             }
         }
 
@@ -1690,8 +1704,8 @@
             // Load discretization events for linger behavior
             await loadEvents();
 
-            // Initial sync
-            syncBothCharts();
+            // Initial sync - force center on page load
+            syncBothCharts(true);
         });
 
         // Listen for playback speed changes
