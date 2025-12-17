@@ -467,6 +467,7 @@
                     <div class="filter-group">
                         <label class="filter-label">Event Type</label>
                         <select class="filter-select" id="filter-event-type" onchange="applyFilters()">
+                            <option value="significant" selected>Significant Only</option>
                             <option value="">All Events</option>
                             <option value="LEVEL_CROSS">Level Cross</option>
                             <option value="COMPLETION">Completion</option>
@@ -648,9 +649,10 @@
         }
 
         // Load bars
-        async function loadBars() {
+        async function loadBars(scale = null) {
             try {
-                const response = await fetch('/api/bars');
+                const url = scale ? `/api/bars?scale=${scale}` : '/api/bars';
+                const response = await fetch(url);
                 const data = await response.json();
 
                 bars = data.map((b, i) => ({
@@ -661,13 +663,17 @@
                     high: b.high,
                     low: b.low,
                     close: b.close,
+                    source_start_index: b.source_start_index,
+                    source_end_index: b.source_end_index,
                 }));
 
                 candleSeries.setData(bars);
                 document.getElementById('bar-count').textContent = bars.length;
 
-                // Check if discretization already exists
-                await checkDiscretizationState();
+                // Check if discretization already exists (only on initial load)
+                if (!scale) {
+                    await checkDiscretizationState();
+                }
             } catch (error) {
                 console.error('Failed to load bars:', error);
                 showToast('Failed to load bars', true);
@@ -740,13 +746,27 @@
             }
         }
 
+        // Current chart scale (for tracking changes)
+        let currentChartScale = null;
+
         // Apply filters
-        function applyFilters() {
+        async function applyFilters() {
             const scale = document.getElementById('filter-scale').value;
             const eventType = document.getElementById('filter-event-type').value;
             const shockThreshold = parseFloat(document.getElementById('filter-shock').value) || null;
             const levelsJumpedMin = parseInt(document.getElementById('filter-levels-jumped').value) || null;
             const gapsOnly = document.getElementById('filter-gaps').checked;
+
+            // Reload bars if scale changed
+            if (scale !== currentChartScale) {
+                currentChartScale = scale;
+                await loadBars(scale || null);
+                // Clear swing selection when scale changes
+                selectedSwingId = null;
+                levelLines.forEach(line => candleSeries.removePriceLine(line));
+                levelLines = [];
+                swingMarkers = [];
+            }
 
             // Build query params
             const params = new URLSearchParams();
@@ -762,7 +782,16 @@
                 const swing = allSwings.find(s => s.swing_id === event.swing_id);
 
                 if (scale && swing && swing.scale !== scale) return false;
-                if (eventType && event.event_type !== eventType) return false;
+
+                // Handle "significant" filter - only show completions and invalidations
+                if (eventType === 'significant') {
+                    if (event.event_type !== 'COMPLETION' && event.event_type !== 'INVALIDATION') {
+                        return false;
+                    }
+                } else if (eventType && event.event_type !== eventType) {
+                    return false;
+                }
+
                 if (shockThreshold && (!event.shock || event.shock.range_multiple < shockThreshold)) return false;
                 if (levelsJumpedMin && (!event.shock || event.shock.levels_jumped < levelsJumpedMin)) return false;
                 if (gapsOnly && (!event.shock || !event.shock.is_gap)) return false;
@@ -771,6 +800,7 @@
             });
 
             renderMarkers();
+            renderSwingList();
             updateStats();
         }
 
@@ -784,10 +814,22 @@
             applyFilters();
         }
 
+        // Find aggregated bar containing a source bar index
+        function findBarContaining(sourceBarIndex) {
+            return bars.find(b =>
+                b.source_start_index !== undefined &&
+                sourceBarIndex >= b.source_start_index &&
+                sourceBarIndex <= b.source_end_index
+            );
+        }
+
+        // Store event markers separately so we can merge with swing markers
+        let eventMarkers = [];
+
         // Render markers on chart
         function renderMarkers() {
-            const markerData = filteredEvents.map(event => {
-                const bar = bars.find(b => b.index === event.bar);
+            eventMarkers = filteredEvents.map(event => {
+                const bar = findBarContaining(event.bar);
                 if (!bar) return null;
 
                 let style = EVENT_STYLES[event.event_type] || { color: '#666', shape: 'circle' };
@@ -830,7 +872,16 @@
                 };
             }).filter(m => m !== null);
 
-            candleSeries.setMarkers(markerData);
+            // Merge with swing markers and display
+            updateAllMarkers();
+        }
+
+        // Merge event markers with swing markers and display
+        function updateAllMarkers() {
+            const allMarkers = [...eventMarkers, ...swingMarkers];
+            // Sort by time for proper rendering
+            allMarkers.sort((a, b) => a.time - b.time);
+            candleSeries.setMarkers(allMarkers);
         }
 
         // Get marker text for event
@@ -851,17 +902,23 @@
         // Render swing list
         function renderSwingList() {
             const container = document.getElementById('swing-list');
+            const scaleFilter = document.getElementById('filter-scale').value;
 
-            if (allSwings.length === 0) {
+            // Filter swings by scale if a scale is selected
+            const filteredSwings = scaleFilter
+                ? allSwings.filter(s => s.scale === scaleFilter)
+                : allSwings;
+
+            if (filteredSwings.length === 0) {
                 container.innerHTML = `
                     <div style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 20px;">
-                        No swings detected
+                        ${allSwings.length === 0 ? 'No swings detected' : 'No swings at this scale'}
                     </div>
                 `;
                 return;
             }
 
-            container.innerHTML = allSwings.map(swing => `
+            container.innerHTML = filteredSwings.map(swing => `
                 <div class="swing-item ${swing.direction.toLowerCase()} ${swing.swing_id === selectedSwingId ? 'active' : ''}"
                      onclick="selectSwing('${swing.swing_id}')">
                     <div class="swing-header">
@@ -875,6 +932,9 @@
             `).join('');
         }
 
+        // Swing endpoint markers
+        let swingMarkers = [];
+
         // Select swing and show its levels
         async function selectSwing(swingId) {
             selectedSwingId = swingId;
@@ -883,6 +943,9 @@
             // Clear existing level lines
             levelLines.forEach(line => candleSeries.removePriceLine(line));
             levelLines = [];
+
+            // Find the swing data
+            const swing = allSwings.find(s => s.swing_id === swingId);
 
             try {
                 const response = await fetch(`/api/discretization/levels?swing_id=${swingId}`);
@@ -901,6 +964,45 @@
                     });
                     levelLines.push(line);
                 });
+
+                // Add markers at swing endpoints (high and low)
+                if (swing) {
+                    const isBull = swing.direction.toUpperCase() === 'BULL';
+                    // For bull: anchor0 = low (defended), anchor1 = high (origin)
+                    // For bear: anchor0 = high (defended), anchor1 = low (origin)
+                    const highPrice = isBull ? data.anchor1 : data.anchor0;
+                    const lowPrice = isBull ? data.anchor0 : data.anchor1;
+                    const highBar = isBull ? swing.anchor1_bar : swing.anchor0_bar;
+                    const lowBar = isBull ? swing.anchor0_bar : swing.anchor1_bar;
+
+                    // Find aggregated bars containing the source bar indices
+                    const highBarData = findBarContaining(highBar);
+                    const lowBarData = findBarContaining(lowBar);
+
+                    swingMarkers = [];
+                    if (highBarData) {
+                        swingMarkers.push({
+                            time: highBarData.timestamp,
+                            position: 'aboveBar',
+                            color: '#ff00ff',  // Magenta for visibility
+                            shape: 'arrowDown',
+                            size: 2,
+                            text: `H: ${highPrice.toFixed(2)}`,
+                        });
+                    }
+                    if (lowBarData) {
+                        swingMarkers.push({
+                            time: lowBarData.timestamp,
+                            position: 'belowBar',
+                            color: '#00ffff',  // Cyan for visibility
+                            shape: 'arrowUp',
+                            size: 2,
+                            text: `L: ${lowPrice.toFixed(2)}`,
+                        });
+                    }
+                    // Merge with event markers
+                    updateAllMarkers();
+                }
             } catch (error) {
                 console.error('Failed to load swing levels:', error);
             }
