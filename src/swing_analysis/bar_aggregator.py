@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
-from .bull_reference_detector import Bar
+from .types import Bar
 
 
 @dataclass

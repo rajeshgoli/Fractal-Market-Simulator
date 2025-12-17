@@ -22,7 +22,7 @@ from src.swing_analysis.scale_calibrator import ScaleCalibrator
 from src.swing_analysis.bar_aggregator import BarAggregator
 from src.swing_analysis.swing_state_manager import SwingStateManager
 from src.swing_analysis.event_detector import EventDetector
-from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.types import Bar
 import pandas as pd
 
 

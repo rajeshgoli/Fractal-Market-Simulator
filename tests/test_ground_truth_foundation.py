@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from src.swing_analysis.bar_aggregator import BarAggregator
-from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.types import Bar
 from src.ground_truth_annotator.models import (
     SwingAnnotation, AnnotationSession, SwingFeedback, ReviewSession, REVIEW_PHASES,
     BetterReference, REVIEW_SCHEMA_VERSION

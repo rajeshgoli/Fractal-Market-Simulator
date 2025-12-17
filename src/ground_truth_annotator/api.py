@@ -38,7 +38,7 @@ from ..discretization import (
     EventType,
 )
 from ..swing_analysis.bar_aggregator import BarAggregator
-from ..swing_analysis.bull_reference_detector import Bar
+from ..swing_analysis.types import Bar
 from ..swing_analysis.swing_detector import detect_swings, ReferenceSwing
 
 logger = logging.getLogger(__name__)

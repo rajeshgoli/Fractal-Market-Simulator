@@ -19,7 +19,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from .bull_reference_detector import Bar
+from .types import Bar
 from .swing_detector import detect_swings
 from .resolution import (
     get_default_aggregations,

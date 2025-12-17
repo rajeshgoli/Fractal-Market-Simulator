@@ -25,7 +25,7 @@ import numpy as np
 from src.discretization import Discretizer, DiscretizerConfig, EventType as NewEventType
 from src.swing_analysis.event_detector import EventDetector, EventType as OldEventType, ActiveSwing
 from src.swing_analysis.swing_detector import detect_swings, ReferenceSwing
-from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.types import Bar
 
 
 def load_test_data():

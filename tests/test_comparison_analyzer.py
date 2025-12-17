@@ -14,7 +14,7 @@ from src.ground_truth_annotator.comparison_analyzer import (
     DetectedSwing,
 )
 from src.ground_truth_annotator.models import AnnotationSession, SwingAnnotation
-from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.types import Bar
 
 
 class TestDetectedSwing:

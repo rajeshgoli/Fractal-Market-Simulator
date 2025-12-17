@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.swing_analysis.swing_state_manager import SwingStateManager, SwingUpdateResult
 from src.swing_analysis.scale_calibrator import ScaleConfig
 from src.swing_analysis.event_detector import EventType, EventSeverity, StructuralEvent, ActiveSwing
-from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.types import Bar
 
 
 # Global fixtures available to all test classes

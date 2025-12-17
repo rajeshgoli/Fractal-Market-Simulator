@@ -23,7 +23,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional, Set, Tuple
 import pandas as pd
 
-from .bull_reference_detector import Bar
+from .types import Bar
 from .swing_detector import detect_swings
 from .level_calculator import calculate_levels
 from .scale_calibrator import ScaleConfig

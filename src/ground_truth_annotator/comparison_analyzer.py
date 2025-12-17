@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from .models import AnnotationSession, SwingAnnotation
-from ..swing_analysis.bull_reference_detector import Bar
+from ..swing_analysis.types import Bar
 from ..swing_analysis.swing_detector import detect_swings
 
 

@@ -16,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.swing_analysis.event_detector import (
     EventDetector, EventType, EventSeverity, StructuralEvent, ActiveSwing
 )
-from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.types import Bar
 from src.swing_analysis.level_calculator import calculate_levels
 
 

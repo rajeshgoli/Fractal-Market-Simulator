@@ -116,7 +116,7 @@ fractal-market-simulator/
 │   ├── data/
 │   │   └── ohlc_loader.py          # CSV data loading
 │   ├── swing_analysis/
-│   │   ├── bull_reference_detector.py   # Bar, BullReferenceSwing, BearReferenceSwing dataclasses
+│   │   ├── types.py                     # Bar, BullReferenceSwing, BearReferenceSwing dataclasses
 │   │   ├── level_calculator.py          # Fibonacci level computation
 │   │   ├── scale_calibrator.py          # Auto-calibrate scale boundaries
 │   │   ├── bar_aggregator.py            # Multi-timeframe bar aggregation
@@ -320,7 +320,7 @@ bars = loader.load_data("market_data.csv")
 
 ### Swing Analysis
 
-#### `src/swing_analysis/bull_reference_detector.py`
+#### `src/swing_analysis/types.py`
 
 **Purpose**: Core dataclass definitions for bars and reference swings.
 

@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple
 
 from .models import AnnotationSession, SwingAnnotation
 from ..swing_analysis.bar_aggregator import BarAggregator
-from ..swing_analysis.bull_reference_detector import Bar
+from ..swing_analysis.types import Bar
 
 
 class CascadeController:

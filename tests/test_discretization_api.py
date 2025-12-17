@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.ground_truth_annotator import api
-from src.swing_analysis.bull_reference_detector import Bar
+from src.swing_analysis.types import Bar
 
 
 @pytest.fixture

@@ -18,7 +18,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from .bull_reference_detector import Bar
+from .types import Bar
 
 
 class EventType(Enum):
