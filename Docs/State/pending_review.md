@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-17
 
 ---
 
 ## Pending Changes
+
+### 2025-12-17 - Implement forward-only playback for Replay View v2
+- **Issue:** #102
+- **Type:** Feature
+- **Files:** api.py, useForwardPlayback.ts, api.ts, Replay.tsx, test_ground_truth_annotator_api.py
 
 ### 2025-12-17 - Implement calibration phase for Replay View v2
 - **Issue:** #101

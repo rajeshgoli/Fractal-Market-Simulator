@@ -2283,6 +2283,473 @@ async def calibrate_replay(
     )
 
 
+# ============================================================================
+# Replay Advance Endpoint (Forward-Only Playback)
+# ============================================================================
+
+
+class ReplayAdvanceRequest(BaseModel):
+    """Request to advance playback beyond calibration window."""
+    calibration_bar_count: int
+    current_bar_index: int
+    advance_by: int = 1  # Number of bars to advance (default: 1)
+
+
+class ReplayBarResponse(BaseModel):
+    """A single OHLC bar returned during playback advance."""
+    index: int
+    timestamp: int
+    open: float
+    high: float
+    low: float
+    close: float
+
+
+class ReplayEventResponse(BaseModel):
+    """A playback event triggered by swing state change."""
+    type: str  # SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED, LEVEL_CROSS
+    bar_index: int
+    scale: str
+    direction: str
+    swing_id: str
+    swing: Optional[CalibrationSwingResponse] = None  # For SWING_FORMED
+    level: Optional[float] = None  # For LEVEL_CROSS (e.g., 0.382, 0.618)
+    previous_level: Optional[float] = None  # For LEVEL_CROSS
+
+
+class ReplaySwingState(BaseModel):
+    """Current state of all swings at a given bar."""
+    XL: List[CalibrationSwingResponse] = []
+    L: List[CalibrationSwingResponse] = []
+    M: List[CalibrationSwingResponse] = []
+    S: List[CalibrationSwingResponse] = []
+
+
+class ReplayAdvanceResponse(BaseModel):
+    """Response from advance endpoint."""
+    new_bars: List[ReplayBarResponse]
+    events: List[ReplayEventResponse]
+    swing_state: ReplaySwingState
+    current_bar_index: int
+    current_price: float
+    end_of_data: bool
+
+
+# Global cache for replay state (avoids recomputing swings every advance)
+_replay_cache: Dict[str, any] = {
+    "last_bar_index": -1,
+    "swing_state": {},  # swing_id -> swing dict with current status
+    "fib_levels": {},  # swing_id -> last crossed fib level
+}
+
+
+def _detect_swings_at_bar(
+    source_bars: List[Bar],
+    bar_index: int,
+    scale_thresholds: Dict[str, float]
+) -> Dict[str, List[dict]]:
+    """
+    Detect swings using data up to bar_index (inclusive).
+
+    Returns swings organized by scale.
+    """
+    if bar_index < 10:
+        return {"XL": [], "L": [], "M": [], "S": []}
+
+    # Convert to DataFrame
+    bar_data = []
+    for bar in source_bars[:bar_index + 1]:
+        bar_data.append({
+            'timestamp': bar.timestamp,
+            'open': bar.open,
+            'high': bar.high,
+            'low': bar.low,
+            'close': bar.close,
+        })
+
+    df = pd.DataFrame(bar_data)
+    df.set_index(pd.RangeIndex(start=0, stop=len(df)), inplace=True)
+
+    # Run swing detection
+    result = detect_swings(
+        df,
+        lookback=5,
+        filter_redundant=True,
+        current_bar_index=bar_index,
+    )
+
+    def assign_scale(size: float) -> str:
+        """Assign swing to the largest scale it qualifies for."""
+        if size >= scale_thresholds["XL"]:
+            return "XL"
+        elif size >= scale_thresholds["L"]:
+            return "L"
+        elif size >= scale_thresholds["M"]:
+            return "M"
+        return "S"
+
+    swings_by_scale: Dict[str, List[dict]] = {
+        "XL": [], "L": [], "M": [], "S": []
+    }
+
+    # Process bull references
+    for i, ref in enumerate(result.get('bull_references', [])):
+        scale = assign_scale(ref['size'])
+        swing = {
+            'id': f"swing-bull-{ref['high_bar_index']}-{ref['low_bar_index']}",
+            'direction': 'bull',
+            'high_price': ref['high_price'],
+            'high_bar_index': ref['high_bar_index'],
+            'low_price': ref['low_price'],
+            'low_bar_index': ref['low_bar_index'],
+            'size': ref['size'],
+            'rank': len(swings_by_scale[scale]) + 1,
+            'scale': scale,
+        }
+        swings_by_scale[scale].append(swing)
+
+    # Process bear references
+    for i, ref in enumerate(result.get('bear_references', [])):
+        scale = assign_scale(ref['size'])
+        swing = {
+            'id': f"swing-bear-{ref['low_bar_index']}-{ref['high_bar_index']}",
+            'direction': 'bear',
+            'high_price': ref['high_price'],
+            'high_bar_index': ref['high_bar_index'],
+            'low_price': ref['low_price'],
+            'low_bar_index': ref['low_bar_index'],
+            'size': ref['size'],
+            'rank': len(swings_by_scale[scale]) + 1,
+            'scale': scale,
+        }
+        swings_by_scale[scale].append(swing)
+
+    return swings_by_scale
+
+
+def _compute_fib_levels(swing: dict) -> Dict[float, float]:
+    """Compute all standard Fib levels for a swing."""
+    high = swing['high_price']
+    low = swing['low_price']
+    swing_range = high - low
+
+    if swing['direction'] == 'bull':
+        # Bull: defended pivot is low, origin is high
+        return {
+            0.0: low,
+            0.236: low + swing_range * 0.236,
+            0.382: low + swing_range * 0.382,
+            0.5: low + swing_range * 0.5,
+            0.618: low + swing_range * 0.618,
+            0.786: low + swing_range * 0.786,
+            1.0: high,
+            1.236: low + swing_range * 1.236,
+            1.382: low + swing_range * 1.382,
+            1.5: low + swing_range * 1.5,
+            1.618: low + swing_range * 1.618,
+            2.0: low + swing_range * 2.0,
+        }
+    else:
+        # Bear: defended pivot is high, origin is low
+        return {
+            0.0: high,
+            0.236: high - swing_range * 0.236,
+            0.382: high - swing_range * 0.382,
+            0.5: high - swing_range * 0.5,
+            0.618: high - swing_range * 0.618,
+            0.786: high - swing_range * 0.786,
+            1.0: low,
+            1.236: high - swing_range * 1.236,
+            1.382: high - swing_range * 1.382,
+            1.5: high - swing_range * 1.5,
+            1.618: high - swing_range * 1.618,
+            2.0: high - swing_range * 2.0,
+        }
+
+
+def _get_current_fib_level(swing: dict, current_price: float) -> float:
+    """Get the current Fib level that price is at."""
+    fib_levels = _compute_fib_levels(swing)
+    sorted_levels = sorted(fib_levels.keys())
+
+    if swing['direction'] == 'bull':
+        # Price moving up: find highest level below current price
+        current_level = 0.0
+        for level in sorted_levels:
+            if current_price >= fib_levels[level]:
+                current_level = level
+            else:
+                break
+    else:
+        # Price moving down: find highest level above current price
+        current_level = 0.0
+        for level in sorted_levels:
+            if current_price <= fib_levels[level]:
+                current_level = level
+            else:
+                break
+
+    return current_level
+
+
+def _swing_to_response(swing: dict, is_active: bool) -> CalibrationSwingResponse:
+    """Convert swing dict to CalibrationSwingResponse."""
+    high = swing['high_price']
+    low = swing['low_price']
+    swing_range = high - low
+
+    if swing['direction'] == 'bull':
+        fib_0 = low
+        fib_0382 = low + swing_range * 0.382
+        fib_1 = high
+        fib_2 = low + swing_range * 2.0
+    else:
+        fib_0 = high
+        fib_0382 = high - swing_range * 0.382
+        fib_1 = low
+        fib_2 = high - swing_range * 2.0
+
+    return CalibrationSwingResponse(
+        id=swing['id'],
+        scale=swing['scale'],
+        direction=swing['direction'],
+        high_price=high,
+        high_bar_index=swing['high_bar_index'],
+        low_price=low,
+        low_bar_index=swing['low_bar_index'],
+        size=swing['size'],
+        rank=swing.get('rank', 1),
+        is_active=is_active,
+        fib_0=fib_0,
+        fib_0382=fib_0382,
+        fib_1=fib_1,
+        fib_2=fib_2,
+    )
+
+
+def _diff_swing_states(
+    prev_swings: Dict[str, dict],
+    new_swings: Dict[str, dict],
+    prev_fib_levels: Dict[str, float],
+    current_price: float,
+    bar_index: int
+) -> tuple[List[ReplayEventResponse], Dict[str, float]]:
+    """
+    Diff swing states and generate events.
+
+    Returns (events, new_fib_levels).
+    """
+    events = []
+    new_fib_levels = {}
+
+    prev_ids = set(prev_swings.keys())
+    new_ids = set(new_swings.keys())
+
+    # SWING_FORMED: New swings that weren't in previous state
+    for swing_id in new_ids - prev_ids:
+        swing = new_swings[swing_id]
+        events.append(ReplayEventResponse(
+            type="SWING_FORMED",
+            bar_index=bar_index,
+            scale=swing['scale'],
+            direction=swing['direction'],
+            swing_id=swing_id,
+            swing=_swing_to_response(swing, True),
+        ))
+        # Initialize fib level tracking
+        new_fib_levels[swing_id] = _get_current_fib_level(swing, current_price)
+
+    # SWING_INVALIDATED: Swings that disappeared
+    for swing_id in prev_ids - new_ids:
+        swing = prev_swings[swing_id]
+        events.append(ReplayEventResponse(
+            type="SWING_INVALIDATED",
+            bar_index=bar_index,
+            scale=swing['scale'],
+            direction=swing['direction'],
+            swing_id=swing_id,
+        ))
+
+    # Check continuing swings for LEVEL_CROSS and COMPLETION
+    for swing_id in prev_ids & new_ids:
+        swing = new_swings[swing_id]
+        prev_level = prev_fib_levels.get(swing_id, 0.0)
+        new_level = _get_current_fib_level(swing, current_price)
+        new_fib_levels[swing_id] = new_level
+
+        # SWING_COMPLETED: crossed 2.0 level
+        if prev_level < 2.0 and new_level >= 2.0:
+            events.append(ReplayEventResponse(
+                type="SWING_COMPLETED",
+                bar_index=bar_index,
+                scale=swing['scale'],
+                direction=swing['direction'],
+                swing_id=swing_id,
+                level=2.0,
+                previous_level=prev_level,
+            ))
+        # LEVEL_CROSS: crossed a significant fib level
+        elif new_level != prev_level and new_level > prev_level:
+            # Only emit for significant levels
+            significant_levels = [0.382, 0.5, 0.618, 1.0, 1.382, 1.618]
+            for lvl in significant_levels:
+                if prev_level < lvl <= new_level:
+                    events.append(ReplayEventResponse(
+                        type="LEVEL_CROSS",
+                        bar_index=bar_index,
+                        scale=swing['scale'],
+                        direction=swing['direction'],
+                        swing_id=swing_id,
+                        level=lvl,
+                        previous_level=prev_level,
+                    ))
+                    break  # Only emit one level cross per bar
+
+    return events, new_fib_levels
+
+
+@app.post("/api/replay/advance", response_model=ReplayAdvanceResponse)
+async def advance_replay(request: ReplayAdvanceRequest):
+    """
+    Advance playback beyond calibration window.
+
+    For each new bar:
+    1. Load next bar from source (not previously visible)
+    2. Re-run detection with new bar as current_bar_index
+    3. Diff against previous swing state
+    4. Fire events for changes (SWING_FORMED, INVALIDATION, COMPLETION, LEVEL_CROSS)
+
+    Args:
+        calibration_bar_count: Number of bars in calibration window
+        current_bar_index: Current playback position (last visible bar)
+        advance_by: Number of bars to advance (default: 1)
+
+    Returns:
+        new_bars: New bars to append to chart
+        events: Events that occurred during advance
+        swing_state: Current swing state at new position
+        end_of_data: Whether we've reached the end of data
+    """
+    global _replay_cache
+    s = get_state()
+
+    # Validate inputs
+    if request.calibration_bar_count < 10:
+        raise HTTPException(status_code=400, detail="calibration_bar_count must be >= 10")
+    if request.current_bar_index < request.calibration_bar_count - 1:
+        raise HTTPException(
+            status_code=400,
+            detail="current_bar_index must be >= calibration_bar_count - 1"
+        )
+
+    # Calculate new bar range
+    start_index = request.current_bar_index + 1
+    end_index = min(start_index + request.advance_by, len(s.source_bars))
+
+    # Check for end of data
+    if start_index >= len(s.source_bars):
+        return ReplayAdvanceResponse(
+            new_bars=[],
+            events=[],
+            swing_state=ReplaySwingState(),
+            current_bar_index=request.current_bar_index,
+            current_price=s.source_bars[request.current_bar_index].close if request.current_bar_index < len(s.source_bars) else 0,
+            end_of_data=True,
+        )
+
+    # Scale thresholds
+    scale_thresholds = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
+
+    # Initialize or update cache
+    if _replay_cache["last_bar_index"] != request.current_bar_index:
+        # Cache miss - need to compute current swing state
+        swings_by_scale = _detect_swings_at_bar(
+            s.source_bars, request.current_bar_index, scale_thresholds
+        )
+        # Build swing state dict
+        swing_state_dict = {}
+        fib_levels_dict = {}
+        current_price = s.source_bars[request.current_bar_index].close
+        for scale in ["XL", "L", "M", "S"]:
+            for swing in swings_by_scale[scale]:
+                swing_state_dict[swing['id']] = swing
+                fib_levels_dict[swing['id']] = _get_current_fib_level(swing, current_price)
+
+        _replay_cache["swing_state"] = swing_state_dict
+        _replay_cache["fib_levels"] = fib_levels_dict
+        _replay_cache["last_bar_index"] = request.current_bar_index
+
+    # Process each new bar
+    new_bars = []
+    all_events = []
+
+    for bar_index in range(start_index, end_index):
+        bar = s.source_bars[bar_index]
+        new_bars.append(ReplayBarResponse(
+            index=bar_index,
+            timestamp=bar.timestamp,
+            open=bar.open,
+            high=bar.high,
+            low=bar.low,
+            close=bar.close,
+        ))
+
+        # Detect swings at this bar
+        new_swings_by_scale = _detect_swings_at_bar(
+            s.source_bars, bar_index, scale_thresholds
+        )
+
+        # Build new swing state dict
+        new_swing_state_dict = {}
+        for scale in ["XL", "L", "M", "S"]:
+            for swing in new_swings_by_scale[scale]:
+                new_swing_state_dict[swing['id']] = swing
+
+        # Diff states
+        current_price = bar.close
+        events, new_fib_levels = _diff_swing_states(
+            _replay_cache["swing_state"],
+            new_swing_state_dict,
+            _replay_cache["fib_levels"],
+            current_price,
+            bar_index
+        )
+        all_events.extend(events)
+
+        # Update cache
+        _replay_cache["swing_state"] = new_swing_state_dict
+        _replay_cache["fib_levels"] = new_fib_levels
+        _replay_cache["last_bar_index"] = bar_index
+
+    # Build final swing state response
+    final_bar_index = end_index - 1
+    final_price = s.source_bars[final_bar_index].close
+
+    # Group swings by scale for response
+    swing_state_response = ReplaySwingState()
+    for swing_id, swing in _replay_cache["swing_state"].items():
+        is_active = _is_swing_active(swing, final_price, swing['direction'])
+        swing_response = _swing_to_response(swing, is_active)
+        scale = swing['scale']
+        if scale == "XL":
+            swing_state_response.XL.append(swing_response)
+        elif scale == "L":
+            swing_state_response.L.append(swing_response)
+        elif scale == "M":
+            swing_state_response.M.append(swing_response)
+        else:
+            swing_state_response.S.append(swing_response)
+
+    return ReplayAdvanceResponse(
+        new_bars=new_bars,
+        events=all_events,
+        swing_state=swing_state_response,
+        current_bar_index=final_bar_index,
+        current_price=final_price,
+        end_of_data=final_bar_index >= len(s.source_bars) - 1,
+    )
+
+
 @app.get("/replay", response_class=HTMLResponse)
 async def replay_page():
     """Serve the Replay View UI - React frontend."""

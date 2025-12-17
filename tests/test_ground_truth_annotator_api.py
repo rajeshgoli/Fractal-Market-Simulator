@@ -1458,3 +1458,210 @@ class TestCalibrationEndpoint:
         assert thresholds["L"] == 40.0
         assert thresholds["M"] == 15.0
         assert thresholds["S"] == 0.0
+
+
+# ============================================================================
+# Replay Advance Endpoint Tests
+# ============================================================================
+
+
+class TestReplayAdvanceEndpoint:
+    """Tests for POST /api/replay/advance endpoint."""
+
+    def test_advance_returns_new_bars(self, client):
+        """Test that advance endpoint returns new bars."""
+        # First run calibration to set up state
+        cal_response = client.get("/api/replay/calibrate?bar_count=100")
+        assert cal_response.status_code == 200
+        cal_data = cal_response.json()
+        calibration_bar_count = cal_data["calibration_bar_count"]
+
+        # Advance by 1 bar
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": calibration_bar_count,
+            "current_bar_index": calibration_bar_count - 1,
+            "advance_by": 1
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "new_bars" in data
+        assert "events" in data
+        assert "swing_state" in data
+        assert "current_bar_index" in data
+        assert "current_price" in data
+        assert "end_of_data" in data
+
+    def test_advance_new_bar_has_required_fields(self, client):
+        """Test that new bars have all required fields."""
+        cal_response = client.get("/api/replay/calibrate?bar_count=100")
+        cal_data = cal_response.json()
+        calibration_bar_count = cal_data["calibration_bar_count"]
+
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": calibration_bar_count,
+            "current_bar_index": calibration_bar_count - 1,
+            "advance_by": 1
+        })
+
+        data = response.json()
+
+        if len(data["new_bars"]) > 0:
+            bar = data["new_bars"][0]
+            assert "index" in bar
+            assert "timestamp" in bar
+            assert "open" in bar
+            assert "high" in bar
+            assert "low" in bar
+            assert "close" in bar
+
+    def test_advance_increments_position(self, client):
+        """Test that advance increments current_bar_index correctly."""
+        cal_response = client.get("/api/replay/calibrate?bar_count=100")
+        cal_data = cal_response.json()
+        calibration_bar_count = cal_data["calibration_bar_count"]
+        start_index = calibration_bar_count - 1
+
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": calibration_bar_count,
+            "current_bar_index": start_index,
+            "advance_by": 1
+        })
+
+        data = response.json()
+
+        # If not end of data, should have advanced by 1
+        if not data["end_of_data"]:
+            assert data["current_bar_index"] == start_index + 1
+
+    def test_advance_multiple_bars(self, client):
+        """Test advancing by multiple bars at once."""
+        cal_response = client.get("/api/replay/calibrate?bar_count=100")
+        cal_data = cal_response.json()
+        calibration_bar_count = cal_data["calibration_bar_count"]
+        start_index = calibration_bar_count - 1
+
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": calibration_bar_count,
+            "current_bar_index": start_index,
+            "advance_by": 5
+        })
+
+        data = response.json()
+
+        # Should have up to 5 new bars
+        if not data["end_of_data"]:
+            assert len(data["new_bars"]) <= 5
+            assert data["current_bar_index"] == start_index + len(data["new_bars"])
+
+    def test_advance_swing_state_structure(self, client):
+        """Test that swing_state has correct structure."""
+        cal_response = client.get("/api/replay/calibrate?bar_count=100")
+        cal_data = cal_response.json()
+        calibration_bar_count = cal_data["calibration_bar_count"]
+
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": calibration_bar_count,
+            "current_bar_index": calibration_bar_count - 1,
+            "advance_by": 1
+        })
+
+        data = response.json()
+        swing_state = data["swing_state"]
+
+        # Should have all four scales
+        assert "XL" in swing_state
+        assert "L" in swing_state
+        assert "M" in swing_state
+        assert "S" in swing_state
+
+    def test_advance_event_structure(self, client):
+        """Test that events have correct structure when present."""
+        cal_response = client.get("/api/replay/calibrate?bar_count=50")
+        cal_data = cal_response.json()
+        calibration_bar_count = cal_data["calibration_bar_count"]
+
+        # Advance by many bars to hopefully trigger some events
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": calibration_bar_count,
+            "current_bar_index": calibration_bar_count - 1,
+            "advance_by": 100
+        })
+
+        data = response.json()
+
+        for event in data["events"]:
+            assert "type" in event
+            assert "bar_index" in event
+            assert "scale" in event
+            assert "direction" in event
+            assert "swing_id" in event
+            # Type should be one of the valid event types
+            assert event["type"] in ["SWING_FORMED", "SWING_INVALIDATED", "SWING_COMPLETED", "LEVEL_CROSS"]
+
+    def test_advance_validation_calibration_bar_count(self, client):
+        """Test validation for calibration_bar_count."""
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": 5,  # Less than 10
+            "current_bar_index": 10,
+            "advance_by": 1
+        })
+
+        assert response.status_code == 400
+        assert "calibration_bar_count must be >= 10" in response.json()["detail"]
+
+    def test_advance_validation_current_bar_index(self, client):
+        """Test validation for current_bar_index."""
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": 100,
+            "current_bar_index": 50,  # Less than calibration_bar_count - 1
+            "advance_by": 1
+        })
+
+        assert response.status_code == 400
+        assert "current_bar_index must be >= calibration_bar_count - 1" in response.json()["detail"]
+
+    def test_advance_end_of_data(self, client):
+        """Test that end_of_data is True when reaching end."""
+        # Get total bar count
+        session = client.get("/api/session").json()
+        total_bars = session["window_size"]
+
+        # Run calibration with smaller bar count
+        cal_response = client.get("/api/replay/calibrate?bar_count=50")
+        cal_data = cal_response.json()
+        calibration_bar_count = cal_data["calibration_bar_count"]
+
+        # Try to advance beyond total bars
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": calibration_bar_count,
+            "current_bar_index": total_bars - 1,
+            "advance_by": 1
+        })
+
+        data = response.json()
+        assert data["end_of_data"] is True
+        assert len(data["new_bars"]) == 0
+
+    def test_advance_returns_current_price(self, client):
+        """Test that current_price is returned correctly."""
+        cal_response = client.get("/api/replay/calibrate?bar_count=100")
+        cal_data = cal_response.json()
+        calibration_bar_count = cal_data["calibration_bar_count"]
+
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": calibration_bar_count,
+            "current_bar_index": calibration_bar_count - 1,
+            "advance_by": 1
+        })
+
+        data = response.json()
+
+        # Current price should be a positive number
+        assert data["current_price"] > 0
+
+        # If we have new bars, current price should match the last bar's close
+        if len(data["new_bars"]) > 0:
+            last_bar = data["new_bars"][-1]
+            assert data["current_price"] == last_bar["close"]

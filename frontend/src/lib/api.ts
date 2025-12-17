@@ -99,3 +99,77 @@ export async function fetchCalibration(barCount: number = 10000): Promise<Calibr
   }
   return response.json();
 }
+
+// Types for replay advance
+export interface ReplayBarData {
+  index: number;
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+export interface ReplayEvent {
+  type: 'SWING_FORMED' | 'SWING_INVALIDATED' | 'SWING_COMPLETED' | 'LEVEL_CROSS';
+  bar_index: number;
+  scale: string;
+  direction: string;
+  swing_id: string;
+  swing?: {
+    id: string;
+    scale: string;
+    direction: string;
+    high_price: number;
+    high_bar_index: number;
+    low_price: number;
+    low_bar_index: number;
+    size: number;
+    rank: number;
+    is_active: boolean;
+    fib_0: number;
+    fib_0382: number;
+    fib_1: number;
+    fib_2: number;
+  };
+  level?: number;
+  previous_level?: number;
+}
+
+export interface ReplaySwingState {
+  XL: CalibrationData['active_swings_by_scale']['XL'];
+  L: CalibrationData['active_swings_by_scale']['L'];
+  M: CalibrationData['active_swings_by_scale']['M'];
+  S: CalibrationData['active_swings_by_scale']['S'];
+}
+
+export interface ReplayAdvanceResponse {
+  new_bars: ReplayBarData[];
+  events: ReplayEvent[];
+  swing_state: ReplaySwingState;
+  current_bar_index: number;
+  current_price: number;
+  end_of_data: boolean;
+}
+
+export async function advanceReplay(
+  calibrationBarCount: number,
+  currentBarIndex: number,
+  advanceBy: number = 1
+): Promise<ReplayAdvanceResponse> {
+  const response = await fetch(`${API_BASE}/replay/advance`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      calibration_bar_count: calibrationBarCount,
+      current_bar_index: currentBarIndex,
+      advance_by: advanceBy,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to advance replay: ${response.statusText}`);
+  }
+  return response.json();
+}

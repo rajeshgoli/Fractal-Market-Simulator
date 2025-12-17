@@ -7,6 +7,7 @@ import { PlaybackControls } from '../components/PlaybackControls';
 import { ExplanationPanel } from '../components/ExplanationPanel';
 import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
+import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings, fetchSession, fetchDetectedSwings, fetchCalibration } from '../lib/api';
 import { INITIAL_FILTERS, LINGER_DURATION_MS } from '../constants';
 import {
@@ -107,6 +108,7 @@ export const Replay: React.FC = () => {
 
   // Data state
   const [sourceBars, setSourceBars] = useState<BarData[]>([]);
+  const [calibrationBars, setCalibrationBars] = useState<BarData[]>([]); // Bars at calibration end
   const [chart1Bars, setChart1Bars] = useState<BarData[]>([]);
   const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
   const [events, setEvents] = useState<DiscretizationEvent[]>([]);
@@ -166,7 +168,7 @@ export const Replay: React.FC = () => {
     return Math.max(10, Math.round(1000 / effectiveSourceBarsPerSecond));
   }, [speedMultiplier, speedAggregation, sourceResolutionMinutes]);
 
-  // Playback hook - uses ref to avoid stale closure issue
+  // Legacy playback hook (used for calibration phase scrubbing, not forward playback)
   const playback = usePlayback({
     sourceBars,
     events,
@@ -178,13 +180,48 @@ export const Replay: React.FC = () => {
     }, []),
   });
 
-  // Compute highlighted swing for linger state (converts discretization swing to DetectedSwing)
+  // Forward playback hook (used for forward-only playback after calibration)
+  const forwardPlayback = useForwardPlayback({
+    calibrationBarCount: calibrationData?.calibration_bar_count || 10000,
+    calibrationBars,
+    playbackIntervalMs: effectivePlaybackIntervalMs,
+    onNewBars: useCallback((newBars: BarData[]) => {
+      // Append new bars to source bars for chart display
+      setSourceBars(prev => [...prev, ...newBars]);
+      // Sync charts when new bars arrive
+      if (newBars.length > 0) {
+        const lastBar = newBars[newBars.length - 1];
+        syncChartsToPositionRef.current(lastBar.index);
+      }
+    }, []),
+  });
+
+  // Compute highlighted swing for linger state (from forward playback or legacy playback)
   const highlightedSwing = useMemo((): DetectedSwing | undefined => {
+    // Check forward playback first (when in PLAYING phase)
+    if (calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.lingerEvent?.swing) {
+      const swing = forwardPlayback.lingerEvent.swing;
+      return {
+        id: swing.id,
+        direction: swing.direction as 'bull' | 'bear',
+        high_price: swing.high_price,
+        high_bar_index: swing.high_bar_index,
+        low_price: swing.low_price,
+        low_bar_index: swing.low_bar_index,
+        size: swing.size,
+        rank: swing.rank,
+        fib_0: swing.fib_0,
+        fib_0382: swing.fib_0382,
+        fib_1: swing.fib_1,
+        fib_2: swing.fib_2,
+      };
+    }
+    // Fall back to legacy playback
     if (!playback.lingerSwingId) return undefined;
     const swing = swings[playback.lingerSwingId];
     if (!swing) return undefined;
     return discretizationSwingToDetected(swing);
-  }, [playback.lingerSwingId, swings]);
+  }, [calibrationPhase, forwardPlayback.lingerEvent, playback.lingerSwingId, swings]);
 
   // Compute current active swing for calibration mode
   const currentActiveSwing = useMemo((): CalibrationSwing | null => {
@@ -219,9 +256,10 @@ export const Replay: React.FC = () => {
   const handleStartPlayback = useCallback(() => {
     if (calibrationPhase === CalibrationPhase.CALIBRATED) {
       setCalibrationPhase(CalibrationPhase.PLAYING);
-      playback.togglePlayPause();
+      // Use forward playback for forward-only mode
+      forwardPlayback.play();
     }
-  }, [calibrationPhase, playback]);
+  }, [calibrationPhase, forwardPlayback]);
 
   // Load initial data
   useEffect(() => {
@@ -270,6 +308,10 @@ export const Replay: React.FC = () => {
         setCalibrationPhase(CalibrationPhase.CALIBRATING);
         const calibration = await fetchCalibration(Math.min(10000, source.length));
         setCalibrationData(calibration);
+
+        // Store calibration bars for forward playback (first N bars up to calibration_bar_count)
+        const calBars = source.slice(0, calibration.calibration_bar_count);
+        setCalibrationBars(calBars);
 
         // Flatten active swings across all scales (XL first, then L, M, S)
         const scaleOrder = ['XL', 'L', 'M', 'S'];
@@ -477,23 +519,30 @@ export const Replay: React.FC = () => {
     syncChart(chart2Ref.current, chart2Bars);
   }, [chart1Bars, chart2Bars, findAggBarForSourceIndex]);
 
+  // Get the current playback position based on phase
+  const currentPlaybackPosition = useMemo(() => {
+    return calibrationPhase === CalibrationPhase.PLAYING
+      ? forwardPlayback.currentPosition
+      : playback.currentPosition;
+  }, [calibrationPhase, forwardPlayback.currentPosition, playback.currentPosition]);
+
   // Update all chart markers when position or swings change
   useEffect(() => {
     updateAllMarkers(
       markers1Ref.current,
       chart1Bars,
-      playback.currentPosition,
+      currentPlaybackPosition,
       detectedSwings,
       highlightedSwing
     );
     updateAllMarkers(
       markers2Ref.current,
       chart2Bars,
-      playback.currentPosition,
+      currentPlaybackPosition,
       detectedSwings,
       highlightedSwing
     );
-  }, [playback.currentPosition, detectedSwings, highlightedSwing, chart1Bars, chart2Bars, updateAllMarkers]);
+  }, [currentPlaybackPosition, detectedSwings, highlightedSwing, chart1Bars, chart2Bars, updateAllMarkers]);
 
   // Keep the ref updated with the latest syncChartsToPosition
   useEffect(() => {
@@ -579,7 +628,22 @@ export const Replay: React.FC = () => {
         return;
       }
 
-      // Linger mode: Arrow keys for navigation
+      // Playing mode: use forward playback for linger navigation
+      if (calibrationPhase === CalibrationPhase.PLAYING) {
+        if (!forwardPlayback.isLingering || !forwardPlayback.lingerQueuePosition) return;
+        if (forwardPlayback.lingerQueuePosition.total <= 1) return;
+
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          forwardPlayback.navigatePrevEvent();
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          forwardPlayback.navigateNextEvent();
+        }
+        return;
+      }
+
+      // Legacy linger mode: Arrow keys for navigation
       if (!playback.isLingering || !playback.lingerQueuePosition) return;
       if (playback.lingerQueuePosition.total <= 1) return;
 
@@ -599,6 +663,10 @@ export const Replay: React.FC = () => {
     navigatePrevActiveSwing,
     navigateNextActiveSwing,
     handleStartPlayback,
+    forwardPlayback.isLingering,
+    forwardPlayback.lingerQueuePosition,
+    forwardPlayback.navigatePrevEvent,
+    forwardPlayback.navigateNextEvent,
     playback.isLingering,
     playback.lingerQueuePosition,
     playback.navigatePrevEvent,
@@ -606,8 +674,8 @@ export const Replay: React.FC = () => {
   ]);
 
   // Get current timestamp for header
-  const currentTimestamp = sourceBars[playback.currentPosition]?.timestamp
-    ? new Date(sourceBars[playback.currentPosition].timestamp * 1000).toISOString()
+  const currentTimestamp = sourceBars[currentPlaybackPosition]?.timestamp
+    ? new Date(sourceBars[currentPlaybackPosition].timestamp * 1000).toISOString()
     : undefined;
 
   if (isLoading) {
@@ -685,40 +753,40 @@ export const Replay: React.FC = () => {
           <SwingOverlay
             series={series1Ref.current}
             swings={calibrationPhase === CalibrationPhase.CALIBRATED ? [] : detectedSwings}
-            currentPosition={playback.currentPosition}
+            currentPosition={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition}
             highlightedSwing={calibrationPhase === CalibrationPhase.CALIBRATED ? calibrationHighlightedSwing : highlightedSwing}
           />
           <SwingOverlay
             series={series2Ref.current}
             swings={calibrationPhase === CalibrationPhase.CALIBRATED ? [] : detectedSwings}
-            currentPosition={playback.currentPosition}
+            currentPosition={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition}
             highlightedSwing={calibrationPhase === CalibrationPhase.CALIBRATED ? calibrationHighlightedSwing : highlightedSwing}
           />
 
           {/* Playback Controls */}
           <div className="shrink-0 z-10">
             <PlaybackControls
-              playbackState={playback.playbackState}
-              onPlayPause={playback.togglePlayPause}
-              onStepBack={playback.stepBack}
-              onStepForward={playback.stepForward}
-              onJumpToStart={playback.jumpToStart}
+              playbackState={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.playbackState : playback.playbackState}
+              onPlayPause={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.togglePlayPause : playback.togglePlayPause}
+              onStepBack={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.stepBack : playback.stepBack}
+              onStepForward={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.stepForward : playback.stepForward}
+              onJumpToStart={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.jumpToStart : playback.jumpToStart}
               onJumpToEnd={playback.jumpToEnd}
-              currentBar={playback.currentPosition}
+              currentBar={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition}
               totalBars={sourceBars.length}
               speedMultiplier={speedMultiplier}
               onSpeedMultiplierChange={setSpeedMultiplier}
               speedAggregation={speedAggregation}
               onSpeedAggregationChange={setSpeedAggregation}
               availableSpeedAggregations={availableSpeedAggregations}
-              isLingering={playback.isLingering}
-              lingerTimeLeft={playback.lingerTimeLeft}
+              isLingering={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.isLingering : playback.isLingering}
+              lingerTimeLeft={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.lingerTimeLeft : playback.lingerTimeLeft}
               lingerTotalTime={LINGER_DURATION_MS / 1000}
-              lingerEventType={playback.lingerEventType}
-              lingerQueuePosition={playback.lingerQueuePosition}
-              onNavigatePrev={playback.navigatePrevEvent}
-              onNavigateNext={playback.navigateNextEvent}
-              onDismissLinger={playback.dismissLinger}
+              lingerEventType={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.lingerEvent?.type : playback.lingerEventType}
+              lingerQueuePosition={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.lingerQueuePosition : playback.lingerQueuePosition}
+              onNavigatePrev={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.navigatePrevEvent : playback.navigatePrevEvent}
+              onNavigateNext={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.navigateNextEvent : playback.navigateNextEvent}
+              onDismissLinger={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.dismissLinger : playback.dismissLinger}
             />
           </div>
 
