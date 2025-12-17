@@ -1,15 +1,43 @@
 # Product Direction
 
-**Last Updated:** December 15, 2025
+**Last Updated:** December 16, 2025
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Implement FIB-based structural separation for extrema selection.**
+**Build Replay View for temporal debugging and trust-building.**
 
-Ver4 sessions (5 completed, 94 FPs reviewed) confirm core detection is sound. **42% of FPs are extrema selection problems** (better_high/low/both). The algo finds swings but anchors to sub-optimal endpoints that aren't structurally significant.
+Discretization pipeline is complete (#73-77, #78 overlay). Before continuing FP/FN refinement, we need to **watch the system think** - understand why swings are detected and compare against human intuition.
+
+**Spec:** `Docs/Working/replay_view_spec.md`
+
+**Key insight:** Static views don't build trust. Users need to see structure unfold temporally and understand detection logic before they can effectively calibrate the system.
+
+---
+
+## P0: Replay View
+
+**Problem:** Can't tell if swing detection is working correctly without understanding the "why" behind each detection.
+
+**Solution:** Temporal playback with detection explanations:
+- Watch bars advance at configurable speed
+- Auto-pause on significant events (SWING_FORMED, COMPLETION, INVALIDATION)
+- Show explanation panel: which high, which low, why this scale, separation from previous
+- 15-second linger with timer wheel, user can skip or extend
+
+**Acceptance criteria:** See `Docs/Working/replay_view_spec.md`
+
+**Backend dependency:** SWING_FORMED events need `explanation` field with detection reasoning.
+
+---
+
+## P1: FIB-Based Structural Separation (Paused)
+
+**Status:** Paused pending Replay View validation.
+
+**Original objective:** Implement FIB-based structural separation for extrema selection.
 
 ---
 

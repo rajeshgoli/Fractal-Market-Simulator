@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-16
 
@@ -11,6 +11,7 @@
 - **#78**: Discretization overlay in Ground Truth Annotator
 - **#79**: Discretizer validation on sample data
 - **#81**: Consolidate annotation sessions into ground_truth.json
+- **Replay View Spec**: `Docs/Working/replay_view_spec.md` — Ready for architect review
 
 ---
 
