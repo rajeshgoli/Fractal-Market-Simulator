@@ -17,6 +17,7 @@ interface UsePlaybackReturn {
   isLingering: boolean;
   lingerTimeLeft: number;
   lingerEventType: string | undefined;
+  lingerSwingId: string | undefined;
   lingerQueuePosition: { current: number; total: number } | undefined;
   currentSwing: SwingData | null;
   previousSwing: SwingData | null;
@@ -98,6 +99,7 @@ export function usePlayback({
   const [currentPosition, setCurrentPosition] = useState(0);
   const [lingerTimeLeft, setLingerTimeLeft] = useState(0);
   const [lingerEventType, setLingerEventType] = useState<string | undefined>();
+  const [lingerSwingId, setLingerSwingId] = useState<string | undefined>();
   const [lingerQueuePosition, setLingerQueuePosition] = useState<{ current: number; total: number } | undefined>();
   const [currentSwing, setCurrentSwing] = useState<SwingData | null>(null);
   const [previousSwing, setPreviousSwing] = useState<SwingData | null>(null);
@@ -164,6 +166,7 @@ export function usePlayback({
       if (!event) return;
 
       setLingerEventType(event.event_type);
+      setLingerSwingId(event.swing_id);
       setLingerQueuePosition(
         eventQueueRef.current.length > 1
           ? { current: eventIndexRef.current + 1, total: eventQueueRef.current.length }
@@ -236,6 +239,7 @@ export function usePlayback({
     eventQueueRef.current = [];
     eventIndexRef.current = 0;
     setLingerEventType(undefined);
+    setLingerSwingId(undefined);
     setLingerQueuePosition(undefined);
     lingerStartRef.current = null;
     setLingerTimeLeft(0);
@@ -370,6 +374,7 @@ export function usePlayback({
     isLingering: playbackState === PlaybackState.LINGERING,
     lingerTimeLeft,
     lingerEventType,
+    lingerSwingId,
     lingerQueuePosition,
     currentSwing,
     previousSwing,

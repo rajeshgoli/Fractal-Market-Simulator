@@ -6,6 +6,7 @@ interface SwingOverlayProps {
   series: ISeriesApi<'Candlestick'> | null;
   swings: DetectedSwing[];
   currentPosition: number;
+  highlightedSwingId?: string;
 }
 
 // Fib level configuration
@@ -29,6 +30,7 @@ export const SwingOverlay: React.FC<SwingOverlayProps> = ({
   series,
   swings,
   currentPosition,
+  highlightedSwingId,
 }) => {
   // Track created price lines so we can remove them on update
   const priceLinesRef = useRef<IPriceLine[]>([]);
@@ -90,11 +92,16 @@ export const SwingOverlay: React.FC<SwingOverlayProps> = ({
     clearPriceLines();
 
     // Filter swings to only show those visible up to current position
-    const visibleSwings = swings.filter(swing => {
+    let visibleSwings = swings.filter(swing => {
       // Only show swings where both points are before current position
       const maxBarIndex = Math.max(swing.high_bar_index, swing.low_bar_index);
       return maxBarIndex <= currentPosition;
     });
+
+    // When a specific swing is highlighted (during linger), only show that swing
+    if (highlightedSwingId) {
+      visibleSwings = visibleSwings.filter(swing => swing.id === highlightedSwingId);
+    }
 
     // Create lines for each visible swing
     const allLines: IPriceLine[] = [];
@@ -111,7 +118,7 @@ export const SwingOverlay: React.FC<SwingOverlayProps> = ({
     return () => {
       clearPriceLines();
     };
-  }, [series, swings, currentPosition, clearPriceLines, createSwingLines]);
+  }, [series, swings, currentPosition, highlightedSwingId, clearPriceLines, createSwingLines]);
 
   // This component doesn't render any DOM elements
   // It only manages price lines on the chart via side effects

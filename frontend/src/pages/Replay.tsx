@@ -411,11 +411,13 @@ export const Replay: React.FC = () => {
             series={series1Ref.current}
             swings={detectedSwings}
             currentPosition={playback.currentPosition}
+            highlightedSwingId={playback.lingerSwingId}
           />
           <SwingOverlay
             series={series2Ref.current}
             swings={detectedSwings}
             currentPosition={playback.currentPosition}
+            highlightedSwingId={playback.lingerSwingId}
           />
 
           {/* Playback Controls */}

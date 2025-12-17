@@ -2,16 +2,31 @@
 
 **Unreviewed Change Count:** 4
 
-**Last Review:** 2025-12-16
+**Last Review:** 2025-12-17
 
 ---
 
 ## Pending Changes
 
-- **#96** - Fix React Replay View: chart updates during playback, position markers
-- **#98** - Fix flaky test: test_performance_scaling_is_nlogn
-- **#97** - Remove dead code: reference detectors, legacy HTML views (~3,700 LOC)
-- **#91** - Replay View redesign: React + Tailwind adoption
+### 2025-12-17 - Highlight specific swing during explanation pause
+- **Issue:** #108
+- **Type:** Bug Fix
+- **Files:** `frontend/src/hooks/usePlayback.ts`, `frontend/src/components/SwingOverlay.tsx`, `frontend/src/pages/Replay.tsx`
+
+### 2025-12-17 - Swing markers and Fib levels on Replay View chart
+- **Issue:** #107
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/api.py`, `frontend/src/components/SwingOverlay.tsx`, `frontend/src/lib/api.ts`, `frontend/src/pages/Replay.tsx`, `frontend/src/types.ts`, `tests/test_ground_truth_annotator_api.py`
+
+### 2025-12-17 - Replay View speed control relative to aggregation
+- **Issue:** #103
+- **Type:** Enhancement
+- **Files:** `frontend/src/components/PlaybackControls.tsx`, `frontend/src/constants.ts`, `frontend/src/hooks/usePlayback.ts`, `frontend/src/lib/api.ts`, `frontend/src/pages/Replay.tsx`, `frontend/src/types.ts`
+
+### 2025-12-17 - Zero swings bug fix
+- **Issue:** #100
+- **Type:** Bug Fix
+- **Files:** `src/swing_analysis/swing_detector.py`, `tests/test_swing_detector.py`
 
 ---
 
@@ -19,6 +34,8 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 17 | Q-2025-12-17-1 — Zero swing bug diagnosis + forward-only playback design | Designed → Ready for engineering |
+| Dec 17 | #91, #96, #97, #98 — React adoption, chart fixes, dead code removal, flaky test | All Accepted |
 | Dec 16 | #84, #85, #86, #87, #89 — Replay View: split view, playback, linger, explanation, bug fixes | All Accepted |
 | Dec 16 | #78, #79, #81, #82, #83 — Discretization overlay, validation, ground truth consolidation, explanation data, windowed API | All Accepted |
 | Dec 16 | Replay View Spec (`Docs/Working/replay_view_spec.md`) | Feasible → Issues #82-#87 created |
