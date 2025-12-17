@@ -1,7 +1,12 @@
 import React from 'react';
-import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock, ChevronDown } from 'lucide-react';
 import { PLAYBACK_SPEEDS } from '../constants';
-import { PlaybackState } from '../types';
+import { PlaybackState, AggregationScale } from '../types';
+
+interface SpeedAggregationOption {
+  value: AggregationScale;
+  label: string;
+}
 
 interface PlaybackControlsProps {
   playbackState: PlaybackState;
@@ -12,8 +17,11 @@ interface PlaybackControlsProps {
   onJumpToEnd: () => void;
   currentBar: number;
   totalBars: number;
-  playbackSpeed: number;
-  onSpeedChange: (speed: number) => void;
+  speedMultiplier: number;
+  onSpeedMultiplierChange: (multiplier: number) => void;
+  speedAggregation: AggregationScale;
+  onSpeedAggregationChange: (agg: AggregationScale) => void;
+  availableSpeedAggregations: SpeedAggregationOption[];
   isLingering: boolean;
   lingerTimeLeft: number;
   lingerTotalTime: number;
@@ -30,8 +38,11 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onJumpToEnd,
   currentBar,
   totalBars,
-  playbackSpeed,
-  onSpeedChange,
+  speedMultiplier,
+  onSpeedMultiplierChange,
+  speedAggregation,
+  onSpeedAggregationChange,
+  availableSpeedAggregations,
   isLingering,
   lingerTimeLeft,
   lingerTotalTime,
@@ -138,23 +149,45 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           </button>
         </div>
 
-        {/* Speed Selector */}
-        <div className="flex items-center bg-app-bg rounded-md p-0.5 border border-app-border">
-          {PLAYBACK_SPEEDS.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => onSpeedChange(s.value)}
-              className={`
-                px-2 py-1 text-xs font-mono rounded transition-colors
-                ${playbackSpeed === s.value
-                  ? 'bg-app-card text-trading-blue font-bold shadow-sm'
-                  : 'text-app-muted hover:text-white'
-                }
-              `}
+        {/* Speed Control: "Speed: [Nx] per [aggregation] bar" */}
+        <div className="flex items-center gap-2 text-xs text-app-muted">
+          <span>Speed:</span>
+
+          {/* Speed Multiplier Dropdown */}
+          <div className="relative">
+            <select
+              value={speedMultiplier}
+              onChange={(e) => onSpeedMultiplierChange(Number(e.target.value))}
+              className="appearance-none bg-app-bg text-trading-blue font-mono font-bold px-2 py-1 pr-6 rounded border border-app-border cursor-pointer focus:outline-none focus:ring-1 focus:ring-trading-blue"
             >
-              {s.label}
-            </button>
-          ))}
+              {PLAYBACK_SPEEDS.map((s) => (
+                <option key={s.value} value={s.value} className="bg-app-card text-app-text">
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-trading-blue" />
+          </div>
+
+          <span>per</span>
+
+          {/* Aggregation Dropdown */}
+          <div className="relative">
+            <select
+              value={speedAggregation}
+              onChange={(e) => onSpeedAggregationChange(e.target.value as AggregationScale)}
+              className="appearance-none bg-app-bg text-trading-blue font-mono font-bold px-2 py-1 pr-6 rounded border border-app-border cursor-pointer focus:outline-none focus:ring-1 focus:ring-trading-blue"
+            >
+              {availableSpeedAggregations.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-app-card text-app-text">
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-trading-blue" />
+          </div>
+
+          <span>bar</span>
         </div>
       </div>
 

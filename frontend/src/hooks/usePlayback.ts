@@ -7,6 +7,7 @@ interface UsePlaybackOptions {
   events: DiscretizationEvent[];
   swings: Record<string, DiscretizationSwing>;
   filters: FilterState[];
+  playbackIntervalMs: number;
   onPositionChange?: (position: number) => void;
 }
 
@@ -26,8 +27,6 @@ interface UsePlaybackReturn {
   stepBack: () => void;
   jumpToStart: () => void;
   jumpToEnd: () => void;
-  setSpeed: (ms: number) => void;
-  playbackSpeed: number;
 }
 
 // Helper to convert event data to SwingData for the explanation panel
@@ -92,11 +91,11 @@ export function usePlayback({
   events,
   swings,
   filters,
+  playbackIntervalMs,
   onPositionChange,
 }: UsePlaybackOptions): UsePlaybackReturn {
   const [playbackState, setPlaybackState] = useState<PlaybackState>(PlaybackState.STOPPED);
   const [currentPosition, setCurrentPosition] = useState(0);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1000);
   const [lingerTimeLeft, setLingerTimeLeft] = useState(0);
   const [lingerEventType, setLingerEventType] = useState<string | undefined>();
   const [lingerQueuePosition, setLingerQueuePosition] = useState<{ current: number; total: number } | undefined>();
@@ -281,8 +280,8 @@ export function usePlayback({
     setPlaybackState(PlaybackState.PLAYING);
     playbackIntervalRef.current = window.setInterval(() => {
       advanceBarRef.current();
-    }, playbackSpeed);
-  }, [playbackState, currentPosition, sourceBars.length, updatePosition, playbackSpeed, exitLinger]);
+    }, playbackIntervalMs);
+  }, [playbackState, currentPosition, sourceBars.length, updatePosition, playbackIntervalMs, exitLinger]);
 
   // Pause playback
   const pause = useCallback(() => {
@@ -348,17 +347,15 @@ export function usePlayback({
     }
   }, [clearTimers, exitLinger, sourceBars.length, updatePosition]);
 
-  // Set speed
-  const setSpeed = useCallback((ms: number) => {
-    setPlaybackSpeed(ms);
-    // Restart interval if playing
+  // Restart interval when playbackIntervalMs changes during playback
+  useEffect(() => {
     if (playbackState === PlaybackState.PLAYING && playbackIntervalRef.current) {
       clearInterval(playbackIntervalRef.current);
       playbackIntervalRef.current = window.setInterval(() => {
         advanceBarRef.current();
-      }, ms);
+      }, playbackIntervalMs);
     }
-  }, [playbackState]);
+  }, [playbackIntervalMs, playbackState]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -383,7 +380,5 @@ export function usePlayback({
     stepBack,
     jumpToStart,
     jumpToEnd,
-    setSpeed,
-    playbackSpeed,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { IChartApi, ISeriesApi, createSeriesMarkers, SeriesMarker, Time, ISeriesMarkersPluginApi } from 'lightweight-charts';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
@@ -6,7 +6,7 @@ import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { ExplanationPanel } from '../components/ExplanationPanel';
 import { usePlayback } from '../hooks/usePlayback';
-import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings } from '../lib/api';
+import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings, fetchSession } from '../lib/api';
 import { INITIAL_FILTERS, LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
@@ -14,6 +14,9 @@ import {
   AggregationScale,
   DiscretizationEvent,
   DiscretizationSwing,
+  parseResolutionToMinutes,
+  getAggregationLabel,
+  getAggregationMinutes,
 } from '../types';
 
 export const Replay: React.FC = () => {
@@ -24,6 +27,11 @@ export const Replay: React.FC = () => {
   // Chart aggregation state
   const [chart1Aggregation, setChart1Aggregation] = useState<AggregationScale>('L');
   const [chart2Aggregation, setChart2Aggregation] = useState<AggregationScale>('S');
+
+  // Speed control state
+  const [sourceResolutionMinutes, setSourceResolutionMinutes] = useState<number>(5); // Default 5m
+  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
+  const [speedAggregation, setSpeedAggregation] = useState<AggregationScale>('L'); // Default to chart1
 
   // Data state
   const [sourceBars, setSourceBars] = useState<BarData[]>([]);
@@ -47,12 +55,45 @@ export const Replay: React.FC = () => {
   // Ref to hold the latest syncChartsToPosition function (avoids stale closure in callback)
   const syncChartsToPositionRef = useRef<(sourceIndex: number) => void>(() => {});
 
+  // Compute available speed aggregation options (only aggregations selected on charts)
+  const availableSpeedAggregations = useMemo(() => {
+    const options: { value: AggregationScale; label: string }[] = [];
+    const seen = new Set<AggregationScale>();
+
+    // Add chart1 aggregation
+    if (!seen.has(chart1Aggregation)) {
+      options.push({ value: chart1Aggregation, label: getAggregationLabel(chart1Aggregation) });
+      seen.add(chart1Aggregation);
+    }
+
+    // Add chart2 aggregation if different
+    if (!seen.has(chart2Aggregation)) {
+      options.push({ value: chart2Aggregation, label: getAggregationLabel(chart2Aggregation) });
+      seen.add(chart2Aggregation);
+    }
+
+    return options;
+  }, [chart1Aggregation, chart2Aggregation]);
+
+  // Calculate effective playback interval in ms
+  // Speed = N aggregated bars per second at selected aggregation
+  // effectiveSourceBarsPerSecond = speedMultiplier * (aggMinutes / sourceMinutes)
+  // interval = 1000 / effectiveSourceBarsPerSecond
+  const effectivePlaybackIntervalMs = useMemo(() => {
+    const aggMinutes = getAggregationMinutes(speedAggregation);
+    const aggregationFactor = aggMinutes / sourceResolutionMinutes;
+    const effectiveSourceBarsPerSecond = speedMultiplier * aggregationFactor;
+    // Clamp to minimum 10ms interval for stability
+    return Math.max(10, Math.round(1000 / effectiveSourceBarsPerSecond));
+  }, [speedMultiplier, speedAggregation, sourceResolutionMinutes]);
+
   // Playback hook - uses ref to avoid stale closure issue
   const playback = usePlayback({
     sourceBars,
     events,
     swings,
     filters,
+    playbackIntervalMs: effectivePlaybackIntervalMs,
     onPositionChange: useCallback((position: number) => {
       syncChartsToPositionRef.current(position);
     }, []),
@@ -64,6 +105,11 @@ export const Replay: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
+        // Load session info to get source resolution
+        const session = await fetchSession();
+        const resolutionMinutes = parseResolutionToMinutes(session.resolution);
+        setSourceResolutionMinutes(resolutionMinutes);
+
         // Load source bars
         const source = await fetchBars('S');
         setSourceBars(source);
@@ -134,6 +180,15 @@ export const Replay: React.FC = () => {
     setChart2Aggregation(scale);
     loadChart2Bars(scale);
   }, [loadChart2Bars]);
+
+  // Keep speedAggregation valid when chart aggregations change
+  useEffect(() => {
+    const validAggregations = [chart1Aggregation, chart2Aggregation];
+    if (!validAggregations.includes(speedAggregation)) {
+      // Default to chart1 aggregation if current is no longer valid
+      setSpeedAggregation(chart1Aggregation);
+    }
+  }, [chart1Aggregation, chart2Aggregation, speedAggregation]);
 
   // Find aggregated bar index for a source bar index
   const findAggBarForSourceIndex = useCallback((bars: BarData[], sourceIndex: number): number => {
@@ -323,8 +378,11 @@ export const Replay: React.FC = () => {
               onJumpToEnd={playback.jumpToEnd}
               currentBar={playback.currentPosition}
               totalBars={sourceBars.length}
-              playbackSpeed={playback.playbackSpeed}
-              onSpeedChange={playback.setSpeed}
+              speedMultiplier={speedMultiplier}
+              onSpeedMultiplierChange={setSpeedMultiplier}
+              speedAggregation={speedAggregation}
+              onSpeedAggregationChange={setSpeedAggregation}
+              availableSpeedAggregations={availableSpeedAggregations}
               isLingering={playback.isLingering}
               lingerTimeLeft={playback.lingerTimeLeft}
               lingerTotalTime={LINGER_DURATION_MS / 1000}

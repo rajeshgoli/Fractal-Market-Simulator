@@ -123,10 +123,48 @@ export enum PlaybackState {
 
 // Aggregation scale options (timeframes not S/M/L/XL)
 export const AGGREGATION_OPTIONS = [
-  { value: 'S', label: '5m' },
-  { value: 'M', label: '15m' },
-  { value: 'L', label: '1H' },
-  { value: 'XL', label: '4H' },
+  { value: 'S', label: '5m', minutes: 5 },
+  { value: 'M', label: '15m', minutes: 15 },
+  { value: 'L', label: '1H', minutes: 60 },
+  { value: 'XL', label: '4H', minutes: 240 },
 ] as const;
 
 export type AggregationScale = typeof AGGREGATION_OPTIONS[number]['value'];
+
+/**
+ * Parse a resolution string (e.g., "5m", "1h", "1D") into minutes.
+ */
+export function parseResolutionToMinutes(resolution: string): number {
+  const match = resolution.match(/^(\d+)([mhDWM])$/i);
+  if (!match) {
+    console.warn(`Unknown resolution format: ${resolution}, defaulting to 1m`);
+    return 1;
+  }
+
+  const value = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+
+  switch (unit) {
+    case 'm': return value;
+    case 'h': return value * 60;
+    case 'd': return value * 60 * 24;
+    case 'w': return value * 60 * 24 * 7;
+    default: return value;
+  }
+}
+
+/**
+ * Get the label for an aggregation scale.
+ */
+export function getAggregationLabel(scale: AggregationScale): string {
+  const option = AGGREGATION_OPTIONS.find(o => o.value === scale);
+  return option?.label ?? scale;
+}
+
+/**
+ * Get minutes for an aggregation scale.
+ */
+export function getAggregationMinutes(scale: AggregationScale): number {
+  const option = AGGREGATION_OPTIONS.find(o => o.value === scale);
+  return option?.minutes ?? 5;
+}

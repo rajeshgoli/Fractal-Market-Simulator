@@ -2,6 +2,25 @@ import { BarData, DiscretizationEvent, DiscretizationSwing, AggregationScale } f
 
 const API_BASE = '/api';
 
+export interface SessionInfo {
+  session_id: string;
+  data_file: string;
+  resolution: string;
+  window_size: number;
+  scale: string;
+  created_at: string;
+  annotation_count: number;
+  completed_scales: string[];
+}
+
+export async function fetchSession(): Promise<SessionInfo> {
+  const response = await fetch(`${API_BASE}/session`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch session: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 export async function fetchBars(scale?: AggregationScale): Promise<BarData[]> {
   const url = scale ? `${API_BASE}/bars?scale=${scale}` : `${API_BASE}/bars`;
   const response = await fetch(url);
