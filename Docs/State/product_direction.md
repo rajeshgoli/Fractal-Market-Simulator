@@ -1,35 +1,79 @@
 # Product Direction
 
-**Last Updated:** December 16, 2025
+**Last Updated:** December 17, 2025
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Build Replay View for temporal debugging and trust-building.**
+**Fix Replay View: Calibration-first, forward-only playback.**
 
-Discretization pipeline is complete (#73-77, #78 overlay). Before continuing FP/FN refinement, we need to **watch the system think** - understand why swings are detected and compare against human intuition.
+Initial Replay View implementation has polished UI but fundamentally wrong replay model. Current preload-and-scrub approach creates look-ahead bias — user sees entire future before playback starts, making causal evaluation impossible.
 
-**Spec:** `Docs/Working/replay_view_spec.md`
-
-**Key insight:** Static views don't build trust. Users need to see structure unfold temporally and understand detection logic before they can effectively calibrate the system.
+**Key insight:** The purpose of Replay View is **causal evaluation** — observing whether level-cross events correspond to swing-formation events as the North Star hypothesis predicts. This requires forward-only playback where new bars appear that weren't previously visible.
 
 ---
 
-## P0: Replay View
+## P0: Replay View Redesign
 
-**Problem:** Can't tell if swing detection is working correctly without understanding the "why" behind each detection.
+**Status:** Blocking issues identified. Needs architecture redesign.
 
-**Solution:** Temporal playback with detection explanations:
-- Watch bars advance at configurable speed
-- Auto-pause on significant events (SWING_FORMED, COMPLETION, INVALIDATION)
-- Show explanation panel: which high, which low, why this scale, separation from previous
-- 15-second linger with timer wheel, user can skip or extend
+### Blocking Issues
 
-**Acceptance criteria:** See `Docs/Working/replay_view_spec.md`
+**1. No swings detected**
 
-**Backend dependency:** SWING_FORMED events need `explanation` field with detection reasoning.
+10K 5m bars yields zero swings. Either bug or missing scale/salience input. Blocks all evaluation.
+
+**2. Look-ahead bias**
+
+Current model: preload all bars, then scrub through. User sees entire future upfront.
+
+**Needed model:** Calibration window → forward-only playback:
+1. Load calibration window (e.g., 10K bars)
+2. Auto-calibrate: detect active swings in that window
+3. Show calibration report
+4. Pre-playback: allow cycling through active swings
+5. Press Play → advance *beyond* the window
+6. New bars appear that weren't previously visible
+7. Events surface in real-time
+8. Keep loading more data until CSV exhausted
+
+**3. Speed tied to wrong reference**
+
+1x = 1 source bar/sec (5m), too slow at 1H/4H. Speed should be relative to chart aggregation.
+
+### UI Changes Required
+
+**New "Scale Calibration" section** (below left controls):
+- Scale toggles: XL, L, M, S (on/off for filtering)
+- "Active swings to show" dropdown: 1, 2, 3, 4, 5 (default: 2)
+
+**Calibration report** (in report area):
+- Swings found per scale
+- Active swings per scale
+- Threshold values (XL, L, M, S definitions)
+
+**Navigation:**
+- `<<` / `>>` = previous/next **event** (not bar)
+
+**Display during playback:**
+- Show only biggest N swings (per dropdown setting)
+- Fib levels: 0, 0.382, 1, 2 for persistent swings
+- Event-triggered swings: those + the level being crossed
+
+### Acceptance Criteria
+
+- [ ] Swings actually detected and shown (bug fix or scale input)
+- [ ] Calibration auto-runs on load, report shown
+- [ ] Pre-playback: can cycle through active swings
+- [ ] Forward-only playback: new bars appear beyond calibration window
+- [ ] Events surface in real-time during playback
+- [ ] `<<` / `>>` navigate by event, not bar
+- [ ] Speed relative to chart aggregation
+- [ ] Scale toggles and active swing count dropdown work
+
+**Spec:** `Docs/Working/replay_view_spec.md` (to be updated)
 
 ---
 

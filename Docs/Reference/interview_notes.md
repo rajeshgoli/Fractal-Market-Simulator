@@ -4,6 +4,70 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 17, 2025 - Replay View Feedback: Calibration-First, Forward-Only Playback
+
+**Context:** User tested Replay View implementation. UI is polished but core behavior doesn't support intended use case.
+
+### What Works
+
+**UI Quality:** "Beautiful", "gorgeous", "visually polished and well thought out."
+
+### Blocking Issues
+
+**1. No swings detected**
+
+Loaded ~10,000 5m bars (~200 1H bars). System shows zero swings. Either a bug or missing scale/salience input. Can't evaluate anything else until this works.
+
+**2. Replay model creates look-ahead bias**
+
+Current behavior: preload all bars, then scrub through them. User sees entire future before playback starts. Impossible to evaluate causality.
+
+> "I can see the entire future upfront, and then the system just walks through it. That makes it impossible for me to evaluate causality."
+
+**Wanted model:** Calibration window → forward-only playback
+
+1. Load calibration window (e.g., 10K bars)
+2. Auto-calibrate: detect all active swings in that window
+3. Show calibration report (swings per scale, active per scale, thresholds)
+4. Pre-playback: allow cycling through active swings
+5. Press Play → advance *beyond* the window
+6. New bars appear that weren't previously visible
+7. Events surface in real-time: swing formed, completed, invalidated, level crosses
+8. Keep loading more data until CSV exhausted
+
+**3. Speed tied to wrong reference**
+
+1x = 1 source bar/sec (5m), which is too slow at 1H/4H aggregation. Speed should be relative to chart timeframe, not raw data.
+
+### UI Changes Requested
+
+**New "Scale Calibration" section** (below left controls):
+- Scale toggles: XL, L, M, S (on/off for filtering)
+- "Active swings to show" dropdown: 1, 2, 3, 4, 5 (default: 2)
+
+**Calibration report** (in report area):
+- Swings found per scale
+- Active swings per scale
+- Threshold values (what defines XL, L, M, S)
+
+**Navigation:**
+- `<<` / `>>` = previous/next **event** (not bar)
+
+**Display during playback:**
+- Show only biggest N swings (per dropdown)
+- Fib levels: 0, 0.382, 1, 2 for persistent swings
+- Event-triggered swings: those + the level being crossed
+
+### Key Insight
+
+The purpose of Replay View is **causal evaluation** — observing whether level-cross events correspond to swing-formation events as the North Star hypothesis predicts. Current preload-and-scrub model defeats this purpose entirely.
+
+### Handoff
+
+Architect to redesign replay model: calibration-first, forward-only playback with event-driven navigation.
+
+---
+
 ## December 15, 2025 - FIB-Based Structural Separation for Extrema Selection
 
 **Context:** User completed 5 ver4 sessions (94 FP reviews). Reviewing patterns in FP data.
