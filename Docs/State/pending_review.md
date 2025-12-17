@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-16
 
 ---
 
 ## Pending Changes
+
+### 2025-12-16 - Replay View: Swing explanation panel
+- **Issue:** #87
+- **Type:** Feature
+- **Files:** `src/ground_truth_annotator/static/replay.html`, `Docs/Reference/user_guide.md`
 
 ### 2025-12-16 - Replay View: Event-driven linger with timer wheel
 - **Issue:** #86

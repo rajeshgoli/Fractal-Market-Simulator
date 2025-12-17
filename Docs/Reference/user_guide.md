@@ -560,6 +560,34 @@ Configure which events trigger linger via checkboxes:
 **Multiple Events:**
 When multiple events occur at the same bar, they are queued and shown sequentially. The indicator displays queue position (e.g., "1/3").
 
+### Swing Explanation Panel
+
+When lingering on a SWING_FORMED event, the explanation panel displays detailed information about why the swing was detected:
+
+**Panel Content:**
+
+| Field | Description |
+|-------|-------------|
+| Scale Badge | XL, L, M, or S scale |
+| Direction Badge | BULL (green) or BEAR (red) |
+| High Endpoint | Price, bar index, and timestamp |
+| Low Endpoint | Price, bar index, and timestamp |
+| Size | Points and percentage of swing |
+| Scale Reason | Why this size qualifies for this scale (e.g., "Size 112.50 >= XL threshold 100") |
+| Separation | Distance in FIB levels from previous swing at same scale |
+
+**Anchor Swings:**
+For the first swing at a scale (anchor swing), the separation section shows "Largest swing in calibration window - anchor point" instead of separation metrics.
+
+**Chart Annotations:**
+When showing a SWING_FORMED explanation:
+- **Current swing**: Bright markers with H/L labels and prices on both charts
+- **Previous swing**: Dimmed markers with "prev H" / "prev L" labels on both charts
+- Markers appear on both top and bottom charts at the appropriate aggregated bars
+
+**Empty State:**
+When not lingering on a SWING_FORMED event, the panel shows guidance: "Advance playback or step to a SWING_FORMED event to see explanation."
+
 ### Use Cases
 
 1. **Multi-timeframe analysis**: View the same moment at different aggregation levels

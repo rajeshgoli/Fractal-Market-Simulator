@@ -348,6 +348,179 @@
             min-width: 0;
         }
 
+        /* Swing explanation panel */
+        .explanation-panel {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .explanation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .explanation-title {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .swing-badge {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .swing-badge.bull {
+            background: var(--accent-bull);
+            color: white;
+        }
+
+        .swing-badge.bear {
+            background: var(--accent-bear);
+            color: white;
+        }
+
+        .swing-badge.scale {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .explanation-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .explanation-section {
+            background: var(--bg-card);
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .explanation-section h4 {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .endpoint-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+        }
+
+        .endpoint-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .endpoint-value {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .endpoint-value.high {
+            color: var(--accent-bull);
+        }
+
+        .endpoint-value.low {
+            color: var(--accent-bear);
+        }
+
+        .size-display {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .size-pct {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .scale-reason {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            line-height: 1.4;
+        }
+
+        .separation-detail {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .separation-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+        }
+
+        .separation-label {
+            color: var(--text-secondary);
+        }
+
+        .separation-value {
+            font-family: monospace;
+            color: var(--accent-blue);
+        }
+
+        .anchor-note {
+            background: var(--accent-purple);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            text-align: center;
+        }
+
+        .explanation-empty {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+        }
+
+        .explanation-empty-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+
+        .explanation-empty-text {
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .explanation-previous {
+            opacity: 0.6;
+            border-left: 3px solid var(--accent-orange);
+            padding-left: 12px;
+        }
+
+        .previous-label {
+            font-size: 0.75rem;
+            color: var(--accent-orange);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
         @media (max-width: 1200px) {
             .chart-container {
                 height: 280px;
@@ -374,6 +547,10 @@
             .filter-group {
                 flex-direction: row;
                 flex-wrap: wrap;
+            }
+
+            .explanation-content {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -519,6 +696,104 @@
                 </div>
 
             </div>
+
+            <!-- Swing Explanation Panel -->
+            <div class="explanation-panel" id="explanation-panel">
+                <!-- Empty state (shown when not on SWING_FORMED event) -->
+                <div class="explanation-empty" id="explanation-empty">
+                    <div class="explanation-empty-icon">📊</div>
+                    <div class="explanation-empty-text">
+                        Advance playback or step to a SWING_FORMED event to see explanation
+                    </div>
+                </div>
+
+                <!-- Content (hidden until SWING_FORMED) -->
+                <div id="explanation-content-wrapper" style="display: none;">
+                    <div class="explanation-header">
+                        <div class="explanation-title">
+                            <span>SWING FORMED:</span>
+                            <span class="swing-badge scale" id="exp-scale">XL</span>
+                            <span class="swing-badge bull" id="exp-direction">BULL</span>
+                        </div>
+                    </div>
+
+                    <div class="explanation-content">
+                        <!-- Left column: Endpoints -->
+                        <div class="explanation-section">
+                            <h4>Endpoints</h4>
+                            <div class="endpoint-row">
+                                <span class="endpoint-label">High:</span>
+                                <span class="endpoint-value high" id="exp-high-price">-</span>
+                            </div>
+                            <div class="endpoint-row">
+                                <span class="endpoint-label">Bar:</span>
+                                <span class="endpoint-value" id="exp-high-bar">-</span>
+                            </div>
+                            <div class="endpoint-row">
+                                <span class="endpoint-label">Time:</span>
+                                <span class="endpoint-value" id="exp-high-time">-</span>
+                            </div>
+                            <div style="height: 10px;"></div>
+                            <div class="endpoint-row">
+                                <span class="endpoint-label">Low:</span>
+                                <span class="endpoint-value low" id="exp-low-price">-</span>
+                            </div>
+                            <div class="endpoint-row">
+                                <span class="endpoint-label">Bar:</span>
+                                <span class="endpoint-value" id="exp-low-bar">-</span>
+                            </div>
+                            <div class="endpoint-row">
+                                <span class="endpoint-label">Time:</span>
+                                <span class="endpoint-value" id="exp-low-time">-</span>
+                            </div>
+                        </div>
+
+                        <!-- Right column: Size & Scale -->
+                        <div class="explanation-section">
+                            <h4>Size</h4>
+                            <div class="size-display" id="exp-size-pts">- pts</div>
+                            <div class="size-pct" id="exp-size-pct">(--%)</div>
+                            <div style="height: 15px;"></div>
+                            <h4>Why this scale</h4>
+                            <div class="scale-reason" id="exp-scale-reason">-</div>
+                        </div>
+
+                        <!-- Separation section (spans both columns when not anchor) -->
+                        <div class="explanation-section" id="exp-separation-section" style="grid-column: 1 / -1;">
+                            <h4>Separation from previous</h4>
+                            <div class="separation-detail" id="exp-separation-detail">
+                                <div class="separation-row">
+                                    <span class="separation-label">Distance:</span>
+                                    <span class="separation-value" id="exp-sep-distance">- FIB levels</span>
+                                </div>
+                                <div class="separation-row">
+                                    <span class="separation-label">Minimum required:</span>
+                                    <span class="separation-value" id="exp-sep-minimum">- FIB levels</span>
+                                </div>
+                                <div class="separation-row">
+                                    <span class="separation-label">Reference:</span>
+                                    <span class="separation-value" id="exp-sep-reference">-</span>
+                                </div>
+                            </div>
+                            <div class="anchor-note" id="exp-anchor-note" style="display: none;">
+                                Largest swing in calibration window - anchor point
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Previous swing (dimmed, shown when available) -->
+                <div class="explanation-previous" id="exp-previous" style="display: none; margin-top: 15px;">
+                    <div class="previous-label">Previous swing</div>
+                    <div style="display: flex; gap: 15px; align-items: center;">
+                        <span class="swing-badge scale" id="exp-prev-scale" style="font-size: 0.75rem;">-</span>
+                        <span class="swing-badge" id="exp-prev-direction" style="font-size: 0.75rem;">-</span>
+                        <span style="font-size: 0.85rem; color: var(--text-secondary);">
+                            <span id="exp-prev-high">-</span> / <span id="exp-prev-low">-</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
             </div> <!-- Close charts-area -->
         </div> <!-- Close main-content -->
@@ -555,6 +830,14 @@
         let lingerStartTime = null;
         let lingerDuration = 30000;  // 30 seconds
         let lingerAnimationId = null;
+
+        // Swing data and markers
+        let allSwings = {};  // All swings indexed by swing_id
+        let currentSwingMarkers1 = null;  // Markers for chart 1
+        let currentSwingMarkers2 = null;  // Markers for chart 2
+        let previousSwingMarkers1 = null;  // Previous swing markers for chart 1
+        let previousSwingMarkers2 = null;  // Previous swing markers for chart 2
+        let currentExplanationEvent = null;  // Currently displayed SWING_FORMED event
 
         // Event filter settings (which events trigger linger)
         const eventFilters = {
@@ -703,6 +986,17 @@
                 }
 
                 console.log(`Loaded ${allEvents.length} events`);
+
+                // Load all swings for explanation panel
+                const swingsResponse = await fetch('/api/discretization/swings');
+                if (swingsResponse.ok) {
+                    const swingsList = await swingsResponse.json();
+                    allSwings = {};
+                    for (const swing of swingsList) {
+                        allSwings[swing.swing_id] = swing;
+                    }
+                    console.log(`Loaded ${swingsList.length} swings`);
+                }
             } catch (error) {
                 console.error('Failed to load events:', error);
             }
@@ -928,6 +1222,14 @@
             } else {
                 queueEl.textContent = '';
             }
+
+            // Update explanation panel for SWING_FORMED events
+            if (event.event_type === 'SWING_FORMED') {
+                updateExplanationPanel(event);
+            } else {
+                // Clear explanation for non-SWING_FORMED events
+                clearExplanationPanel();
+            }
         }
 
         // Start the 30-second linger timer
@@ -1014,6 +1316,9 @@
             // Reset timer wheel
             const wheel = document.getElementById('timer-wheel');
             wheel.style.setProperty('--progress', 0);
+
+            // Clear explanation panel
+            clearExplanationPanel();
         }
 
         // Jump to start (first bar)
@@ -1045,6 +1350,296 @@
             document.body.appendChild(toast);
 
             setTimeout(() => toast.remove(), 3000);
+        }
+
+        // =====================================================================
+        // Explanation Panel Functions
+        // =====================================================================
+
+        // Format timestamp for display
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return '-';
+            // Handle ISO string or Unix timestamp
+            const date = typeof timestamp === 'string'
+                ? new Date(timestamp)
+                : new Date(timestamp * 1000);
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Update the explanation panel with SWING_FORMED event data
+        function updateExplanationPanel(event) {
+            if (!event || event.event_type !== 'SWING_FORMED') {
+                clearExplanationPanel();
+                return;
+            }
+
+            currentExplanationEvent = event;
+            const data = event.data;
+            const explanation = data.explanation || {};
+
+            // Show content, hide empty state
+            document.getElementById('explanation-empty').style.display = 'none';
+            document.getElementById('explanation-content-wrapper').style.display = 'block';
+
+            // Update scale and direction badges
+            const scaleEl = document.getElementById('exp-scale');
+            const directionEl = document.getElementById('exp-direction');
+
+            scaleEl.textContent = data.scale || '-';
+
+            const direction = (data.direction || '').toUpperCase();
+            directionEl.textContent = direction;
+            directionEl.className = 'swing-badge ' + (direction === 'BULL' ? 'bull' : 'bear');
+
+            // Update endpoints
+            if (explanation.high) {
+                document.getElementById('exp-high-price').textContent =
+                    (explanation.high.price || 0).toFixed(2);
+                document.getElementById('exp-high-bar').textContent =
+                    `Bar ${explanation.high.bar || '-'}`;
+                document.getElementById('exp-high-time').textContent =
+                    formatTimestamp(explanation.high.timestamp);
+            }
+
+            if (explanation.low) {
+                document.getElementById('exp-low-price').textContent =
+                    (explanation.low.price || 0).toFixed(2);
+                document.getElementById('exp-low-bar').textContent =
+                    `Bar ${explanation.low.bar || '-'}`;
+                document.getElementById('exp-low-time').textContent =
+                    formatTimestamp(explanation.low.timestamp);
+            }
+
+            // Update size
+            document.getElementById('exp-size-pts').textContent =
+                `${(explanation.size_pts || 0).toFixed(2)} pts`;
+            document.getElementById('exp-size-pct').textContent =
+                `(${(explanation.size_pct || 0).toFixed(2)}%)`;
+
+            // Update scale reason
+            document.getElementById('exp-scale-reason').textContent =
+                explanation.scale_reason || '-';
+
+            // Update separation section
+            const separationSection = document.getElementById('exp-separation-section');
+            const separationDetail = document.getElementById('exp-separation-detail');
+            const anchorNote = document.getElementById('exp-anchor-note');
+
+            if (explanation.is_anchor) {
+                // Anchor swing - show note
+                separationDetail.style.display = 'none';
+                anchorNote.style.display = 'block';
+            } else if (explanation.separation) {
+                // Has separation data
+                separationDetail.style.display = 'flex';
+                anchorNote.style.display = 'none';
+
+                document.getElementById('exp-sep-distance').textContent =
+                    `${(explanation.separation.distance_fib || 0).toFixed(3)} FIB levels`;
+                document.getElementById('exp-sep-minimum').textContent =
+                    `${(explanation.separation.minimum_fib || 0).toFixed(3)} FIB levels`;
+
+                const refSwingId = explanation.separation.from_swing_id || '-';
+                document.getElementById('exp-sep-reference').textContent =
+                    refSwingId.substring(0, 8) + '...';
+
+                // Show previous swing info
+                showPreviousSwing(explanation.separation.from_swing_id);
+            } else {
+                // No separation data
+                separationDetail.style.display = 'none';
+                anchorNote.style.display = 'none';
+            }
+
+            // Add chart markers for current swing
+            addCurrentSwingMarkers(explanation);
+        }
+
+        // Clear the explanation panel
+        function clearExplanationPanel() {
+            currentExplanationEvent = null;
+            document.getElementById('explanation-empty').style.display = 'flex';
+            document.getElementById('explanation-content-wrapper').style.display = 'none';
+            document.getElementById('exp-previous').style.display = 'none';
+
+            // Clear chart markers
+            clearSwingMarkers();
+        }
+
+        // Show previous swing info in the panel
+        function showPreviousSwing(swingId) {
+            if (!swingId || !allSwings[swingId]) {
+                document.getElementById('exp-previous').style.display = 'none';
+                return;
+            }
+
+            const swing = allSwings[swingId];
+            document.getElementById('exp-previous').style.display = 'block';
+
+            document.getElementById('exp-prev-scale').textContent = swing.scale;
+
+            const dirEl = document.getElementById('exp-prev-direction');
+            const isBull = swing.direction === 'BULL';
+            dirEl.textContent = swing.direction;
+            dirEl.className = 'swing-badge ' + (isBull ? 'bull' : 'bear');
+            dirEl.style.fontSize = '0.75rem';
+
+            // For bull: anchor0 is low, anchor1 is high
+            // For bear: anchor0 is high, anchor1 is low
+            const highPrice = isBull ? swing.anchor1 : swing.anchor0;
+            const lowPrice = isBull ? swing.anchor0 : swing.anchor1;
+
+            document.getElementById('exp-prev-high').textContent = highPrice.toFixed(2);
+            document.getElementById('exp-prev-low').textContent = lowPrice.toFixed(2);
+
+            // Add dimmed markers for previous swing on charts
+            addPreviousSwingMarkers(swing);
+        }
+
+        // =====================================================================
+        // Chart Marker Functions
+        // =====================================================================
+
+        // Clear all swing markers from charts
+        function clearSwingMarkers() {
+            if (currentSwingMarkers1) {
+                candleSeries1.setMarkers([]);
+                currentSwingMarkers1 = null;
+            }
+            if (currentSwingMarkers2) {
+                candleSeries2.setMarkers([]);
+                currentSwingMarkers2 = null;
+            }
+            previousSwingMarkers1 = null;
+            previousSwingMarkers2 = null;
+        }
+
+        // Find the bar time for a given source bar index in an aggregated bar array
+        function findBarTimeForSourceIndex(bars, sourceIndex) {
+            for (const bar of bars) {
+                if (bar.source_start_index !== undefined &&
+                    sourceIndex >= bar.source_start_index &&
+                    sourceIndex <= bar.source_end_index) {
+                    return bar.time;
+                }
+            }
+            // Fallback: find closest bar
+            for (const bar of bars) {
+                if (bar.source_start_index !== undefined &&
+                    bar.source_start_index <= sourceIndex) {
+                    return bar.time;
+                }
+            }
+            return bars.length > 0 ? bars[bars.length - 1].time : null;
+        }
+
+        // Add markers for the current swing on both charts
+        function addCurrentSwingMarkers(explanation) {
+            if (!explanation || !explanation.high || !explanation.low) return;
+
+            const highBar = explanation.high.bar;
+            const lowBar = explanation.low.bar;
+            const highPrice = explanation.high.price;
+            const lowPrice = explanation.low.price;
+
+            // Create markers for chart 1
+            const markers1 = createSwingMarkers(chart1Bars, highBar, lowBar, highPrice, lowPrice, true);
+            if (markers1.length > 0) {
+                // Combine with previous swing markers if any
+                const allMarkers1 = previousSwingMarkers1 ? [...previousSwingMarkers1, ...markers1] : markers1;
+                candleSeries1.setMarkers(allMarkers1.sort((a, b) => a.time - b.time));
+                currentSwingMarkers1 = markers1;
+            }
+
+            // Create markers for chart 2
+            const markers2 = createSwingMarkers(chart2Bars, highBar, lowBar, highPrice, lowPrice, true);
+            if (markers2.length > 0) {
+                // Combine with previous swing markers if any
+                const allMarkers2 = previousSwingMarkers2 ? [...previousSwingMarkers2, ...markers2] : markers2;
+                candleSeries2.setMarkers(allMarkers2.sort((a, b) => a.time - b.time));
+                currentSwingMarkers2 = markers2;
+            }
+        }
+
+        // Add dimmed markers for the previous swing
+        function addPreviousSwingMarkers(swing) {
+            if (!swing) return;
+
+            // For bull: anchor0_bar is low, anchor1_bar is high
+            // For bear: anchor0_bar is high, anchor1_bar is low
+            const isBull = swing.direction === 'BULL';
+            const highBar = isBull ? swing.anchor1_bar : swing.anchor0_bar;
+            const lowBar = isBull ? swing.anchor0_bar : swing.anchor1_bar;
+            const highPrice = isBull ? swing.anchor1 : swing.anchor0;
+            const lowPrice = isBull ? swing.anchor0 : swing.anchor1;
+
+            // Create dimmed markers for chart 1
+            const markers1 = createSwingMarkers(chart1Bars, highBar, lowBar, highPrice, lowPrice, false);
+            previousSwingMarkers1 = markers1;
+
+            // Create dimmed markers for chart 2
+            const markers2 = createSwingMarkers(chart2Bars, highBar, lowBar, highPrice, lowPrice, false);
+            previousSwingMarkers2 = markers2;
+
+            // Update all markers on both charts
+            updateAllMarkers();
+        }
+
+        // Create swing markers for a chart
+        function createSwingMarkers(bars, highBar, lowBar, highPrice, lowPrice, isCurrent) {
+            const markers = [];
+
+            const highTime = findBarTimeForSourceIndex(bars, highBar);
+            const lowTime = findBarTimeForSourceIndex(bars, lowBar);
+
+            if (highTime) {
+                markers.push({
+                    time: highTime,
+                    position: 'aboveBar',
+                    color: isCurrent ? '#26a69a' : 'rgba(38, 166, 154, 0.4)',
+                    shape: 'arrowDown',
+                    text: isCurrent ? `H ${highPrice.toFixed(2)}` : `prev H`,
+                    size: isCurrent ? 2 : 1,
+                });
+            }
+
+            if (lowTime) {
+                markers.push({
+                    time: lowTime,
+                    position: 'belowBar',
+                    color: isCurrent ? '#ef5350' : 'rgba(239, 83, 80, 0.4)',
+                    shape: 'arrowUp',
+                    text: isCurrent ? `L ${lowPrice.toFixed(2)}` : `prev L`,
+                    size: isCurrent ? 2 : 1,
+                });
+            }
+
+            return markers;
+        }
+
+        // Update all markers on both charts (combines current and previous)
+        function updateAllMarkers() {
+            const allMarkers1 = [
+                ...(previousSwingMarkers1 || []),
+                ...(currentSwingMarkers1 || [])
+            ].sort((a, b) => a.time - b.time);
+
+            const allMarkers2 = [
+                ...(previousSwingMarkers2 || []),
+                ...(currentSwingMarkers2 || [])
+            ].sort((a, b) => a.time - b.time);
+
+            if (allMarkers1.length > 0) {
+                candleSeries1.setMarkers(allMarkers1);
+            }
+            if (allMarkers2.length > 0) {
+                candleSeries2.setMarkers(allMarkers2);
+            }
         }
 
         // Initialize on page load
