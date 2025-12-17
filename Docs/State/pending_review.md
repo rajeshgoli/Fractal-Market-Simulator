@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2025-12-16
 
@@ -8,11 +8,7 @@
 
 ## Pending Changes
 
-- **#78**: Discretization overlay in Ground Truth Annotator
-- **#79**: Discretizer validation on sample data
-- **#81**: Consolidate annotation sessions into ground_truth.json
-- **#82**: SWING_FORMED event explanation data
-- **#83**: Windowed events API tests
+*(No pending changes)*
 
 ---
 
@@ -20,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 16 | #78, #79, #81, #82, #83 — Discretization overlay, validation, ground truth consolidation, explanation data, windowed API | All Accepted |
 | Dec 16 | Replay View Spec (`Docs/Working/replay_view_spec.md`) | Feasible → Issues #82-#87 created |
 | Dec 16 | #73, #74, #75, #76, #77 — Discretization core implementation | All Accepted |
 | Dec 16 | #68, #69, #70, #71 — Phase 3 + Architecture Overhaul | All Accepted |

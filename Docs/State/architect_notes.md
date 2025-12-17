@@ -27,20 +27,20 @@ Read in order:
 
 ## Current Phase: Replay View
 
-**Active work stream:** Replay View (#82-#87) — Temporal debugging tool for swing detection validation
+**Active work stream:** Replay View (#84-#87) — Temporal debugging tool for swing detection validation
 
 ### Issue Status
 
 | Issue | Component | Status | Priority |
 |-------|-----------|--------|----------|
-| #82 | SWING_FORMED explanation enrichment | **Next** | P0 (blocking) |
-| #83 | Windowed events API | Pending | P1 |
-| #84 | Split view + aggregation | Pending | P1 |
+| #82 | SWING_FORMED explanation enrichment | **Complete** | — |
+| #83 | Windowed events API | **Complete** | — |
+| #84 | Split view + aggregation | **Next** | P1 |
 | #85 | Playback controls | Pending | P1 |
 | #86 | Event-driven linger + timer | Pending | P2 |
 | #87 | Swing explanation panel | Pending | P2 |
 
-**Critical path:** #82 → #84 → #86 → #87
+**Critical path:** #84 → #86 → #87 (backend dependencies resolved)
 
 ### Architecture Assessment
 
@@ -62,7 +62,7 @@ Analysis: `Docs/Working/replay_view_architecture.md`
 
 ## Previous Phase: Discretization Pipeline
 
-**Work stream:** Milestone 1 (#72) — Core implementation complete
+**Work stream:** Milestone 1 (#72) — **Complete**
 
 | Issue | Component | Status |
 |-------|-----------|--------|
@@ -72,7 +72,7 @@ Analysis: `Docs/Working/replay_view_architecture.md`
 | #76 | Discretizer Core | Complete |
 | #77 | Event Log I/O | Complete |
 | #78 | Visual Overlay | Complete |
-| #79 | Validation | Pending |
+| #79 | Validation | Complete |
 
 ---
 
@@ -170,6 +170,7 @@ Unified coordinate system for bull/bear swings:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 16 | #78, #79, #81, #82, #83 — Discretization overlay, validation, ground truth consolidation, explanation data, windowed API | All Accepted |
 | Dec 16 | Replay View spec assessment | Feasible → Issues #82-#87 created |
 | Dec 16 | #73, #74, #75, #76, #77 — Discretization core implementation | All Accepted |
 | Dec 16 | #68, #69, #70, #71 — Phase 3 + Architecture Overhaul | All Accepted |
