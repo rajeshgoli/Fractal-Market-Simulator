@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-16
 
@@ -11,7 +11,6 @@
 - **#78**: Discretization overlay in Ground Truth Annotator
 - **#79**: Discretizer validation on sample data
 - **#81**: Consolidate annotation sessions into ground_truth.json
-- **Replay View Spec**: `Docs/Working/replay_view_spec.md` — Ready for architect review
 
 ---
 
@@ -19,6 +18,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 16 | Replay View Spec (`Docs/Working/replay_view_spec.md`) | Feasible → Issues #82-#87 created |
 | Dec 16 | #73, #74, #75, #76, #77 — Discretization core implementation | All Accepted |
 | Dec 16 | #68, #69, #70, #71 — Phase 3 + Architecture Overhaul | All Accepted |
 | Dec 15 | Q-2025-12-15-2: FIB structural separation feasibility | Feasible → Merged into Phase 3 |
