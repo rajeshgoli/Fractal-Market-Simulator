@@ -1844,7 +1844,7 @@ async def discretization_page():
 async def replay_page():
     """Serve the Replay View UI - React frontend."""
     # First try the React build
-    project_root = Path(__file__).parent.parent.parent.parent
+    project_root = Path(__file__).parent.parent.parent
     react_index = project_root / "frontend" / "dist" / "index.html"
 
     if react_index.exists():
@@ -2021,7 +2021,7 @@ def init_app(
 
 
 # Mount React frontend assets (from Vite build)
-project_root = Path(__file__).parent.parent.parent.parent
+project_root = Path(__file__).parent.parent.parent
 react_dist_dir = project_root / "frontend" / "dist"
 react_assets_dir = react_dist_dir / "assets"
 if react_assets_dir.exists():
