@@ -8,6 +8,11 @@ interface ExplanationPanelProps {
   previousSwing?: SwingData | null;
 }
 
+// Safe number formatting that handles null/undefined
+const formatPrice = (value: number | null | undefined, decimals: number = 2): string => {
+  return (value ?? 0).toFixed(decimals);
+};
+
 export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({ swing, previousSwing }) => {
   if (!swing) {
     return (
@@ -53,7 +58,7 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({ swing, previ
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-lg font-mono tabular-nums text-trading-bull tracking-tight">
-                  {swing.highPrice.toFixed(2)}
+                  {formatPrice(swing.highPrice)}
                 </span>
                 <span className="text-xs text-app-muted tabular-nums">{swing.highTime}</span>
               </div>
@@ -71,7 +76,7 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({ swing, previ
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-lg font-mono tabular-nums text-trading-bear tracking-tight">
-                  {swing.lowPrice.toFixed(2)}
+                  {formatPrice(swing.lowPrice)}
                 </span>
                 <span className="text-xs text-app-muted tabular-nums">{swing.lowTime}</span>
               </div>
@@ -85,10 +90,10 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({ swing, previ
             <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-2">Size & Scale</span>
             <div className="flex items-baseline gap-3">
               <span className={`text-2xl font-mono tabular-nums font-medium ${priceColor}`}>
-                {swing.size.toFixed(2)} <span className="text-sm text-app-muted font-sans">pts</span>
+                {formatPrice(swing.size)} <span className="text-sm text-app-muted font-sans">pts</span>
               </span>
               <span className="text-sm text-app-muted tabular-nums">
-                ({swing.sizePct.toFixed(2)}%)
+                ({formatPrice(swing.sizePct)}%)
               </span>
             </div>
           </div>
@@ -120,23 +125,23 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({ swing, previ
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-app-muted">Fib Distance</span>
-                  <span className="font-mono text-trading-blue">{swing.separation.distanceFib.toFixed(3)}</span>
+                  <span className="font-mono text-trading-blue">{formatPrice(swing.separation.distanceFib, 3)}</span>
                 </div>
                 <div className="relative h-2 bg-app-bg rounded-full overflow-hidden border border-app-border/50">
                   {/* Marker for min requirement */}
                   <div
                     className="absolute top-0 bottom-0 w-0.5 bg-app-muted/50 z-10"
-                    style={{ left: `${(swing.separation.minimumFib * 100)}%` }}
+                    style={{ left: `${((swing.separation.minimumFib ?? 0) * 100)}%` }}
                   ></div>
                   {/* Fill */}
                   <div
                     className="absolute top-0 left-0 bottom-0 bg-trading-purple"
-                    style={{ width: `${Math.min(swing.separation.distanceFib * 100, 100)}%` }}
+                    style={{ width: `${Math.min((swing.separation.distanceFib ?? 0) * 100, 100)}%` }}
                   ></div>
                 </div>
                 <div className="flex justify-between text-[10px] text-app-muted mt-1">
                   <span>0.0</span>
-                  <span>Min: {swing.separation.minimumFib.toFixed(3)}</span>
+                  <span>Min: {formatPrice(swing.separation.minimumFib, 3)}</span>
                   <span>1.0</span>
                 </div>
               </div>
@@ -175,7 +180,7 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({ swing, previ
               {previousSwing.direction.toUpperCase()}
             </Badge>
             <span className="text-xs text-app-muted font-mono tabular-nums">
-              {previousSwing.highPrice.toFixed(2)} / {previousSwing.lowPrice.toFixed(2)}
+              {formatPrice(previousSwing.highPrice)} / {formatPrice(previousSwing.lowPrice)}
             </span>
           </div>
         </div>
