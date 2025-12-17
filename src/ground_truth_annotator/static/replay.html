@@ -937,10 +937,10 @@
             }
         }
 
-        // Load source bars to track total count
+        // Load source bars to track total count (scale=S returns source resolution)
         async function loadSourceBars() {
             try {
-                const response = await fetch('/api/bars');
+                const response = await fetch('/api/bars?scale=S');
                 sourceBars = await response.json();
                 document.getElementById('source-bar-count').textContent = sourceBars.length;
                 updateBarPosition();
@@ -1069,10 +1069,13 @@
             const bars = chartNum === 1 ? chart1Bars : chart2Bars;
             const chart = chartNum === 1 ? chart1 : chart2;
 
+            console.log(`syncChartToPosition(${chartNum}, forceCenter=${forceCenter}): bars.length=${bars.length}, currentSourceBarIndex=${currentSourceBarIndex}`);
+
             if (bars.length === 0) return;
 
             // Find which aggregated bar contains the current source position
             const aggBarIndex = findBarContainingSourceIndex(bars, currentSourceBarIndex);
+            console.log(`  -> aggBarIndex=${aggBarIndex}`);
 
             if (aggBarIndex >= 0 && aggBarIndex < bars.length) {
                 // Check if current bar is already visible (unless force centering)
@@ -1084,7 +1087,7 @@
                         const margin = rangeSize * 0.1;
                         const inRange = aggBarIndex >= visibleRange.from + margin &&
                                        aggBarIndex <= visibleRange.to - margin;
-                        console.log(`Chart${chartNum} sync: aggBar=${aggBarIndex}, visible=${visibleRange.from.toFixed(0)}-${visibleRange.to.toFixed(0)}, inRange=${inRange}`);
+                        console.log(`  -> visible=${visibleRange.from.toFixed(0)}-${visibleRange.to.toFixed(0)}, inRange=${inRange}`);
                         if (inRange) {
                             // Current bar is visible with margin, don't scroll
                             return;
@@ -1111,6 +1114,7 @@
                 }
                 from = Math.max(0, from);  // Ensure non-negative
 
+                console.log(`  -> SCROLLING to ${from}-${to}`);
                 chart.timeScale().setVisibleLogicalRange({ from, to });
             }
         }
