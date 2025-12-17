@@ -354,13 +354,24 @@ export const Replay: React.FC = () => {
         }
         setSwings(swingMap);
 
-        // Run calibration
+        // Run calibration - this sets playback_index on the backend
         setCalibrationPhase(CalibrationPhase.CALIBRATING);
         const calibration = await fetchCalibration(Math.min(10000, source.length));
         setCalibrationData(calibration);
 
-        // Store calibration bars for forward playback (first N bars up to calibration_bar_count)
-        const calBars = source.slice(0, calibration.calibration_bar_count);
+        // Re-fetch chart bars now that playback_index is set
+        // (initial fetch happened before calibration when playback_index was None)
+        const [newBars1, newBars2, newSourceBars] = await Promise.all([
+          fetchBars(chart1Aggregation),
+          fetchBars(chart2Aggregation),
+          fetchBars('S'),
+        ]);
+        setChart1Bars(newBars1);
+        setChart2Bars(newBars2);
+        setSourceBars(newSourceBars);
+
+        // Store calibration bars for forward playback
+        const calBars = newSourceBars.slice(0, calibration.calibration_bar_count);
         setCalibrationBars(calBars);
 
         // Reset index and transition to calibrated phase
