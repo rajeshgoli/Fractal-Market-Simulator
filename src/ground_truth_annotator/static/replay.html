@@ -837,6 +837,12 @@
         let previousSwingMarkers2 = null;  // Previous swing markers for chart 2
         let currentExplanationEvent = null;  // Currently displayed SWING_FORMED event
 
+        // Position indicator state
+        let positionMarker1 = null;  // Current position marker for chart 1
+        let positionMarker2 = null;  // Current position marker for chart 2
+        let lastAggBarIndex1 = -1;   // Track aggregated bar changes for chart 1
+        let lastAggBarIndex2 = -1;   // Track aggregated bar changes for chart 2
+
         // Event filter settings (which events trigger linger)
         const eventFilters = {
             SWING_FORMED: true,
@@ -1063,6 +1069,47 @@
             return bars.length - 1;
         }
 
+        // Update position marker for a specific chart
+        function updatePositionMarker(chartNum) {
+            const bars = chartNum === 1 ? chart1Bars : chart2Bars;
+
+            if (bars.length === 0) return;
+
+            // Find which aggregated bar contains the current source position
+            const aggBarIndex = findBarContainingSourceIndex(bars, currentSourceBarIndex);
+
+            if (aggBarIndex >= 0 && aggBarIndex < bars.length) {
+                const bar = bars[aggBarIndex];
+
+                // Create a distinctive position marker (vertical bar indicator)
+                const marker = {
+                    time: bar.time,
+                    position: 'aboveBar',
+                    color: '#ffeb3b',  // Yellow for visibility
+                    shape: 'arrowDown',
+                    text: '▼',
+                    size: 1,
+                };
+
+                if (chartNum === 1) {
+                    positionMarker1 = marker;
+                    lastAggBarIndex1 = aggBarIndex;
+                } else {
+                    positionMarker2 = marker;
+                    lastAggBarIndex2 = aggBarIndex;
+                }
+
+                // Update all markers on this chart
+                updateAllMarkers();
+            }
+        }
+
+        // Update position markers on both charts
+        function updatePositionMarkers() {
+            updatePositionMarker(1);
+            updatePositionMarker(2);
+        }
+
         // Sync a chart's visible range to the current source bar position
         // Only scrolls if current bar is outside visible range (preserves manual adjustments)
         function syncChartToPosition(chartNum, forceCenter = false) {
@@ -1074,9 +1121,16 @@
             // Find which aggregated bar contains the current source position
             const aggBarIndex = findBarContainingSourceIndex(bars, currentSourceBarIndex);
 
+            // Check if aggregated bar changed BEFORE updating position marker
+            const lastAggBarIndex = chartNum === 1 ? lastAggBarIndex1 : lastAggBarIndex2;
+            const aggBarChanged = lastAggBarIndex !== aggBarIndex && lastAggBarIndex >= 0;
+
+            // Always update position marker (visual feedback even without scroll)
+            updatePositionMarker(chartNum);
+
             if (aggBarIndex >= 0 && aggBarIndex < bars.length) {
-                // Check if current bar is already visible (unless force centering)
-                if (!forceCenter) {
+                // Check if current bar is already visible (unless force centering or agg bar changed)
+                if (!forceCenter && !aggBarChanged) {
                     const visibleRange = chart.timeScale().getVisibleLogicalRange();
                     if (visibleRange) {
                         // Add small margin (10%) so we scroll before bar hits edge
@@ -1548,18 +1602,14 @@
         // Chart Marker Functions
         // =====================================================================
 
-        // Clear all swing markers from charts
+        // Clear all swing markers from charts (keeps position markers)
         function clearSwingMarkers() {
-            if (currentSwingMarkers1) {
-                candleSeries1.setMarkers([]);
-                currentSwingMarkers1 = null;
-            }
-            if (currentSwingMarkers2) {
-                candleSeries2.setMarkers([]);
-                currentSwingMarkers2 = null;
-            }
+            currentSwingMarkers1 = null;
+            currentSwingMarkers2 = null;
             previousSwingMarkers1 = null;
             previousSwingMarkers2 = null;
+            // Update markers (will still show position markers if set)
+            updateAllMarkers();
         }
 
         // Find the bar time for a given source bar index in an aggregated bar array
@@ -1665,24 +1715,23 @@
             return markers;
         }
 
-        // Update all markers on both charts (combines current and previous)
+        // Update all markers on both charts (combines position, current, and previous swing markers)
         function updateAllMarkers() {
             const allMarkers1 = [
+                ...(positionMarker1 ? [positionMarker1] : []),
                 ...(previousSwingMarkers1 || []),
                 ...(currentSwingMarkers1 || [])
             ].sort((a, b) => a.time - b.time);
 
             const allMarkers2 = [
+                ...(positionMarker2 ? [positionMarker2] : []),
                 ...(previousSwingMarkers2 || []),
                 ...(currentSwingMarkers2 || [])
             ].sort((a, b) => a.time - b.time);
 
-            if (allMarkers1.length > 0) {
-                candleSeries1.setMarkers(allMarkers1);
-            }
-            if (allMarkers2.length > 0) {
-                candleSeries2.setMarkers(allMarkers2);
-            }
+            // Always update markers (even if empty, to clear old markers)
+            candleSeries1.setMarkers(allMarkers1);
+            candleSeries2.setMarkers(allMarkers2);
         }
 
         // Initialize on page load
