@@ -7,7 +7,7 @@ import { PlaybackControls } from '../components/PlaybackControls';
 import { ExplanationPanel } from '../components/ExplanationPanel';
 import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
-import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings, fetchSession, fetchDetectedSwings } from '../lib/api';
+import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings, fetchSession, fetchDetectedSwings, fetchCalibration } from '../lib/api';
 import { INITIAL_FILTERS, LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
@@ -16,6 +16,9 @@ import {
   DiscretizationEvent,
   DiscretizationSwing,
   DetectedSwing,
+  CalibrationData,
+  CalibrationSwing,
+  CalibrationPhase,
   SWING_COLORS,
   parseResolutionToMinutes,
   getAggregationLabel,
@@ -68,6 +71,26 @@ function discretizationSwingToDetected(swing: DiscretizationSwing): DetectedSwin
   };
 }
 
+/**
+ * Convert a calibration swing to a DetectedSwing for chart overlay.
+ */
+function calibrationSwingToDetected(swing: CalibrationSwing, rank: number = 1): DetectedSwing {
+  return {
+    id: swing.id,
+    direction: swing.direction,
+    high_price: swing.high_price,
+    high_bar_index: swing.high_bar_index,
+    low_price: swing.low_price,
+    low_bar_index: swing.low_bar_index,
+    size: swing.size,
+    rank,
+    fib_0: swing.fib_0,
+    fib_0382: swing.fib_0382,
+    fib_1: swing.fib_1,
+    fib_2: swing.fib_2,
+  };
+}
+
 export const Replay: React.FC = () => {
   // UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -91,6 +114,12 @@ export const Replay: React.FC = () => {
   const [detectedSwings, setDetectedSwings] = useState<DetectedSwing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Calibration state
+  const [calibrationPhase, setCalibrationPhase] = useState<CalibrationPhase>(CalibrationPhase.NOT_STARTED);
+  const [calibrationData, setCalibrationData] = useState<CalibrationData | null>(null);
+  const [activeSwingsFlat, setActiveSwingsFlat] = useState<CalibrationSwing[]>([]);
+  const [currentActiveSwingIndex, setCurrentActiveSwingIndex] = useState<number>(0);
 
   // Chart refs for syncing
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -157,6 +186,43 @@ export const Replay: React.FC = () => {
     return discretizationSwingToDetected(swing);
   }, [playback.lingerSwingId, swings]);
 
+  // Compute current active swing for calibration mode
+  const currentActiveSwing = useMemo((): CalibrationSwing | null => {
+    if (calibrationPhase !== CalibrationPhase.CALIBRATED || activeSwingsFlat.length === 0) {
+      return null;
+    }
+    return activeSwingsFlat[currentActiveSwingIndex] || null;
+  }, [calibrationPhase, activeSwingsFlat, currentActiveSwingIndex]);
+
+  // Convert current active swing to DetectedSwing for chart overlay
+  const calibrationHighlightedSwing = useMemo((): DetectedSwing | undefined => {
+    if (!currentActiveSwing) return undefined;
+    return calibrationSwingToDetected(currentActiveSwing, 1);
+  }, [currentActiveSwing]);
+
+  // Navigation functions for active swing cycling
+  const navigatePrevActiveSwing = useCallback(() => {
+    if (activeSwingsFlat.length === 0) return;
+    setCurrentActiveSwingIndex(prev =>
+      prev === 0 ? activeSwingsFlat.length - 1 : prev - 1
+    );
+  }, [activeSwingsFlat.length]);
+
+  const navigateNextActiveSwing = useCallback(() => {
+    if (activeSwingsFlat.length === 0) return;
+    setCurrentActiveSwingIndex(prev =>
+      prev === activeSwingsFlat.length - 1 ? 0 : prev + 1
+    );
+  }, [activeSwingsFlat.length]);
+
+  // Handler to start playback (transition from calibrated to playing)
+  const handleStartPlayback = useCallback(() => {
+    if (calibrationPhase === CalibrationPhase.CALIBRATED) {
+      setCalibrationPhase(CalibrationPhase.PLAYING);
+      playback.togglePlayPause();
+    }
+  }, [calibrationPhase, playback]);
+
   // Load initial data
   useEffect(() => {
     const loadData = async () => {
@@ -199,6 +265,22 @@ export const Replay: React.FC = () => {
           swingMap[swing.swing_id] = swing;
         }
         setSwings(swingMap);
+
+        // Run calibration
+        setCalibrationPhase(CalibrationPhase.CALIBRATING);
+        const calibration = await fetchCalibration(Math.min(10000, source.length));
+        setCalibrationData(calibration);
+
+        // Flatten active swings across all scales (XL first, then L, M, S)
+        const scaleOrder = ['XL', 'L', 'M', 'S'];
+        const flatActiveSwings: CalibrationSwing[] = [];
+        for (const scale of scaleOrder) {
+          const scaleSwings = calibration.active_swings_by_scale[scale] || [];
+          flatActiveSwings.push(...scaleSwings);
+        }
+        setActiveSwingsFlat(flatActiveSwings);
+        setCurrentActiveSwingIndex(0);
+        setCalibrationPhase(CalibrationPhase.CALIBRATED);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
@@ -479,10 +561,25 @@ export const Replay: React.FC = () => {
     setFilters(INITIAL_FILTERS);
   }, []);
 
-  // Keyboard shortcuts for swing navigation during linger
+  // Keyboard shortcuts for swing navigation during linger and calibration
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle when lingering with multiple events
+      // Calibration mode: [ and ] for swing cycling, Space/Enter to start playback
+      if (calibrationPhase === CalibrationPhase.CALIBRATED) {
+        if (e.key === '[') {
+          e.preventDefault();
+          navigatePrevActiveSwing();
+        } else if (e.key === ']') {
+          e.preventDefault();
+          navigateNextActiveSwing();
+        } else if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          handleStartPlayback();
+        }
+        return;
+      }
+
+      // Linger mode: Arrow keys for navigation
       if (!playback.isLingering || !playback.lingerQueuePosition) return;
       if (playback.lingerQueuePosition.total <= 1) return;
 
@@ -497,7 +594,16 @@ export const Replay: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [playback.isLingering, playback.lingerQueuePosition, playback.navigatePrevEvent, playback.navigateNextEvent]);
+  }, [
+    calibrationPhase,
+    navigatePrevActiveSwing,
+    navigateNextActiveSwing,
+    handleStartPlayback,
+    playback.isLingering,
+    playback.lingerQueuePosition,
+    playback.navigatePrevEvent,
+    playback.navigateNextEvent
+  ]);
 
   // Get current timestamp for header
   const currentTimestamp = sourceBars[playback.currentPosition]?.timestamp
@@ -538,6 +644,15 @@ export const Replay: React.FC = () => {
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         currentTimestamp={currentTimestamp}
         sourceBarCount={sourceBars.length}
+        calibrationStatus={
+          calibrationPhase === CalibrationPhase.CALIBRATING
+            ? 'calibrating'
+            : calibrationPhase === CalibrationPhase.CALIBRATED
+            ? 'calibrated'
+            : calibrationPhase === CalibrationPhase.PLAYING
+            ? 'playing'
+            : undefined
+        }
       />
 
       {/* Main Layout */}
@@ -569,15 +684,15 @@ export const Replay: React.FC = () => {
           {/* Swing Overlays - render Fib level price lines on charts */}
           <SwingOverlay
             series={series1Ref.current}
-            swings={detectedSwings}
+            swings={calibrationPhase === CalibrationPhase.CALIBRATED ? [] : detectedSwings}
             currentPosition={playback.currentPosition}
-            highlightedSwing={highlightedSwing}
+            highlightedSwing={calibrationPhase === CalibrationPhase.CALIBRATED ? calibrationHighlightedSwing : highlightedSwing}
           />
           <SwingOverlay
             series={series2Ref.current}
-            swings={detectedSwings}
+            swings={calibrationPhase === CalibrationPhase.CALIBRATED ? [] : detectedSwings}
             currentPosition={playback.currentPosition}
-            highlightedSwing={highlightedSwing}
+            highlightedSwing={calibrationPhase === CalibrationPhase.CALIBRATED ? calibrationHighlightedSwing : highlightedSwing}
           />
 
           {/* Playback Controls */}
@@ -607,11 +722,19 @@ export const Replay: React.FC = () => {
             />
           </div>
 
-          {/* Explanation Panel */}
+          {/* Explanation Panel / Calibration Report */}
           <div className="h-48 md:h-56 shrink-0">
             <ExplanationPanel
               swing={playback.currentSwing}
               previousSwing={playback.previousSwing}
+              calibrationPhase={calibrationPhase}
+              calibrationData={calibrationData}
+              currentActiveSwing={currentActiveSwing}
+              currentActiveSwingIndex={currentActiveSwingIndex}
+              totalActiveSwings={activeSwingsFlat.length}
+              onNavigatePrev={navigatePrevActiveSwing}
+              onNavigateNext={navigateNextActiveSwing}
+              onStartPlayback={handleStartPlayback}
             />
           </div>
         </main>

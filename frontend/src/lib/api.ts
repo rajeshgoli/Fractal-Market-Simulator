@@ -1,4 +1,4 @@
-import { BarData, DiscretizationEvent, DiscretizationSwing, AggregationScale, DetectedSwing } from '../types';
+import { BarData, DiscretizationEvent, DiscretizationSwing, AggregationScale, DetectedSwing, CalibrationData } from '../types';
 
 const API_BASE = '/api';
 
@@ -88,6 +88,14 @@ export async function fetchDetectedSwings(
   );
   if (!response.ok) {
     throw new Error(`Failed to fetch detected swings: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function fetchCalibration(barCount: number = 10000): Promise<CalibrationData> {
+  const response = await fetch(`${API_BASE}/replay/calibrate?bar_count=${barCount}`);
+  if (!response.ok) {
+    throw new Error(`Failed to run calibration: ${response.statusText}`);
   }
   return response.json();
 }

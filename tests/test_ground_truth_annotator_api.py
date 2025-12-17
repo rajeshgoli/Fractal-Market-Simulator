@@ -1356,3 +1356,105 @@ class TestDiscretizationScaleAssignment:
             elif scale == "S":
                 assert size >= thresholds["S"], f"S swing has size {size} < 0"
                 assert size < thresholds["M"], f"S swing has size {size} >= 15 (should be M)"
+
+
+class TestCalibrationEndpoint:
+    """Tests for the calibration endpoint (Replay View v2)."""
+
+    def test_calibrate_returns_response(self, client):
+        """Test that calibration returns a valid response."""
+        response = client.get("/api/replay/calibrate")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check required top-level fields
+        assert "calibration_bar_count" in data
+        assert "current_price" in data
+        assert "swings_by_scale" in data
+        assert "active_swings_by_scale" in data
+        assert "scale_thresholds" in data
+        assert "stats_by_scale" in data
+
+    def test_calibrate_with_bar_count_param(self, client):
+        """Test that bar_count parameter is respected."""
+        response = client.get("/api/replay/calibrate?bar_count=100")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Bar count should be at most 100
+        assert data["calibration_bar_count"] <= 100
+
+    def test_calibrate_swings_by_scale_structure(self, client):
+        """Test that swings_by_scale has correct structure."""
+        response = client.get("/api/replay/calibrate")
+        assert response.status_code == 200
+        data = response.json()
+
+        # All scales should be present
+        for scale in ["XL", "L", "M", "S"]:
+            assert scale in data["swings_by_scale"]
+            assert scale in data["active_swings_by_scale"]
+            assert scale in data["stats_by_scale"]
+            assert scale in data["scale_thresholds"]
+
+    def test_calibrate_swing_has_required_fields(self, client):
+        """Test that detected swings have all required fields."""
+        response = client.get("/api/replay/calibrate")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Find any swing to check structure
+        for scale in ["XL", "L", "M", "S"]:
+            swings = data["swings_by_scale"][scale]
+            if swings:
+                swing = swings[0]
+                assert "id" in swing
+                assert "scale" in swing
+                assert "direction" in swing
+                assert "high_price" in swing
+                assert "high_bar_index" in swing
+                assert "low_price" in swing
+                assert "low_bar_index" in swing
+                assert "size" in swing
+                assert "rank" in swing
+                assert "is_active" in swing
+                assert "fib_0" in swing
+                assert "fib_0382" in swing
+                assert "fib_1" in swing
+                assert "fib_2" in swing
+                return  # Only need to check one swing
+
+    def test_calibrate_stats_structure(self, client):
+        """Test that stats_by_scale has correct structure."""
+        response = client.get("/api/replay/calibrate")
+        assert response.status_code == 200
+        data = response.json()
+
+        for scale in ["XL", "L", "M", "S"]:
+            stats = data["stats_by_scale"][scale]
+            assert "total_swings" in stats
+            assert "active_swings" in stats
+            # Active swings should be <= total swings
+            assert stats["active_swings"] <= stats["total_swings"]
+
+    def test_calibrate_active_swings_have_is_active_true(self, client):
+        """Test that all swings in active_swings_by_scale have is_active=True."""
+        response = client.get("/api/replay/calibrate")
+        assert response.status_code == 200
+        data = response.json()
+
+        for scale in ["XL", "L", "M", "S"]:
+            for swing in data["active_swings_by_scale"][scale]:
+                assert swing["is_active"] is True
+
+    def test_calibrate_scale_thresholds(self, client):
+        """Test that scale thresholds are correct."""
+        response = client.get("/api/replay/calibrate")
+        assert response.status_code == 200
+        data = response.json()
+
+        thresholds = data["scale_thresholds"]
+        assert thresholds["XL"] == 100.0
+        assert thresholds["L"] == 40.0
+        assert thresholds["M"] == 15.0
+        assert thresholds["S"] == 0.0

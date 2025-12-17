@@ -1864,11 +1864,52 @@ class DetectedSwingResponse(BaseModel):
     low_bar_index: int
     size: float
     rank: int
+    scale: Optional[str] = None  # Optional scale (XL, L, M, S)
     # Fib levels for overlay
     fib_0: float  # Defended pivot (0)
     fib_0382: float  # First retracement
     fib_1: float  # Origin extremum (1.0)
     fib_2: float  # Completion target (2.0)
+
+
+# ============================================================================
+# Calibration API Models
+# ============================================================================
+
+
+class CalibrationSwingResponse(BaseModel):
+    """A swing detected during calibration."""
+    id: str
+    scale: str
+    direction: str  # "bull" or "bear"
+    high_price: float
+    high_bar_index: int
+    low_price: float
+    low_bar_index: int
+    size: float
+    rank: int
+    is_active: bool  # Whether swing is active at calibration end
+    # Fib levels for overlay
+    fib_0: float
+    fib_0382: float
+    fib_1: float
+    fib_2: float
+
+
+class CalibrationScaleStats(BaseModel):
+    """Statistics for a single scale during calibration."""
+    total_swings: int
+    active_swings: int
+
+
+class CalibrationResponse(BaseModel):
+    """Response from calibration endpoint."""
+    calibration_bar_count: int
+    current_price: float
+    swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
+    active_swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
+    scale_thresholds: Dict[str, float]
+    stats_by_scale: Dict[str, CalibrationScaleStats]
 
 
 class SwingsWindowedResponse(BaseModel):
@@ -1996,6 +2037,249 @@ async def get_windowed_swings(
         bar_end=bar_end,
         swing_count=len(swing_responses),
         swings=swing_responses,
+    )
+
+
+# ============================================================================
+# Calibration Endpoints (for Replay View v2)
+# ============================================================================
+
+
+def _is_swing_active(
+    swing: dict,
+    current_price: float,
+    direction: str
+) -> bool:
+    """
+    Determine if a swing is "active" at the current price.
+
+    A swing is active if:
+    1. Not yet invalidated (price hasn't violated the defended pivot)
+    2. Not yet completed (price hasn't reached 2.0 extension)
+    3. Current price is within the 0.382-2.0 zone
+
+    Args:
+        swing: Swing dict with high_price, low_price, size, fib levels
+        current_price: Current market price
+        direction: "bull" or "bear"
+
+    Returns:
+        True if the swing is active
+    """
+    high = swing['high_price']
+    low = swing['low_price']
+    swing_range = high - low
+
+    if direction == 'bull':
+        # Bull swing: defended pivot is low, origin is high
+        # Price moving up from low
+        fib_0 = low  # Defended pivot
+        fib_0382 = low + swing_range * 0.382
+        fib_2 = low + swing_range * 2.0
+
+        # Invalidated if price below defended pivot (with tolerance)
+        if current_price < fib_0 * 0.999:
+            return False
+
+        # Completed if price reached 2.0 extension
+        if current_price > fib_2:
+            return False
+
+        # Active if in 0.382-2.0 zone
+        return fib_0382 <= current_price <= fib_2
+    else:
+        # Bear swing: defended pivot is high, origin is low
+        # Price moving down from high
+        fib_0 = high  # Defended pivot
+        fib_0382 = high - swing_range * 0.382
+        fib_2 = high - swing_range * 2.0
+
+        # Invalidated if price above defended pivot (with tolerance)
+        if current_price > fib_0 * 1.001:
+            return False
+
+        # Completed if price reached 2.0 extension
+        if current_price < fib_2:
+            return False
+
+        # Active if in 0.382-2.0 zone
+        return fib_2 <= current_price <= fib_0382
+
+
+def _swing_to_calibration_response(
+    swing: dict,
+    swing_id: str,
+    scale: str,
+    rank: int,
+    is_active: bool
+) -> CalibrationSwingResponse:
+    """Convert a swing dict to CalibrationSwingResponse."""
+    direction = swing['direction']
+    high = swing['high_price']
+    low = swing['low_price']
+    swing_range = high - low
+
+    # Calculate Fib levels based on direction
+    if direction == 'bull':
+        fib_0 = low
+        fib_0382 = low + swing_range * 0.382
+        fib_1 = high
+        fib_2 = low + swing_range * 2.0
+    else:
+        fib_0 = high
+        fib_0382 = high - swing_range * 0.382
+        fib_1 = low
+        fib_2 = high - swing_range * 2.0
+
+    return CalibrationSwingResponse(
+        id=swing_id,
+        scale=scale,
+        direction=direction,
+        high_price=high,
+        high_bar_index=swing['high_bar_index'],
+        low_price=low,
+        low_bar_index=swing['low_bar_index'],
+        size=swing['size'],
+        rank=rank,
+        is_active=is_active,
+        fib_0=fib_0,
+        fib_0382=fib_0382,
+        fib_1=fib_1,
+        fib_2=fib_2,
+    )
+
+
+@app.get("/api/replay/calibrate", response_model=CalibrationResponse)
+async def calibrate_replay(
+    bar_count: int = Query(10000, description="Number of bars for calibration window"),
+):
+    """
+    Run calibration for Replay View.
+
+    Loads the first N bars as the calibration window, detects swings at all
+    scales, and identifies which swings are "active" at the end of the window.
+
+    A swing is "active" if:
+    - Not yet invalidated (swing point not violated)
+    - Not yet completed (price hasn't reached 2.0 extension)
+    - Current price is within 0.382-2.0 zone
+
+    Args:
+        bar_count: Number of bars for calibration window (default: 10000)
+
+    Returns:
+        CalibrationResponse with swings by scale and active swing lists
+    """
+    s = get_state()
+
+    # Determine actual calibration window size
+    actual_bar_count = min(bar_count, len(s.source_bars))
+    if actual_bar_count < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Need at least 10 bars for calibration"
+        )
+
+    # Get calibration window bars
+    calibration_bars = s.source_bars[:actual_bar_count]
+    current_price = calibration_bars[-1].close
+
+    # Convert to DataFrame for detect_swings
+    bar_data = []
+    for bar in calibration_bars:
+        bar_data.append({
+            'timestamp': bar.timestamp,
+            'open': bar.open,
+            'high': bar.high,
+            'low': bar.low,
+            'close': bar.close,
+        })
+
+    df = pd.DataFrame(bar_data)
+    df.set_index(pd.RangeIndex(start=0, stop=len(df)), inplace=True)
+
+    # Scale thresholds for assignment (swing goes to largest scale it qualifies for)
+    scale_thresholds = {
+        "XL": 100.0,
+        "L": 40.0,
+        "M": 15.0,
+        "S": 0.0,
+    }
+
+    def assign_scale(size: float) -> str:
+        """Assign swing to the largest scale it qualifies for."""
+        if size >= scale_thresholds["XL"]:
+            return "XL"
+        elif size >= scale_thresholds["L"]:
+            return "L"
+        elif size >= scale_thresholds["M"]:
+            return "M"
+        return "S"
+
+    # Run swing detection with current_bar_index at end of calibration window
+    result = detect_swings(
+        df,
+        lookback=5,
+        filter_redundant=True,
+        current_bar_index=actual_bar_count - 1,
+    )
+
+    # Process all swings and assign to scales
+    swings_by_scale: Dict[str, List[CalibrationSwingResponse]] = {
+        "XL": [], "L": [], "M": [], "S": []
+    }
+    active_swings_by_scale: Dict[str, List[CalibrationSwingResponse]] = {
+        "XL": [], "L": [], "M": [], "S": []
+    }
+
+    # Process bull references
+    for i, ref in enumerate(result.get('bull_references', [])):
+        scale = assign_scale(ref['size'])
+        swing_id = f"cal-bull-{i}"
+        ref['direction'] = 'bull'
+        is_active = _is_swing_active(ref, current_price, 'bull')
+        rank = len(swings_by_scale[scale]) + 1
+
+        swing_response = _swing_to_calibration_response(
+            ref, swing_id, scale, rank, is_active
+        )
+        swings_by_scale[scale].append(swing_response)
+
+        if is_active:
+            active_swings_by_scale[scale].append(swing_response)
+
+    # Process bear references
+    for i, ref in enumerate(result.get('bear_references', [])):
+        scale = assign_scale(ref['size'])
+        swing_id = f"cal-bear-{i}"
+        ref['direction'] = 'bear'
+        is_active = _is_swing_active(ref, current_price, 'bear')
+        rank = len(swings_by_scale[scale]) + 1
+
+        swing_response = _swing_to_calibration_response(
+            ref, swing_id, scale, rank, is_active
+        )
+        swings_by_scale[scale].append(swing_response)
+
+        if is_active:
+            active_swings_by_scale[scale].append(swing_response)
+
+    # Compute stats by scale
+    stats_by_scale = {
+        scale: CalibrationScaleStats(
+            total_swings=len(swings_by_scale[scale]),
+            active_swings=len(active_swings_by_scale[scale])
+        )
+        for scale in ["XL", "L", "M", "S"]
+    }
+
+    return CalibrationResponse(
+        calibration_bar_count=actual_bar_count,
+        current_price=current_price,
+        swings_by_scale=swings_by_scale,
+        active_swings_by_scale=active_swings_by_scale,
+        scale_thresholds=scale_thresholds,
+        stats_by_scale=stats_by_scale,
     )
 
 

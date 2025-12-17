@@ -5,6 +5,7 @@ interface HeaderProps {
   onToggleSidebar: () => void;
   currentTimestamp?: string;
   sourceBarCount: number;
+  calibrationStatus?: 'calibrating' | 'calibrated' | 'playing';
 }
 
 interface NavItem {
@@ -39,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSidebar,
   currentTimestamp,
   sourceBarCount,
+  calibrationStatus,
 }) => {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
@@ -130,6 +132,21 @@ export const Header: React.FC<HeaderProps> = ({
           <Monitor className="text-trading-blue" size={18} />
           <h1 className="font-bold tracking-wide text-sm">MARKET REPLAY</h1>
         </div>
+
+        {/* Calibration Status Badge */}
+        {calibrationStatus && (
+          <div className={`px-2 py-0.5 rounded text-xs font-medium ${
+            calibrationStatus === 'calibrating'
+              ? 'bg-trading-orange/20 text-trading-orange'
+              : calibrationStatus === 'calibrated'
+              ? 'bg-trading-bull/20 text-trading-bull'
+              : 'bg-trading-blue/20 text-trading-blue'
+          }`}>
+            {calibrationStatus === 'calibrating' && 'Calibrating...'}
+            {calibrationStatus === 'calibrated' && 'Calibrated'}
+            {calibrationStatus === 'playing' && 'Playing'}
+          </div>
+        )}
       </div>
 
       {/* Right Side Info */}

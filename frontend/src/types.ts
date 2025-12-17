@@ -147,6 +147,50 @@ export const SWING_COLORS: Record<number, string> = {
   5: '#EC4899', // Pink
 };
 
+// ============================================================================
+// Calibration Types (Replay View v2)
+// ============================================================================
+
+export interface CalibrationSwing {
+  id: string;
+  scale: string;
+  direction: 'bull' | 'bear';
+  high_price: number;
+  high_bar_index: number;
+  low_price: number;
+  low_bar_index: number;
+  size: number;
+  rank: number;
+  is_active: boolean;
+  // Fib levels for overlay
+  fib_0: number;
+  fib_0382: number;
+  fib_1: number;
+  fib_2: number;
+}
+
+export interface CalibrationScaleStats {
+  total_swings: number;
+  active_swings: number;
+}
+
+export interface CalibrationData {
+  calibration_bar_count: number;
+  current_price: number;
+  swings_by_scale: Record<string, CalibrationSwing[]>;
+  active_swings_by_scale: Record<string, CalibrationSwing[]>;
+  scale_thresholds: Record<string, number>;
+  stats_by_scale: Record<string, CalibrationScaleStats>;
+}
+
+// Calibration phase states
+export enum CalibrationPhase {
+  NOT_STARTED = 'NOT_STARTED',
+  CALIBRATING = 'CALIBRATING',
+  CALIBRATED = 'CALIBRATED',
+  PLAYING = 'PLAYING',
+}
+
 // Aggregation scale options (timeframes not S/M/L/XL)
 export const AGGREGATION_OPTIONS = [
   { value: 'S', label: '5m', minutes: 5 },

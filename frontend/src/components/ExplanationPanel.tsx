@@ -1,11 +1,20 @@
 import React from 'react';
-import { SwingData, Direction } from '../types';
+import { SwingData, Direction, CalibrationData, CalibrationSwing, CalibrationPhase } from '../types';
 import { Badge } from './ui/Badge';
-import { Info, GitCommit, Target, Ruler, ArrowRight } from 'lucide-react';
+import { Info, GitCommit, Target, Ruler, ArrowRight, CheckCircle, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
 interface ExplanationPanelProps {
   swing: SwingData | null;
   previousSwing?: SwingData | null;
+  // Calibration props
+  calibrationPhase?: CalibrationPhase;
+  calibrationData?: CalibrationData | null;
+  currentActiveSwing?: CalibrationSwing | null;
+  currentActiveSwingIndex?: number;
+  totalActiveSwings?: number;
+  onNavigatePrev?: () => void;
+  onNavigateNext?: () => void;
+  onStartPlayback?: () => void;
 }
 
 // Safe number formatting that handles null/undefined
@@ -13,7 +22,167 @@ const formatPrice = (value: number | null | undefined, decimals: number = 2): st
   return (value ?? 0).toFixed(decimals);
 };
 
-export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({ swing, previousSwing }) => {
+export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
+  swing,
+  previousSwing,
+  calibrationPhase,
+  calibrationData,
+  currentActiveSwing,
+  currentActiveSwingIndex = 0,
+  totalActiveSwings = 0,
+  onNavigatePrev,
+  onNavigateNext,
+  onStartPlayback,
+}) => {
+  // Show calibration report when calibrated
+  if (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) {
+    const stats = calibrationData.stats_by_scale;
+    const thresholds = calibrationData.scale_thresholds;
+    const scaleOrder = ['XL', 'L', 'M', 'S'];
+
+    return (
+      <div className="h-full bg-app-secondary border-t border-app-border flex flex-col font-sans text-sm">
+        {/* Panel Header */}
+        <div className="flex items-center gap-3 px-4 py-2 border-b border-app-border bg-app-bg/40">
+          <div className="flex items-center gap-2 text-app-text font-semibold tracking-wider uppercase">
+            <CheckCircle size={16} className="text-trading-bull" />
+            <span>Calibration Complete</span>
+          </div>
+          <div className="h-4 w-px bg-app-border mx-2"></div>
+          <span className="text-xs text-app-muted">
+            {calibrationData.calibration_bar_count.toLocaleString()} bars
+          </span>
+        </div>
+
+        {/* Content Grid */}
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-app-border/50 overflow-hidden">
+          {/* Column 1: Swings Detected */}
+          <div className="p-4 flex flex-col justify-center">
+            <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-3">
+              Swings Detected
+            </span>
+            <div className="space-y-2">
+              {scaleOrder.map(scale => {
+                const scaleStat = stats[scale];
+                if (!scaleStat) return null;
+                return (
+                  <div key={scale} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="neutral" className="min-w-[2rem] justify-center text-xs">{scale}</Badge>
+                      <span className="text-app-text font-mono">{scaleStat.total_swings}</span>
+                    </div>
+                    <span className="text-xs text-trading-blue">
+                      ({scaleStat.active_swings} active)
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Column 2: Scale Thresholds */}
+          <div className="p-4 flex flex-col justify-center">
+            <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-3">
+              Scale Thresholds
+            </span>
+            <div className="space-y-2">
+              {scaleOrder.map(scale => {
+                const threshold = thresholds[scale];
+                return (
+                  <div key={scale} className="flex items-center justify-between">
+                    <Badge variant="neutral" className="min-w-[2rem] justify-center text-xs">{scale}</Badge>
+                    <span className="font-mono text-app-text">
+                      {threshold === 0 ? 'All sizes' : `≥ ${threshold} pts`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Column 3: Active Swing Navigation + Start Button */}
+          <div className="p-4 flex flex-col justify-center items-center gap-4">
+            {totalActiveSwings > 0 ? (
+              <>
+                {/* Navigation */}
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={onNavigatePrev}
+                    className="p-2 rounded bg-app-card border border-app-border hover:bg-app-bg transition-colors"
+                    title="Previous swing ([)"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <div className="text-center">
+                    <div className="text-lg font-mono font-semibold text-app-text">
+                      {currentActiveSwingIndex + 1} / {totalActiveSwings}
+                    </div>
+                    {currentActiveSwing && (
+                      <div className="flex gap-2 mt-1 justify-center">
+                        <Badge variant="neutral" className="text-xs">{currentActiveSwing.scale}</Badge>
+                        <Badge
+                          variant={currentActiveSwing.direction === 'bull' ? 'bull' : 'bear'}
+                          className="text-xs"
+                        >
+                          {currentActiveSwing.direction.toUpperCase()}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={onNavigateNext}
+                    className="p-2 rounded bg-app-card border border-app-border hover:bg-app-bg transition-colors"
+                    title="Next swing (])"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+
+                {/* Start Playback Button */}
+                <button
+                  onClick={onStartPlayback}
+                  className="flex items-center gap-2 px-6 py-2 bg-trading-blue text-white font-semibold rounded hover:bg-blue-600 transition-colors"
+                >
+                  <Play size={18} />
+                  Start Playback
+                </button>
+                <span className="text-[10px] text-app-muted">Press Space or Enter</span>
+              </>
+            ) : (
+              <div className="text-center">
+                <p className="text-app-muted text-sm mb-4">No active swings detected</p>
+                <button
+                  onClick={onStartPlayback}
+                  className="flex items-center gap-2 px-6 py-2 bg-trading-blue text-white font-semibold rounded hover:bg-blue-600 transition-colors"
+                >
+                  <Play size={18} />
+                  Start Playback
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Current swing details (dimmed footer) */}
+        {currentActiveSwing && (
+          <div className="px-4 py-2 border-t border-app-border/30 bg-app-bg/20">
+            <div className="flex items-center gap-4 text-xs text-app-muted">
+              <span>
+                <span className="text-trading-bull">H:</span> {formatPrice(currentActiveSwing.high_price)} (bar {currentActiveSwing.high_bar_index})
+              </span>
+              <span>
+                <span className="text-trading-bear">L:</span> {formatPrice(currentActiveSwing.low_price)} (bar {currentActiveSwing.low_bar_index})
+              </span>
+              <span>
+                <span className="text-app-text">Size:</span> {formatPrice(currentActiveSwing.size)} pts
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (!swing) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center text-app-muted border-t border-app-border bg-app-secondary p-6">
