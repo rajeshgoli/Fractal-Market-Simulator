@@ -227,9 +227,153 @@
             border-color: var(--accent-bear);
         }
 
+        /* Timer wheel styles */
+        .timer-wheel-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .timer-wheel {
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            right: -4px;
+            bottom: -4px;
+            border-radius: 50%;
+            background: conic-gradient(
+                var(--accent-blue) calc(var(--progress, 0) * 1%),
+                transparent 0
+            );
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .timer-wheel-container .btn {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Linger state styles */
+        .linger-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: var(--bg-card);
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .linger-indicator.hidden {
+            display: none;
+        }
+
+        .linger-timer {
+            font-family: monospace;
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+
+        .linger-event-type {
+            color: var(--accent-orange);
+        }
+
+        .linger-queue {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* Event filter sidebar */
+        .event-filters {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .event-filters h3 {
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .filter-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .filter-item label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .filter-item label:hover {
+            color: var(--text-primary);
+        }
+
+        .filter-note {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-left: 24px;
+        }
+
+        /* Main layout with sidebar */
+        .main-content {
+            display: flex;
+            gap: 20px;
+        }
+
+        .sidebar {
+            width: 220px;
+            flex-shrink: 0;
+        }
+
+        .charts-area {
+            flex-grow: 1;
+            min-width: 0;
+        }
+
         @media (max-width: 1200px) {
             .chart-container {
                 height: 280px;
+            }
+
+            .main-content {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+            }
+
+            .event-filters {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 15px;
+            }
+
+            .event-filters h3 {
+                width: 100%;
+            }
+
+            .filter-group {
+                flex-direction: row;
+                flex-wrap: wrap;
             }
         }
     </style>
@@ -253,6 +397,47 @@
             </div>
         </header>
 
+        <div class="main-content">
+            <!-- Sidebar with event filters -->
+            <div class="sidebar">
+                <div class="event-filters">
+                    <h3>Linger Events</h3>
+                    <div class="filter-group">
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-swing-formed" checked>
+                            <label for="filter-swing-formed">SWING_FORMED</label>
+                        </div>
+                        <div class="filter-note">New swing detected</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-completion" checked>
+                            <label for="filter-completion">COMPLETION</label>
+                        </div>
+                        <div class="filter-note">Ratio reached 2.0</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-invalidation" checked>
+                            <label for="filter-invalidation">INVALIDATION</label>
+                        </div>
+                        <div class="filter-note">Ratio crossed below threshold</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-level-cross">
+                            <label for="filter-level-cross">LEVEL_CROSS</label>
+                        </div>
+                        <div class="filter-note">Too frequent (off by default)</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-swing-terminated">
+                            <label for="filter-swing-terminated">SWING_TERMINATED</label>
+                        </div>
+                        <div class="filter-note">Redundant (off by default)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts area -->
+            <div class="charts-area">
         <div class="chart-stack">
             <!-- Top Chart Panel -->
             <div class="chart-panel">
@@ -304,13 +489,22 @@
             <div class="playback-controls">
                 <button class="btn btn-secondary" onclick="jumpToStart()" title="Jump to Start">|◄</button>
                 <button class="btn btn-secondary" onclick="stepBack()" title="Step Back">◄</button>
-                <button class="btn btn-primary" id="play-btn" onclick="togglePlayback()">▶</button>
+                <div class="timer-wheel-container">
+                    <div class="timer-wheel" id="timer-wheel"></div>
+                    <button class="btn btn-primary" id="play-btn" onclick="togglePlayback()">▶</button>
+                </div>
                 <button class="btn btn-secondary" onclick="stepForward()" title="Step Forward">►</button>
                 <button class="btn btn-secondary" onclick="jumpToEnd()" title="Jump to End">►|</button>
 
                 <div class="playback-info">
                     <span class="control-label">Bar:</span>
                     <span class="bar-indicator" id="bar-position">0 / 0</span>
+                </div>
+
+                <div class="linger-indicator hidden" id="linger-indicator">
+                    <span class="linger-event-type" id="linger-event-type">SWING_FORMED</span>
+                    <span class="linger-timer" id="linger-timer">30s</span>
+                    <span class="linger-queue" id="linger-queue"></span>
                 </div>
 
                 <div class="speed-control">
@@ -326,9 +520,19 @@
 
             </div>
         </div>
+            </div> <!-- Close charts-area -->
+        </div> <!-- Close main-content -->
     </div>
 
     <script>
+        // Playback states
+        const PlaybackState = {
+            STOPPED: 'STOPPED',
+            PLAYING: 'PLAYING',
+            PAUSED: 'PAUSED',
+            LINGERING: 'LINGERING'
+        };
+
         // State
         let chart1 = null;
         let chart2 = null;
@@ -338,8 +542,28 @@
         let chart2Bars = [];
         let sourceBars = [];  // Track source bars for position sync
         let currentSourceBarIndex = 0;  // Position in source bars
-        let isPlaying = false;
+        let playbackState = PlaybackState.STOPPED;
+        let isPlaying = false;  // Legacy compatibility
         let playbackInterval = null;
+
+        // Linger/Event state
+        let allEvents = [];  // All discretization events
+        let eventsByBar = {};  // Events indexed by bar
+        let eventQueue = [];  // Queue of events to show at current bar
+        let currentEventIndex = 0;  // Index in current queue
+        let lingerTimerId = null;
+        let lingerStartTime = null;
+        let lingerDuration = 30000;  // 30 seconds
+        let lingerAnimationId = null;
+
+        // Event filter settings (which events trigger linger)
+        const eventFilters = {
+            SWING_FORMED: true,
+            COMPLETION: true,
+            INVALIDATION: true,
+            LEVEL_CROSS: false,
+            SWING_TERMINATED: false
+        };
 
         // Initialize both charts
         function initCharts() {
@@ -444,6 +668,76 @@
             }
         }
 
+        // Load discretization events
+        async function loadEvents() {
+            try {
+                // First run discretization if not already done
+                const stateResponse = await fetch('/api/discretization/state');
+                const state = await stateResponse.json();
+
+                if (!state.has_log) {
+                    // Run discretization
+                    const runResponse = await fetch('/api/discretization/run', { method: 'POST' });
+                    if (!runResponse.ok) {
+                        console.warn('Discretization not available');
+                        return;
+                    }
+                }
+
+                // Load all events
+                const response = await fetch('/api/discretization/events');
+                if (!response.ok) {
+                    console.warn('Failed to load events');
+                    return;
+                }
+
+                allEvents = await response.json();
+
+                // Index events by bar
+                eventsByBar = {};
+                for (const event of allEvents) {
+                    if (!eventsByBar[event.bar]) {
+                        eventsByBar[event.bar] = [];
+                    }
+                    eventsByBar[event.bar].push(event);
+                }
+
+                console.log(`Loaded ${allEvents.length} events`);
+            } catch (error) {
+                console.error('Failed to load events:', error);
+            }
+        }
+
+        // Get enabled events at a specific bar
+        function getEnabledEventsAtBar(barIndex) {
+            const events = eventsByBar[barIndex] || [];
+            return events.filter(event => eventFilters[event.event_type]);
+        }
+
+        // Initialize event filter checkboxes
+        function initEventFilters() {
+            const filterIds = {
+                'filter-swing-formed': 'SWING_FORMED',
+                'filter-completion': 'COMPLETION',
+                'filter-invalidation': 'INVALIDATION',
+                'filter-level-cross': 'LEVEL_CROSS',
+                'filter-swing-terminated': 'SWING_TERMINATED'
+            };
+
+            for (const [elementId, eventType] of Object.entries(filterIds)) {
+                const checkbox = document.getElementById(elementId);
+                if (checkbox) {
+                    // Set initial state
+                    checkbox.checked = eventFilters[eventType];
+
+                    // Listen for changes
+                    checkbox.addEventListener('change', () => {
+                        eventFilters[eventType] = checkbox.checked;
+                    });
+                }
+            }
+        }
+
         // Change aggregation for a chart
         async function changeAggregation(chartNum) {
             const select = document.getElementById(`chart${chartNum}-aggregation`);
@@ -521,8 +815,11 @@
 
         // Toggle playback
         function togglePlayback() {
-            if (isPlaying) {
-                stopPlayback();
+            if (playbackState === PlaybackState.LINGERING) {
+                // Skip ahead - resume immediately
+                skipLinger();
+            } else if (playbackState === PlaybackState.PLAYING) {
+                pausePlayback();
             } else {
                 startPlayback();
             }
@@ -534,27 +831,189 @@
                 currentSourceBarIndex = 0;  // Reset if at end
             }
 
+            playbackState = PlaybackState.PLAYING;
             isPlaying = true;
             document.getElementById('play-btn').textContent = '⏸';
 
             const speed = parseInt(document.getElementById('playback-speed').value);
             playbackInterval = setInterval(() => {
                 if (currentSourceBarIndex < sourceBars.length - 1) {
-                    stepForward();
+                    advancePlayback();
                 } else {
                     stopPlayback();
                 }
             }, speed);
         }
 
-        // Stop playback
-        function stopPlayback() {
+        // Pause playback (user initiated)
+        function pausePlayback() {
+            if (playbackState === PlaybackState.LINGERING) {
+                // Freeze the timer
+                if (lingerTimerId) {
+                    clearTimeout(lingerTimerId);
+                    lingerTimerId = null;
+                }
+                if (lingerAnimationId) {
+                    cancelAnimationFrame(lingerAnimationId);
+                    lingerAnimationId = null;
+                }
+            }
+
+            playbackState = PlaybackState.PAUSED;
             isPlaying = false;
             document.getElementById('play-btn').textContent = '▶';
             if (playbackInterval) {
                 clearInterval(playbackInterval);
                 playbackInterval = null;
             }
+        }
+
+        // Stop playback (end of data or jump)
+        function stopPlayback() {
+            playbackState = PlaybackState.STOPPED;
+            isPlaying = false;
+            document.getElementById('play-btn').textContent = '▶';
+            if (playbackInterval) {
+                clearInterval(playbackInterval);
+                playbackInterval = null;
+            }
+            clearLingerState();
+        }
+
+        // Advance playback by one bar (called by playback interval)
+        function advancePlayback() {
+            currentSourceBarIndex++;
+            updateBarPosition();
+            syncBothCharts();
+
+            // Check for events at this bar
+            const events = getEnabledEventsAtBar(currentSourceBarIndex);
+            if (events.length > 0) {
+                enterLingerState(events);
+            }
+        }
+
+        // Enter lingering state
+        function enterLingerState(events) {
+            // Stop the playback interval
+            if (playbackInterval) {
+                clearInterval(playbackInterval);
+                playbackInterval = null;
+            }
+
+            playbackState = PlaybackState.LINGERING;
+            eventQueue = events;
+            currentEventIndex = 0;
+
+            showCurrentEvent();
+            startLingerTimer();
+        }
+
+        // Show the current event in the queue
+        function showCurrentEvent() {
+            const event = eventQueue[currentEventIndex];
+            if (!event) return;
+
+            // Update linger indicator
+            const indicator = document.getElementById('linger-indicator');
+            const eventTypeEl = document.getElementById('linger-event-type');
+            const queueEl = document.getElementById('linger-queue');
+
+            indicator.classList.remove('hidden');
+            eventTypeEl.textContent = event.event_type;
+
+            // Show queue position if multiple events
+            if (eventQueue.length > 1) {
+                queueEl.textContent = `(${currentEventIndex + 1}/${eventQueue.length})`;
+            } else {
+                queueEl.textContent = '';
+            }
+        }
+
+        // Start the 30-second linger timer
+        function startLingerTimer() {
+            lingerStartTime = Date.now();
+
+            // Clear any existing timer
+            if (lingerTimerId) {
+                clearTimeout(lingerTimerId);
+            }
+            if (lingerAnimationId) {
+                cancelAnimationFrame(lingerAnimationId);
+            }
+
+            // Start timer wheel animation
+            updateTimerWheel();
+
+            // Set timeout for auto-resume
+            lingerTimerId = setTimeout(() => {
+                onLingerTimerComplete();
+            }, lingerDuration);
+        }
+
+        // Update timer wheel animation
+        function updateTimerWheel() {
+            if (playbackState !== PlaybackState.LINGERING) return;
+
+            const elapsed = Date.now() - lingerStartTime;
+            const progress = Math.min(100, (elapsed / lingerDuration) * 100);
+
+            const wheel = document.getElementById('timer-wheel');
+            wheel.style.setProperty('--progress', progress);
+
+            // Update timer display
+            const remaining = Math.max(0, Math.ceil((lingerDuration - elapsed) / 1000));
+            document.getElementById('linger-timer').textContent = `${remaining}s`;
+
+            if (progress < 100 && playbackState === PlaybackState.LINGERING) {
+                lingerAnimationId = requestAnimationFrame(updateTimerWheel);
+            }
+        }
+
+        // Called when linger timer completes
+        function onLingerTimerComplete() {
+            lingerTimerId = null;
+
+            // Check if more events in queue
+            if (currentEventIndex < eventQueue.length - 1) {
+                currentEventIndex++;
+                showCurrentEvent();
+                startLingerTimer();
+            } else {
+                // All events shown, resume playback
+                clearLingerState();
+                startPlayback();
+            }
+        }
+
+        // Skip the current linger (user clicked play)
+        function skipLinger() {
+            clearLingerState();
+            startPlayback();
+        }
+
+        // Clear linger state
+        function clearLingerState() {
+            if (lingerTimerId) {
+                clearTimeout(lingerTimerId);
+                lingerTimerId = null;
+            }
+            if (lingerAnimationId) {
+                cancelAnimationFrame(lingerAnimationId);
+                lingerAnimationId = null;
+            }
+
+            eventQueue = [];
+            currentEventIndex = 0;
+            lingerStartTime = null;
+
+            // Hide linger indicator
+            const indicator = document.getElementById('linger-indicator');
+            indicator.classList.add('hidden');
+
+            // Reset timer wheel
+            const wheel = document.getElementById('timer-wheel');
+            wheel.style.setProperty('--progress', 0);
         }
 
         // Jump to start (first bar)
@@ -591,6 +1050,7 @@
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', async () => {
             initCharts();
+            initEventFilters();
 
             // Load source bars first
             await loadSourceBars();
@@ -604,15 +1064,28 @@
                 loadBars(2, scale2)
             ]);
 
+            // Load discretization events for linger behavior
+            await loadEvents();
+
             // Initial sync
             syncBothCharts();
         });
 
         // Listen for playback speed changes
         document.getElementById('playback-speed').addEventListener('change', () => {
-            if (isPlaying) {
-                stopPlayback();
-                startPlayback();
+            if (playbackState === PlaybackState.PLAYING) {
+                // Restart playback with new speed
+                if (playbackInterval) {
+                    clearInterval(playbackInterval);
+                }
+                const speed = parseInt(document.getElementById('playback-speed').value);
+                playbackInterval = setInterval(() => {
+                    if (currentSourceBarIndex < sourceBars.length - 1) {
+                        advancePlayback();
+                    } else {
+                        stopPlayback();
+                    }
+                }, speed);
             }
         });
     </script>
