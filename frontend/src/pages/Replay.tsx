@@ -532,10 +532,13 @@ export const Replay: React.FC = () => {
 
   // Get the current playback position based on phase
   const currentPlaybackPosition = useMemo(() => {
-    return calibrationPhase === CalibrationPhase.PLAYING
-      ? forwardPlayback.currentPosition
-      : playback.currentPosition;
-  }, [calibrationPhase, forwardPlayback.currentPosition, playback.currentPosition]);
+    if (calibrationPhase === CalibrationPhase.PLAYING) {
+      return forwardPlayback.currentPosition;
+    } else if (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) {
+      return calibrationData.calibration_bar_count - 1;
+    }
+    return playback.currentPosition;
+  }, [calibrationPhase, forwardPlayback.currentPosition, playback.currentPosition, calibrationData]);
 
   // Note: No client-side filtering needed - backend controls visibility via playback_index
   // The /api/bars endpoint automatically respects the current playback position
@@ -880,7 +883,7 @@ export const Replay: React.FC = () => {
           <div className="shrink-0 z-10">
             <PlaybackControls
               playbackState={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.playbackState : playback.playbackState}
-              onPlayPause={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.togglePlayPause : playback.togglePlayPause}
+              onPlayPause={calibrationPhase === CalibrationPhase.CALIBRATED ? handleStartPlayback : (calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.togglePlayPause : playback.togglePlayPause)}
               onStepBack={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.stepBack : playback.stepBack}
               onStepForward={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.stepForward : playback.stepForward}
               onJumpToStart={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.jumpToStart : playback.jumpToStart}
@@ -892,7 +895,7 @@ export const Replay: React.FC = () => {
               hasNextEvent={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.hasNextEvent : true}
               currentEventIndex={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentEventIndex : -1}
               totalEvents={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.allEvents.length : 0}
-              currentBar={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition}
+              currentBar={calibrationPhase === CalibrationPhase.CALIBRATED ? (calibrationData?.calibration_bar_count ?? 0) - 1 : (calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition)}
               totalBars={sourceBars.length}
               speedMultiplier={speedMultiplier}
               onSpeedMultiplierChange={setSpeedMultiplier}
