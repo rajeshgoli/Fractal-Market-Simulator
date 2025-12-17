@@ -302,9 +302,11 @@
 
             <!-- Playback Controls -->
             <div class="playback-controls">
-                <button class="btn btn-secondary" onclick="stepBack()" title="Step Back">&larr; Step</button>
-                <button class="btn btn-primary" id="play-btn" onclick="togglePlayback()">Play</button>
-                <button class="btn btn-secondary" onclick="stepForward()" title="Step Forward">Step &rarr;</button>
+                <button class="btn btn-secondary" onclick="jumpToStart()" title="Jump to Start">|◄</button>
+                <button class="btn btn-secondary" onclick="stepBack()" title="Step Back">◄</button>
+                <button class="btn btn-primary" id="play-btn" onclick="togglePlayback()">▶</button>
+                <button class="btn btn-secondary" onclick="stepForward()" title="Step Forward">►</button>
+                <button class="btn btn-secondary" onclick="jumpToEnd()" title="Jump to End">►|</button>
 
                 <div class="playback-info">
                     <span class="control-label">Bar:</span>
@@ -322,7 +324,6 @@
                     </select>
                 </div>
 
-                <button class="btn btn-secondary" onclick="resetPlayback()">Reset</button>
             </div>
         </div>
     </div>
@@ -534,7 +535,7 @@
             }
 
             isPlaying = true;
-            document.getElementById('play-btn').textContent = 'Pause';
+            document.getElementById('play-btn').textContent = '⏸';
 
             const speed = parseInt(document.getElementById('playback-speed').value);
             playbackInterval = setInterval(() => {
@@ -549,19 +550,29 @@
         // Stop playback
         function stopPlayback() {
             isPlaying = false;
-            document.getElementById('play-btn').textContent = 'Play';
+            document.getElementById('play-btn').textContent = '▶';
             if (playbackInterval) {
                 clearInterval(playbackInterval);
                 playbackInterval = null;
             }
         }
 
-        // Reset playback to beginning
-        function resetPlayback() {
+        // Jump to start (first bar)
+        function jumpToStart() {
             stopPlayback();
             currentSourceBarIndex = 0;
             updateBarPosition();
             syncBothCharts();
+        }
+
+        // Jump to end (last bar)
+        function jumpToEnd() {
+            stopPlayback();
+            if (sourceBars.length > 0) {
+                currentSourceBarIndex = sourceBars.length - 1;
+                updateBarPosition();
+                syncBothCharts();
+            }
         }
 
         // Show toast notification
