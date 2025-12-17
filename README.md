@@ -16,11 +16,11 @@ For full specification, see [Product North Star](Docs/Reference/product_north_st
 
 ## Current State
 
-**Phase:** Swing detection validation via multi-timeframe replay and expert annotation.
+**Phase:** Replay View v2 complete. User testing and ground truth annotation.
 
 ### Replay View
 
-The primary tool for understanding swing detection behavior. Provides synchronized dual-chart playback with event-driven pauses at structural moments.
+The primary tool for understanding swing detection behavior. Provides calibration-first, forward-only playback with event-driven pauses at structural moments.
 
 ```bash
 # Setup
@@ -28,16 +28,22 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
+# Build frontend (one-time)
+cd frontend && npm install && npm run build && cd ..
+
 # Launch and open Replay View
 python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --resolution 5m --window 10000
 open http://127.0.0.1:8000/replay
 ```
 
 **Features:**
-- Split-chart view with independent aggregation (Source, S, M, L, XL)
-- Time-synchronized playback with step/play controls
-- Event-driven linger pauses at swing formations, completions, invalidations
-- Swing explanation panel showing detection reasoning
+- **Calibration phase**: Auto-analyze first 10K bars, detect active swings, show calibration report
+- **Forward-only playback**: New bars appear beyond calibration window (no look-ahead bias)
+- **Split-chart view**: Independent aggregation (Source, S, M, L, XL) on top/bottom charts
+- **Event navigation**: Jump by structural event (◀◀/▶▶), not just bars
+- **Scale filtering**: Toggle XL/L/M/S scales, control active swing count (1-5)
+- **Swing markers**: H/L labels with Fibonacci levels (0, 0.382, 1, 2) on charts
+- **Speed control**: Aggregation-relative playback ("10x per 1H bar")
 
 ### Additional Tools
 
@@ -52,15 +58,15 @@ See [User Guide](Docs/Reference/user_guide.md) for detailed documentation on all
 
 ```bash
 # Replay View (recommended starting point)
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --resolution 5m
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --resolution 5m --window 10000
 open http://127.0.0.1:8000/replay
 
 # Ground Truth Annotation (cascade mode)
 python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --cascade --offset random
 open http://127.0.0.1:8000
 
-# Run tests
-python -m pytest tests/ -v
+# Run tests (780 tests)
+source venv/bin/activate && python -m pytest tests/ -v
 ```
 
 ## Documentation
