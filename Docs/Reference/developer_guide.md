@@ -116,8 +116,7 @@ fractal-market-simulator/
 │   ├── data/
 │   │   └── ohlc_loader.py          # CSV data loading
 │   ├── swing_analysis/
-│   │   ├── bull_reference_detector.py   # Bar dataclass, thin wrapper detectors
-│   │   ├── reference_detector.py        # DirectionalReferenceDetector base
+│   │   ├── bull_reference_detector.py   # Bar, BullReferenceSwing, BearReferenceSwing dataclasses
 │   │   ├── level_calculator.py          # Fibonacci level computation
 │   │   ├── scale_calibrator.py          # Auto-calibrate scale boundaries
 │   │   ├── bar_aggregator.py            # Multi-timeframe bar aggregation
@@ -321,30 +320,11 @@ bars = loader.load_data("market_data.csv")
 
 ### Swing Analysis
 
-#### `src/swing_analysis/reference_detector.py`
-
-**Purpose**: Unified reference swing detection parameterized by direction.
-
-**Key Class**: `DirectionalReferenceDetector`
-
-```python
-from src.swing_analysis.reference_detector import DirectionalReferenceDetector
-
-# Create detector for bull swings (completed bear legs being countered)
-bull_detector = DirectionalReferenceDetector("bull", config)
-swings = bull_detector.detect(bars, current_price)
-
-# Or for bear swings (completed bull legs being countered)
-bear_detector = DirectionalReferenceDetector("bear", config)
-```
-
-Detects swing highs/lows and pairs them into valid reference swings. Uses lookback validation to ensure swings are structural (not noise).
-
 #### `src/swing_analysis/bull_reference_detector.py`
 
-**Purpose**: Bar dataclass definition and thin wrapper detectors for backward compatibility.
+**Purpose**: Core dataclass definitions for bars and reference swings.
 
-**Key Dataclass**: `Bar`
+**Key Dataclasses**: `Bar`, `BullReferenceSwing`, `BearReferenceSwing`, `DetectorConfig`
 
 ```python
 @dataclass
@@ -357,9 +337,7 @@ class Bar:
     close: Decimal
 ```
 
-**Wrapper Classes**: `BullReferenceDetector`, `BearReferenceDetector`
-
-Thin wrappers around `DirectionalReferenceDetector` maintaining the original API for backward compatibility.
+The `BullReferenceSwing` and `BearReferenceSwing` dataclasses include computed Fibonacci levels and methods for retracement calculations.
 
 #### `src/swing_analysis/level_calculator.py`
 
@@ -1288,7 +1266,6 @@ Tolerance is calculated as: `max(5, int(duration * tolerance_pct))`
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/discretization` | GET | Serve discretization UI |
 | `/api/discretization/state` | GET | Check if discretization has been run |
 | `/api/discretization/run` | POST | Run discretization on current window |
 | `/api/discretization/events` | GET | Get all events (with optional filters) |
@@ -1343,7 +1320,6 @@ class DiscretizationSwingResponse(BaseModel):
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/replay` | GET | Serve React Replay View UI |
-| `/replay-legacy` | GET | Serve legacy vanilla JS Replay View |
 
 **Features**:
 - React + Tailwind frontend (built with Vite)

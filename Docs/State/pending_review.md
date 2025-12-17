@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-16
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#97** - Remove dead code: reference detectors, legacy HTML views (~3,700 LOC)
 - **#91** - Replay View redesign: React + Tailwind adoption
 
 ---
