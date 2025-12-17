@@ -1,12 +1,17 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-17
 
 ---
 
 ## Pending Changes
+
+### 2025-12-17 - Add scale toggles and active swing count controls
+- **Issue:** #105
+- **Type:** Feature
+- **Files:** types.ts, useSwingDisplay.ts (new), ExplanationPanel.tsx, Replay.tsx, user_guide.md
 
 ### 2025-12-17 - Implement event-based navigation for Replay View v2
 - **Issue:** #104

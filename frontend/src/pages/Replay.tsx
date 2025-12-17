@@ -24,7 +24,11 @@ import {
   parseResolutionToMinutes,
   getAggregationLabel,
   getAggregationMinutes,
+  SwingDisplayConfig,
+  SwingScaleKey,
+  DEFAULT_SWING_DISPLAY_CONFIG,
 } from '../types';
+import { useSwingDisplay } from '../hooks/useSwingDisplay';
 
 /**
  * Convert a discretization swing to a DetectedSwing for chart overlay.
@@ -120,8 +124,16 @@ export const Replay: React.FC = () => {
   // Calibration state
   const [calibrationPhase, setCalibrationPhase] = useState<CalibrationPhase>(CalibrationPhase.NOT_STARTED);
   const [calibrationData, setCalibrationData] = useState<CalibrationData | null>(null);
-  const [activeSwingsFlat, setActiveSwingsFlat] = useState<CalibrationSwing[]>([]);
   const [currentActiveSwingIndex, setCurrentActiveSwingIndex] = useState<number>(0);
+
+  // Swing display configuration (scale toggles, active swing count)
+  const [displayConfig, setDisplayConfig] = useState<SwingDisplayConfig>({
+    enabledScales: new Set(DEFAULT_SWING_DISPLAY_CONFIG.enabledScales),
+    activeSwingCount: DEFAULT_SWING_DISPLAY_CONFIG.activeSwingCount,
+  });
+
+  // Use hook to filter and rank swings based on display config
+  const { filteredActiveSwings, filteredStats } = useSwingDisplay(calibrationData, displayConfig);
 
   // Chart refs for syncing
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -225,11 +237,11 @@ export const Replay: React.FC = () => {
 
   // Compute current active swing for calibration mode
   const currentActiveSwing = useMemo((): CalibrationSwing | null => {
-    if (calibrationPhase !== CalibrationPhase.CALIBRATED || activeSwingsFlat.length === 0) {
+    if (calibrationPhase !== CalibrationPhase.CALIBRATED || filteredActiveSwings.length === 0) {
       return null;
     }
-    return activeSwingsFlat[currentActiveSwingIndex] || null;
-  }, [calibrationPhase, activeSwingsFlat, currentActiveSwingIndex]);
+    return filteredActiveSwings[currentActiveSwingIndex] || null;
+  }, [calibrationPhase, filteredActiveSwings, currentActiveSwingIndex]);
 
   // Convert current active swing to DetectedSwing for chart overlay
   const calibrationHighlightedSwing = useMemo((): DetectedSwing | undefined => {
@@ -239,18 +251,40 @@ export const Replay: React.FC = () => {
 
   // Navigation functions for active swing cycling
   const navigatePrevActiveSwing = useCallback(() => {
-    if (activeSwingsFlat.length === 0) return;
+    if (filteredActiveSwings.length === 0) return;
     setCurrentActiveSwingIndex(prev =>
-      prev === 0 ? activeSwingsFlat.length - 1 : prev - 1
+      prev === 0 ? filteredActiveSwings.length - 1 : prev - 1
     );
-  }, [activeSwingsFlat.length]);
+  }, [filteredActiveSwings.length]);
 
   const navigateNextActiveSwing = useCallback(() => {
-    if (activeSwingsFlat.length === 0) return;
+    if (filteredActiveSwings.length === 0) return;
     setCurrentActiveSwingIndex(prev =>
-      prev === activeSwingsFlat.length - 1 ? 0 : prev + 1
+      prev === filteredActiveSwings.length - 1 ? 0 : prev + 1
     );
-  }, [activeSwingsFlat.length]);
+  }, [filteredActiveSwings.length]);
+
+  // Handler for toggling scale filter
+  const handleToggleScale = useCallback((scale: SwingScaleKey) => {
+    setDisplayConfig(prev => {
+      const newEnabledScales = new Set(prev.enabledScales);
+      if (newEnabledScales.has(scale)) {
+        newEnabledScales.delete(scale);
+      } else {
+        newEnabledScales.add(scale);
+      }
+      return { ...prev, enabledScales: newEnabledScales };
+    });
+    // Reset index when filter changes
+    setCurrentActiveSwingIndex(0);
+  }, []);
+
+  // Handler for setting active swing count
+  const handleSetActiveSwingCount = useCallback((count: number) => {
+    setDisplayConfig(prev => ({ ...prev, activeSwingCount: count }));
+    // Reset index when count changes
+    setCurrentActiveSwingIndex(0);
+  }, []);
 
   // Handler to start playback (transition from calibrated to playing)
   const handleStartPlayback = useCallback(() => {
@@ -313,14 +347,8 @@ export const Replay: React.FC = () => {
         const calBars = source.slice(0, calibration.calibration_bar_count);
         setCalibrationBars(calBars);
 
-        // Flatten active swings across all scales (XL first, then L, M, S)
-        const scaleOrder = ['XL', 'L', 'M', 'S'];
-        const flatActiveSwings: CalibrationSwing[] = [];
-        for (const scale of scaleOrder) {
-          const scaleSwings = calibration.active_swings_by_scale[scale] || [];
-          flatActiveSwings.push(...scaleSwings);
-        }
-        setActiveSwingsFlat(flatActiveSwings);
+        // Reset index and transition to calibrated phase
+        // (filteredActiveSwings will be computed by useSwingDisplay hook)
         setCurrentActiveSwingIndex(0);
         setCalibrationPhase(CalibrationPhase.CALIBRATED);
       } catch (err) {
@@ -849,10 +877,14 @@ export const Replay: React.FC = () => {
               calibrationData={calibrationData}
               currentActiveSwing={currentActiveSwing}
               currentActiveSwingIndex={currentActiveSwingIndex}
-              totalActiveSwings={activeSwingsFlat.length}
+              totalActiveSwings={filteredActiveSwings.length}
               onNavigatePrev={navigatePrevActiveSwing}
               onNavigateNext={navigateNextActiveSwing}
               onStartPlayback={handleStartPlayback}
+              displayConfig={displayConfig}
+              filteredStats={filteredStats}
+              onToggleScale={handleToggleScale}
+              onSetActiveSwingCount={handleSetActiveSwingCount}
             />
           </div>
         </main>

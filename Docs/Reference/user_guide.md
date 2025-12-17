@@ -59,10 +59,35 @@ When loading Replay View, a calibration phase runs automatically:
 3. **Playing**: After starting playback, normal replay mode begins
 
 **Calibration Report shows:**
-- Swings detected per scale (total and active counts)
+- Scale filters to toggle which scales to display
+- Active swings count dropdown (how many to show per scale)
+- Calibration report with swings detected per scale
 - Scale thresholds (XL ≥ 100 pts, L ≥ 40 pts, M ≥ 15 pts, S = all)
 - Navigation through active swings with `[` / `]` keys
 - Start Playback button (also Space/Enter)
+
+### Scale Filters and Active Swing Count
+
+The calibration panel includes controls for filtering displayed swings:
+
+**Scale Filters (checkboxes):**
+- XL, L, M, S toggles to enable/disable each scale
+- Default: XL, L, M enabled; S disabled (S swings are often too noisy)
+- Disabled scales appear grayed out in the calibration report
+
+**Active Swings Count (dropdown):**
+- Shows 1-5 options
+- Default: 2 (shows top 2 biggest swings per enabled scale)
+- Swings are ranked by size (pts) within each scale
+- Changing this updates the navigation total immediately
+
+**Calibration Report columns:**
+| Column | Description |
+|--------|-------------|
+| Scale Filters | Toggle checkboxes + count dropdown |
+| Calibration Report | Swing counts per scale (N shown) |
+| Scale Thresholds | Size requirements per scale |
+| Navigation | Swing cycling + Start Playback |
 
 **Active Swing Definition:**
 A swing is "active" at calibration end if:

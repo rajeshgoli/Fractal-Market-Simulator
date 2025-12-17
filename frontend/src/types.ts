@@ -191,6 +191,24 @@ export enum CalibrationPhase {
   PLAYING = 'PLAYING',
 }
 
+// ============================================================================
+// Swing Display Configuration (Scale Toggles + Active Swing Count)
+// ============================================================================
+
+export type SwingScaleKey = 'XL' | 'L' | 'M' | 'S';
+
+export interface SwingDisplayConfig {
+  enabledScales: Set<SwingScaleKey>;
+  activeSwingCount: number;  // 1-5, how many top swings to show per scale
+}
+
+export const DEFAULT_SWING_DISPLAY_CONFIG: SwingDisplayConfig = {
+  enabledScales: new Set(['XL', 'L', 'M'] as SwingScaleKey[]),  // S off by default
+  activeSwingCount: 2,
+};
+
+export const ACTIVE_SWING_COUNT_OPTIONS = [1, 2, 3, 4, 5] as const;
+
 // Aggregation scale options (timeframes not S/M/L/XL)
 export const AGGREGATION_OPTIONS = [
   { value: 'S', label: '5m', minutes: 5 },

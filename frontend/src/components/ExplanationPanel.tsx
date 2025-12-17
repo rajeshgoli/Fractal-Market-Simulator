@@ -1,5 +1,14 @@
 import React from 'react';
-import { SwingData, Direction, CalibrationData, CalibrationSwing, CalibrationPhase } from '../types';
+import {
+  SwingData,
+  Direction,
+  CalibrationData,
+  CalibrationSwing,
+  CalibrationPhase,
+  SwingDisplayConfig,
+  SwingScaleKey,
+  ACTIVE_SWING_COUNT_OPTIONS,
+} from '../types';
 import { Badge } from './ui/Badge';
 import { Info, GitCommit, Target, Ruler, ArrowRight, CheckCircle, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
@@ -15,6 +24,11 @@ interface ExplanationPanelProps {
   onNavigatePrev?: () => void;
   onNavigateNext?: () => void;
   onStartPlayback?: () => void;
+  // Display config props
+  displayConfig?: SwingDisplayConfig;
+  filteredStats?: Record<string, { total_swings: number; active_swings: number; displayed_swings: number }>;
+  onToggleScale?: (scale: SwingScaleKey) => void;
+  onSetActiveSwingCount?: (count: number) => void;
 }
 
 // Safe number formatting that handles null/undefined
@@ -33,12 +47,23 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
   onNavigatePrev,
   onNavigateNext,
   onStartPlayback,
+  displayConfig,
+  filteredStats,
+  onToggleScale,
+  onSetActiveSwingCount,
 }) => {
   // Show calibration report when calibrated
   if (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) {
-    const stats = calibrationData.stats_by_scale;
     const thresholds = calibrationData.scale_thresholds;
-    const scaleOrder = ['XL', 'L', 'M', 'S'];
+    const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
+    // Use filteredStats if available, otherwise fall back to calibration stats
+    const statsToDisplay = filteredStats || Object.fromEntries(
+      scaleOrder.map(scale => [scale, {
+        total_swings: calibrationData.stats_by_scale[scale]?.total_swings || 0,
+        active_swings: calibrationData.stats_by_scale[scale]?.active_swings || 0,
+        displayed_swings: calibrationData.stats_by_scale[scale]?.active_swings || 0,
+      }])
+    );
 
     return (
       <div className="h-full bg-app-secondary border-t border-app-border flex flex-col font-sans text-sm">
@@ -55,24 +80,76 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
         </div>
 
         {/* Content Grid */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-app-border/50 overflow-hidden">
-          {/* Column 1: Swings Detected */}
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-app-border/50 overflow-hidden">
+          {/* Column 1: Scale Filters */}
           <div className="p-4 flex flex-col justify-center">
             <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-3">
-              Swings Detected
+              Scale Filters
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {scaleOrder.map(scale => {
+                const isEnabled = displayConfig?.enabledScales.has(scale) ?? (scale !== 'S');
+                return (
+                  <label
+                    key={scale}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded border cursor-pointer transition-colors ${
+                      isEnabled
+                        ? 'bg-trading-blue/20 border-trading-blue text-trading-blue'
+                        : 'bg-app-card border-app-border text-app-muted hover:border-app-text/30'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={() => onToggleScale?.(scale)}
+                      className="sr-only"
+                    />
+                    <span className={`w-3 h-3 rounded-sm border flex items-center justify-center ${
+                      isEnabled ? 'bg-trading-blue border-trading-blue' : 'border-app-muted'
+                    }`}>
+                      {isEnabled && <span className="text-white text-[10px]">✓</span>}
+                    </span>
+                    <span className="text-xs font-semibold">{scale}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {/* Active swings dropdown */}
+            <div className="mt-4">
+              <label className="text-xs text-app-muted block mb-1">Active swings to show:</label>
+              <select
+                value={displayConfig?.activeSwingCount ?? 2}
+                onChange={(e) => onSetActiveSwingCount?.(parseInt(e.target.value, 10))}
+                className="bg-app-card border border-app-border rounded px-2 py-1 text-sm text-app-text focus:outline-none focus:border-trading-blue"
+              >
+                {ACTIVE_SWING_COUNT_OPTIONS.map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Column 2: Calibration Report */}
+          <div className="p-4 flex flex-col justify-center">
+            <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-3">
+              Calibration Report
             </span>
             <div className="space-y-2">
               {scaleOrder.map(scale => {
-                const scaleStat = stats[scale];
+                const scaleStat = statsToDisplay[scale];
+                const isEnabled = displayConfig?.enabledScales.has(scale) ?? (scale !== 'S');
                 if (!scaleStat) return null;
                 return (
-                  <div key={scale} className="flex items-center justify-between">
+                  <div
+                    key={scale}
+                    className={`flex items-center justify-between ${!isEnabled ? 'opacity-40' : ''}`}
+                  >
                     <div className="flex items-center gap-2">
                       <Badge variant="neutral" className="min-w-[2rem] justify-center text-xs">{scale}</Badge>
-                      <span className="text-app-text font-mono">{scaleStat.total_swings}</span>
+                      <span className="text-app-text font-mono text-xs">{scaleStat.total_swings} swings</span>
                     </div>
                     <span className="text-xs text-trading-blue">
-                      ({scaleStat.active_swings} active)
+                      ({scaleStat.displayed_swings} shown)
                     </span>
                   </div>
                 );
@@ -80,7 +157,7 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
             </div>
           </div>
 
-          {/* Column 2: Scale Thresholds */}
+          {/* Column 3: Scale Thresholds */}
           <div className="p-4 flex flex-col justify-center">
             <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-3">
               Scale Thresholds
@@ -88,10 +165,14 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
             <div className="space-y-2">
               {scaleOrder.map(scale => {
                 const threshold = thresholds[scale];
+                const isEnabled = displayConfig?.enabledScales.has(scale) ?? (scale !== 'S');
                 return (
-                  <div key={scale} className="flex items-center justify-between">
+                  <div
+                    key={scale}
+                    className={`flex items-center justify-between ${!isEnabled ? 'opacity-40' : ''}`}
+                  >
                     <Badge variant="neutral" className="min-w-[2rem] justify-center text-xs">{scale}</Badge>
-                    <span className="font-mono text-app-text">
+                    <span className="font-mono text-app-text text-xs">
                       {threshold === 0 ? 'All sizes' : `≥ ${threshold} pts`}
                     </span>
                   </div>
@@ -100,29 +181,29 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
             </div>
           </div>
 
-          {/* Column 3: Active Swing Navigation + Start Button */}
-          <div className="p-4 flex flex-col justify-center items-center gap-4">
+          {/* Column 4: Active Swing Navigation + Start Button */}
+          <div className="p-4 flex flex-col justify-center items-center gap-3">
             {totalActiveSwings > 0 ? (
               <>
                 {/* Navigation */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   <button
                     onClick={onNavigatePrev}
-                    className="p-2 rounded bg-app-card border border-app-border hover:bg-app-bg transition-colors"
+                    className="p-1.5 rounded bg-app-card border border-app-border hover:bg-app-bg transition-colors"
                     title="Previous swing ([)"
                   >
-                    <ChevronLeft size={18} />
+                    <ChevronLeft size={16} />
                   </button>
                   <div className="text-center">
-                    <div className="text-lg font-mono font-semibold text-app-text">
+                    <div className="text-base font-mono font-semibold text-app-text">
                       {currentActiveSwingIndex + 1} / {totalActiveSwings}
                     </div>
                     {currentActiveSwing && (
-                      <div className="flex gap-2 mt-1 justify-center">
-                        <Badge variant="neutral" className="text-xs">{currentActiveSwing.scale}</Badge>
+                      <div className="flex gap-1 mt-0.5 justify-center">
+                        <Badge variant="neutral" className="text-[10px] px-1">{currentActiveSwing.scale}</Badge>
                         <Badge
                           variant={currentActiveSwing.direction === 'bull' ? 'bull' : 'bear'}
-                          className="text-xs"
+                          className="text-[10px] px-1"
                         >
                           {currentActiveSwing.direction.toUpperCase()}
                         </Badge>
@@ -131,31 +212,31 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
                   </div>
                   <button
                     onClick={onNavigateNext}
-                    className="p-2 rounded bg-app-card border border-app-border hover:bg-app-bg transition-colors"
+                    className="p-1.5 rounded bg-app-card border border-app-border hover:bg-app-bg transition-colors"
                     title="Next swing (])"
                   >
-                    <ChevronRight size={18} />
+                    <ChevronRight size={16} />
                   </button>
                 </div>
 
                 {/* Start Playback Button */}
                 <button
                   onClick={onStartPlayback}
-                  className="flex items-center gap-2 px-6 py-2 bg-trading-blue text-white font-semibold rounded hover:bg-blue-600 transition-colors"
+                  className="flex items-center gap-2 px-4 py-1.5 bg-trading-blue text-white font-semibold rounded hover:bg-blue-600 transition-colors text-sm"
                 >
-                  <Play size={18} />
+                  <Play size={16} />
                   Start Playback
                 </button>
                 <span className="text-[10px] text-app-muted">Press Space or Enter</span>
               </>
             ) : (
               <div className="text-center">
-                <p className="text-app-muted text-sm mb-4">No active swings detected</p>
+                <p className="text-app-muted text-xs mb-3">No active swings for selected scales</p>
                 <button
                   onClick={onStartPlayback}
-                  className="flex items-center gap-2 px-6 py-2 bg-trading-blue text-white font-semibold rounded hover:bg-blue-600 transition-colors"
+                  className="flex items-center gap-2 px-4 py-1.5 bg-trading-blue text-white font-semibold rounded hover:bg-blue-600 transition-colors text-sm"
                 >
-                  <Play size={18} />
+                  <Play size={16} />
                   Start Playback
                 </button>
               </div>
