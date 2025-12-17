@@ -469,7 +469,7 @@ async def get_bars(scale: Optional[str] = Query(None, description="Scale to get 
     Get aggregated bars for chart display.
 
     Returns bars aggregated to the target count for efficient visualization.
-    If scale is provided and cascade mode is active, returns bars for that scale.
+    Scale options: S (source), M (~800 bars), L (~200 bars), XL (~50 bars)
     """
     s = get_state()
 
@@ -495,6 +495,47 @@ async def get_bars(scale: Optional[str] = Query(None, description="Scale to get 
                 source_end_index=source_end,
             ))
         return bars
+
+    # Handle scale without cascade controller (e.g., Replay View)
+    if scale and s.aggregator:
+        # Scale target bar counts (matching CascadeController.SCALE_TARGET_BARS)
+        scale_targets = {"XL": 50, "L": 200, "M": 800, "S": None}
+        target = scale_targets.get(scale.upper())
+
+        if scale.upper() == "S" or target is None:
+            # S scale: return source bars directly with 1:1 mapping
+            bars = []
+            for i, src_bar in enumerate(s.source_bars):
+                bars.append(BarResponse(
+                    index=i,
+                    timestamp=src_bar.timestamp,
+                    open=src_bar.open,
+                    high=src_bar.high,
+                    low=src_bar.low,
+                    close=src_bar.close,
+                    source_start_index=i,
+                    source_end_index=i,
+                ))
+            return bars
+        else:
+            # Aggregate to target bar count
+            agg_bars = s.aggregator.aggregate_to_target_bars(target)
+            bars_per_candle = len(s.source_bars) // target if len(s.source_bars) > target else 1
+            bars = []
+            for i, agg_bar in enumerate(agg_bars):
+                source_start = i * bars_per_candle
+                source_end = min(source_start + bars_per_candle - 1, len(s.source_bars) - 1)
+                bars.append(BarResponse(
+                    index=i,
+                    timestamp=agg_bar.timestamp,
+                    open=agg_bar.open,
+                    high=agg_bar.high,
+                    low=agg_bar.low,
+                    close=agg_bar.close,
+                    source_start_index=source_start,
+                    source_end_index=source_end,
+                ))
+            return bars
 
     # Default: return pre-computed aggregated bars
     bars = []
