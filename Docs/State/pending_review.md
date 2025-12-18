@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-17
 
@@ -10,7 +10,9 @@
 
 - **#130** — Decouple swing navigation from display count; navigation now cycles through all swings for enabled scales
 - **#131** — Add stats panel toggle and fix swing H/L markers during playback
+- **#133** — Add self-referential separation for XL scale swings (reduced 17 redundant swings to 5)
 - **#134** — Modularize api.py (3,514 lines) into 7 routers and schemas.py
+- **#136** — Restrict protection tolerance to XL anchors, improve "1" endpoint selection, relax entry threshold to 0.236
 
 ---
 
