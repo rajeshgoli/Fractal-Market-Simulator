@@ -24,15 +24,108 @@ Read in order:
 
 ---
 
-## Current Phase: Replay View Playback Redesign
+## Current Phase: Replay View Playback Redesign + Feedback Capture Design
 
-**Status:** Architecture guidance provided for Issue #112. Implementation required.
+### Feedback Capture Schema Design (Q-2025-12-17-1)
 
-### Problem Identified
+**Decision:** Separate file (`playback_feedback.json`) — not part of `ground_truth.json`.
+
+**Rationale:**
+1. **Different workflow** — Playback observation ≠ annotation. Annotation sessions are deliberate two-click workflows; playback feedback is opportunistic observation capture.
+2. **Different lifecycle** — Annotation sessions have phases (XL→L→M→S cascade). Playback observations are append-only stream.
+3. **File size** — `ground_truth.json` is already 600KB+ with annotation data. Mixing workflows creates bloat and complicates querying.
+4. **Query patterns** — User wants to ask "what did I observe on Dec 17?" not "what feedback relates to annotation session X?"
+
+**Schema:**
+
+```json
+{
+  "schema_version": 1,
+  "playback_sessions": [
+    {
+      "session_id": "uuid",
+      "data_file": "es-5m.csv",
+      "started_at": "2025-12-17T14:30:00Z",
+      "observations": [
+        {
+          "observation_id": "uuid",
+          "created_at": "2025-12-17T14:35:22Z",
+          "playback_bar": 1234,
+          "event_context": {
+            "event_type": "SWING_FORMED",
+            "scale": "M",
+            "swing": {
+              "high_bar_index": 100,
+              "low_bar_index": 150,
+              "high_price": "4500.00",
+              "low_price": "4400.00",
+              "direction": "bull"
+            },
+            "detection_bar_index": 160
+          },
+          "text": "Swing detected but price already hit 2x target"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Context Fields Captured:**
+
+| Field | Purpose |
+|-------|---------|
+| `playback_bar` | Playback position — "where was I when I typed this?" |
+| `event_type` | What triggered the linger (SWING_FORMED, SWING_COMPLETED, LEVEL_CROSS, etc.) |
+| `scale` | S/M/L/XL — allows filtering observations by scale |
+| `swing.*` | Full swing geometry — H/L prices and bar indices |
+| `detection_bar_index` | When swing was detected — for debugging timing issues |
+| `text` | Free-form observation — the actual user insight |
+
+**Not Captured:**
+
+- `playback_speed` — Not useful for debugging intent
+- `active_filters` — UI state, not observation context
+- Link to `annotation_session_id` — Different workflow
+
+**Retrieval Examples:**
+
+```python
+# "Show me all observations about M-scale swings"
+[o for s in data['playback_sessions']
+   for o in s['observations']
+   if o['event_context']['scale'] == 'M']
+
+# "What did I observe on Dec 17?"
+[o for s in data['playback_sessions']
+   for o in s['observations']
+   if o['created_at'].startswith('2025-12-17')]
+
+# "Find observations about false positives after target achieved"
+[o for s in data['playback_sessions']
+   for o in s['observations']
+   if 'target' in o['text'].lower()]
+```
+
+**Implementation Notes:**
+
+1. File location: `ground_truth/playback_feedback.json` (alongside `ground_truth.json`)
+2. Backend creates playback session on first `/api/replay/advance` call
+3. New endpoint: `POST /api/playback/feedback` with body `{text: string, event_context: ...}`
+4. Frontend sends event context from current linger state
+5. Auto-pause timer on text input focus (already in product requirements)
+
+---
+
+### Playback Redesign (#112)
+
+**Status:** Architecture guidance provided. Implementation required.
+
+#### Problem Identified
 
 User testing revealed a fundamental architecture flaw: the current implementation pre-loads ALL source bars at startup, meaning the algorithm has "seen" all data including bars meant for playback. The frontend filtering approach is cosmetic — it hides bars that were already processed during calibration. This defeats the purpose of incremental playback.
 
-### Architectural Decision
+#### Architectural Decision
 
 **Backend-controlled data boundary** — the backend should be the single source of truth for what bars are "visible" at any point in time.
 
@@ -42,7 +135,7 @@ User testing revealed a fundamental architecture flaw: the current implementatio
 3. Simpler frontend — no complex filtering logic with potential bugs
 4. Testable — backend behavior can be unit tested in isolation
 
-### Implementation Required
+#### Implementation Required
 
 | Task | Scope | Status |
 |------|-------|--------|
@@ -151,6 +244,7 @@ Once playback is truly incremental:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 17 | Q-2025-12-17-1 — Feedback capture schema design (#115) | Separate file, playback_feedback.json |
 | Dec 17 | Q-2025-12-17-2 — Playback redesign architecture (#112) | Backend-controlled data boundary |
 | Dec 17 | #101, #102, #104, #105, #111 — Calibration, forward playback, event nav, scale toggles | All Accepted, Epic #99 closed |
 | Dec 17 | #100, #103, #107, #108, #109 — Zero swings fix, speed control, swing overlay, multi-swing nav | All Accepted |

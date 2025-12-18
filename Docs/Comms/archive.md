@@ -2,6 +2,91 @@
 
 ---
 
+## Q-2025-12-17-1: Replay View Feedback Capture Schema Design (Issue #115)
+
+**From:** Product
+**To:** Architect
+**Date:** December 17, 2025
+**Status:** Resolved
+
+### Context
+
+User wants to capture free-form feedback during Replay View playback linger events. When observing swing detection behavior, they want to type observations and have them saved with full event context for later analysis.
+
+### Questions Asked
+
+1. **Schema location:** Should this be a new top-level structure in ground_truth.json, a new section within sessions, or a separate file entirely?
+2. **Context to capture:** What event context should be saved with each feedback entry?
+3. **Relationship to existing data:** How does this relate to annotation sessions?
+4. **Retrieval use case:** What structure makes this easy to query and contextualize?
+
+### Resolution (Architect)
+
+**Decision:** Separate file (`playback_feedback.json`) — not part of `ground_truth.json`.
+
+**Rationale:**
+1. **Different workflow** — Playback observation ≠ annotation. Annotation sessions are deliberate two-click workflows; playback feedback is opportunistic observation capture.
+2. **Different lifecycle** — Annotation sessions have phases (XL→L→M→S cascade). Playback observations are append-only stream.
+3. **File size** — `ground_truth.json` is already 600KB+ with annotation data. Mixing workflows creates bloat and complicates querying.
+4. **Query patterns** — User wants to ask "what did I observe on Dec 17?" not "what feedback relates to annotation session X?"
+
+**Schema:**
+
+```json
+{
+  "schema_version": 1,
+  "playback_sessions": [
+    {
+      "session_id": "uuid",
+      "data_file": "es-5m.csv",
+      "started_at": "2025-12-17T14:30:00Z",
+      "observations": [
+        {
+          "observation_id": "uuid",
+          "created_at": "2025-12-17T14:35:22Z",
+          "playback_bar": 1234,
+          "event_context": {
+            "event_type": "SWING_FORMED",
+            "scale": "M",
+            "swing": {
+              "high_bar_index": 100,
+              "low_bar_index": 150,
+              "high_price": "4500.00",
+              "low_price": "4400.00",
+              "direction": "bull"
+            },
+            "detection_bar_index": 160
+          },
+          "text": "Swing detected but price already hit 2x target"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Context Fields:**
+
+| Field | Purpose |
+|-------|---------|
+| `playback_bar` | Playback position — "where was I when I typed this?" |
+| `event_type` | What triggered the linger |
+| `scale` | S/M/L/XL — allows filtering |
+| `swing.*` | Full swing geometry |
+| `detection_bar_index` | When swing was detected |
+| `text` | Free-form observation |
+
+**Implementation Notes:**
+1. File location: `ground_truth/playback_feedback.json`
+2. Backend creates session on first `/api/replay/advance` call
+3. New endpoint: `POST /api/playback/feedback`
+4. Frontend sends event context from current linger state
+5. Auto-pause timer on text input focus
+
+**Full design:** See `Docs/State/architect_notes.md`
+
+---
+
 ## Q-2025-12-17-2: Replay View Playback Redesign (Issue #112)
 
 **From:** Engineer
