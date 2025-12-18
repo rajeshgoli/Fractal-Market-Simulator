@@ -372,7 +372,7 @@ class AppState:
     aggregated_bars: List[Bar]
     aggregation_map: dict  # aggregated_index -> (source_start, source_end)
     storage: AnnotationStorage
-    session: AnnotationSession
+    session: Optional[AnnotationSession]  # Lazy: created on first annotation
     scale: str
     target_bars: int
     cascade_controller: Optional[CascadeController] = None
@@ -386,6 +386,7 @@ class AppState:
     storage_dir: Optional[str] = None
     resolution_minutes: int = 1
     total_source_bars: int = 0  # Total bars in file (before offset/windowing)
+    window_offset: int = 0  # Offset into source data (for lazy session creation)
     cascade_enabled: bool = False
     # Cached DataFrame to avoid re-reading file on next window
     cached_dataframe: Optional[pd.DataFrame] = None
@@ -428,6 +429,42 @@ def get_state() -> AppState:
             detail="Application not initialized. Start server with --data flag."
         )
     return state
+
+
+def get_or_create_session(s: AppState) -> AnnotationSession:
+    """
+    Get the current session or create one if it doesn't exist.
+
+    Sessions are created lazily to avoid orphan session files when using
+    the server for replay-only mode (which doesn't need sessions).
+
+    Args:
+        s: The application state
+
+    Returns:
+        The annotation session (creating one if necessary)
+    """
+    if s.session is not None:
+        return s.session
+
+    # Create session on first access
+    resolution_str = f"{s.resolution_minutes}m"
+    session = s.storage.create_session(
+        data_file=s.data_file,
+        resolution=resolution_str,
+        window_size=len(s.source_bars),
+        window_offset=s.window_offset
+    )
+    logger.info(f"Lazily created session {session.session_id}")
+
+    # Store in state
+    s.session = session
+
+    # Initialize cascade controller's session reference if in cascade mode
+    if s.cascade_controller:
+        s.cascade_controller._session = session
+
+    return session
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -608,6 +645,7 @@ async def create_annotation(request: AnnotationCreate):
     - If start.low < end.low -> bear reference (upswing)
     """
     s = get_state()
+    session = get_or_create_session(s)
 
     # Validate indices
     if request.start_bar_index < 0 or request.start_bar_index >= len(s.aggregated_bars):
@@ -652,14 +690,14 @@ async def create_annotation(request: AnnotationCreate):
         end_source_index=end_source_end,
         start_price=start_price,
         end_price=end_price,
-        window_id=s.session.session_id
+        window_id=session.session_id
     )
 
     # Save annotation
-    s.storage.save_annotation(s.session.session_id, annotation)
+    s.storage.save_annotation(session.session_id, annotation)
 
     # Reload session to get updated annotation list
-    s.session = s.storage.get_session(s.session.session_id)
+    s.session = s.storage.get_session(session.session_id)
 
     # Sync cascade controller's session if in cascade mode
     if s.cascade_controller:
@@ -675,8 +713,9 @@ async def create_annotation(request: AnnotationCreate):
 async def list_annotations():
     """List all annotations for current scale."""
     s = get_state()
+    session = get_or_create_session(s)
 
-    annotations = s.storage.get_annotations(s.session.session_id, scale=s.scale)
+    annotations = s.storage.get_annotations(session.session_id, scale=s.scale)
 
     return [_annotation_to_response(ann) for ann in annotations]
 
@@ -685,13 +724,14 @@ async def list_annotations():
 async def delete_annotation(annotation_id: str):
     """Delete an annotation by ID."""
     s = get_state()
+    session = get_or_create_session(s)
 
-    success = s.storage.delete_annotation(s.session.session_id, annotation_id)
+    success = s.storage.delete_annotation(session.session_id, annotation_id)
     if not success:
         raise HTTPException(status_code=404, detail="Annotation not found")
 
     # Reload session
-    s.session = s.storage.get_session(s.session.session_id)
+    s.session = s.storage.get_session(session.session_id)
 
     # Sync cascade controller's session if in cascade mode
     if s.cascade_controller:
@@ -704,6 +744,7 @@ async def delete_annotation(annotation_id: str):
 async def get_session():
     """Get current session state."""
     s = get_state()
+    session = get_or_create_session(s)
 
     # If cascade mode, use cascade controller's current scale
     current_scale = s.scale
@@ -711,18 +752,18 @@ async def get_session():
         current_scale = s.cascade_controller.get_current_scale()
 
     return SessionResponse(
-        session_id=s.session.session_id,
-        data_file=s.session.data_file,
-        resolution=s.session.resolution,
-        window_size=s.session.window_size,
-        window_offset=s.session.window_offset,
+        session_id=session.session_id,
+        data_file=session.data_file,
+        resolution=session.resolution,
+        window_size=session.window_size,
+        window_offset=session.window_offset,
         total_source_bars=s.total_source_bars,
         calibration_bar_count=s.calibration_bar_count,
         scale=current_scale,
-        created_at=s.session.created_at.isoformat(),
-        annotation_count=len(s.session.annotations),
-        completed_scales=s.session.completed_scales,
-        status=s.session.status
+        created_at=session.created_at.isoformat(),
+        annotation_count=len(session.annotations),
+        completed_scales=session.completed_scales,
+        status=session.status
     )
 
 
@@ -735,6 +776,7 @@ async def update_session_status(request: SessionStatusUpdate):
     at the end of annotation or review.
     """
     s = get_state()
+    session = get_or_create_session(s)
 
     if request.status not in ("keep", "discard"):
         raise HTTPException(
@@ -742,8 +784,8 @@ async def update_session_status(request: SessionStatusUpdate):
             detail="Invalid status. Must be 'keep' or 'discard'."
         )
 
-    s.session.status = request.status
-    s.storage.update_session(s.session)
+    session.status = request.status
+    s.storage.update_session(session)
 
     return {"status": "ok", "new_status": request.status}
 
@@ -764,6 +806,7 @@ async def finalize_session(request: SessionFinalizeRequest):
         New filenames for "keep", or confirmation message for "discard"
     """
     s = get_state()
+    session = get_or_create_session(s)
 
     if request.status not in ("keep", "discard"):
         raise HTTPException(
@@ -772,20 +815,20 @@ async def finalize_session(request: SessionFinalizeRequest):
         )
 
     # Update session status first (in memory, will be persisted or deleted)
-    s.session.status = request.status
+    session.status = request.status
 
     try:
         if request.status == "discard":
             # Delete review file first (if exists)
             if s.review_storage:
                 s.review_storage.finalize_review(
-                    session_id=s.session.session_id,
+                    session_id=session.session_id,
                     status="discard"
                 )
 
             # Delete session file
             s.storage.finalize_session(
-                session_id=s.session.session_id,
+                session_id=session.session_id,
                 status="discard"
             )
 
@@ -797,7 +840,7 @@ async def finalize_session(request: SessionFinalizeRequest):
             )
 
         # status == "keep": save session status then rename
-        s.storage.update_session(s.session)
+        s.storage.update_session(session)
 
         # Update review session with metadata if it exists
         if s.review_controller:
@@ -809,7 +852,7 @@ async def finalize_session(request: SessionFinalizeRequest):
 
         # Finalize session file (rename to clean timestamp name)
         session_filename, new_path_id = s.storage.finalize_session(
-            session_id=s.session.session_id,
+            session_id=session.session_id,
             status="keep",
             label=request.label
         )
@@ -818,7 +861,7 @@ async def finalize_session(request: SessionFinalizeRequest):
         review_filename = None
         if s.review_storage:
             review_filename = s.review_storage.finalize_review(
-                session_id=s.session.session_id,
+                session_id=session.session_id,
                 status="keep",
                 new_path_id=new_path_id
             )
@@ -964,11 +1007,12 @@ async def run_comparison():
     swings on the source bars. Results are stored for later retrieval.
     """
     s = get_state()
+    session = get_or_create_session(s)
 
     analyzer = ComparisonAnalyzer(tolerance_pct=0.1)
 
     # Run comparison on all scales that have annotations
-    results = analyzer.compare_session(s.session, s.source_bars)
+    results = analyzer.compare_session(session, s.source_bars)
 
     # Generate report
     report = analyzer.generate_report(results)
@@ -1120,8 +1164,10 @@ def _ensure_comparison_run(s: AppState) -> Dict[str, ComparisonResult]:
 
         # If still not available, run synchronously
         if s.comparison_results is None:
+            # Session must exist at this point (caller should have created it)
+            session = get_or_create_session(s)
             analyzer = ComparisonAnalyzer(tolerance_pct=0.1)
-            s.comparison_results = analyzer.compare_session(s.session, s.source_bars)
+            s.comparison_results = analyzer.compare_session(session, s.source_bars)
             # Also update the comparison report
             s.comparison_report = analyzer.generate_report(s.comparison_results)
     return s.comparison_results
@@ -1137,6 +1183,11 @@ def _precompute_comparison_background(s: AppState) -> None:
     try:
         logger.info("Starting background precomputation of system swings...")
         s.precompute_in_progress = True
+
+        # Session should exist since this is called after annotation
+        if s.session is None:
+            logger.warning("Session is None in background precomputation, skipping")
+            return
 
         analyzer = ComparisonAnalyzer(tolerance_pct=0.1)
         results = analyzer.compare_session(s.session, s.source_bars)
@@ -1164,7 +1215,7 @@ def start_precomputation_if_ready(s: AppState) -> None:
         return
     if s.comparison_results is not None:
         return
-    if len(s.session.annotations) == 0:
+    if s.session is None or len(s.session.annotations) == 0:
         return  # Wait for at least one annotation
 
     # Start background thread
@@ -1198,6 +1249,7 @@ async def start_review():
     - Returns initial state
     """
     s = get_state()
+    session = get_or_create_session(s)
 
     if s.review_storage is None:
         raise HTTPException(status_code=500, detail="Review storage not initialized")
@@ -1208,7 +1260,7 @@ async def start_review():
     # Create or get review controller
     if s.review_controller is None:
         s.review_controller = ReviewController(
-            session_id=s.session.session_id,
+            session_id=session.session_id,
             annotation_storage=s.storage,
             review_storage=s.review_storage,
             comparison_results=comparison_results
@@ -1448,6 +1500,7 @@ async def export_review(format: str = Query("json")):
     }
     """
     s = get_state()
+    session = get_or_create_session(s)
     controller = _get_review_controller(s)
 
     summary = controller.get_summary()
@@ -1457,9 +1510,9 @@ async def export_review(format: str = Query("json")):
 
     if format == "json":
         return {
-            "session_id": s.session.session_id,
+            "session_id": session.session_id,
             "review_id": summary["review_id"],
-            "data_file": s.session.data_file,
+            "data_file": session.data_file,
             "summary": summary,
             "matches": matches,
             "false_positives": fps,
@@ -1535,8 +1588,8 @@ async def start_next_session():
     """
     s = get_state()
 
-    # Calculate random offset
-    window_size = s.session.window_size
+    # Calculate random offset (use source_bars length as window size)
+    window_size = len(s.source_bars)
     max_offset = max(0, s.total_source_bars - window_size)
     new_offset = random.randint(0, max_offset) if max_offset > 0 else 0
 
@@ -1553,11 +1606,12 @@ async def start_next_session():
         cached_df=s.cached_dataframe
     )
 
-    # Get the new session from updated state
+    # Get the new session from updated state (create it for annotation workflow)
     new_state = get_state()
+    new_session = get_or_create_session(new_state)
 
     return NextSessionResponse(
-        session_id=new_state.session.session_id,
+        session_id=new_session.session_id,
         offset=new_offset,
         redirect_url="/"
     )
@@ -2986,19 +3040,20 @@ def init_app(
     # Initialize storage
     storage = AnnotationStorage(storage_dir)
 
-    # Create session
-    resolution_str = f"{resolution_minutes}m"
-    session = storage.create_session(
-        data_file=data_file,
-        resolution=resolution_str,
-        window_size=len(source_bars),
-        window_offset=window_offset
-    )
-    logger.info(f"Created session {session.session_id}")
-
-    # Initialize cascade controller if cascade mode
+    # Session creation is lazy for non-cascade mode (replay-only won't create orphan sessions)
+    # Cascade mode requires session immediately for CascadeController
+    session = None
     cascade_controller = None
     if cascade:
+        # Cascade mode: create session immediately (annotation workflow)
+        resolution_str = f"{resolution_minutes}m"
+        session = storage.create_session(
+            data_file=data_file,
+            resolution=resolution_str,
+            window_size=len(source_bars),
+            window_offset=window_offset
+        )
+        logger.info(f"Created session {session.session_id} (cascade mode)")
         cascade_controller = CascadeController(
             session=session,
             source_bars=source_bars,
@@ -3046,12 +3101,14 @@ def init_app(
         storage_dir=storage_dir,
         resolution_minutes=resolution_minutes,
         total_source_bars=total_source_bars,
+        window_offset=window_offset,
         cascade_enabled=cascade,
         # Cache full DataFrame to avoid re-reading on next window
         cached_dataframe=full_df
     )
 
-    logger.info(f"Initialized annotator with {len(source_bars)} bars, scale={scale}")
+    session_mode = "cascade" if cascade else "lazy"
+    logger.info(f"Initialized annotator with {len(source_bars)} bars, scale={scale}, session={session_mode}")
 
 
 # Mount React frontend assets (from Vite build)

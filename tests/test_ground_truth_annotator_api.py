@@ -1075,10 +1075,16 @@ class TestSessionFinalizeEndpoint:
         """Discard should delete session files."""
         from pathlib import Path
 
+        # Create an annotation to trigger session creation (lazy session)
+        client.post("/api/annotations", json={
+            "start_bar_index": 0,
+            "end_bar_index": 5
+        })
+
         # Get initial file count
         storage_path = Path(temp_storage)
         initial_files = list(storage_path.glob("*.json"))
-        assert len(initial_files) > 0  # Should have inprogress file
+        assert len(initial_files) > 0  # Should have inprogress file after annotation
 
         response = client.post("/api/session/finalize", json={
             "status": "discard"
@@ -1123,11 +1129,12 @@ class TestSessionFinalizeEndpoint:
 class TestInprogressFilename:
     """Tests for inprogress filename on session creation."""
 
-    def test_new_session_has_inprogress_filename(self, temp_storage, test_data_path):
-        """New sessions should be saved with inprogress- prefix."""
+    def test_lazy_session_creates_inprogress_filename(self, temp_storage, test_data_path):
+        """Sessions created lazily (on first annotation) should have inprogress- prefix."""
         from pathlib import Path
+        from starlette.testclient import TestClient
 
-        # Reset and create new session
+        # Reset and init app (session NOT created yet - lazy)
         api.state = None
         init_app(
             data_file=test_data_path,
@@ -1138,13 +1145,63 @@ class TestInprogressFilename:
             target_bars=50
         )
 
-        # Check files in storage
+        # Check files in storage - should be empty initially
         storage_path = Path(temp_storage)
-        json_files = list(storage_path.glob("*.json"))
+        initial_files = list(storage_path.glob("*.json"))
+        assert len(initial_files) == 0  # No session file yet (lazy creation)
 
-        # Should have exactly one file with inprogress- prefix
+        # Create an annotation to trigger session creation
+        client = TestClient(api.app)
+        response = client.post("/api/annotations", json={
+            "start_bar_index": 0,
+            "end_bar_index": 5
+        })
+        assert response.status_code == 200
+
+        # Now check files - should have inprogress file
+        json_files = list(storage_path.glob("*.json"))
         inprogress_files = [f for f in json_files if f.name.startswith("inprogress-")]
         assert len(inprogress_files) == 1
+
+    def test_replay_only_does_not_create_session(self, temp_storage, test_data_path):
+        """Replay-only usage should NOT create orphan session files (#119)."""
+        from pathlib import Path
+        from starlette.testclient import TestClient
+
+        # Reset and init app (session NOT created yet - lazy)
+        api.state = None
+        init_app(
+            data_file=test_data_path,
+            storage_dir=temp_storage,
+            resolution_minutes=1,
+            window_size=500,
+            scale="S",
+            target_bars=50
+        )
+
+        # Check files in storage - should be empty initially
+        storage_path = Path(temp_storage)
+        initial_files = list(storage_path.glob("*.json"))
+        assert len(initial_files) == 0  # No session file yet (lazy creation)
+
+        # Use replay endpoints (calibrate and advance) - no session needed
+        client = TestClient(api.app)
+
+        # Call calibrate endpoint
+        response = client.get("/api/replay/calibrate?bar_count=100")
+        assert response.status_code == 200
+
+        # Call advance endpoint
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": 100,
+            "current_bar_index": 99,
+            "advance_by": 5
+        })
+        assert response.status_code == 200
+
+        # Check files in storage - should STILL be empty (replay doesn't need session)
+        final_files = list(storage_path.glob("*.json"))
+        assert len(final_files) == 0  # Still no session file - fixes #119
 
 
 class TestReviewFlowIntegration:
