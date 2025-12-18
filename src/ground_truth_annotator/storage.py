@@ -39,7 +39,8 @@ PLAYBACK_FEEDBACK_FILE = GROUND_TRUTH_DIR / "playback_feedback.json"
 GROUND_TRUTH_SCHEMA_VERSION = 1
 
 # Schema version for playback_feedback.json
-PLAYBACK_FEEDBACK_SCHEMA_VERSION = 1
+# v2: Added 'offset' field to session metadata
+PLAYBACK_FEEDBACK_SCHEMA_VERSION = 2
 
 # Maximum age for stale sessions (3 hours in seconds)
 STALE_SESSION_MAX_AGE_HOURS = 3
@@ -945,7 +946,7 @@ class PlaybackFeedbackStorage:
         with open(self._feedback_file, 'w') as f:
             json.dump(data, f, indent=2)
 
-    def get_or_create_session(self, data_file: str) -> PlaybackSession:
+    def get_or_create_session(self, data_file: str, offset: int = 0) -> PlaybackSession:
         """
         Get the current session for a data file, or create a new one.
 
@@ -954,6 +955,7 @@ class PlaybackFeedbackStorage:
 
         Args:
             data_file: The data file being reviewed
+            offset: Offset into source data for this window
 
         Returns:
             PlaybackSession (existing or newly created)
@@ -963,7 +965,7 @@ class PlaybackFeedbackStorage:
             return self._current_session
 
         # Create new session for this data file
-        session = PlaybackSession.create(data_file)
+        session = PlaybackSession.create(data_file, offset=offset)
         self._current_session = session
 
         # Persist immediately
@@ -978,7 +980,8 @@ class PlaybackFeedbackStorage:
         data_file: str,
         playback_bar: int,
         event_context: Dict[str, Any],
-        text: str
+        text: str,
+        offset: int = 0
     ) -> PlaybackObservation:
         """
         Add an observation to the current session.
@@ -990,12 +993,13 @@ class PlaybackFeedbackStorage:
             playback_bar: Current playback bar index
             event_context: Full event context (type, scale, swing details)
             text: Free-form observation text
+            offset: Offset into source data for this window
 
         Returns:
             The created PlaybackObservation
         """
         # Get or create session
-        session = self.get_or_create_session(data_file)
+        session = self.get_or_create_session(data_file, offset=offset)
 
         # Create observation
         observation = PlaybackObservation.create(

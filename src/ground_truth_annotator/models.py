@@ -386,15 +386,17 @@ class PlaybackSession:
     session_id: str
     data_file: str                # Source data file being reviewed
     started_at: datetime
+    offset: int                   # Offset into source data for this window
     observations: List[PlaybackObservation] = field(default_factory=list)
 
     @classmethod
-    def create(cls, data_file: str) -> 'PlaybackSession':
+    def create(cls, data_file: str, offset: int = 0) -> 'PlaybackSession':
         """Factory method to create a new playback session."""
         return cls(
             session_id=str(uuid.uuid4()),
             data_file=data_file,
             started_at=datetime.now(timezone.utc),
+            offset=offset,
             observations=[]
         )
 
@@ -407,6 +409,7 @@ class PlaybackSession:
         return {
             'session_id': self.session_id,
             'data_file': self.data_file,
+            'offset': self.offset,
             'started_at': self.started_at.isoformat(),
             'observations': [o.to_dict() for o in self.observations]
         }
@@ -418,6 +421,7 @@ class PlaybackSession:
             session_id=data['session_id'],
             data_file=data['data_file'],
             started_at=datetime.fromisoformat(data['started_at']),
+            offset=data.get('offset', 0),  # Default to 0 for older sessions
             observations=[PlaybackObservation.from_dict(o) for o in data.get('observations', [])]
         )
 

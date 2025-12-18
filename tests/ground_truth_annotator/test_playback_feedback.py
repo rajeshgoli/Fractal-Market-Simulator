@@ -76,6 +76,16 @@ class TestPlaybackSession:
         assert session.session_id  # UUID generated
         assert session.data_file == "es-5m.csv"
         assert session.started_at is not None
+        assert session.offset == 0  # Default offset
+        assert session.observations == []
+
+    def test_create_session_with_offset(self):
+        """Test factory method creates session with explicit offset."""
+        session = PlaybackSession.create(data_file="es-5m.csv", offset=1171873)
+
+        assert session.session_id
+        assert session.data_file == "es-5m.csv"
+        assert session.offset == 1171873
         assert session.observations == []
 
     def test_add_observation(self):
@@ -94,7 +104,7 @@ class TestPlaybackSession:
 
     def test_to_dict_and_from_dict(self):
         """Test serialization round-trip with observations."""
-        session = PlaybackSession.create(data_file="test.csv")
+        session = PlaybackSession.create(data_file="test.csv", offset=12345)
         session.add_observation(PlaybackObservation.create(
             playback_bar=100,
             event_context={"event_type": "SWING_FORMED", "scale": "S"},
@@ -111,9 +121,34 @@ class TestPlaybackSession:
 
         assert restored.session_id == session.session_id
         assert restored.data_file == session.data_file
+        assert restored.offset == 12345
         assert len(restored.observations) == 2
         assert restored.observations[0].text == "First observation"
         assert restored.observations[1].text == "Second observation"
+
+    def test_to_dict_includes_offset(self):
+        """Test that to_dict includes offset field."""
+        session = PlaybackSession.create(data_file="test.csv", offset=999)
+        data = session.to_dict()
+
+        assert "offset" in data
+        assert data["offset"] == 999
+
+    def test_from_dict_backward_compatibility(self):
+        """Test that from_dict handles missing offset field (v1 data)."""
+        # Simulate v1 data without offset field
+        v1_data = {
+            "session_id": "abc-123",
+            "data_file": "old_data.csv",
+            "started_at": "2025-12-17T10:00:00+00:00",
+            "observations": []
+        }
+
+        session = PlaybackSession.from_dict(v1_data)
+
+        assert session.session_id == "abc-123"
+        assert session.data_file == "old_data.csv"
+        assert session.offset == 0  # Default value for missing field
 
 
 class TestPlaybackFeedbackStorage:
@@ -138,6 +173,39 @@ class TestPlaybackFeedbackStorage:
         sessions = temp_storage.get_sessions()
         assert len(sessions) == 1
         assert sessions[0].data_file == "test.csv"
+
+    def test_create_session_with_offset(self, temp_storage):
+        """Test that session stores offset from first observation."""
+        temp_storage.add_observation(
+            data_file="test.csv",
+            playback_bar=100,
+            event_context={"event_type": "SWING_FORMED", "scale": "S"},
+            text="First observation",
+            offset=1171873
+        )
+
+        sessions = temp_storage.get_sessions()
+        assert len(sessions) == 1
+        assert sessions[0].offset == 1171873
+
+    def test_offset_persisted_to_file(self, tmp_path):
+        """Test that offset is persisted to the JSON file."""
+        feedback_file = tmp_path / "playback_feedback.json"
+        storage = PlaybackFeedbackStorage(feedback_file=str(feedback_file))
+
+        storage.add_observation(
+            data_file="test.csv",
+            playback_bar=100,
+            event_context={"event_type": "SWING_FORMED", "scale": "S"},
+            text="Test",
+            offset=999999
+        )
+
+        with open(feedback_file, 'r') as f:
+            data = json.load(f)
+
+        assert len(data["playback_sessions"]) == 1
+        assert data["playback_sessions"][0]["offset"] == 999999
 
     def test_add_multiple_observations_same_session(self, temp_storage):
         """Test adding multiple observations to the same session."""

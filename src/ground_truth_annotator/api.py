@@ -3315,6 +3315,7 @@ async def submit_playback_feedback(request: PlaybackFeedbackRequest):
         playback_bar=request.playback_bar,
         event_context=context,
         text=text,
+        offset=s.window_offset,
     )
 
     return PlaybackFeedbackResponse(
