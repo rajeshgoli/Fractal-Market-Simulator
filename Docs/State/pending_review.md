@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-17
 
@@ -11,6 +11,7 @@
 - **#112** — Fixed: Chart filtering to respect playback position (stream bars beyond calibration)
 - **#113** — Backend-controlled data boundary: playback_index in AppState, /api/bars respects boundary
 - **#114** — Fix Replay View v2 playback regressions (explanation panel, event/scale filtering, bar counter UI)
+- **#115** — Replay View v2 usability improvements (Escape to dismiss, scale filters in sidebar, bar counter)
 
 ---
 
