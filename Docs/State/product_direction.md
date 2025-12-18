@@ -1,40 +1,105 @@
 # Product Direction
 
-**Last Updated:** December 17, 2025 (PM session)
+**Last Updated:** December 17, 2025 (PM session 3)
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Implement Replay View v2 usability improvements for efficient observation workflow.**
+**Fix critical bug in swing detection filter that causes valid swings to be missed.**
 
-Replay View v2 core functionality is working: swing detection explanations, linger events, level crossed handling, and navigation all confirmed. User is now actively observing detection behavior and needs usability improvements for efficient feedback capture.
+Debugging session revealed `get_level_band()` bug that incorrectly filters ~99% of valid swings as "redundant." This explains why calibration finds only 1 XL swing when multiple obvious swings exist.
 
-**User's goal:** Observe swing detection patterns during forward playback, capture feedback on specific events, and collect data on detection edge cases.
+**User's goal:** Reliable swing detection during calibration and playback.
 
 ---
 
-## P0: Replay View v2 Usability Improvements
+## P0: Critical Bug Fix (#126)
 
-**Status:** 3 usability items identified. Ready for engineering.
+**Status:** Issue filed. Highest priority.
 
-### New Items (Dec 17)
+### Problem
 
-| # | Feature | Description |
-|---|---------|-------------|
-| 1 | **Escape key → dismiss** | Map Escape to X button for faster keyboard workflow |
-| 2 | **Scale filters during playback** | Add S/M/L/XL filter section to left panel below linger events, same design language |
-| 3 | **Feedback capture box** | Text input + submit below filters; typing pauses auto-advance timer; saves to ground_truth.json |
+`get_level_band()` in `swing_detector.py` checks `if price < levels[0].price`, but `levels[0]` is the HIGHEST price level (multiplier -0.1), not the lowest. Since all prices are below that, everything returns -999.
+
+In `filter_swings()`, swings with the same FIB band are considered "redundant." Since ALL swings return band -999, they're all redundant with the anchor — only the largest swing survives.
+
+### Evidence
+
+| Metric | Value |
+|--------|-------|
+| Bear refs before filter | 82 |
+| Bear refs after filter | **1** |
+
+The Dec 20 → Dec 27 swing (4743 → 4841, 98 pts) exists before filtering but is incorrectly filtered out.
+
+### Fix
+
+Check against actual lowest price level, not `levels[0]`:
+```python
+min_price = min(level.price for level in levels)
+if price_dec < min_price:
+    return Decimal("-999")
+```
+
+---
+
+## P0: Always-On Feedback Capture (#123)
+
+**Status:** Ready for engineering.
+
+### Requirements
+
+| Aspect | Requirement |
+|--------|-------------|
+| Visibility | Feedback box always visible in left panel (not just during linger) |
+| Pause on focus | Clicking in box or typing pauses playback automatically |
+| Context capture | Rich state snapshot on submit (see below) |
+| Storage | Append to `playback_feedback.json` |
+
+### Context to Capture on Submit
+
+- Current state (calibrating, calibration_complete, playing, paused)
+- Offset used for session
+- Bars elapsed since calibration
+- Swings found (count by scale)
+- Swings invalidated (count)
+- Swings completed (count)
+- Current bar index
+- User's free-text observation
 
 ### Acceptance Criteria
 
-- [ ] Escape key dismisses current linger event (same as clicking X)
-- [ ] Scale filter section visible during forward playback
-- [ ] Filter toggles work to show/hide swings by scale
-- [ ] Feedback text box visible during linger events
-- [ ] Typing in feedback box pauses/removes auto-advance timer
-- [ ] Submit saves feedback to ground_truth.json with event context
+- [ ] Feedback text box visible at all times during replay
+- [ ] Clicking in box or typing pauses playback
+- [ ] Submit captures full context snapshot
+- [ ] Feedback saved to `playback_feedback.json`
+- [ ] Multiple observations per session supported
+
+---
+
+## Strategic Direction: Tool Consolidation (Exploring)
+
+**Status:** Exploring. No action yet.
+
+User sees Replay View potentially replacing ground_truth_annotator:
+
+> "I'm thinking we can retire ground_truth_annotator tool and use this instead."
+
+**Decision:** Defer architectural changes. User wants 5-10 real Replay View sessions before making permanent decisions about tool consolidation.
+
+Ground truth annotator's two-click workflow remains available. May port to Replay View later if observation sessions validate the direction.
+
+---
+
+## Previous P0 Items (Resolved)
+
+| Item | Status |
+|------|--------|
+| Escape key → dismiss | Assumed complete (part of prior usability work) |
+| Scale filters during playback | Assumed complete |
+| Feedback capture box (linger events) | Complete (#116) |
 
 ### Previous Regressions (Resolved)
 

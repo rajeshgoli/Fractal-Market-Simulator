@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-17
 
@@ -8,11 +8,7 @@
 
 ## Pending Changes
 
-- **#122** — Add trigger_explanation field to replay events for human-readable explanations
-- **#123** — Always-on feedback capture in Replay View with rich context snapshots
-- **#126** — Fix get_level_band() bug causing valid bearish swings to be filtered as redundant
-- **#127** — Store offset in playback_feedback.json for debugging
-- **#128** — Deduplicate swings using same pivot in incremental detector
+- **#130** — Decouple swing navigation from display count; navigation now cycles through all swings for enabled scales
 
 ---
 
@@ -20,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 17 | #122, #123, #126, #127, #128 — Trigger explanations, always-on feedback, level band fix, offset storage, deduplication | All Accepted |
 | Dec 17 | #116, #118, #119, #120, #121 — Feedback capture, collision fix, lazy sessions, incremental detection, stale filtering | All Accepted |
 | Dec 17 | #112, #113, #114, #115, #117 — Replay View v2 architecture fix + usability | All Accepted |
 | Dec 17 | #101, #102, #104, #105, #111 — Calibration, forward playback, event nav, scale toggles, swing markers | All Accepted, Epic #99 closed |
