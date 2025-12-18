@@ -29,6 +29,8 @@ interface ExplanationPanelProps {
   filteredStats?: Record<string, { total_swings: number; active_swings: number; displayed_swings: number }>;
   onToggleScale?: (scale: SwingScaleKey) => void;
   onSetActiveSwingCount?: (count: number) => void;
+  // Show stats toggle (for playback mode)
+  showStats?: boolean;
 }
 
 // Safe number formatting that handles null/undefined
@@ -51,9 +53,14 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
   filteredStats,
   onToggleScale,
   onSetActiveSwingCount,
+  showStats = false,
 }) => {
-  // Show calibration report when calibrated
-  if (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) {
+  // Show calibration report when calibrated, or during playback if showStats is enabled
+  const shouldShowStats =
+    (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) ||
+    (calibrationPhase === CalibrationPhase.PLAYING && showStats && calibrationData);
+
+  if (shouldShowStats && calibrationData) {
     const thresholds = calibrationData.scale_thresholds;
     const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
     // Use filteredStats if available, otherwise fall back to calibration stats
@@ -70,8 +77,8 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
         {/* Panel Header */}
         <div className="flex items-center gap-3 px-4 py-2 border-b border-app-border bg-app-bg/40">
           <div className="flex items-center gap-2 text-app-text font-semibold tracking-wider uppercase">
-            <CheckCircle size={16} className="text-trading-bull" />
-            <span>Calibration Complete</span>
+            <CheckCircle size={16} className={calibrationPhase === CalibrationPhase.PLAYING ? "text-trading-blue" : "text-trading-bull"} />
+            <span>{calibrationPhase === CalibrationPhase.PLAYING ? "Calibration Stats" : "Calibration Complete"}</span>
           </div>
           <div className="h-4 w-px bg-app-border mx-2"></div>
           <span className="text-xs text-app-muted">
@@ -181,9 +188,20 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
             </div>
           </div>
 
-          {/* Column 4: Active Swing Navigation + Start Button */}
+          {/* Column 4: Active Swing Navigation + Start Button (CALIBRATED) or Status (PLAYING) */}
           <div className="p-4 flex flex-col justify-center items-center gap-3">
-            {totalActiveSwings > 0 ? (
+            {calibrationPhase === CalibrationPhase.PLAYING ? (
+              /* During playback, show a simple status */
+              <div className="text-center">
+                <div className="flex items-center gap-2 justify-center mb-2">
+                  <div className="w-2 h-2 rounded-full bg-trading-blue animate-pulse"></div>
+                  <span className="text-sm font-medium text-app-text">Playback Active</span>
+                </div>
+                <p className="text-xs text-app-muted">
+                  Toggle "Show Stats" in sidebar to hide this panel
+                </p>
+              </div>
+            ) : totalActiveSwings > 0 ? (
               <>
                 {/* Navigation */}
                 <div className="flex items-center gap-3">
@@ -244,8 +262,8 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
           </div>
         </div>
 
-        {/* Current swing details (dimmed footer) */}
-        {currentActiveSwing && (
+        {/* Current swing details (dimmed footer) - only shown during CALIBRATED phase */}
+        {calibrationPhase === CalibrationPhase.CALIBRATED && currentActiveSwing && (
           <div className="px-4 py-2 border-t border-app-border/30 bg-app-bg/20">
             <div className="flex items-center gap-4 text-xs text-app-muted">
               <span>

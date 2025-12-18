@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { FilterState, EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause } from 'lucide-react';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2 } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent } from '../lib/api';
 
 interface FeedbackContext {
@@ -33,6 +33,10 @@ interface SidebarProps {
   showScaleFilters?: boolean;
   displayConfig?: SwingDisplayConfig;
   onToggleScale?: (scale: SwingScaleKey) => void;
+  // Stats panel toggle (shown during playback)
+  showStatsToggle?: boolean;
+  showStats?: boolean;
+  onToggleShowStats?: () => void;
   // Feedback props - now always visible during playback
   showFeedback?: boolean;
   isLingering?: boolean;
@@ -53,6 +57,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   showScaleFilters = false,
   displayConfig,
   onToggleScale,
+  showStatsToggle = false,
+  showStats = false,
+  onToggleShowStats,
   showFeedback = false,
   isLingering = false,
   lingerEvent,
@@ -250,6 +257,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </label>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Show Stats Toggle (shown during playback) */}
+      {showStatsToggle && onToggleShowStats && (
+        <div className="p-4 border-t border-app-border">
+          <div
+            className={`
+              group flex items-start gap-3 p-3 rounded-lg transition-all duration-200
+              ${showStats
+                ? 'bg-app-card border border-app-border'
+                : 'hover:bg-app-card/50 border border-transparent opacity-70'
+              }
+            `}
+          >
+            <div className="pt-1">
+              <BarChart2 size={16} className="text-trading-purple" />
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-sm font-medium ${showStats ? 'text-app-text' : 'text-app-muted'}`}>
+                  Show Stats
+                </span>
+                <Toggle
+                  checked={showStats}
+                  onChange={onToggleShowStats}
+                  id="toggle-show-stats"
+                />
+              </div>
+              <p className="text-xs text-app-muted">
+                Show calibration stats panel during playback
+              </p>
+            </div>
           </div>
         </div>
       )}

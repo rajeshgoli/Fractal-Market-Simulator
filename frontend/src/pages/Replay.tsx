@@ -190,6 +190,9 @@ export const Replay: React.FC = () => {
     activeSwingCount: DEFAULT_SWING_DISPLAY_CONFIG.activeSwingCount,
   });
 
+  // Show stats toggle (for displaying calibration stats during playback)
+  const [showStats, setShowStats] = useState(false);
+
   // Use hook to filter and rank swings based on display config
   // filteredActiveSwings is limited by activeSwingCount (for chart display)
   // allNavigableSwings includes all swings for enabled scales (for navigation)
@@ -319,6 +322,37 @@ export const Replay: React.FC = () => {
     if (!swing) return undefined;
     return discretizationSwingToDetected(swing);
   }, [calibrationPhase, forwardPlayback.lingerEvent, playback.lingerSwingId, swings]);
+
+  // Convert forward playback's current swing state to DetectedSwing[] for marker rendering
+  const activeSwingsForMarkers = useMemo((): DetectedSwing[] => {
+    if (calibrationPhase !== CalibrationPhase.PLAYING || !forwardPlayback.currentSwingState) {
+      return [];
+    }
+    const swings: DetectedSwing[] = [];
+    const scales: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
+    for (const scale of scales) {
+      // Only include swings from enabled scales
+      if (!displayConfig.enabledScales.has(scale)) continue;
+      const scaleSwings = forwardPlayback.currentSwingState[scale] || [];
+      for (const swing of scaleSwings) {
+        swings.push({
+          id: swing.id,
+          direction: swing.direction,
+          high_price: swing.high_price,
+          high_bar_index: swing.high_bar_index,
+          low_price: swing.low_price,
+          low_bar_index: swing.low_bar_index,
+          size: swing.size,
+          rank: swing.rank,
+          fib_0: swing.fib_0,
+          fib_0382: swing.fib_0382,
+          fib_1: swing.fib_1,
+          fib_2: swing.fib_2,
+        });
+      }
+    }
+    return swings;
+  }, [calibrationPhase, forwardPlayback.currentSwingState, displayConfig.enabledScales]);
 
   // Compute current active swing for calibration mode (navigate through all swings, not just displayed)
   const currentActiveSwing = useMemo((): CalibrationSwing | null => {
@@ -738,22 +772,29 @@ export const Replay: React.FC = () => {
   }, [chart1Bars, chart2Bars, findAggBarForSourceIndex]);
 
   // Update all chart markers when position or swings change
+  // During PLAYING phase, use activeSwingsForMarkers (from currentSwingState) instead of detectedSwings
+  const swingsForMarkers = useMemo(() => {
+    return calibrationPhase === CalibrationPhase.PLAYING
+      ? activeSwingsForMarkers
+      : detectedSwings;
+  }, [calibrationPhase, activeSwingsForMarkers, detectedSwings]);
+
   useEffect(() => {
     updateAllMarkers(
       markers1Ref.current,
       chart1Bars,
       currentPlaybackPosition,
-      detectedSwings,
+      swingsForMarkers,
       highlightedSwing
     );
     updateAllMarkers(
       markers2Ref.current,
       chart2Bars,
       currentPlaybackPosition,
-      detectedSwings,
+      swingsForMarkers,
       highlightedSwing
     );
-  }, [currentPlaybackPosition, detectedSwings, highlightedSwing, chart1Bars, chart2Bars, updateAllMarkers]);
+  }, [currentPlaybackPosition, swingsForMarkers, highlightedSwing, chart1Bars, chart2Bars, updateAllMarkers]);
 
   // Keep the ref updated with the latest syncChartsToPosition
   useEffect(() => {
@@ -1009,6 +1050,10 @@ export const Replay: React.FC = () => {
             showScaleFilters={calibrationPhase === CalibrationPhase.PLAYING}
             displayConfig={displayConfig}
             onToggleScale={handleToggleScale}
+            // Stats toggle (shown during playback)
+            showStatsToggle={calibrationPhase === CalibrationPhase.PLAYING}
+            showStats={showStats}
+            onToggleShowStats={() => setShowStats(prev => !prev)}
             // Feedback is always visible during CALIBRATED and PLAYING phases
             showFeedback={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
             isLingering={calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.isLingering}
@@ -1038,13 +1083,13 @@ export const Replay: React.FC = () => {
           {/* Swing Overlays - render Fib level price lines on charts */}
           <SwingOverlay
             series={series1Ref.current}
-            swings={calibrationPhase === CalibrationPhase.CALIBRATED ? [] : detectedSwings}
+            swings={calibrationPhase === CalibrationPhase.CALIBRATED ? [] : swingsForMarkers}
             currentPosition={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition}
             highlightedSwing={calibrationPhase === CalibrationPhase.CALIBRATED ? calibrationHighlightedSwing : highlightedSwing}
           />
           <SwingOverlay
             series={series2Ref.current}
-            swings={calibrationPhase === CalibrationPhase.CALIBRATED ? [] : detectedSwings}
+            swings={calibrationPhase === CalibrationPhase.CALIBRATED ? [] : swingsForMarkers}
             currentPosition={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition}
             highlightedSwing={calibrationPhase === CalibrationPhase.CALIBRATED ? calibrationHighlightedSwing : highlightedSwing}
           />
@@ -1104,6 +1149,7 @@ export const Replay: React.FC = () => {
               filteredStats={filteredStats}
               onToggleScale={handleToggleScale}
               onSetActiveSwingCount={handleSetActiveSwingCount}
+              showStats={showStats}
             />
           </div>
         </main>
