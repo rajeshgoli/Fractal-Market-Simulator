@@ -1679,85 +1679,166 @@ class TestStructuralSeparation(unittest.TestCase):
         self.assertTrue(details.is_anchor)  # First swing is anchor
         self.assertIsNone(details.containing_swing_id)
 
-    def test_is_structurally_separated_fallback(self):
-        """Should use fallback when no larger_swings provided."""
+    def test_is_structurally_separated_self_referential(self):
+        """Should use self-referential separation when no larger_swings provided."""
         from src.swing_analysis.swing_detector import is_structurally_separated
 
+        # First swing (anchor) with size 20
         swing = {
             'high_price': 110.0,
             'low_price': 90.0,
             'high_bar_index': 10,
-            'low_bar_index': 5
+            'low_bar_index': 5,
+            'size': 20.0
         }
 
+        # Previous swing with size 20 - will be used as FIB reference
         previous_swings = [{
             'high_price': 105.0,
             'low_price': 85.0,
-            'high_bar_index': 50,  # Far enough
-            'low_bar_index': 45
+            'high_bar_index': 50,
+            'low_bar_index': 45,
+            'size': 20.0
         }]
 
         details = is_structurally_separated(
-            swing, previous_swings, None, lookback=5, median_candle=2.0
+            swing, previous_swings, None, lookback=5, median_candle=2.0, direction='bull'
         )
 
-        # Should use fallback check
-        self.assertIsNone(details.containing_swing_id)  # No containing swing = fallback
+        # Should use self-referential check with 0.1 FIB threshold
+        self.assertIsNone(details.containing_swing_id)  # No containing swing
         self.assertFalse(details.is_anchor)  # Not first swing
+        self.assertEqual(details.minimum_fib, 0.1)  # Self-referential uses 0.1 FIB
 
-    def test_fallback_separation_check_passes(self):
-        """Should pass when swings are sufficiently separated."""
-        from src.swing_analysis.swing_detector import _fallback_separation_check
+    def test_self_referential_separation_check_passes(self):
+        """Should pass when defended pivots are >= 0.5 FIB apart."""
+        from src.swing_analysis.swing_detector import _self_referential_separation_check
 
+        # Bull swing: defended pivot is the LOW
+        # Largest swing has size 20, so min_sep = 0.5 * 20 = 10
         swing = {
-            'high_price': 110.0,
-            'low_price': 90.0,
-            'high_bar_index': 100,  # Far from previous
+            'high_price': 130.0,
+            'low_price': 110.0,  # 25 away from previous low (defended pivot)
+            'high_bar_index': 100,
             'low_bar_index': 95
         }
 
         previous_swings = [{
             'high_price': 105.0,
-            'low_price': 85.0,
+            'low_price': 85.0,  # Defended pivot for bull
             'high_bar_index': 10,
-            'low_bar_index': 5
+            'low_bar_index': 5,
+            'size': 20.0  # Reference size for FIB calculation
         }]
 
-        result = _fallback_separation_check(
-            swing, previous_swings, lookback=5, median_candle=2.0
+        is_sep, closest_id, distance_fib = _self_referential_separation_check(
+            swing, previous_swings, direction='bull', minimum_fib=0.5
         )
 
-        self.assertTrue(result)
+        # min_sep = 0.5 * 20 = 10
+        # Bull: check LOW separation = |110 - 85| = 25 >= 10
+        self.assertTrue(is_sep)
 
-    def test_fallback_separation_check_fails(self):
-        """Should fail when swings are too close in time and price."""
-        from src.swing_analysis.swing_detector import _fallback_separation_check
+    def test_self_referential_separation_check_fails(self):
+        """Should fail when BOTH endpoints are < minimum FIB apart."""
+        from src.swing_analysis.swing_detector import _self_referential_separation_check
 
-        # Swings that are very close in both bar distance and price
+        # Swings with BOTH high and low very close
         swing = {
-            'high_price': 106.0,
-            'low_price': 91.0,
-            'high_bar_index': 14,
-            'low_bar_index': 12  # Close to previous high_bar_index
+            'high_price': 106.0,  # Only 1 away from previous high
+            'low_price': 86.0,   # Only 1 away from previous low
+            'high_bar_index': 50,
+            'low_bar_index': 45
         }
 
         previous_swings = [{
-            'high_price': 90.5,  # Price that makes separation small
+            'high_price': 105.0,
             'low_price': 85.0,
             'high_bar_index': 10,
-            'low_bar_index': 5
+            'low_bar_index': 5,
+            'size': 20.0  # Reference size: min_sep = 0.1 * 20 = 2
         }]
 
-        result = _fallback_separation_check(
-            swing, previous_swings, lookback=5, median_candle=2.0
+        is_sep, closest_id, distance_fib = _self_referential_separation_check(
+            swing, previous_swings, direction='bull', minimum_fib=0.1
         )
 
-        # bar_sep = abs(swing_low_idx - prev_high_idx) = abs(12 - 10) = 2
-        # price_sep = abs(swing_low_price - prev_high_price) = abs(91 - 90.5) = 0.5
-        # min_bar_separation = 2 * 5 = 10 bars
-        # min_price_separation = 0.236 * 2.0 * 5 = 2.36
-        # Both are below thresholds: bar_sep=2 < 10, price_sep=0.5 < 2.36
-        self.assertFalse(result)
+        # min_sep = 0.1 * 20 = 2
+        # High sep = |106 - 105| = 1 < 2
+        # Low sep = |86 - 85| = 1 < 2
+        # BOTH < min_sep -> redundant
+        self.assertFalse(is_sep)
+
+    def test_self_referential_keeps_swings_with_different_origin(self):
+        """Should keep swings with same defended pivot but different origin."""
+        from src.swing_analysis.swing_detector import _self_referential_separation_check
+
+        # Bear swing: HIGH is defended pivot
+        # Same high but very different low -> should be kept
+        swing = {
+            'high_price': 106.0,  # Only 1 away from previous high
+            'low_price': 50.0,   # 35 away from previous low = 1.75 FIB
+            'high_bar_index': 50,
+            'low_bar_index': 45
+        }
+
+        previous_swings = [{
+            'high_price': 105.0,
+            'low_price': 85.0,
+            'high_bar_index': 10,
+            'low_bar_index': 5,
+            'size': 20.0  # Reference size: min_sep = 0.1 * 20 = 2
+        }]
+
+        is_sep, closest_id, distance_fib = _self_referential_separation_check(
+            swing, previous_swings, direction='bear', minimum_fib=0.1
+        )
+
+        # min_sep = 0.1 * 20 = 2
+        # High sep = |106 - 105| = 1 < 2
+        # Low sep = |50 - 85| = 35 > 2
+        # NOT both < min_sep -> structurally distinct
+        self.assertTrue(is_sep)
+
+    def test_self_referential_uses_largest_swing_as_reference(self):
+        """Should use the largest previous swing's size for FIB reference."""
+        from src.swing_analysis.swing_detector import _self_referential_separation_check
+
+        # Swing with BOTH endpoints close to a previous swing
+        swing = {
+            'high_price': 101.0,  # 1 away from first swing's high
+            'low_price': 81.0,   # 1 away from first swing's low
+            'high_bar_index': 100,
+            'low_bar_index': 90
+        }
+
+        # Two previous swings - largest has size 50
+        previous_swings = [
+            {
+                'high_price': 100.0,
+                'low_price': 80.0,
+                'high_bar_index': 10,
+                'low_bar_index': 5,
+                'size': 20.0  # Smaller
+            },
+            {
+                'high_price': 110.0,
+                'low_price': 60.0,
+                'high_bar_index': 50,
+                'low_bar_index': 40,
+                'size': 50.0  # Largest - this should be used for FIB reference
+            }
+        ]
+
+        is_sep, closest_id, distance_fib = _self_referential_separation_check(
+            swing, previous_swings, direction='bull', minimum_fib=0.1
+        )
+
+        # min_sep = 0.1 * 50 = 5 (using largest swing)
+        # Against first swing: high_sep = 1, low_sep = 1 -> both < 5 -> would be filtered
+        # Against second swing: high_sep = 9, low_sep = 21 -> neither < 5 -> ok
+        # First swing causes filtering
+        self.assertFalse(is_sep)
 
     def test_structural_separation_with_larger_swings(self):
         """Should use larger swing for FIB-based separation."""
@@ -1848,6 +1929,86 @@ class TestApplyStructuralSeparationFilter(unittest.TestCase):
         )
 
         self.assertEqual(result, [])
+
+    def test_self_referential_filters_redundant_xl_swings(self):
+        """
+        Should filter redundant XL swings when no larger_swings provided.
+
+        This tests the fix for issue #133 where XL swings weren't enforcing
+        structural separation from each other.
+
+        Swings are considered redundant if BOTH endpoints are within 0.1 FIB
+        of a previously accepted swing.
+        """
+        from src.swing_analysis.swing_detector import _apply_structural_separation_filter
+
+        # Simulate XL bear swings that are essentially duplicates
+        # All have same high AND nearly-same low -> truly redundant
+        references = [
+            {
+                'high_price': 4841.50,
+                'low_price': 4800.00,
+                'high_bar_index': 1000,
+                'low_bar_index': 900,
+                'size': 41.50  # Reference size: min_sep = 0.1 * 41.50 = 4.15
+            },
+            {
+                'high_price': 4841.50,  # Same high (0 FIB apart)
+                'low_price': 4802.00,   # Only 2 pts apart = 0.048 FIB < 0.1
+                'high_bar_index': 1000,
+                'low_bar_index': 910,
+                'size': 39.50
+            },
+            {
+                'high_price': 4841.50,  # Same high (0 FIB apart)
+                'low_price': 4803.00,   # Only 3 pts apart = 0.072 FIB < 0.1
+                'high_bar_index': 1000,
+                'low_bar_index': 920,
+                'size': 38.50
+            },
+        ]
+
+        # No larger_swings = XL scale behavior
+        filtered = _apply_structural_separation_filter(
+            references, None, lookback=5, median_candle=2.0, direction='bear'
+        )
+
+        # First swing should be kept (anchor)
+        self.assertGreaterEqual(len(filtered), 1)
+
+        # Second and third swings should be filtered because BOTH endpoints
+        # are within 0.1 FIB of the first swing
+        # HIGH sep = 0 < 4.15, LOW sep = 2 or 3 < 4.15 -> both < min_sep -> redundant
+        self.assertEqual(len(filtered), 1, "Should filter swings with both endpoints too close")
+
+    def test_self_referential_keeps_distinct_xl_swings(self):
+        """Should keep XL swings that are >= 0.5 FIB apart."""
+        from src.swing_analysis.swing_detector import _apply_structural_separation_filter
+
+        # Two distinct XL swings with clear structural separation
+        references = [
+            {
+                'high_price': 4800.00,
+                'low_price': 4700.00,  # Size = 100
+                'high_bar_index': 500,
+                'low_bar_index': 400,
+                'size': 100.0
+            },
+            {
+                'high_price': 4950.00,  # 150 pts from first high (1.5 FIB)
+                'low_price': 4850.00,   # 150 pts from first low (1.5 FIB)
+                'high_bar_index': 1000,
+                'low_bar_index': 900,
+                'size': 100.0
+            },
+        ]
+
+        filtered = _apply_structural_separation_filter(
+            references, None, lookback=5, median_candle=2.0, direction='bear'
+        )
+
+        # Both should be kept - separation = 150 >= 0.5 * 100 = 50
+        self.assertEqual(len(filtered), 2)
 
 
 class TestFibConfluenceScore(unittest.TestCase):

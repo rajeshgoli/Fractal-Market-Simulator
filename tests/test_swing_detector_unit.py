@@ -408,13 +408,15 @@ def test_case_eleven_redundant_filtering():
     df = create_df(prices)
     result = detect_swings(df, lookback=3, filter_redundant=True)
 
-    # 200->100 (band 1.0) and 195->100 (band 0.9) are both kept
-    # 198->100 is filtered as redundant with 200->100 (both in band 1.0)
+    # With self-referential separation (issue #133 fix):
+    # Swings are redundant if BOTH endpoints are within 0.1 FIB
+    # 200->100 (anchor): size 100, min_sep = 10
+    # 198->100: high_sep = 2 < 10, low_sep = 0 < 10 -> redundant
+    # 195->100: high_sep = 5 < 10, low_sep = 0 < 10 -> redundant
+    # Only the anchor (200->100) is kept
     large_refs = [r for r in result["bull_references"] if r["size"] > 90]
-    assert len(large_refs) == 2
-    high_prices = {r["high_price"] for r in large_refs}
-    assert 200.0 in high_prices  # Anchor (band 1.0)
-    assert 195.0 in high_prices  # Structurally distinct (band 0.9)
+    assert len(large_refs) == 1
+    assert large_refs[0]["high_price"] == 200.0  # Anchor kept
 
 def test_case_twelve_multi_tier_filtering():
     """

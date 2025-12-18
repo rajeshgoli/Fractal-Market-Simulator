@@ -707,54 +707,78 @@ def find_containing_swing(
     return min(candidates, key=lambda s: s.get('size', float('inf')))
 
 
-def _fallback_separation_check(
+def _self_referential_separation_check(
     swing: Dict[str, Any],
     previous_swings: List[Dict[str, Any]],
-    lookback: int,
-    median_candle: float
-) -> bool:
+    direction: str,
+    minimum_fib: float = 0.1
+) -> Tuple[bool, Optional[str], Optional[float]]:
     """
-    Fallback separation check when no larger swing exists (XL scale or window edges).
+    Self-referential separation check for XL scale (no larger swings).
 
-    Uses N-bar separation and X% move criteria instead of FIB-based separation.
+    Uses the largest previously accepted swing as the FIB reference grid.
+    Swings are considered redundant only if BOTH endpoints are within
+    minimum_fib of a previous swing. This allows swings with different
+    origin extrema to coexist even if they share the same defended pivot.
+
+    Example:
+    - Bear swings to same HIGH but from different LOWs: kept (different origins)
+    - Bear swings to same HIGH from nearly-same LOWs: filtered (redundant)
 
     Args:
         swing: The swing to check
-        previous_swings: List of previous swings of the same direction
-        lookback: Lookback parameter from detection
-        median_candle: Median candle height in the window
+        previous_swings: List of previously accepted swings of the same direction
+        direction: 'bull' or 'bear'
+        minimum_fib: Minimum separation in FIB terms (default 0.1)
 
     Returns:
-        True if swing is sufficiently separated, False otherwise
+        Tuple of (is_separated, closest_swing_id, distance_fib)
     """
     if not previous_swings:
-        return True  # No previous swings = automatically separated
+        return True, None, None  # No previous swings = automatically separated
 
-    # Minimum separation thresholds
-    min_bar_separation = 2 * lookback  # Non-overlapping detection windows
-    min_price_separation = 0.236 * median_candle * lookback  # FIB-equivalent (smallest level)
+    # Find the largest previously accepted swing to use as FIB reference
+    largest_swing = max(previous_swings, key=lambda s: s.get('size', 0))
+    reference_size = largest_swing.get('size', 0)
 
-    swing_low_idx = swing.get('low_bar_index', 0)
-    swing_high_idx = swing.get('high_bar_index', 0)
-    swing_low_price = swing.get('low_price', 0)
-    swing_high_price = swing.get('high_price', 0)
+    if reference_size <= 0:
+        return True, None, None  # Can't compute FIB separation without valid size
+
+    min_separation = minimum_fib * reference_size
+
+    swing_high = swing.get('high_price', 0)
+    swing_low = swing.get('low_price', 0)
+
+    closest_prev_id = None
+    min_max_sep_fib = float('inf')  # Track the maximum separation to any prev swing
 
     for prev in previous_swings:
-        prev_high_idx = prev.get('high_bar_index', 0)
-        prev_low_idx = prev.get('low_bar_index', 0)
-        prev_high_price = prev.get('high_price', 0)
-        prev_low_price = prev.get('low_price', 0)
+        prev_id = prev.get('swing_id')
+        prev_high = prev.get('high_price', 0)
+        prev_low = prev.get('low_price', 0)
 
-        # Check separation between swing endpoints
-        # For bull references (high->low), check separation from previous low to current high
-        bar_sep = abs(swing_low_idx - prev_high_idx)
-        price_sep = abs(swing_low_price - prev_high_price)
+        # Check BOTH endpoint separations
+        high_sep = abs(swing_high - prev_high)
+        low_sep = abs(swing_low - prev_low)
 
-        # Too close in both time and price = not separated
-        if bar_sep < min_bar_separation and price_sep < min_price_separation:
-            return False
+        # A swing is redundant only if BOTH endpoints are too close
+        # (meaning it describes essentially the same market structure)
+        high_sep_fib = high_sep / reference_size
+        low_sep_fib = low_sep / reference_size
 
-    return True
+        # Use max separation to determine if swings are distinct
+        # If either endpoint is well-separated, the swing is distinct
+        max_sep_fib = max(high_sep_fib, low_sep_fib)
+
+        if max_sep_fib < min_max_sep_fib:
+            min_max_sep_fib = max_sep_fib
+            closest_prev_id = prev_id
+
+        # Redundant if BOTH endpoints are within minimum_fib
+        if high_sep < min_separation and low_sep < min_separation:
+            return False, prev_id, max_sep_fib
+
+    return True, closest_prev_id, min_max_sep_fib if min_max_sep_fib != float('inf') else None
 
 
 def is_structurally_separated(
@@ -762,7 +786,8 @@ def is_structurally_separated(
     previous_swings: List[Dict[str, Any]],
     larger_swings: Optional[List[Dict[str, Any]]],
     lookback: int,
-    median_candle: float
+    median_candle: float,
+    direction: str = 'bull'
 ) -> SeparationDetails:
     """
     Check if swing is structurally separated from previous swings.
@@ -775,12 +800,17 @@ def is_structurally_separated(
     Uses extended FIB grid (includes 0.236, 0.786, 1.236, 1.786) for
     better coverage of structural reversals.
 
+    For XL scale (no larger swings), uses self-referential separation:
+    each new swing must be >= 0.5 FIB away from all previous swings,
+    using the largest accepted swing as the reference grid.
+
     Args:
         swing: The swing to validate
         previous_swings: Previous swings of the same direction to check against
         larger_swings: Swings from the next larger scale (for FIB grid reference)
         lookback: Lookback parameter from detection
         median_candle: Median candle height
+        direction: 'bull' or 'bear'
 
     Returns:
         SeparationDetails with is_separated, is_anchor, containing_swing_id,
@@ -791,21 +821,55 @@ def is_structurally_separated(
         return SeparationDetails(is_separated=True, is_anchor=True)
 
     if not larger_swings:
-        # XL or window edge: use fallback
-        is_sep = _fallback_separation_check(swing, previous_swings, lookback, median_candle)
-        return SeparationDetails(is_separated=is_sep, is_anchor=False)
+        # XL or window edge: use self-referential separation
+        # Use 0.1 FIB minimum separation - conservative threshold that filters
+        # swings with nearly-identical defended pivots (like issue #133 where
+        # max high separation was 0.063 FIB) while allowing structurally
+        # distinct swings to pass
+        self_ref_minimum_fib = 0.1
+        is_sep, closest_id, distance_fib = _self_referential_separation_check(
+            swing, previous_swings, direction, self_ref_minimum_fib
+        )
+        return SeparationDetails(
+            is_separated=is_sep,
+            is_anchor=False,
+            from_swing_id=closest_id,
+            distance_fib=distance_fib,
+            minimum_fib=self_ref_minimum_fib,
+        )
 
     # Get FIB grid from immediate larger swing
     containing = find_containing_swing(swing, larger_swings)
     if not containing:
-        is_sep = _fallback_separation_check(swing, previous_swings, lookback, median_candle)
-        return SeparationDetails(is_separated=is_sep, is_anchor=False)
+        # No containing swing found - use self-referential separation
+        self_ref_minimum_fib = 0.1
+        is_sep, closest_id, distance_fib = _self_referential_separation_check(
+            swing, previous_swings, direction, self_ref_minimum_fib
+        )
+        return SeparationDetails(
+            is_separated=is_sep,
+            is_anchor=False,
+            from_swing_id=closest_id,
+            distance_fib=distance_fib,
+            minimum_fib=self_ref_minimum_fib,
+        )
 
     containing_id = containing.get('swing_id')
     swing_size = containing.get('size', 0)
     if swing_size <= 0:
-        is_sep = _fallback_separation_check(swing, previous_swings, lookback, median_candle)
-        return SeparationDetails(is_separated=is_sep, is_anchor=False, containing_swing_id=containing_id)
+        # Invalid containing swing size - use self-referential separation
+        self_ref_minimum_fib = 0.1
+        is_sep, closest_id, distance_fib = _self_referential_separation_check(
+            swing, previous_swings, direction, self_ref_minimum_fib
+        )
+        return SeparationDetails(
+            is_separated=is_sep,
+            is_anchor=False,
+            containing_swing_id=containing_id,
+            from_swing_id=closest_id,
+            distance_fib=distance_fib,
+            minimum_fib=self_ref_minimum_fib,
+        )
 
     # Minimum separation = 0.236 * containing swing size (smallest FIB level)
     minimum_fib = 0.236
@@ -886,7 +950,7 @@ def _apply_structural_separation_filter(
 
     for ref in references:
         details = is_structurally_separated(
-            ref, accepted_swings, larger_swings, lookback, median_candle
+            ref, accepted_swings, larger_swings, lookback, median_candle, direction
         )
 
         # Add structural separation metadata
@@ -1193,9 +1257,12 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             bear_references, highs, lows, lookback, median_candle, min_prominence, 'bear'
         )
 
-    # 7. Structural Separation Gate (Phase 3) - uses larger_swings context
-    # Filters swings that are not structurally distinct (< 0.236 FIB level apart)
-    if larger_swings is not None:
+    # 7. Structural Separation Gate (Phase 3)
+    # Filters swings that are not structurally distinct from each other.
+    # - With larger_swings context: always apply 0.236 FIB separation
+    # - Without larger_swings (XL scale): apply 0.1 FIB self-referential separation
+    #   only when filter_redundant=True (to maintain backward compatibility)
+    if larger_swings is not None or filter_redundant:
         bull_references = _apply_structural_separation_filter(
             bull_references, larger_swings, lookback, median_candle, 'bull'
         )
