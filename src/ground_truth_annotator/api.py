@@ -2511,18 +2511,47 @@ class ReplayAdvanceResponse(BaseModel):
 
 
 class PlaybackFeedbackEventContext(BaseModel):
-    """Event context for playback feedback."""
-    event_type: str  # SWING_FORMED, SWING_COMPLETED, LEVEL_CROSS, etc.
-    scale: str  # S, M, L, XL
+    """Event context for playback feedback (optional, only during linger)."""
+    event_type: Optional[str] = None  # SWING_FORMED, SWING_COMPLETED, LEVEL_CROSS, etc.
+    scale: Optional[str] = None  # S, M, L, XL
     swing: Optional[Dict] = None  # Swing details if applicable
     detection_bar_index: Optional[int] = None  # When swing was detected
+
+
+class SwingCountsByScale(BaseModel):
+    """Swing counts broken down by scale."""
+    XL: int = 0
+    L: int = 0
+    M: int = 0
+    S: int = 0
+
+
+class PlaybackFeedbackSnapshot(BaseModel):
+    """Rich context snapshot for always-on feedback capture."""
+    # Current state
+    state: str  # calibrating, calibration_complete, playing, paused
+    # Session offset
+    window_offset: int
+    # Bars elapsed since calibration
+    bars_since_calibration: int
+    # Current bar index
+    current_bar_index: int
+    # Calibration bar count
+    calibration_bar_count: int
+    # Swing counts by scale
+    swings_found: SwingCountsByScale
+    # Event-related counts
+    swings_invalidated: int
+    swings_completed: int
+    # Optional event context (if during linger)
+    event_context: Optional[PlaybackFeedbackEventContext] = None
 
 
 class PlaybackFeedbackRequest(BaseModel):
     """Request to submit playback feedback."""
     text: str  # Free-form observation text
     playback_bar: int  # Current playback position
-    event_context: PlaybackFeedbackEventContext
+    snapshot: PlaybackFeedbackSnapshot  # Rich context snapshot
 
 
 class PlaybackFeedbackResponse(BaseModel):
@@ -3224,13 +3253,13 @@ async def submit_playback_feedback(request: PlaybackFeedbackRequest):
     """
     Submit playback feedback observation.
 
-    Captures free-form text feedback during Replay View playback linger events.
+    Captures free-form text feedback during Replay View playback at any time.
     Creates a playback session if none exists for the current data file.
 
     Request body:
         - text: Free-form observation text
         - playback_bar: Current playback bar index
-        - event_context: Event context (type, scale, swing details)
+        - snapshot: Rich context snapshot (state, swing counts, etc.)
 
     Returns:
         - success: Whether the observation was saved
@@ -3248,21 +3277,43 @@ async def submit_playback_feedback(request: PlaybackFeedbackRequest):
     if not text:
         raise HTTPException(status_code=400, detail="Observation text cannot be empty")
 
-    # Build event context dict from Pydantic model
-    event_context = {
-        "event_type": request.event_context.event_type,
-        "scale": request.event_context.scale,
+    # Build rich context dict from snapshot
+    snapshot = request.snapshot
+    context = {
+        "state": snapshot.state,
+        "window_offset": snapshot.window_offset,
+        "bars_since_calibration": snapshot.bars_since_calibration,
+        "current_bar_index": snapshot.current_bar_index,
+        "calibration_bar_count": snapshot.calibration_bar_count,
+        "swings_found": {
+            "XL": snapshot.swings_found.XL,
+            "L": snapshot.swings_found.L,
+            "M": snapshot.swings_found.M,
+            "S": snapshot.swings_found.S,
+        },
+        "swings_invalidated": snapshot.swings_invalidated,
+        "swings_completed": snapshot.swings_completed,
     }
-    if request.event_context.swing:
-        event_context["swing"] = request.event_context.swing
-    if request.event_context.detection_bar_index is not None:
-        event_context["detection_bar_index"] = request.event_context.detection_bar_index
+
+    # Add optional event context if present
+    if snapshot.event_context:
+        event_ctx = {}
+        if snapshot.event_context.event_type:
+            event_ctx["event_type"] = snapshot.event_context.event_type
+        if snapshot.event_context.scale:
+            event_ctx["scale"] = snapshot.event_context.scale
+        if snapshot.event_context.swing:
+            event_ctx["swing"] = snapshot.event_context.swing
+        if snapshot.event_context.detection_bar_index is not None:
+            event_ctx["detection_bar_index"] = snapshot.event_context.detection_bar_index
+        if event_ctx:
+            context["event_context"] = event_ctx
 
     # Add observation
     observation = s.playback_feedback_storage.add_observation(
         data_file=s.data_file or "unknown",
         playback_bar=request.playback_bar,
-        event_context=event_context,
+        event_context=context,
         text=text,
     )
 

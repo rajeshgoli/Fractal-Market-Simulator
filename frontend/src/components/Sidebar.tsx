@@ -1,8 +1,28 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { FilterState, EventType, SwingDisplayConfig, SwingScaleKey } from '../types';
+import { FilterState, EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send } from 'lucide-react';
-import { submitPlaybackFeedback, PlaybackFeedbackEventContext, ReplayEvent } from '../lib/api';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause } from 'lucide-react';
+import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent } from '../lib/api';
+
+interface FeedbackContext {
+  // Playback state information
+  playbackState: PlaybackState;
+  calibrationPhase: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
+  windowOffset: number;
+  calibrationBarCount: number;
+  currentBarIndex: number;
+  // Swing counts
+  swingsFoundByScale: {
+    XL: number;
+    L: number;
+    M: number;
+    S: number;
+  };
+  // Event counts
+  totalEvents: number;
+  swingsInvalidated: number;
+  swingsCompleted: number;
+}
 
 interface SidebarProps {
   filters: FilterState[];
@@ -13,12 +33,16 @@ interface SidebarProps {
   showScaleFilters?: boolean;
   displayConfig?: SwingDisplayConfig;
   onToggleScale?: (scale: SwingScaleKey) => void;
-  // Feedback props (shown during linger events)
+  // Feedback props - now always visible during playback
+  showFeedback?: boolean;
   isLingering?: boolean;
   lingerEvent?: ReplayEvent;
   currentPlaybackBar?: number;
+  feedbackContext?: FeedbackContext;
   onFeedbackFocus?: () => void;
   onFeedbackBlur?: () => void;
+  // Pause playback on typing (for non-linger state)
+  onPausePlayback?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,45 +53,66 @@ export const Sidebar: React.FC<SidebarProps> = ({
   showScaleFilters = false,
   displayConfig,
   onToggleScale,
+  showFeedback = false,
   isLingering = false,
   lingerEvent,
   currentPlaybackBar,
+  feedbackContext,
   onFeedbackFocus,
   onFeedbackBlur,
+  onPausePlayback,
 }) => {
   const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [hasAutopaused, setHasAutopaused] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const handleFeedbackSubmit = useCallback(async () => {
-    if (!feedbackText.trim() || !lingerEvent || currentPlaybackBar === undefined) return;
+    if (!feedbackText.trim() || currentPlaybackBar === undefined || !feedbackContext) return;
 
     setIsSubmitting(true);
     setSubmitStatus('idle');
 
     try {
-      // Build event context from linger event
-      const eventContext: PlaybackFeedbackEventContext = {
-        event_type: lingerEvent.type,
-        scale: lingerEvent.scale,
+      // Build rich context snapshot
+      const snapshot: PlaybackFeedbackSnapshot = {
+        state: feedbackContext.calibrationPhase,
+        window_offset: feedbackContext.windowOffset,
+        bars_since_calibration: feedbackContext.currentBarIndex - feedbackContext.calibrationBarCount,
+        current_bar_index: feedbackContext.currentBarIndex,
+        calibration_bar_count: feedbackContext.calibrationBarCount,
+        swings_found: feedbackContext.swingsFoundByScale,
+        swings_invalidated: feedbackContext.swingsInvalidated,
+        swings_completed: feedbackContext.swingsCompleted,
       };
 
-      if (lingerEvent.swing) {
-        eventContext.swing = {
-          high_bar_index: lingerEvent.swing.high_bar_index,
-          low_bar_index: lingerEvent.swing.low_bar_index,
-          high_price: String(lingerEvent.swing.high_price),
-          low_price: String(lingerEvent.swing.low_price),
-          direction: lingerEvent.swing.direction,
+      // Add event context if we have a linger event
+      if (lingerEvent) {
+        const eventContext: PlaybackFeedbackEventContext = {
+          event_type: lingerEvent.type,
+          scale: lingerEvent.scale,
         };
-        eventContext.detection_bar_index = lingerEvent.bar_index;
+
+        if (lingerEvent.swing) {
+          eventContext.swing = {
+            high_bar_index: lingerEvent.swing.high_bar_index,
+            low_bar_index: lingerEvent.swing.low_bar_index,
+            high_price: String(lingerEvent.swing.high_price),
+            low_price: String(lingerEvent.swing.low_price),
+            direction: lingerEvent.swing.direction,
+          };
+          eventContext.detection_bar_index = lingerEvent.bar_index;
+        }
+
+        snapshot.event_context = eventContext;
       }
 
-      await submitPlaybackFeedback(feedbackText, currentPlaybackBar, eventContext);
+      await submitPlaybackFeedback(feedbackText, currentPlaybackBar, snapshot);
       setFeedbackText('');
       setSubmitStatus('success');
+      setHasAutopaused(false); // Reset autopause state after successful submit
       // Clear success status after 2 seconds
       setTimeout(() => setSubmitStatus('idle'), 2000);
     } catch (err) {
@@ -78,15 +123,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [feedbackText, lingerEvent, currentPlaybackBar]);
+  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext]);
 
   const handleInputFocus = useCallback(() => {
+    // Pause linger timer if lingering
     onFeedbackFocus?.();
-  }, [onFeedbackFocus]);
+    // Auto-pause playback if playing (not lingering)
+    if (!isLingering && feedbackContext?.playbackState === PlaybackState.PLAYING) {
+      onPausePlayback?.();
+      setHasAutopaused(true);
+    }
+  }, [onFeedbackFocus, isLingering, feedbackContext?.playbackState, onPausePlayback]);
 
   const handleInputBlur = useCallback(() => {
     onFeedbackBlur?.();
   }, [onFeedbackBlur]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setFeedbackText(e.target.value);
+    // Auto-pause on first keystroke if playing
+    if (!hasAutopaused && !isLingering && feedbackContext?.playbackState === PlaybackState.PLAYING) {
+      onPausePlayback?.();
+      setHasAutopaused(true);
+    }
+  }, [hasAutopaused, isLingering, feedbackContext?.playbackState, onPausePlayback]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Submit on Ctrl+Enter or Cmd+Enter
@@ -194,18 +254,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
-      {/* Feedback Section (shown during linger events) */}
-      {isLingering && lingerEvent && (
+      {/* Feedback Section (always visible during playback) */}
+      {showFeedback && feedbackContext && (
         <div className="p-4 border-t border-app-border bg-app-bg/30">
           <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
             <MessageSquare size={14} />
             Observation
+            {hasAutopaused && (
+              <span className="flex items-center gap-1 text-trading-orange">
+                <Pause size={10} />
+                <span className="text-[10px] font-normal normal-case">paused</span>
+              </span>
+            )}
           </h2>
           <div className="space-y-2">
             <textarea
               ref={inputRef}
               value={feedbackText}
-              onChange={(e) => setFeedbackText(e.target.value)}
+              onChange={handleInputChange}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
               onKeyDown={handleKeyDown}
@@ -221,7 +287,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }`}>
                 {submitStatus === 'success' && 'Saved!'}
                 {submitStatus === 'error' && 'Failed to save'}
-                {submitStatus === 'idle' && lingerEvent.scale && `${lingerEvent.scale} - ${lingerEvent.type}`}
+                {submitStatus === 'idle' && isLingering && lingerEvent?.scale && `${lingerEvent.scale} - ${lingerEvent.type}`}
+                {submitStatus === 'idle' && !isLingering && `Bar ${feedbackContext.currentBarIndex}`}
               </span>
               <button
                 onClick={handleFeedbackSubmit}

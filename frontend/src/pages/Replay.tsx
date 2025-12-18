@@ -20,6 +20,7 @@ import {
   CalibrationData,
   CalibrationSwing,
   CalibrationPhase,
+  PlaybackState,
   SWING_COLORS,
   parseResolutionToMinutes,
   getAggregationLabel,
@@ -339,6 +340,71 @@ export const Replay: React.FC = () => {
     // Fall back to legacy playback swing
     return playback.currentSwing;
   }, [calibrationPhase, forwardPlayback.lingerEvent, playback.currentSwing, sourceBars]);
+
+  // Compute feedback context for always-on observation capture
+  const feedbackContext = useMemo(() => {
+    // Only provide context during playback phases (CALIBRATED or PLAYING)
+    if (calibrationPhase !== CalibrationPhase.CALIBRATED && calibrationPhase !== CalibrationPhase.PLAYING) {
+      return null;
+    }
+
+    // Determine the calibration phase state string
+    let stateString: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
+    if (calibrationPhase === CalibrationPhase.CALIBRATED) {
+      stateString = 'calibration_complete';
+    } else if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
+      stateString = 'playing';
+    } else {
+      stateString = 'paused';
+    }
+
+    // Count swings by scale from current swing state or calibration data
+    const swingsFoundByScale = { XL: 0, L: 0, M: 0, S: 0 };
+    if (forwardPlayback.currentSwingState) {
+      // During playback, use current swing state
+      const swingState = forwardPlayback.currentSwingState;
+      swingsFoundByScale.XL = swingState.XL?.length || 0;
+      swingsFoundByScale.L = swingState.L?.length || 0;
+      swingsFoundByScale.M = swingState.M?.length || 0;
+      swingsFoundByScale.S = swingState.S?.length || 0;
+    } else if (calibrationData?.active_swings_by_scale) {
+      // During calibrated state, use calibration data
+      swingsFoundByScale.XL = calibrationData.active_swings_by_scale.XL?.length || 0;
+      swingsFoundByScale.L = calibrationData.active_swings_by_scale.L?.length || 0;
+      swingsFoundByScale.M = calibrationData.active_swings_by_scale.M?.length || 0;
+      swingsFoundByScale.S = calibrationData.active_swings_by_scale.S?.length || 0;
+    }
+
+    // Count invalidated and completed from allEvents
+    let swingsInvalidated = 0;
+    let swingsCompleted = 0;
+    for (const event of forwardPlayback.allEvents) {
+      if (event.type === 'SWING_INVALIDATED') swingsInvalidated++;
+      if (event.type === 'SWING_COMPLETED') swingsCompleted++;
+    }
+
+    return {
+      playbackState: forwardPlayback.playbackState,
+      calibrationPhase: stateString,
+      windowOffset: sessionInfo?.windowOffset || 0,
+      calibrationBarCount: calibrationData?.calibration_bar_count || 0,
+      currentBarIndex: calibrationPhase === CalibrationPhase.PLAYING
+        ? forwardPlayback.currentPosition
+        : (calibrationData?.calibration_bar_count || 0) - 1,
+      swingsFoundByScale,
+      totalEvents: forwardPlayback.allEvents.length,
+      swingsInvalidated,
+      swingsCompleted,
+    };
+  }, [
+    calibrationPhase,
+    calibrationData,
+    forwardPlayback.playbackState,
+    forwardPlayback.currentSwingState,
+    forwardPlayback.currentPosition,
+    forwardPlayback.allEvents,
+    sessionInfo?.windowOffset,
+  ]);
 
   // Navigation functions for active swing cycling
   const navigatePrevActiveSwing = useCallback(() => {
@@ -940,11 +1006,15 @@ export const Replay: React.FC = () => {
             showScaleFilters={calibrationPhase === CalibrationPhase.PLAYING}
             displayConfig={displayConfig}
             onToggleScale={handleToggleScale}
+            // Feedback is always visible during CALIBRATED and PLAYING phases
+            showFeedback={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
             isLingering={calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.isLingering}
             lingerEvent={forwardPlayback.lingerEvent}
-            currentPlaybackBar={forwardPlayback.currentPosition}
+            currentPlaybackBar={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : (calibrationData?.calibration_bar_count || 0) - 1}
+            feedbackContext={feedbackContext || undefined}
             onFeedbackFocus={forwardPlayback.pauseLingerTimer}
             onFeedbackBlur={forwardPlayback.resumeLingerTimer}
+            onPausePlayback={forwardPlayback.pause}
           />
         </div>
 

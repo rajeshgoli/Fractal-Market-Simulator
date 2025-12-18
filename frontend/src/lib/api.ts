@@ -180,8 +180,8 @@ export async function advanceReplay(
 
 // Types for playback feedback
 export interface PlaybackFeedbackEventContext {
-  event_type: string;
-  scale: string;
+  event_type?: string;
+  scale?: string;
   swing?: {
     high_bar_index: number;
     low_bar_index: number;
@@ -190,6 +190,32 @@ export interface PlaybackFeedbackEventContext {
     direction: string;
   };
   detection_bar_index?: number;
+}
+
+// Rich context snapshot for always-on feedback
+export interface PlaybackFeedbackSnapshot {
+  // Current state
+  state: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
+  // Session offset
+  window_offset: number;
+  // Bars elapsed since calibration
+  bars_since_calibration: number;
+  // Current bar index
+  current_bar_index: number;
+  // Calibration bar count
+  calibration_bar_count: number;
+  // Swing counts by scale
+  swings_found: {
+    XL: number;
+    L: number;
+    M: number;
+    S: number;
+  };
+  // Event-related counts (from allEvents)
+  swings_invalidated: number;
+  swings_completed: number;
+  // Optional event context (if during linger)
+  event_context?: PlaybackFeedbackEventContext;
 }
 
 export interface PlaybackFeedbackResponse {
@@ -201,7 +227,7 @@ export interface PlaybackFeedbackResponse {
 export async function submitPlaybackFeedback(
   text: string,
   playbackBar: number,
-  eventContext: PlaybackFeedbackEventContext
+  snapshot: PlaybackFeedbackSnapshot
 ): Promise<PlaybackFeedbackResponse> {
   const response = await fetch(`${API_BASE}/playback/feedback`, {
     method: 'POST',
@@ -211,7 +237,7 @@ export async function submitPlaybackFeedback(
     body: JSON.stringify({
       text,
       playback_bar: playbackBar,
-      event_context: eventContext,
+      snapshot,
     }),
   });
   if (!response.ok) {

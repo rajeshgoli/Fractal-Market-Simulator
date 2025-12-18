@@ -231,22 +231,29 @@ During linger pauses on SWING_FORMED events:
 - Blue: Retracement zone (0.382, 0.5, 0.618)
 - Green: Completion target (2.0)
 
-### Playback Feedback Capture
+### Always-On Feedback Capture
 
-During linger events, a feedback input appears in the sidebar to capture observations:
+The feedback input is always visible during playback (not just during linger events), allowing you to capture observations at any point:
 
 **How it works:**
-- Text input appears only during linger pauses
-- Type observations about the event (e.g., "Swing detected but price already hit 2x target")
+- Text input appears in the sidebar after calibration completes
+- Visible during both the calibration review phase and forward playback
+- Type observations at any time (e.g., "Calibration found only 1 XL swing but I see several obvious ones")
 - Submit with `Ctrl+Enter` or click Save
-- Timer pauses when input is focused (won't auto-advance while typing)
-- Timer resumes when input loses focus
+- **Auto-pause:** Clicking in the box or typing automatically pauses playback
+- During linger events, timer pauses when input is focused
 
-**Event Context:** Each observation captures full context:
-- Event type (SWING_FORMED, LEVEL_CROSS, etc.)
-- Scale (S, M, L, XL)
-- Swing details (if applicable)
-- Playback bar index
+**Rich Context Snapshot:** Each observation captures complete state:
+- Current state (calibrating, calibration_complete, playing, paused)
+- Window offset used for session
+- Bars elapsed since calibration
+- Current bar index
+- Swings found (count by scale: XL, L, M, S)
+- Swings invalidated count
+- Swings completed count
+- Optional event context (if during linger event)
+
+**Status Indicator:** Shows "paused" badge when playback was auto-paused for typing.
 
 **Storage:** Observations persist to `ground_truth/playback_feedback.json` grouped by session.
 
