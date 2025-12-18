@@ -782,22 +782,27 @@ export const Replay: React.FC = () => {
       : detectedSwings;
   }, [calibrationPhase, activeSwingsForMarkers, detectedSwings]);
 
+  // Use calibrationHighlightedSwing during CALIBRATED phase, highlightedSwing during PLAYING
+  const markerHighlightedSwing = calibrationPhase === CalibrationPhase.CALIBRATED
+    ? calibrationHighlightedSwing
+    : highlightedSwing;
+
   useEffect(() => {
     updateAllMarkers(
       markers1Ref.current,
       chart1Bars,
       currentPlaybackPosition,
       swingsForMarkers,
-      highlightedSwing
+      markerHighlightedSwing
     );
     updateAllMarkers(
       markers2Ref.current,
       chart2Bars,
       currentPlaybackPosition,
       swingsForMarkers,
-      highlightedSwing
+      markerHighlightedSwing
     );
-  }, [currentPlaybackPosition, swingsForMarkers, highlightedSwing, chart1Bars, chart2Bars, updateAllMarkers]);
+  }, [currentPlaybackPosition, swingsForMarkers, markerHighlightedSwing, chart1Bars, chart2Bars, updateAllMarkers]);
 
   // Keep the ref updated with the latest syncChartsToPosition
   useEffect(() => {
