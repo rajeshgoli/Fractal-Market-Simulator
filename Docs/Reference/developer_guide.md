@@ -42,12 +42,21 @@ src/
 │   └── io.py                       # JSON read/write for logs
 └── ground_truth_annotator/
     ├── main.py                     # CLI entry point
-    ├── api.py                      # FastAPI REST endpoints
+    ├── api.py                      # FastAPI app factory + core routes (~550 lines)
+    ├── schemas.py                  # Pydantic request/response models
+    ├── routers/                    # Domain-specific API routers
+    │   ├── annotations.py          # CRUD for swing annotations
+    │   ├── session.py              # Session state management
+    │   ├── cascade.py              # XL→L→M→S workflow endpoints
+    │   ├── comparison.py           # User vs system comparison
+    │   ├── review.py               # Match/FP/FN review phases
+    │   ├── discretization.py       # Event log generation
+    │   └── replay.py               # Replay View playback + detection
     ├── models.py                   # SwingAnnotation, AnnotationSession, ReviewSession
     ├── storage.py                  # JSON persistence
     ├── comparison_analyzer.py      # FN/FP detection vs annotations
-    ├── cascade_controller.py       # XL→L→M→S workflow
-    └── review_controller.py        # Match/FP/FN review phases
+    ├── cascade_controller.py       # XL→L→M→S workflow logic
+    └── review_controller.py        # Match/FP/FN review logic
 
 frontend/                           # React + Vite Replay View
 ├── src/
@@ -62,7 +71,7 @@ frontend/                           # React + Vite Replay View
 │       └── useForwardPlayback.ts   # Forward-only playback (after calibration)
 └── package.json
 
-tests/                              # 830+ tests
+tests/                              # 860+ tests
 scripts/                            # Dev utilities
 ```
 
