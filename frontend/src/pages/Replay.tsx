@@ -324,6 +324,7 @@ export const Replay: React.FC = () => {
   }, [calibrationPhase, forwardPlayback.lingerEvent, playback.lingerSwingId, swings]);
 
   // Convert forward playback's current swing state to DetectedSwing[] for marker rendering
+  // Respects both enabledScales and activeSwingCount from displayConfig
   const activeSwingsForMarkers = useMemo((): DetectedSwing[] => {
     if (calibrationPhase !== CalibrationPhase.PLAYING || !forwardPlayback.currentSwingState) {
       return [];
@@ -334,7 +335,9 @@ export const Replay: React.FC = () => {
       // Only include swings from enabled scales
       if (!displayConfig.enabledScales.has(scale)) continue;
       const scaleSwings = forwardPlayback.currentSwingState[scale] || [];
+      // Limit to activeSwingCount swings per scale (rank is 1-indexed)
       for (const swing of scaleSwings) {
+        if (swing.rank > displayConfig.activeSwingCount) continue;
         swings.push({
           id: swing.id,
           direction: swing.direction,
@@ -352,7 +355,7 @@ export const Replay: React.FC = () => {
       }
     }
     return swings;
-  }, [calibrationPhase, forwardPlayback.currentSwingState, displayConfig.enabledScales]);
+  }, [calibrationPhase, forwardPlayback.currentSwingState, displayConfig.enabledScales, displayConfig.activeSwingCount]);
 
   // Compute current active swing for calibration mode (navigate through all swings, not just displayed)
   const currentActiveSwing = useMemo((): CalibrationSwing | null => {
@@ -877,6 +880,12 @@ export const Replay: React.FC = () => {
   // Keyboard shortcuts for navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore keyboard shortcuts when typing in input/textarea elements
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
       // Calibration mode: [ and ] for swing cycling, Space/Enter to start playback
       if (calibrationPhase === CalibrationPhase.CALIBRATED) {
         if (e.key === '[') {
