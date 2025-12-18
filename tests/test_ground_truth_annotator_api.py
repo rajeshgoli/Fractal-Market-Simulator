@@ -1722,3 +1722,164 @@ class TestReplayAdvanceEndpoint:
         if len(data["new_bars"]) > 0:
             last_bar = data["new_bars"][-1]
             assert data["current_price"] == last_bar["close"]
+
+
+class TestStaleEventFiltering:
+    """Tests for filtering stale SWING_FORMED events (#121)."""
+
+    def test_diff_swing_states_filters_calibration_swings(self):
+        """_diff_swing_states should not emit SWING_FORMED for calibration swings."""
+        from src.ground_truth_annotator.api import _diff_swing_states
+
+        # Previous state (empty - simulates first advance after calibration)
+        prev_swings = {}
+        prev_fib_levels = {}
+
+        # New state with swings detected by _detect_swings_at_bar
+        new_swings = {
+            "swing-bull-100-200": {
+                "id": "swing-bull-100-200",
+                "direction": "bull",
+                "scale": "S",
+                "high_price": 5100,
+                "high_bar_index": 100,
+                "low_price": 5000,
+                "low_bar_index": 200,
+                "size": 100,
+            },
+            "swing-bear-150-250": {
+                "id": "swing-bear-150-250",
+                "direction": "bear",
+                "scale": "M",
+                "high_price": 5200,
+                "high_bar_index": 250,
+                "low_price": 5050,
+                "low_bar_index": 150,
+                "size": 150,
+            }
+        }
+
+        # Calibration swing IDs - one swing was valid at calibration end
+        calibration_swing_ids = {"swing-bull-100-200"}
+
+        events, fib_levels = _diff_swing_states(
+            prev_swings, new_swings, prev_fib_levels,
+            current_price=5075, bar_index=300,
+            calibration_swing_ids=calibration_swing_ids
+        )
+
+        # Should only emit SWING_FORMED for the bear swing (not in calibration)
+        formed_events = [e for e in events if e.type == "SWING_FORMED"]
+        assert len(formed_events) == 1
+        assert formed_events[0].swing_id == "swing-bear-150-250"
+
+        # Both swings should have fib levels tracked
+        assert "swing-bull-100-200" in fib_levels
+        assert "swing-bear-150-250" in fib_levels
+
+    def test_diff_swing_states_without_calibration_ids_emits_all(self):
+        """Without calibration_swing_ids, all new swings emit SWING_FORMED."""
+        from src.ground_truth_annotator.api import _diff_swing_states
+
+        prev_swings = {}
+        prev_fib_levels = {}
+        new_swings = {
+            "swing-bull-100-200": {
+                "id": "swing-bull-100-200",
+                "direction": "bull",
+                "scale": "S",
+                "high_price": 5100,
+                "high_bar_index": 100,
+                "low_price": 5000,
+                "low_bar_index": 200,
+                "size": 100,
+            },
+        }
+
+        # No calibration_swing_ids - backward compatible behavior
+        events, _ = _diff_swing_states(
+            prev_swings, new_swings, prev_fib_levels,
+            current_price=5050, bar_index=300,
+            calibration_swing_ids=None
+        )
+
+        formed_events = [e for e in events if e.type == "SWING_FORMED"]
+        assert len(formed_events) == 1
+
+    def test_calibration_stores_swing_ids_in_cache(self, temp_storage, test_data_path):
+        """Calibration endpoint should store structural swing IDs in cache."""
+        api.state = None
+        api._replay_cache = {}
+
+        init_app(
+            data_file=test_data_path,
+            storage_dir=temp_storage,
+            resolution_minutes=1,
+            window_size=500,
+            scale="S",
+            target_bars=50
+        )
+
+        client = TestClient(app)
+
+        # Call calibration
+        response = client.get("/api/replay/calibrate?bar_count=200")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check that calibration_swing_ids was stored in cache
+        assert "calibration_swing_ids" in api._replay_cache
+        calibration_ids = api._replay_cache["calibration_swing_ids"]
+        assert isinstance(calibration_ids, set)
+
+        # IDs should match the structural format used by _detect_swings_at_bar
+        for swing_id in calibration_ids:
+            assert swing_id.startswith("swing-bull-") or swing_id.startswith("swing-bear-")
+
+        # Count should match active swings from response
+        total_active = sum(
+            len(data["active_swings_by_scale"][scale])
+            for scale in ["XL", "L", "M", "S"]
+        )
+        assert len(calibration_ids) == total_active
+
+    def test_advance_filters_stale_events_legacy_path(self, temp_storage, test_data_path):
+        """Advance should filter SWING_FORMED for calibration swings (legacy path)."""
+        api.state = None
+        api._replay_cache = {}
+
+        init_app(
+            data_file=test_data_path,
+            storage_dir=temp_storage,
+            resolution_minutes=1,
+            window_size=500,
+            scale="S",
+            target_bars=50
+        )
+
+        client = TestClient(app)
+
+        # Calibration
+        cal_response = client.get("/api/replay/calibrate?bar_count=200")
+        assert cal_response.status_code == 200
+        cal_data = cal_response.json()
+
+        # Force legacy path by clearing incremental state
+        api._replay_cache["incremental_state"] = None
+
+        # Advance - should use legacy detection but filter stale events
+        response = client.post("/api/replay/advance", json={
+            "calibration_bar_count": cal_data["calibration_bar_count"],
+            "current_bar_index": cal_data["calibration_bar_count"] - 1,
+            "advance_by": 1
+        })
+        assert response.status_code == 200
+        data = response.json()
+
+        # Get all SWING_FORMED events
+        formed_events = [e for e in data["events"] if e["type"] == "SWING_FORMED"]
+
+        # Formed events should NOT include swings that were in calibration
+        calibration_ids = api._replay_cache.get("calibration_swing_ids", set())
+        for event in formed_events:
+            assert event["swing_id"] not in calibration_ids

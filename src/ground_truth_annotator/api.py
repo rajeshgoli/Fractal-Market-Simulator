@@ -15,7 +15,7 @@ import threading
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
@@ -2420,6 +2420,19 @@ async def calibrate_replay(
     _replay_cache["scale_thresholds"] = scale_thresholds
     _replay_cache["last_bar_index"] = actual_bar_count - 1
 
+    # Store structural IDs of all active calibration swings for stale event filtering
+    # During playback, SWING_FORMED should not fire for swings already valid at calibration end
+    calibration_swing_ids = set()
+    for scale in ["XL", "L", "M", "S"]:
+        for swing_resp in active_swings_by_scale[scale]:
+            # Use structural ID format matching _detect_swings_at_bar
+            if swing_resp.direction == 'bull':
+                structural_id = f"swing-bull-{swing_resp.high_bar_index}-{swing_resp.low_bar_index}"
+            else:
+                structural_id = f"swing-bear-{swing_resp.low_bar_index}-{swing_resp.high_bar_index}"
+            calibration_swing_ids.add(structural_id)
+    _replay_cache["calibration_swing_ids"] = calibration_swing_ids
+
     # Also build swing_state and fib_levels for compatibility
     swing_state_dict = {}
     fib_levels_dict = {}
@@ -2718,10 +2731,19 @@ def _diff_swing_states(
     new_swings: Dict[str, dict],
     prev_fib_levels: Dict[str, float],
     current_price: float,
-    bar_index: int
+    bar_index: int,
+    calibration_swing_ids: Optional[Set[str]] = None
 ) -> tuple[List[ReplayEventResponse], Dict[str, float]]:
     """
     Diff swing states and generate events.
+
+    Args:
+        prev_swings: Previous swing state by ID
+        new_swings: New swing state by ID
+        prev_fib_levels: Previous fib levels by swing ID
+        current_price: Current price for fib calculations
+        bar_index: Current bar index for event attribution
+        calibration_swing_ids: Set of structural IDs from calibration to filter stale events
 
     Returns (events, new_fib_levels).
     """
@@ -2734,6 +2756,14 @@ def _diff_swing_states(
     # SWING_FORMED: New swings that weren't in previous state
     for swing_id in new_ids - prev_ids:
         swing = new_swings[swing_id]
+        # Initialize fib level tracking regardless of event emission
+        new_fib_levels[swing_id] = _get_current_fib_level(swing, current_price)
+
+        # Skip SWING_FORMED if this swing was already valid during calibration
+        # The swing_id from _detect_swings_at_bar matches the structural ID format
+        if calibration_swing_ids and swing_id in calibration_swing_ids:
+            continue
+
         events.append(ReplayEventResponse(
             type="SWING_FORMED",
             bar_index=bar_index,
@@ -2742,8 +2772,6 @@ def _diff_swing_states(
             swing_id=swing_id,
             swing=_swing_to_response(swing, True),
         ))
-        # Initialize fib level tracking
-        new_fib_levels[swing_id] = _get_current_fib_level(swing, current_price)
 
     # SWING_INVALIDATED: Swings that disappeared
     # Include swing data so UI can show what was invalidated
@@ -3029,7 +3057,8 @@ async def advance_replay(request: ReplayAdvanceRequest):
                 new_swing_state_dict,
                 _replay_cache["fib_levels"],
                 current_price,
-                bar_index
+                bar_index,
+                calibration_swing_ids=_replay_cache.get("calibration_swing_ids")
             )
             all_events.extend(events)
 
