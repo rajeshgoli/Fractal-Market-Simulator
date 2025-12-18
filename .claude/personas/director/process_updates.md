@@ -4,6 +4,23 @@ Revision history for workflow system changes.
 
 ---
 
+## 2025-12-18: Reinforced pending_review.md Rule in Product Persona
+
+**Triggered by:** Product role again updated `pending_review.md` when filing GitHub issues #131 and #132 (no code changes).
+
+**Root Cause:** The Dec 17 update added rules to `engineer.md` and `_protocols.md`, but `product.md` only had implicit guidance. Product's "What You Do NOT Do" list didn't explicitly forbid touching `pending_review.md`.
+
+**Changes Made:**
+
+1. **`product.md`**: Added to "What You Do NOT Do" section:
+   - `Update pending_review.md — this tracks *completed work* awaiting review, not filed issues. Only Engineer updates it after fixing issues.`
+
+**Rationale:** Explicit negative guidance in the same file Product reads. The rule was documented elsewhere but not where Product persona would see it during workflow.
+
+**Impact:** Product role now has explicit "do not" rule in its own persona file.
+
+---
+
 ## 2025-12-17: pending_review.md Ownership Rules
 
 **Triggered by:** Product role incorrectly incremented pending_review.md count after filing a GitHub issue (no code change).

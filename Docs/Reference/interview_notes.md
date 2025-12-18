@@ -4,6 +4,158 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 18, 2025 - Stats Panel Visibility and Continuity
+
+**Context:** User feedback on calibration/stats panel UX during annotation workflow.
+
+### Issue 1: Observation Input Hides Stats During Calibration
+
+**Problem:** Clicking "Type observations" during calibration hides the stats panel.
+
+**Root cause:** Click triggers pause → enters playback mode → playback mode doesn't show stats. But calibration is already paused, so this transition is unnecessary.
+
+**Expected:** When already in calibration (paused), clicking observation input should show the text box without hiding the stats panel.
+
+### Issue 2: On-Demand Stats Panel
+
+**Request:** The calibration panel shows "overall stats" (swing counts, ATR, thresholds) that are useful beyond calibration. User wants ability to view these anytime.
+
+**Solution:** Add "Show stats" toggle on left sidebar (consistent with "Linger events" placement).
+
+### Issue 3: Swing H/L Candles Not Marked
+
+**Problem:** FIB lines are shown for swings, but the actual high and low candles are not marked. User can't see which candles define each swing.
+
+**Solution:** Visually mark swing high and low candles on the chart.
+
+### Issue 4: Stats Continuity During Replay
+
+**Question:** Are calibration stats updated during incremental replay, or are they static?
+
+**User observation:** Stats are only visible after calibration, so it's unclear if they're being maintained incrementally during replay.
+
+**Action:** Investigate and update stats incrementally if not already implemented.
+
+### Handoff
+
+- **#131:** Stats panel visibility — don't hide during calibration, add Show stats toggle
+- **#132:** Investigate and fix stats continuity during incremental replay
+
+---
+
+## December 17, 2025 - Swing Navigation Should Cycle All Swings
+
+**Context:** User testing Replay View post-calibration. Usability feedback on swing navigation.
+
+### Problem
+
+"Active swings to show" controls both display density AND navigation universe. With 17 XL swings and display set to 2, navigation shows "2 / 2" — user cannot cycle through all detected swings.
+
+### Expected Behavior
+
+Navigation should cycle through all 17 swings (1/17 → 17/17), with "active swings to show" only controlling how many are visible on the chart simultaneously.
+
+Two concepts are conflated:
+1. **Display density** — how many swings visible at once
+2. **Navigation scope** — full set of swings available to review
+
+### User Decision
+
+When asked about mental model (window of N around focus vs stepping in chunks), user confirmed **Option A**: Navigation shows 1/17 through 17/17, but always displays a window of 2 swings around the current focus.
+
+### Handoff
+
+- **#130:** Swing navigation should cycle through all swings, not just displayed count
+
+---
+
+## December 17, 2025 - Replay View v2 Validation + Direction Shift
+
+**Context:** User tested Replay View v2. Tool works great. Exploring consolidation of ground truth annotator functionality.
+
+### Key Feedback
+
+**1. Replay View may replace ground_truth_annotator**
+
+> "The tool works great. I'm thinking we can retire ground_truth_annotator tool and use this instead."
+
+User sees Replay View as potentially the unified workflow — observe detection, capture feedback, possibly annotate swings. Ground truth annotator's two-click workflow could migrate here eventually.
+
+**2. Always-on feedback capture requested**
+
+Current: Feedback box appears only during linger events.
+
+Requested: Feedback box always visible. Use case:
+
+> "Calibration completed and it reports it has found only one XL swing. I am wondering why it's missing some obvious ones I see. Perhaps I can add it as a comment here and you can debug."
+
+**3. Typing should pause playback**
+
+When user clicks in feedback box or starts typing, playback should pause automatically. No manual pause required.
+
+**4. Rich context capture**
+
+Feedback should capture current visible state:
+- Current state (calibrating, calibration_complete, playing, paused)
+- Offset used for session
+- Bars elapsed since calibration
+- Swings found (by scale)
+- Swings invalidated
+- Swings completed
+- Current bar index
+
+### Decision: Phased Approach
+
+**Quick win now:** Implement always-on feedback with rich context capture.
+
+**Defer:** Don't deprecate ground_truth_annotator yet. User wants 5-10 real Replay View sessions before making permanent architectural decisions.
+
+> "Let's not do anything with [ground truth annotator] now. This is just early thoughts and maybe I'm too excited for this tool. I want to use the tool for at least 5-10 sessions before we do anything permanent."
+
+### Additional Nits (P1)
+
+**0. Missing offset in playback_feedback.json**
+
+Offset used for session is not captured in playback_feedback.json. This makes debugging difficult — can't correlate bar indices back to source data without knowing the offset. Need to add offset to session metadata.
+
+**1. Aggregation look-ahead (#124)**
+
+When using aggregated timeframes (e.g., 1H from 5m source), candles show their final shape immediately instead of building incrementally. Breaks causal evaluation — you see the future.
+
+**2. Zoom reset (#125)**
+
+Zoom level resets on any chart update. Can't maintain focus on specific price action.
+
+### Debugging Session: Missing XL Swings
+
+User observed only 1 XL swing detected during calibration, but saw obvious swings like Dec 20 → Dec 27 (4743 → 4841, ~98 points).
+
+**Investigation traced through:**
+1. Swing points detected ✓
+2. Structural validity ✓
+3. Pre-formation protection ✓
+4. Price range check ✓
+5. **filter_redundant** — BUG FOUND
+
+**Root cause:** `get_level_band()` in `swing_detector.py` line 201 checks `if price < levels[0].price`, but `levels[0]` is the HIGHEST price (multiplier -0.1), not the lowest. Since all prices are below that, everything returns -999, making ALL swings appear "redundant."
+
+Before filtering: 82 bear references
+After filtering: 1 bear reference
+
+The swing exists but is incorrectly filtered.
+
+### Handoff
+
+- **#126: Critical bug in get_level_band() (P0)**
+- #123: Always-on feedback capture (P0)
+- #124: Aggregation look-ahead (P1)
+- #125: Zoom reset (P1)
+- #127: Store offset in playback_feedback.json (P1)
+
+Keep ground truth annotator as-is.
+
+---
+
 ## December 17, 2025 - Replay View v2 Usability Feedback (Session 2)
 
 **Context:** Continued testing of Replay View v2. Four additional usability issues identified.

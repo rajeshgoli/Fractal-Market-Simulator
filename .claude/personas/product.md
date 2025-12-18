@@ -92,3 +92,4 @@ When the user reports bugs, broken behavior, or technical observations during us
 - Skip user validation for major pivots
 - Over-query User (negotiate with Architect first)
 - Modify `.claude/personas/*` (escalate to Director)
+- Update `pending_review.md` — this tracks *completed work* awaiting review, not filed issues. Only Engineer updates it after fixing issues.
