@@ -118,7 +118,7 @@ After pressing Play (or Space/Enter) in the calibrated state, playback enters **
 **Event Behavior:**
 - Events trigger auto-pause with linger timer
 - Navigate between events with arrow keys when multiple occur
-- Dismiss linger to resume playback
+- Press **Escape** or click X to dismiss linger and resume playback
 
 **Limitations:**
 - Step Back is disabled in forward-only mode (can't un-see data)
@@ -165,7 +165,14 @@ Both charts stay time-synchronized:
 
 **Speed is aggregation-relative:** "2x per 1H" means 2 aggregated bars per second at the L (1H) aggregation level, which translates to 24 source bars per second if source resolution is 5m.
 
-The bar position indicator shows current position (e.g., "Bar: 1234 / 50000").
+**Status Indicators (bottom right):**
+| Indicator | Description |
+|-----------|-------------|
+| Event | Current event index (e.g., "Event 5/23") |
+| Bar | Bars processed since playback started (starts at 1) |
+| Calibrated | Number of bars used for calibration |
+| Offset | Window offset in source data |
+| Remaining | Bars remaining until end of data |
 
 ### Event-Driven Linger
 
@@ -176,7 +183,7 @@ When significant events occur during playback, the view auto-pauses:
 - A 30-second timer wheel appears around the pause button
 - Timer countdown displays remaining seconds
 - When timer completes, playback auto-resumes
-- Click Play to skip ahead and resume immediately
+- Press **Escape** or click X to dismiss and resume immediately
 - Click Pause to freeze the timer
 
 **Event Filters (Sidebar):**
@@ -188,6 +195,10 @@ When significant events occur during playback, the view auto-pauses:
 | INVALIDATION | ON | Ratio crossed below threshold |
 | LEVEL_CROSS | OFF | Too frequent for practical use |
 | SWING_TERMINATED | OFF | Redundant with completion/invalidation |
+
+**Scale Filters (Sidebar):**
+
+During forward playback, the sidebar also shows scale filters (S/M/L/XL). Toggle these to show/hide events for specific scales. Filters persist during playback.
 
 **Multiple Events:**
 When multiple events occur at the same bar, they are queued and shown sequentially. The indicator displays queue position (e.g., "1/3"). Use ◀/▶ buttons or arrow keys to navigate between events.
@@ -511,3 +522,4 @@ This file is version-controlled and represents accumulated ground truth data.
 | `Shift+]` | Playing | Step forward one bar (fine control) |
 | `←` | Linger (multi-event) | Previous event in queue |
 | `→` | Linger (multi-event) | Next event in queue |
+| `Escape` | Linger | Dismiss linger and resume playback |
