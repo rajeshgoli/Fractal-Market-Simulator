@@ -20,3 +20,4 @@ pytz==2025.2
 six==1.17.0
 tzdata==2025.2
 uvicorn>=0.27.0
+sortedcontainers>=2.4.0

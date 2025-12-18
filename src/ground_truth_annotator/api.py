@@ -40,6 +40,13 @@ from ..discretization import (
 from ..swing_analysis.bar_aggregator import BarAggregator
 from ..swing_analysis.types import Bar
 from ..swing_analysis.swing_detector import detect_swings, ReferenceSwing
+from ..swing_analysis.incremental_detector import (
+    IncrementalSwingState,
+    ActiveSwing,
+    IncrementalEvent,
+    advance_bar_incremental,
+    initialize_from_calibration,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -2377,6 +2384,51 @@ async def calibrate_replay(
     s.calibration_bar_count = actual_bar_count
     s.playback_index = actual_bar_count - 1  # Last visible bar index
 
+    # Initialize incremental detection state for O(active) replay advance
+    global _replay_cache
+
+    # Build calibration swings dict for incremental state initialization
+    # Include all swings (active check happens inside initialize_from_calibration)
+    cal_swings_for_init: Dict[str, List[Dict]] = {"XL": [], "L": [], "M": [], "S": []}
+    for scale in ["XL", "L", "M", "S"]:
+        for swing_resp in active_swings_by_scale[scale]:
+            cal_swings_for_init[scale].append({
+                'id': swing_resp.id,
+                'direction': swing_resp.direction,
+                'high_price': swing_resp.high_price,
+                'high_bar_index': swing_resp.high_bar_index,
+                'low_price': swing_resp.low_price,
+                'low_bar_index': swing_resp.low_bar_index,
+                'size': swing_resp.size,
+                'rank': swing_resp.rank,
+                'is_active': True,
+            })
+
+    incremental_state = initialize_from_calibration(
+        calibration_swings=cal_swings_for_init,
+        source_bars=s.source_bars,
+        calibration_bar_count=actual_bar_count,
+        scale_thresholds=scale_thresholds,
+        current_price=current_price,
+        lookback=5,
+        protection_tolerance=0.1,
+    )
+
+    # Store in cache
+    _replay_cache["incremental_state"] = incremental_state
+    _replay_cache["calibration_bar_count"] = actual_bar_count
+    _replay_cache["scale_thresholds"] = scale_thresholds
+    _replay_cache["last_bar_index"] = actual_bar_count - 1
+
+    # Also build swing_state and fib_levels for compatibility
+    swing_state_dict = {}
+    fib_levels_dict = {}
+    for swing_id, swing in incremental_state.active_swings.items():
+        swing_state_dict[swing_id] = swing.to_dict()
+        fib_levels_dict[swing_id] = incremental_state.fib_levels.get(swing_id, 0.0)
+    _replay_cache["swing_state"] = swing_state_dict
+    _replay_cache["fib_levels"] = fib_levels_dict
+
     return CalibrationResponse(
         calibration_bar_count=actual_bar_count,
         current_price=current_price,
@@ -2471,6 +2523,9 @@ _replay_cache: Dict[str, any] = {
     "last_bar_index": -1,
     "swing_state": {},  # swing_id -> swing dict with current status
     "fib_levels": {},  # swing_id -> last crossed fib level
+    "incremental_state": None,  # IncrementalSwingState for O(active) detection
+    "calibration_bar_count": 0,  # Calibration window size
+    "scale_thresholds": {},  # Scale -> size thresholds
 }
 
 
@@ -2743,16 +2798,106 @@ def _diff_swing_states(
     return events, new_fib_levels
 
 
+def _incremental_event_to_response(
+    event: IncrementalEvent,
+    is_active: bool = True
+) -> ReplayEventResponse:
+    """Convert IncrementalEvent to ReplayEventResponse."""
+    swing_response = None
+    if event.swing:
+        swing = event.swing
+        high = swing.high_price
+        low = swing.low_price
+        swing_range = high - low
+
+        if swing.direction == 'bull':
+            fib_0 = low
+            fib_0382 = low + swing_range * 0.382
+            fib_1 = high
+            fib_2 = low + swing_range * 2.0
+        else:
+            fib_0 = high
+            fib_0382 = high - swing_range * 0.382
+            fib_1 = low
+            fib_2 = high - swing_range * 2.0
+
+        swing_response = CalibrationSwingResponse(
+            id=swing.swing_id,
+            scale=swing.scale,
+            direction=swing.direction,
+            high_price=high,
+            high_bar_index=swing.high_bar_index,
+            low_price=low,
+            low_bar_index=swing.low_bar_index,
+            size=swing.size,
+            rank=swing.rank,
+            is_active=is_active,
+            fib_0=fib_0,
+            fib_0382=fib_0382,
+            fib_1=fib_1,
+            fib_2=fib_2,
+        )
+
+    return ReplayEventResponse(
+        type=event.event_type,
+        bar_index=event.bar_index,
+        scale=event.scale,
+        direction=event.direction,
+        swing_id=event.swing_id,
+        swing=swing_response,
+        level=event.level,
+        previous_level=event.previous_level,
+    )
+
+
+def _active_swing_to_response(swing: ActiveSwing, is_active: bool) -> CalibrationSwingResponse:
+    """Convert ActiveSwing to CalibrationSwingResponse."""
+    high = swing.high_price
+    low = swing.low_price
+    swing_range = high - low
+
+    if swing.direction == 'bull':
+        fib_0 = low
+        fib_0382 = low + swing_range * 0.382
+        fib_1 = high
+        fib_2 = low + swing_range * 2.0
+    else:
+        fib_0 = high
+        fib_0382 = high - swing_range * 0.382
+        fib_1 = low
+        fib_2 = high - swing_range * 2.0
+
+    return CalibrationSwingResponse(
+        id=swing.swing_id,
+        scale=swing.scale,
+        direction=swing.direction,
+        high_price=high,
+        high_bar_index=swing.high_bar_index,
+        low_price=low,
+        low_bar_index=swing.low_bar_index,
+        size=swing.size,
+        rank=swing.rank,
+        is_active=is_active,
+        fib_0=fib_0,
+        fib_0382=fib_0382,
+        fib_1=fib_1,
+        fib_2=fib_2,
+    )
+
+
 @app.post("/api/replay/advance", response_model=ReplayAdvanceResponse)
 async def advance_replay(request: ReplayAdvanceRequest):
     """
-    Advance playback beyond calibration window.
+    Advance playback beyond calibration window using O(active_swings) incremental detection.
 
-    For each new bar:
-    1. Load next bar from source (not previously visible)
-    2. Re-run detection with new bar as current_bar_index
-    3. Diff against previous swing state
-    4. Fire events for changes (SWING_FORMED, INVALIDATION, COMPLETION, LEVEL_CROSS)
+    For each new bar, performs incremental operations:
+    1. Check for new swing point confirmation at trailing edge (N - lookback)
+    2. Pair new swing points with existing opposite points
+    3. Check active swings for invalidation (pivot violation)
+    4. Check active swings for fib level crosses
+
+    This replaces the O(N log N) full detection per bar with O(active) operations,
+    enabling smooth 10x playback at any aggregation level.
 
     Args:
         calibration_bar_count: Number of bars in calibration window
@@ -2793,26 +2938,39 @@ async def advance_replay(request: ReplayAdvanceRequest):
         )
 
     # Scale thresholds
-    scale_thresholds = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
+    scale_thresholds = _replay_cache.get("scale_thresholds") or {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
 
-    # Initialize or update cache
-    if _replay_cache["last_bar_index"] != request.current_bar_index:
-        # Cache miss - need to compute current swing state
-        swings_by_scale = _detect_swings_at_bar(
-            s.source_bars, request.current_bar_index, scale_thresholds
-        )
-        # Build swing state dict
-        swing_state_dict = {}
-        fib_levels_dict = {}
-        current_price = s.source_bars[request.current_bar_index].close
-        for scale in ["XL", "L", "M", "S"]:
-            for swing in swings_by_scale[scale]:
-                swing_state_dict[swing['id']] = swing
-                fib_levels_dict[swing['id']] = _get_current_fib_level(swing, current_price)
+    # Get incremental state (should be initialized by calibration)
+    incremental_state: Optional[IncrementalSwingState] = _replay_cache.get("incremental_state")
 
-        _replay_cache["swing_state"] = swing_state_dict
-        _replay_cache["fib_levels"] = fib_levels_dict
-        _replay_cache["last_bar_index"] = request.current_bar_index
+    # Check if we need to fallback to legacy detection
+    # This happens if:
+    # 1. No incremental state (calibration not called)
+    # 2. Cache miss (position jumped, state is stale)
+    use_incremental = (
+        incremental_state is not None and
+        _replay_cache["last_bar_index"] == request.current_bar_index and
+        len(incremental_state.highs) == request.current_bar_index + 1
+    )
+
+    if not use_incremental:
+        # Fallback to legacy O(N log N) detection for cache miss
+        # This should be rare - only happens if client sends out-of-sequence requests
+        if _replay_cache["last_bar_index"] != request.current_bar_index:
+            swings_by_scale = _detect_swings_at_bar(
+                s.source_bars, request.current_bar_index, scale_thresholds
+            )
+            swing_state_dict = {}
+            fib_levels_dict = {}
+            current_price = s.source_bars[request.current_bar_index].close
+            for scale in ["XL", "L", "M", "S"]:
+                for swing in swings_by_scale[scale]:
+                    swing_state_dict[swing['id']] = swing
+                    fib_levels_dict[swing['id']] = _get_current_fib_level(swing, current_price)
+
+            _replay_cache["swing_state"] = swing_state_dict
+            _replay_cache["fib_levels"] = fib_levels_dict
+            _replay_cache["last_bar_index"] = request.current_bar_index
 
     # Process each new bar
     new_bars = []
@@ -2829,32 +2987,55 @@ async def advance_replay(request: ReplayAdvanceRequest):
             close=bar.close,
         ))
 
-        # Detect swings at this bar
-        new_swings_by_scale = _detect_swings_at_bar(
-            s.source_bars, bar_index, scale_thresholds
-        )
+        if use_incremental and incremental_state is not None:
+            # Use O(active) incremental detection
+            inc_events = advance_bar_incremental(
+                bar_high=bar.high,
+                bar_low=bar.low,
+                bar_close=bar.close,
+                state=incremental_state
+            )
 
-        # Build new swing state dict
-        new_swing_state_dict = {}
-        for scale in ["XL", "L", "M", "S"]:
-            for swing in new_swings_by_scale[scale]:
-                new_swing_state_dict[swing['id']] = swing
+            # Convert IncrementalEvents to ReplayEventResponse
+            for event in inc_events:
+                is_active = event.event_type != "SWING_INVALIDATED"
+                all_events.append(_incremental_event_to_response(event, is_active))
 
-        # Diff states
-        current_price = bar.close
-        events, new_fib_levels = _diff_swing_states(
-            _replay_cache["swing_state"],
-            new_swing_state_dict,
-            _replay_cache["fib_levels"],
-            current_price,
-            bar_index
-        )
-        all_events.extend(events)
+            # Update cache with incremental state
+            swing_state_dict = {}
+            fib_levels_dict = {}
+            for swing_id, swing in incremental_state.active_swings.items():
+                swing_state_dict[swing_id] = swing.to_dict()
+                fib_levels_dict[swing_id] = incremental_state.fib_levels.get(swing_id, 0.0)
 
-        # Update cache
-        _replay_cache["swing_state"] = new_swing_state_dict
-        _replay_cache["fib_levels"] = new_fib_levels
-        _replay_cache["last_bar_index"] = bar_index
+            _replay_cache["swing_state"] = swing_state_dict
+            _replay_cache["fib_levels"] = fib_levels_dict
+            _replay_cache["last_bar_index"] = bar_index
+
+        else:
+            # Fallback: O(N log N) full detection per bar
+            new_swings_by_scale = _detect_swings_at_bar(
+                s.source_bars, bar_index, scale_thresholds
+            )
+
+            new_swing_state_dict = {}
+            for scale in ["XL", "L", "M", "S"]:
+                for swing in new_swings_by_scale[scale]:
+                    new_swing_state_dict[swing['id']] = swing
+
+            current_price = bar.close
+            events, new_fib_levels = _diff_swing_states(
+                _replay_cache["swing_state"],
+                new_swing_state_dict,
+                _replay_cache["fib_levels"],
+                current_price,
+                bar_index
+            )
+            all_events.extend(events)
+
+            _replay_cache["swing_state"] = new_swing_state_dict
+            _replay_cache["fib_levels"] = new_fib_levels
+            _replay_cache["last_bar_index"] = bar_index
 
     # Build final swing state response
     final_bar_index = end_index - 1
@@ -2862,18 +3043,36 @@ async def advance_replay(request: ReplayAdvanceRequest):
 
     # Group swings by scale for response
     swing_state_response = ReplaySwingState()
-    for swing_id, swing in _replay_cache["swing_state"].items():
-        is_active = _is_swing_active(swing, final_price, swing['direction'])
-        swing_response = _swing_to_response(swing, is_active)
-        scale = swing['scale']
-        if scale == "XL":
-            swing_state_response.XL.append(swing_response)
-        elif scale == "L":
-            swing_state_response.L.append(swing_response)
-        elif scale == "M":
-            swing_state_response.M.append(swing_response)
-        else:
-            swing_state_response.S.append(swing_response)
+
+    if use_incremental and incremental_state is not None:
+        # Build from incremental state
+        for swing_id, swing in incremental_state.active_swings.items():
+            fib_level = swing.get_fib_level(final_price)
+            is_active = 0.382 <= fib_level <= 2.0
+            swing_response = _active_swing_to_response(swing, is_active)
+            scale = swing.scale
+            if scale == "XL":
+                swing_state_response.XL.append(swing_response)
+            elif scale == "L":
+                swing_state_response.L.append(swing_response)
+            elif scale == "M":
+                swing_state_response.M.append(swing_response)
+            else:
+                swing_state_response.S.append(swing_response)
+    else:
+        # Build from legacy cache
+        for swing_id, swing in _replay_cache["swing_state"].items():
+            is_active = _is_swing_active(swing, final_price, swing['direction'])
+            swing_response = _swing_to_response(swing, is_active)
+            scale = swing['scale']
+            if scale == "XL":
+                swing_state_response.XL.append(swing_response)
+            elif scale == "L":
+                swing_state_response.L.append(swing_response)
+            elif scale == "M":
+                swing_state_response.M.append(swing_response)
+            else:
+                swing_state_response.S.append(swing_response)
 
     # Update playback_index for backend-controlled data boundary
     s.playback_index = final_bar_index

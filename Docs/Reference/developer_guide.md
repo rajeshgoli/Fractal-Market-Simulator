@@ -28,6 +28,7 @@ src/
 ├── swing_analysis/
 │   ├── types.py                    # Bar, BullReferenceSwing, BearReferenceSwing
 │   ├── swing_detector.py           # Main detection: detect_swings()
+│   ├── incremental_detector.py     # O(active) per-bar detection for replay
 │   ├── level_calculator.py         # Fibonacci level computation
 │   ├── reference_frame.py          # Oriented coordinate system for ratios
 │   ├── bar_aggregator.py           # Multi-timeframe OHLC aggregation
@@ -61,7 +62,7 @@ frontend/                           # React + Vite Replay View
 │       └── useForwardPlayback.ts   # Forward-only playback (after calibration)
 └── package.json
 
-tests/                              # 780 tests
+tests/                              # 830+ tests
 scripts/                            # Dev utilities
 ```
 
@@ -327,6 +328,53 @@ xl_swings = xl_result["bull_references"] + xl_result["bear_references"]
 l_result = detect_swings(df, lookback=8, quota=6, larger_swings=xl_swings)
 # L swings now have structural separation context from XL
 ```
+
+---
+
+### Incremental Swing Detection
+
+**File:** `src/swing_analysis/incremental_detector.py`
+
+O(active_swings) per-bar detection for replay playback, replacing O(N log N) full detection.
+
+```python
+from src.swing_analysis.incremental_detector import (
+    IncrementalSwingState,
+    advance_bar_incremental,
+    initialize_from_calibration,
+)
+
+# Initialize from calibration results
+state = initialize_from_calibration(
+    calibration_swings=active_swings_by_scale,  # Dict of scale -> swing list
+    source_bars=source_bars,
+    calibration_bar_count=10000,
+    scale_thresholds={"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
+    current_price=current_price,
+    lookback=5,
+    protection_tolerance=0.1,
+)
+
+# Advance one bar incrementally
+events = advance_bar_incremental(
+    bar_high=bar.high,
+    bar_low=bar.low,
+    bar_close=bar.close,
+    state=state
+)
+
+# Events are: SWING_FORMED, SWING_INVALIDATED, LEVEL_CROSS, SWING_COMPLETED
+for event in events:
+    print(f"{event.event_type}: {event.swing_id} at bar {event.bar_index}")
+```
+
+**Key characteristics:**
+- Statistics (median_candle, price_range) frozen at calibration
+- Swing point detection deferred by lookback (confirmed at N - lookback)
+- No retroactive promotion of redundancy/quota-filtered swings
+- Simulates live trading behavior (decisions made with available information)
+
+**Performance:** ~2,500x improvement (from ~1.6M ops to ~630 ops per 12-bar tick)
 
 ---
 
