@@ -4,6 +4,61 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 17, 2025 - Replay View v2 Testing Feedback
+
+**Context:** User tested Replay View v2 (post forward-playback fixes). UI polish confirmed, but explanation panel regression blocks validation workflow.
+
+### What Works
+
+- UI is "awesome", "great progress", "smooth"
+- Chart rendering with H/L markers works during calibration
+- Forward playback mechanics functioning
+
+### Blocking Issues
+
+**1. Explanation panel regression**
+
+Panel stuck on "advance playback to swing formed event to see detection details" — never updates regardless of event type. Was working in v1 calibration phase.
+
+> "The saving grace is that the high and the low are shown properly on the chart so I can look at the chart and see what is being detected most of the time."
+
+**2. Empty chart on some events**
+
+For some linger events (swing invalidated, swing completed, level crossed), nothing renders on chart — no fib levels, no H/L markers. Event banner shows but user can't see what it refers to.
+
+> "It just lingers and I don't know what event happened or what I'm supposed to look at."
+
+**3. Level cross toggle ignored (regression)**
+
+User disabled level cross events but playback still lingers on them. S/M level crosses are frequent, causing constant pauses. **This worked correctly in v1** — toggle should be honored, not removed.
+
+**4. No effective scale filtering**
+
+Because explanation panel is broken, user can't select which scales to focus on. Pauses on every event at every scale — playback doesn't progress.
+
+**5. Remove "Swing terminated" toggle (cleanup)**
+
+SWING_TERMINATED = "swing ended (completed or invalidated)" — redundant with existing toggles. User can achieve same result with SWING_COMPLETED OR SWING_INVALIDATED. Remove from UI to reduce clutter.
+
+### User's Goal
+
+> "I now have some theories on how we can improve [detection], but I need to watch it some more to be sure."
+
+**Required for validation:**
+- Focus on SWING_FORMED, SWING_COMPLETED, SWING_INVALIDATED events
+- Fix level cross toggle (regression) — when disabled, should not linger
+- Restore v1 explanation panel functionality (H/L markers, fib levels, swing details)
+
+### Root Cause Hypothesis
+
+Issues 1-4 appear connected. Explanation panel regression broke swing context, which means filters don't apply correctly, and missing context means nothing renders for some events.
+
+### Handoff
+
+Engineering to fix explanation panel regression and level cross filtering. See issues to be created.
+
+---
+
 ## December 17, 2025 - Replay View Feedback: Calibration-First, Forward-Only Playback
 
 **Context:** User tested Replay View implementation. UI is polished but core behavior doesn't support intended use case.

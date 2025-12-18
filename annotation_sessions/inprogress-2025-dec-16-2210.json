@@ -1,0 +1,13 @@
+{
+  "version": 4,
+  "session_id": "1f174892-f00c-4161-ab0d-a61f860c80a5",
+  "data_file": "test_data/es-5m.csv",
+  "resolution": "5m",
+  "window_size": 100000,
+  "window_offset": 194279,
+  "created_at": "2025-12-17T06:10:10.811553+00:00",
+  "annotations": [],
+  "completed_scales": [],
+  "skipped_scales": [],
+  "status": "in_progress"
+}

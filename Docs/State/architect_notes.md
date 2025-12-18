@@ -14,75 +14,103 @@ Read in order:
 - Ground truth annotation as validation mechanism
 - Sequential XL→L→M→S detection with `larger_swings` context passing
 - Discretization: structural events, not per-bar tokens
+- Calibration-first playback for causal evaluation
 
 **Known debt:**
 - `detect_swings()` function (~333 LOC) — monolithic; filter pipeline not extracted
-- Flaky performance test (`test_performance_scaling_is_nlogn`) — passes in isolation, fails occasionally in full suite
-- `_detect_level_crossings()` fallback — `open_close_cross` and `wick_touch` semantics not fully implemented (fall back to `close_cross`)
 
 **Cleanup tasks (deferred):**
-- Delete `Docs/Archive/Proposals/Discretization/` once discretization pipeline is complete and documented in user_guide + developer_guide (exploratory drafts no longer needed)
+- Delete `Docs/Archive/Proposals/Discretization/` once discretization pipeline is complete and documented in user_guide + developer_guide
 
 ---
 
-## Current Phase: Hypothesis Baseline
+## Current Phase: Replay View Playback Redesign
 
-**Replay View complete.** All issues (#84-#87, #89) implemented and accepted.
+**Status:** Architecture guidance provided for Issue #112. Implementation required.
 
-### Next Work Stream
+### Problem Identified
 
-**Hypothesis Baseline (#80)** — Measure baseline statistics:
+User testing revealed a fundamental architecture flaw: the current implementation pre-loads ALL source bars at startup, meaning the algorithm has "seen" all data including bars meant for playback. The frontend filtering approach is cosmetic — it hides bars that were already processed during calibration. This defeats the purpose of incremental playback.
 
-| Hypothesis | What it tests |
-|------------|---------------|
-| H1: Completion conditional on band | P(completion \| ext_high) >> P(completion \| mid_retrace) |
-| H2: Frustration rule | P(invalidation \| test_count > 3) elevated |
-| H3: Void transit time | Decision corridor (1.382-1.618) traversed faster |
-| H4: Downward causality | L behavior differs based on XL band |
-| H5: Shock clustering | Shocks cluster in time (not uniform) |
+### Architectural Decision
 
-**Owner:** Product → define priority and success criteria
+**Backend-controlled data boundary** — the backend should be the single source of truth for what bars are "visible" at any point in time.
+
+**Rationale:**
+1. Single responsibility — backend owns data loading; frontend owns visualization
+2. No trust issue — frontend cannot accidentally receive future data
+3. Simpler frontend — no complex filtering logic with potential bugs
+4. Testable — backend behavior can be unit tested in isolation
+
+### Implementation Required
+
+| Task | Scope | Status |
+|------|-------|--------|
+| Modify `init_app()` to only load calibration window | Backend | Pending |
+| Add `playback_index` tracking to `AppState` | Backend | Pending |
+| `/api/replay/advance` loads from disk/cache | Backend | Pending |
+| `/api/bars` respects `playback_index` | Backend | Pending |
+| Remove client-side filtering logic | Frontend | Pending |
+| Re-fetch aggregated bars after advance | Frontend | Pending |
+
+**Key Design:**
+
+1. **Phase 1 - Calibration:** `init_app()` only loads calibration window into `source_bars`. Store `total_bars_available` and file reference for later loading.
+
+2. **Phase 2 - Playback:** `/api/replay/advance` loads bars from disk/cache (not pre-loaded array), extends `source_bars`, runs detection on visible window.
+
+3. **Detection Strategy:** Re-run detection per bar (current approach) is correct. O(N log N) detection takes <10ms for 10K bars.
 
 ---
 
-## Completed: Replay View (#84-#89)
+## Recently Completed
 
-**Status:** All issues accepted and complete.
+**Epic #99 — Replay View v2:**
 
-| Issue | Component | Status |
-|-------|-----------|--------|
-| #82 | SWING_FORMED explanation enrichment | Complete |
-| #83 | Windowed events API | Complete |
-| #84 | Split view + aggregation | Complete |
-| #85 | Playback controls | Complete |
-| #86 | Event-driven linger + timer | Complete |
-| #87 | Swing explanation panel | Complete |
-| #89 | UX bug fixes (labels, zoom, reset) | Complete |
+| Issue | Feature | Status |
+|-------|---------|--------|
+| #100 | Zero swings bug fix — `current_bar_index` param | Complete |
+| #101 | Calibration phase — load window, detect swings, show report | Complete |
+| #102 | Forward-only playback — incremental detection, event diffing | Complete |
+| #103 | Speed control — aggregation-relative ("Nx per 1H") | Complete |
+| #104 | Event navigation — ◀◀/▶▶ jump by event, not bar | Complete |
+| #105 | Scale toggles — XL/L/M/S filters, active swing count dropdown | Complete |
+| #111 | Swing markers — H/L labels, Fib levels on chart | Complete |
 
 **Key implementation details:**
-- Timer duration: 30 seconds (longer dwell aids comprehension)
-- Multiple events at same bar: Queue, show sequentially
-- Explanation generation: At discretization time, not API read time
-- Split view: Two independent lightweight-charts instances with shared time sync
-- Aggregation labels: "5m (source)", "~1H", "~4H", "~1D" (approximations, not exact timeframes)
 
-**Note on aggregation labels:** Spec requested "5m, 15m, 1H, 4H, 1D" but implementation uses scale-based approximations. This is acceptable since actual aggregation depends on source resolution. The tilde prefix (~) honestly indicates approximation. 15m omitted because system uses S/M/L/XL scale hierarchy, not fixed timeframes.
+1. **CalibrationPhase state machine:** NOT_STARTED → CALIBRATING → CALIBRATED → PLAYING
+   - CALIBRATED: User can cycle through active swings with `[`/`]` keys
+   - PLAYING: Forward-only playback with real-time event detection
+
+2. **useSwingDisplay hook:** Filters swings by enabled scales, ranks by size, limits to top N per scale
+
+3. **useForwardPlayback hook:** POST /api/replay/advance fetches bars incrementally, diffs swing state for events
+
+4. **Event diffing logic:** Compares previous vs new swing state to detect SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED, LEVEL_CROSS
 
 ---
 
-## Previous Phase: Discretization Pipeline
+## Next Steps
 
-**Work stream:** Milestone 1 (#72) — **Complete**
+### 1. Playback Redesign Implementation
 
-| Issue | Component | Status |
-|-------|-----------|--------|
-| #73 | ReferenceFrame | Complete |
-| #74 | Level Set Constants | Complete |
-| #75 | DiscretizationEvent Schema | Complete |
-| #76 | Discretizer Core | Complete |
-| #77 | Event Log I/O | Complete |
-| #78 | Visual Overlay | Complete |
-| #79 | Validation | Complete |
+Create GitHub issues for the implementation tasks above. Backend changes first, then frontend cleanup.
+
+### 2. User Testing (After Redesign)
+
+Once playback is truly incremental:
+
+1. **User testing** — Gather feedback on:
+   - Calibration UX (is 10K bars appropriate default?)
+   - Event navigation (are event types well-chosen?)
+   - Scale filtering (is S-off default appropriate?)
+   - Speed control (is aggregation-relative intuitive?)
+
+2. **Performance profiling** — Monitor for:
+   - Detection latency during forward playback
+   - Memory usage during long sessions
+   - Chart rendering performance with many swings
 
 ---
 
@@ -90,55 +118,12 @@ Read in order:
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Swing Detector | Healthy | Phase 1-3 complete |
+| Swing Detector | Healthy | `current_bar_index` param for replay context |
 | Ground Truth Annotator | Healthy | Two-click annotation + Review Mode |
 | Discretization Pipeline | Healthy | Core complete, visual overlay done |
-| Replay View | Healthy | Split view, playback, linger, explanations |
-| Test Suite | Healthy | 733 tests passing (1 flaky perf test) |
-| Documentation | Needs update | user_guide.md aggregation section outdated |
-
----
-
-## Architecture Highlights
-
-### Replay View
-
-**Purpose:** Trust-building tool that shows *why* swings are detected.
-
-**Key design decisions:**
-- **Split view** — Two charts with independent aggregation for natural zoom levels
-- **Event-driven linger** — Auto-pause on SWING_FORMED to explain detection
-- **30s timer wheel** — Visual countdown before auto-resume
-- **Explanation panel** — Shows endpoints, size, scale reason, separation details
-- **Chart markers** — Current swing bright, previous swing dimmed
-
-### Discretization Pipeline
-
-**Purpose:** Convert OHLC + swings → structural event log for hypothesis testing.
-
-**Key design decisions:**
-- **Batch-only** — No streaming complexity; corpus processing is goal
-- **Per-scale independence** — No cross-scale coupling in discretizer; analysis is post-hoc
-- **Config-driven** — Level set, crossing semantics, thresholds all configurable
-- **Self-describing** — Each log embeds full config for corpus comparability
-- **Side-channels** — EffortAnnotation, ShockAnnotation, ParentContext enable rich queries
-
-**Event Types:**
-- `LEVEL_CROSS` — Price crossed a Fibonacci level
-- `LEVEL_TEST` — Price approached but didn't cross
-- `COMPLETION` — Ratio reached 2.0
-- `INVALIDATION` — Ratio crossed below threshold
-- `SWING_FORMED` / `SWING_TERMINATED` — Lifecycle events
-
-**Level Set (v1.0):** 16 levels from -0.15 (deep stop-run) to 2.236 (extended completion)
-
-### ReferenceFrame Abstraction
-
-Unified coordinate system for bull/bear swings:
-- `ratio = 0`: Defended pivot (stop level)
-- `ratio = 1`: Origin extremum
-- `ratio = 2`: Completion target
-- Negative ratios: Stop-run territory
+| Replay View | **Needs Redesign** | Look-ahead bug in playback (#112) |
+| Test Suite | Healthy | 780 tests (778 passing, 2 skipped) |
+| Documentation | **Current** | Both guides updated Dec 17 |
 
 ---
 
@@ -146,8 +131,8 @@ Unified coordinate system for bull/bear swings:
 
 | Document | Status | Action Needed |
 |----------|--------|---------------|
-| `Docs/Reference/user_guide.md` | **Outdated** | Update aggregation table (lines 54-61) to match actual UI labels |
-| `Docs/Reference/developer_guide.md` | Current | - |
+| `Docs/Reference/developer_guide.md` | **Current** | Updated Dec 17 |
+| `Docs/Reference/user_guide.md` | **Current** | Updated Dec 17 |
 | `CLAUDE.md` | Current | - |
 
 ---
@@ -166,12 +151,12 @@ Unified coordinate system for bull/bear swings:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 17 | Q-2025-12-17-2 — Playback redesign architecture (#112) | Backend-controlled data boundary |
+| Dec 17 | #101, #102, #104, #105, #111 — Calibration, forward playback, event nav, scale toggles | All Accepted, Epic #99 closed |
+| Dec 17 | #100, #103, #107, #108, #109 — Zero swings fix, speed control, swing overlay, multi-swing nav | All Accepted |
+| Dec 17 | Q-2025-12-17-1 — Zero swing bug diagnosis + forward-only playback design | Designed → Ready for engineering |
 | Dec 16 | #84, #85, #86, #87, #89 — Replay View complete | All Accepted |
-| Dec 16 | #78, #79, #81, #82, #83 — Discretization overlay, validation, ground truth consolidation, explanation data, windowed API | All Accepted |
+| Dec 16 | #78, #79, #81, #82, #83 — Discretization overlay, validation | All Accepted |
 | Dec 16 | Replay View spec assessment | Feasible → Issues #82-#87 created |
-| Dec 16 | #73, #74, #75, #76, #77 — Discretization core implementation | All Accepted |
+| Dec 16 | #73, #74, #75, #76, #77 — Discretization core | All Accepted |
 | Dec 16 | #68, #69, #70, #71 — Phase 3 + Architecture Overhaul | All Accepted |
-| Dec 16 | Discretization proposal synthesis (5 agents) | Converged → Schema extensions |
-| Dec 15 | Discretization Proposal F1: Issue decomposition | Accepted → Epic #72 |
-| Dec 15 | #59-#66 — Annotation UX + Filters + Endpoint Selection | All Accepted |
-| Dec 12 | Review Mode epic (#38) | All Accepted |

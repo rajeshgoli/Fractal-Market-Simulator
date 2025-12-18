@@ -36,10 +36,22 @@ Execute implementation tasks with precision. Tasks come from GitHub issues.
    - Update `Docs/Reference/user_guide.md` if user-facing changes
    - Update `Docs/Reference/developer_guide.md` if implementation/architecture changes
    - Add implementation notes as **comments on the GitHub issue**
-7. **Track**: Update `Docs/State/pending_review.md` (increment count, list issue numbers)
+7. **Track**: Update `Docs/State/pending_review.md` per rules below
 8. **Handoff**: Close or comment on issue, signal ready for review
 
-## pending_review.md Format
+## pending_review.md Rules (CRITICAL)
+
+**Only Engineer increments the count. Only Architect resets it to 0.**
+
+| Situation | Action |
+|-----------|--------|
+| Engineer: code change for **new** issue | Increment count, add issue to list |
+| Engineer: code change for issue **already in list** | Add explanation only, NO count change |
+| Architect: after review | Reset count to 0, move issues to review history |
+| Filing GitHub issues (no code) | Do NOT touch pending_review.md |
+| Product/Director work | Do NOT touch pending_review.md |
+
+**Format:**
 
 ```markdown
 # Pending Review
@@ -48,10 +60,8 @@ Execute implementation tasks with precision. Tasks come from GitHub issues.
 
 ## Pending Changes
 
-### YYYY-MM-DD - Brief Description
-- **Issue:** #42
-- **Type:** Bug Fix / Feature / Enhancement
-- **Files:** [key files changed]
+- **#42** — Brief description of what changed
+- **#43** — Brief description of what changed
 ```
 
 ## What You Do NOT Do

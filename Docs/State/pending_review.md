@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-17
 
@@ -8,30 +8,9 @@
 
 ## Pending Changes
 
-### 2025-12-17 - Add scale toggles and active swing count controls
-- **Issue:** #105
-- **Type:** Feature
-- **Files:** types.ts, useSwingDisplay.ts (new), ExplanationPanel.tsx, Replay.tsx, user_guide.md
-
-### 2025-12-17 - Implement event-based navigation for Replay View v2
-- **Issue:** #104
-- **Type:** Feature
-- **Files:** useForwardPlayback.ts, PlaybackControls.tsx, Replay.tsx, user_guide.md
-
-### 2025-12-17 - Implement forward-only playback for Replay View v2
-- **Issue:** #102
-- **Type:** Feature
-- **Files:** api.py, useForwardPlayback.ts, api.ts, Replay.tsx, test_ground_truth_annotator_api.py
-
-### 2025-12-17 - Implement calibration phase for Replay View v2
-- **Issue:** #101
-- **Type:** Feature
-- **Files:** api.py, types.ts, api.ts, Replay.tsx, ExplanationPanel.tsx, Header.tsx, test_ground_truth_annotator_api.py
-
-### 2025-12-17 - Fix swing markers and scale assignment
-- **Issue:** #111
-- **Type:** Bug Fix
-- **Files:** SwingOverlay.tsx, Replay.tsx, api.py, test_ground_truth_annotator_api.py
+- **#112** — Fixed: Chart filtering to respect playback position (stream bars beyond calibration)
+- **#113** — Backend-controlled data boundary: playback_index in AppState, /api/bars respects boundary
+- **#114** — Fix Replay View v2 playback regressions (explanation panel, event/scale filtering, bar counter UI)
 
 ---
 
@@ -39,6 +18,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 17 | #101, #102, #104, #105, #111 — Calibration, forward playback, event nav, scale toggles, swing markers | All Accepted, Epic #99 closed |
 | Dec 17 | #100, #103, #107, #108, #109 — Zero swings fix, speed control, swing overlay, multi-swing nav | All Accepted |
 | Dec 17 | Q-2025-12-17-1 — Zero swing bug diagnosis + forward-only playback design | Designed → Ready for engineering |
 | Dec 17 | #91, #96, #97, #98 — React adoption, chart fixes, dead code removal, flaky test | All Accepted |

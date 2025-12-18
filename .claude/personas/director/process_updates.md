@@ -4,6 +4,32 @@ Revision history for workflow system changes.
 
 ---
 
+## 2025-12-17: pending_review.md Ownership Rules
+
+**Triggered by:** Product role incorrectly incremented pending_review.md count after filing a GitHub issue (no code change).
+
+**Root Cause:** The rule for when to update pending_review.md count was implicit, not explicit. Product assumed filing an issue counted as a trackable change.
+
+**Changes Made:**
+
+1. **`engineer.md`**: Added "pending_review.md Rules (CRITICAL)" section with explicit table:
+   - Engineer: Code change for NEW issue → Increment count, add to list
+   - Engineer: Code change for issue ALREADY in list → Add explanation only, NO count change
+   - Architect: After review → Reset count to 0, move issues to review history
+   - Filing issues (no code) → Do NOT touch
+   - Product/Director work → Do NOT touch
+
+2. **`_protocols.md`**: Added "pending_review.md Ownership" section:
+   - Only Engineer increments the count
+   - Only Architect resets it to 0
+   - Added anti-pattern: Non-Engineer/Architect roles modifying pending_review.md
+
+**Rationale:** pending_review.md tracks implemented changes awaiting architect review. Only two roles touch it: Engineer (increment after code) and Architect (reset after review). Filing issues or doing product/director work doesn't create reviewable code changes.
+
+**Impact:** All roles now have explicit guidance. Product/Director know not to touch pending_review.md. Architect knows they only reset to 0 after review.
+
+---
+
 ## 2025-12-11: Major Docs Restructure
 
 **Triggered by:** User feedback on doc proliferation. `engineer_notes/` had 17 files, `product_next_steps*.md` had 4 versions.

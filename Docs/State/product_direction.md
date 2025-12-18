@@ -7,133 +7,67 @@
 
 ## Current Objective
 
-**Fix Replay View: Calibration-first, forward-only playback.**
+**Fix Replay View v2 regressions to unblock detection validation.**
 
-Initial Replay View implementation has polished UI but fundamentally wrong replay model. Current preload-and-scrub approach creates look-ahead bias — user sees entire future before playback starts, making causal evaluation impossible.
+Replay View v2 has polished UI and forward-only playback working. However, regressions from v1 broke the explanation panel and event filtering, blocking the validation workflow.
 
-**Key insight:** The purpose of Replay View is **causal evaluation** — observing whether level-cross events correspond to swing-formation events as the North Star hypothesis predicts. This requires forward-only playback where new bars appear that weren't previously visible.
+**User's goal:** Observe swing detection during forward playback to validate theories on detection improvements. Needs to see swing details when events occur.
 
 ---
 
-## P0: Replay View Redesign
+## P0: Replay View v2 Regression Fixes
 
-**Status:** Blocking issues identified. Needs architecture redesign.
+**Status:** 4 regressions + 1 cleanup identified. Ready for engineering.
 
-### Blocking Issues
+### Regressions from v1
 
-**1. No swings detected**
+| # | Issue | Impact |
+|---|-------|--------|
+| 1 | **Explanation panel broken** — stuck on "advance playback..." text | Can't see swing details (H/L, fib levels) that worked in v1 |
+| 2 | **Empty chart on some events** — no markers render | Can't see what SWING_INVALIDATED/COMPLETED/LEVEL_CROSS refers to |
+| 3 | **Event type toggles ignored** — level cross still lingers when disabled | Can't filter out high-frequency S/M events |
+| 4 | **Scale filtering broken** — pauses on every event at every scale | Playback doesn't progress |
 
-10K 5m bars yields zero swings. Either bug or missing scale/salience input. Blocks all evaluation.
+### Cleanup
 
-**2. Look-ahead bias**
+| # | Issue | Action |
+|---|-------|--------|
+| 5 | **Remove SWING_TERMINATED toggle** | Redundant — it's just SWING_COMPLETED OR SWING_INVALIDATED |
 
-Current model: preload all bars, then scrub through. User sees entire future upfront.
+### Root Cause Hypothesis
 
-**Needed model:** Calibration window → forward-only playback:
-1. Load calibration window (e.g., 10K bars)
-2. Auto-calibrate: detect active swings in that window
-3. Show calibration report
-4. Pre-playback: allow cycling through active swings
-5. Press Play → advance *beyond* the window
-6. New bars appear that weren't previously visible
-7. Events surface in real-time
-8. Keep loading more data until CSV exhausted
-
-**3. Speed tied to wrong reference**
-
-1x = 1 source bar/sec (5m), too slow at 1H/4H. Speed should be relative to chart aggregation.
-
-**UX decision:** Add aggregation dropdown next to speed control: "Speed: [10x ▼] per [1H ▼] bar"
-
-### UI Changes Required
-
-**New "Scale Calibration" section** (below left controls):
-- Scale toggles: XL, L, M, S (on/off for filtering)
-- "Active swings to show" dropdown: 1, 2, 3, 4, 5 (default: 2)
-
-**Calibration report** (in report area):
-- Swings found per scale
-- Active swings per scale
-- Threshold values (XL, L, M, S definitions)
-
-**Navigation:**
-- `<<` / `>>` = previous/next **event** (not bar)
-
-**Speed control:**
-- Add aggregation dropdown next to speed: "Speed: [10x ▼] per [1H ▼] bar"
-
-**Display during playback:**
-- Show only biggest N swings (per dropdown setting)
-- Mark high and low of each active swing on chart
-- Use distinct colors per swing (if showing 2 swings, use 2 different colors)
-- Fib levels: 0, 0.382, 1, 2 for persistent swings
-- Event-triggered swings: those + the level being crossed
+Issues 1-4 appear connected. Explanation panel regression broke swing context propagation, which means filters don't apply correctly, and missing context means nothing renders for some events.
 
 ### Acceptance Criteria
 
-- [ ] Swings actually detected and shown (bug fix or scale input)
-- [ ] Calibration auto-runs on load, report shown
-- [ ] Pre-playback: can cycle through active swings
-- [ ] Forward-only playback: new bars appear beyond calibration window
-- [ ] Events surface in real-time during playback
-- [ ] `<<` / `>>` navigate by event, not bar
-- [ ] Speed control with aggregation dropdown: "Speed: [10x ▼] per [1H ▼] bar"
-- [ ] Active swings have high/low marked on chart with distinct colors per swing
-- [ ] Scale toggles and active swing count dropdown work
+- [ ] Explanation panel updates on SWING_FORMED, SWING_COMPLETED, SWING_INVALIDATED events
+- [ ] Swing H/L markers and fib levels render for all event types
+- [ ] Event type toggles honored — disabled events don't linger
+- [ ] Scale filtering works — can focus on XL/L only
+- [ ] SWING_TERMINATED toggle removed from UI
 
-**Spec:** `Docs/Working/replay_view_spec.md` (to be updated)
+### What's Working (preserve)
+
+- UI polish ("awesome", "smooth")
+- Forward-only playback mechanics
+- Chart rendering with H/L markers during calibration
+- Calibration phase swing cycling
 
 ---
 
 ## P1: FIB-Based Structural Separation (Paused)
 
-**Status:** Paused pending Replay View validation.
-
-**Original objective:** Implement FIB-based structural separation for extrema selection.
-
----
-
-## P0: FIB-Based Structural Separation
+**Status:** Paused pending Replay View validation. Awaiting Architect feasibility assessment (Q-2025-12-15-2).
 
 **Problem:** Algo picks extrema satisfying lookback rules but lacking structural significance:
 - "Random lower high in a series of lower highs" — no qualifying low separates it from highest high
 - "Random low near bottom" — not the structural low a stop would defend
 
-**Root cause:** Separation between consecutive same-type swings isn't enforced in market-structure terms.
-
-### Proposed Solution
-
-Use FIB levels from **larger-scale swings** (already established, no lookahead) to define "meaningful separation":
-
-```
-Given: High A exists at scale S
-To register High B at scale S:
-  1. There must be a Low L between A and B
-  2. L must be ≥1 FIB level away from High A (measured on scale M+ grid)
-  3. High B and L must be ≥1 FIB level apart (on any larger scale grid)
-
-For XL swings (no larger reference):
-  → Fall back to N bars or X% move (volatility-adjusted)
-```
-
-### Why This Works
-
-| Property | How Achieved |
-|----------|--------------|
-| No lookahead | Larger swings are historical — already confirmed |
-| Market-structure-aware | "Meaningful separation" = FIB unit, not arbitrary price/bars |
-| Scale-coherent | Small swings must register on larger FIB grids to matter |
-| Self-consistent | Uses existing multi-scale architecture (S→M→L→XL) |
-
-**Key insight:** Separation measured in *FIB units* is structurally meaningful. A 10-point move is noise or signal depending on where it sits on the larger swing's grid.
-
-### Status
-
-**Awaiting Architect feasibility assessment.** See `Docs/Comms/questions.md` Q-2025-12-15-2.
+**Proposed Solution:** Use FIB levels from larger-scale swings (already established, no lookahead) to define "meaningful separation." See interview notes Dec 15 for full proposal.
 
 ---
 
-## P1 (Superseded): Previous Endpoint Selection Approach
+## P2 (Superseded): Previous Endpoint Selection Approach
 
 Previous approach focused on:
 - **Fib Confluence:** Prefer highs/lows near fib levels of larger swings
