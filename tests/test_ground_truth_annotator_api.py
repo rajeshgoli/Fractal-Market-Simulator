@@ -1729,7 +1729,7 @@ class TestStaleEventFiltering:
 
     def test_diff_swing_states_filters_calibration_swings(self):
         """_diff_swing_states should not emit SWING_FORMED for calibration swings."""
-        from src.ground_truth_annotator.api import _diff_swing_states
+        from src.ground_truth_annotator.routers.replay import _diff_swing_states
 
         # Previous state (empty - simulates first advance after calibration)
         prev_swings = {}
@@ -1779,7 +1779,7 @@ class TestStaleEventFiltering:
 
     def test_diff_swing_states_without_calibration_ids_emits_all(self):
         """Without calibration_swing_ids, all new swings emit SWING_FORMED."""
-        from src.ground_truth_annotator.api import _diff_swing_states
+        from src.ground_truth_annotator.routers.replay import _diff_swing_states
 
         prev_swings = {}
         prev_fib_levels = {}
@@ -1808,8 +1808,19 @@ class TestStaleEventFiltering:
 
     def test_calibration_stores_swing_ids_in_cache(self, temp_storage, test_data_path):
         """Calibration endpoint should store structural swing IDs in cache."""
+        from src.ground_truth_annotator.routers import replay as replay_router
+
         api.state = None
-        api._replay_cache = {}
+        replay_router._replay_cache.clear()
+        replay_router._replay_cache.update({
+            "last_bar_index": -1,
+            "swing_state": {},
+            "fib_levels": {},
+            "incremental_state": None,
+            "calibration_bar_count": 0,
+            "scale_thresholds": {},
+            "calibration_swing_ids": set(),
+        })
 
         init_app(
             data_file=test_data_path,
@@ -1828,8 +1839,8 @@ class TestStaleEventFiltering:
         data = response.json()
 
         # Check that calibration_swing_ids was stored in cache
-        assert "calibration_swing_ids" in api._replay_cache
-        calibration_ids = api._replay_cache["calibration_swing_ids"]
+        assert "calibration_swing_ids" in replay_router._replay_cache
+        calibration_ids = replay_router._replay_cache["calibration_swing_ids"]
         assert isinstance(calibration_ids, set)
 
         # IDs should match the structural format used by _detect_swings_at_bar
@@ -1845,8 +1856,19 @@ class TestStaleEventFiltering:
 
     def test_advance_filters_stale_events_legacy_path(self, temp_storage, test_data_path):
         """Advance should filter SWING_FORMED for calibration swings (legacy path)."""
+        from src.ground_truth_annotator.routers import replay as replay_router
+
         api.state = None
-        api._replay_cache = {}
+        replay_router._replay_cache.clear()
+        replay_router._replay_cache.update({
+            "last_bar_index": -1,
+            "swing_state": {},
+            "fib_levels": {},
+            "incremental_state": None,
+            "calibration_bar_count": 0,
+            "scale_thresholds": {},
+            "calibration_swing_ids": set(),
+        })
 
         init_app(
             data_file=test_data_path,
@@ -1865,7 +1887,7 @@ class TestStaleEventFiltering:
         cal_data = cal_response.json()
 
         # Force legacy path by clearing incremental state
-        api._replay_cache["incremental_state"] = None
+        replay_router._replay_cache["incremental_state"] = None
 
         # Advance - should use legacy detection but filter stale events
         response = client.post("/api/replay/advance", json={
@@ -1880,6 +1902,6 @@ class TestStaleEventFiltering:
         formed_events = [e for e in data["events"] if e["type"] == "SWING_FORMED"]
 
         # Formed events should NOT include swings that were in calibration
-        calibration_ids = api._replay_cache.get("calibration_swing_ids", set())
+        calibration_ids = replay_router._replay_cache.get("calibration_swing_ids", set())
         for event in formed_events:
             assert event["swing_id"] not in calibration_ids
