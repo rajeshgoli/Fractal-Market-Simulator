@@ -765,10 +765,15 @@ def _apply_protection_filter(references: List[Dict[str, Any]], direction: str,
 
         if direction == 'bull':
             # Bull reference: High BEFORE Low (downswing)
-            # Pre-formation: high not violated before low forms
+            # Pre-formation: origin (high) not violated before low forms
             max_between = _range_max(highs, high_idx + 1, low_idx)
             if max_between is not None and max_between > high_price:
                 continue  # High was violated before low formed
+
+            # Pre-formation: defended pivot (low) not undercut before formation
+            min_between = _range_min(lows, high_idx + 1, low_idx)
+            if min_between is not None and min_between < low_price:
+                continue  # A lower low exists between origin and pivot
 
             # Post-formation: swing low not violated after formation
             if suffix_min_lows is not None and low_idx + 1 < len(suffix_min_lows):
@@ -778,10 +783,15 @@ def _apply_protection_filter(references: List[Dict[str, Any]], direction: str,
                     continue  # Low was violated
         else:
             # Bear reference: Low BEFORE High (upswing)
-            # Pre-formation: low not violated before high forms
+            # Pre-formation: origin (low) not violated before high forms
             min_between = _range_min(lows, low_idx + 1, high_idx)
             if min_between is not None and min_between < low_price:
                 continue  # Low was violated before high formed
+
+            # Pre-formation: defended pivot (high) not exceeded before formation
+            max_between = _range_max(highs, low_idx + 1, high_idx)
+            if max_between is not None and max_between > high_price:
+                continue  # A higher high exists between origin and pivot
 
             # Post-formation: swing high not violated after formation
             if suffix_max_highs is not None and high_idx + 1 < len(suffix_max_highs):

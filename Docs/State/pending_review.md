@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-18
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - **#138** — Fixed inverted endpoint optimization: bull swings now find highest HIGH, bear swings find lowest LOW
+- **#140** — Fixed symmetric pre-formation protection: both detectors now check origin AND defended pivot
 
 ---
 

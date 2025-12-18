@@ -24,6 +24,7 @@ from src.swing_analysis.incremental_detector import (
     advance_bar_incremental,
     initialize_from_calibration,
     _format_trigger_explanation,
+    _check_pre_formation_protection,
 )
 
 
@@ -1039,3 +1040,113 @@ class TestDuplicateSwingPrevention:
         unique_high_indices = set(s.high_bar_index for s in bull_swings)
         assert len(unique_high_indices) == len(bull_swings), \
             "Each bull swing should use a unique high"
+
+
+class TestPreFormationProtection:
+    """Tests for _check_pre_formation_protection function (#140 fix)."""
+
+    def test_bull_swing_origin_protection_violated(self):
+        """Bull swing rejected when high is exceeded between H and L."""
+        highs = [100, 120, 130, 115, 110, 105]  # 130 at idx 2 exceeds 120 at idx 1
+        lows = [95, 100, 125, 110, 100, 95]
+
+        # Bull swing: high at index 1 (120), low at index 5 (95)
+        # High at index 2 (130) exceeds the origin (120 + tolerance)
+        result = _check_pre_formation_protection(
+            highs, lows, high_idx=1, low_idx=5, direction='bull', tolerance=0.0
+        )
+
+        assert result is False, "Bull swing should be rejected when origin (high) is exceeded"
+
+    def test_bull_swing_defended_pivot_violated(self):
+        """Bull swing rejected when low is undercut between H and L."""
+        highs = [100, 120, 115, 110, 105, 100]
+        lows = [95, 100, 85, 90, 88, 92]  # 85 at idx 2 undercuts 92 at idx 5
+
+        # Bull swing: high at index 1 (120), low at index 5 (92)
+        # Low at index 2 (85) is lower than the swing's low (92)
+        result = _check_pre_formation_protection(
+            highs, lows, high_idx=1, low_idx=5, direction='bull', tolerance=0.0
+        )
+
+        assert result is False, "Bull swing should be rejected when defended pivot (low) is undercut"
+
+    def test_bull_swing_both_ok(self):
+        """Bull swing kept when no violation in either direction."""
+        highs = [100, 120, 115, 110, 105, 100]  # All highs <= 120
+        lows = [95, 100, 98, 95, 93, 92]  # All lows >= 92
+
+        # Bull swing: high at index 1 (120), low at index 5 (92)
+        result = _check_pre_formation_protection(
+            highs, lows, high_idx=1, low_idx=5, direction='bull', tolerance=0.0
+        )
+
+        assert result is True, "Bull swing should pass when no violations"
+
+    def test_bear_swing_origin_protection_violated(self):
+        """Bear swing rejected when low is undercut between L and H."""
+        highs = [100, 90, 85, 95, 100, 110]
+        lows = [95, 80, 75, 90, 95, 100]  # 75 at idx 2 undercuts 80 at idx 1
+
+        # Bear swing: low at index 1 (80), high at index 5 (110)
+        # Low at index 2 (75) is lower than the origin (80)
+        result = _check_pre_formation_protection(
+            highs, lows, high_idx=5, low_idx=1, direction='bear', tolerance=0.0
+        )
+
+        assert result is False, "Bear swing should be rejected when origin (low) is undercut"
+
+    def test_bear_swing_defended_pivot_violated(self):
+        """Bear swing rejected when high is exceeded between L and H."""
+        highs = [100, 85, 115, 105, 100, 110]  # 115 at idx 2 exceeds 110 at idx 5
+        lows = [95, 80, 110, 100, 95, 100]
+
+        # Bear swing: low at index 1 (80), high at index 5 (110)
+        # High at index 2 (115) exceeds the swing's high (110)
+        result = _check_pre_formation_protection(
+            highs, lows, high_idx=5, low_idx=1, direction='bear', tolerance=0.0
+        )
+
+        assert result is False, "Bear swing should be rejected when defended pivot (high) is exceeded"
+
+    def test_bear_swing_both_ok(self):
+        """Bear swing kept when no violation in either direction."""
+        highs = [100, 85, 95, 100, 105, 110]  # All highs <= 110
+        lows = [95, 80, 85, 90, 95, 100]  # All lows >= 80
+
+        # Bear swing: low at index 1 (80), high at index 5 (110)
+        result = _check_pre_formation_protection(
+            highs, lows, high_idx=5, low_idx=1, direction='bear', tolerance=0.0
+        )
+
+        assert result is True, "Bear swing should pass when no violations"
+
+    def test_bull_swing_tolerance_applied(self):
+        """Bull swing tolerance is applied correctly to both checks."""
+        # Swing size = 120 - 90 = 30
+        # Tolerance 10% = 3 points
+        # Origin threshold: 120 + 3 = 123
+        # Pivot threshold: 90 - 3 = 87
+        highs = [100, 120, 122, 118, 115, 110]  # 122 < 123, within tolerance
+        lows = [95, 100, 88, 92, 90, 90]  # 88 > 87, within tolerance
+
+        result = _check_pre_formation_protection(
+            highs, lows, high_idx=1, low_idx=5, direction='bull', tolerance=0.1
+        )
+
+        assert result is True, "Bull swing should pass when violations are within tolerance"
+
+    def test_bear_swing_tolerance_applied(self):
+        """Bear swing tolerance is applied correctly to both checks."""
+        # Swing size = 120 - 80 = 40
+        # Tolerance 10% = 4 points
+        # Origin threshold: 80 - 4 = 76
+        # Pivot threshold: 120 + 4 = 124
+        highs = [100, 85, 122, 115, 110, 120]  # 122 < 124, within tolerance
+        lows = [95, 80, 78, 85, 90, 100]  # 78 > 76, within tolerance
+
+        result = _check_pre_formation_protection(
+            highs, lows, high_idx=5, low_idx=1, direction='bear', tolerance=0.1
+        )
+
+        assert result is True, "Bear swing should pass when violations are within tolerance"

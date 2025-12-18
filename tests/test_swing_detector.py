@@ -1559,6 +1559,132 @@ class TestProtectionFilter(unittest.TestCase):
 
         self.assertEqual(len(filtered), 1)
 
+    def test_protection_filter_bull_pre_formation_defended_pivot_violated(self):
+        """Bull swing rejected when a bar between H and L has a lower low."""
+        from src.swing_analysis.swing_detector import _apply_protection_filter, _build_suffix_max, _build_suffix_min
+        import numpy as np
+
+        # Bull swing: high at index 1, low at index 5
+        # But there's a lower low at index 3 (80) that undercuts the swing low (95)
+        highs = np.array([100, 120, 115, 90, 100, 105, 110], dtype=np.float64)
+        lows = np.array([95, 100, 95, 80, 90, 95, 100], dtype=np.float64)  # Lower low at idx 3
+
+        suffix_max_highs = _build_suffix_max(highs)
+        suffix_min_lows = _build_suffix_min(lows)
+
+        # Bull swing: high at index 1 (120), low at index 5 (95)
+        # The low at index 3 (80) is lower than the swing's low (95)
+        references = [{
+            'high_price': 120.0,
+            'high_bar_index': 1,
+            'low_price': 95.0,
+            'low_bar_index': 5,
+            'size': 25.0
+        }]
+
+        filtered = _apply_protection_filter(
+            references, 'bull', highs, lows, 0.1,
+            suffix_max_highs, suffix_min_lows
+        )
+
+        # Should be filtered: the lower low at idx 3 violates the defended pivot
+        self.assertEqual(len(filtered), 0,
+            "Bull swing should be rejected when a lower low exists between origin and pivot")
+
+    def test_protection_filter_bull_pre_formation_defended_pivot_ok(self):
+        """Bull swing kept when no bar between H and L has a lower low."""
+        from src.swing_analysis.swing_detector import _apply_protection_filter, _build_suffix_max, _build_suffix_min
+        import numpy as np
+
+        # Bull swing: high at index 1, low at index 5
+        # All lows between are higher than the swing low
+        highs = np.array([100, 120, 115, 110, 105, 100, 105], dtype=np.float64)
+        lows = np.array([95, 100, 98, 96, 94, 92, 95], dtype=np.float64)  # All lows >= swing low
+
+        suffix_max_highs = _build_suffix_max(highs)
+        suffix_min_lows = _build_suffix_min(lows)
+
+        # Bull swing: high at index 1 (120), low at index 5 (92)
+        references = [{
+            'high_price': 120.0,
+            'high_bar_index': 1,
+            'low_price': 92.0,
+            'low_bar_index': 5,
+            'size': 28.0
+        }]
+
+        filtered = _apply_protection_filter(
+            references, 'bull', highs, lows, 0.1,
+            suffix_max_highs, suffix_min_lows
+        )
+
+        # Should be kept: all intermediate lows are >= swing low
+        self.assertEqual(len(filtered), 1,
+            "Bull swing should be kept when no lower low exists between origin and pivot")
+
+    def test_protection_filter_bear_pre_formation_defended_pivot_violated(self):
+        """Bear swing rejected when a bar between L and H has a higher high."""
+        from src.swing_analysis.swing_detector import _apply_protection_filter, _build_suffix_max, _build_suffix_min
+        import numpy as np
+
+        # Bear swing: low at index 1, high at index 5
+        # But there's a higher high at index 3 (130) that exceeds the swing high (120)
+        highs = np.array([100, 90, 100, 130, 115, 120, 115], dtype=np.float64)  # Higher high at idx 3
+        lows = np.array([95, 80, 95, 120, 110, 110, 105], dtype=np.float64)
+
+        suffix_max_highs = _build_suffix_max(highs)
+        suffix_min_lows = _build_suffix_min(lows)
+
+        # Bear swing: low at index 1 (80), high at index 5 (120)
+        # The high at index 3 (130) is higher than the swing's high (120)
+        references = [{
+            'high_price': 120.0,
+            'high_bar_index': 5,
+            'low_price': 80.0,
+            'low_bar_index': 1,
+            'size': 40.0
+        }]
+
+        filtered = _apply_protection_filter(
+            references, 'bear', highs, lows, 0.1,
+            suffix_max_highs, suffix_min_lows
+        )
+
+        # Should be filtered: the higher high at idx 3 violates the defended pivot
+        self.assertEqual(len(filtered), 0,
+            "Bear swing should be rejected when a higher high exists between origin and pivot")
+
+    def test_protection_filter_bear_pre_formation_defended_pivot_ok(self):
+        """Bear swing kept when no bar between L and H has a higher high."""
+        from src.swing_analysis.swing_detector import _apply_protection_filter, _build_suffix_max, _build_suffix_min
+        import numpy as np
+
+        # Bear swing: low at index 1, high at index 5
+        # All highs between are lower than the swing high
+        highs = np.array([100, 85, 95, 105, 115, 125, 120], dtype=np.float64)  # All highs <= swing high
+        lows = np.array([95, 80, 90, 100, 110, 115, 110], dtype=np.float64)
+
+        suffix_max_highs = _build_suffix_max(highs)
+        suffix_min_lows = _build_suffix_min(lows)
+
+        # Bear swing: low at index 1 (80), high at index 5 (125)
+        references = [{
+            'high_price': 125.0,
+            'high_bar_index': 5,
+            'low_price': 80.0,
+            'low_bar_index': 1,
+            'size': 45.0
+        }]
+
+        filtered = _apply_protection_filter(
+            references, 'bear', highs, lows, 0.1,
+            suffix_max_highs, suffix_min_lows
+        )
+
+        # Should be kept: all intermediate highs are <= swing high
+        self.assertEqual(len(filtered), 1,
+            "Bear swing should be kept when no higher high exists between origin and pivot")
+
 
 class TestFindContainingSwing(unittest.TestCase):
     """Test suite for find_containing_swing function (Phase 3)."""

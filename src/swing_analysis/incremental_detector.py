@@ -290,27 +290,41 @@ def _check_pre_formation_protection(
     """
     Check pre-formation protection for a swing pair.
 
-    For bull swing (high before low): highs between high_idx and low_idx
-    must not exceed high_price significantly.
+    For bull swing (high before low):
+    - Highs between high_idx and low_idx must not exceed high_price (origin protection)
+    - Lows between high_idx and low_idx must not undercut low_price (defended pivot protection)
 
-    For bear swing (low before high): lows between low_idx and high_idx
-    must not go below low_price significantly.
+    For bear swing (low before high):
+    - Lows between low_idx and high_idx must not undercut low_price (origin protection)
+    - Highs between low_idx and high_idx must not exceed high_price (defended pivot protection)
     """
     if direction == 'bull':
         high_price = highs[high_idx]
-        swing_range = high_price - lows[low_idx]
-        threshold = high_price + tolerance * swing_range
+        low_price = lows[low_idx]
+        swing_range = high_price - low_price
+        origin_threshold = high_price + tolerance * swing_range
+        pivot_threshold = low_price - tolerance * swing_range
 
         for i in range(high_idx + 1, low_idx):
-            if highs[i] > threshold:
+            # Check origin (high) not exceeded
+            if highs[i] > origin_threshold:
+                return False
+            # Check defended pivot (low) not undercut
+            if lows[i] < pivot_threshold:
                 return False
     else:
+        high_price = highs[high_idx]
         low_price = lows[low_idx]
-        swing_range = highs[high_idx] - low_price
-        threshold = low_price - tolerance * swing_range
+        swing_range = high_price - low_price
+        origin_threshold = low_price - tolerance * swing_range
+        pivot_threshold = high_price + tolerance * swing_range
 
         for i in range(low_idx + 1, high_idx):
-            if lows[i] < threshold:
+            # Check origin (low) not undercut
+            if lows[i] < origin_threshold:
+                return False
+            # Check defended pivot (high) not exceeded
+            if highs[i] > pivot_threshold:
                 return False
 
     return True
