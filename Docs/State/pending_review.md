@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-17
 
@@ -12,6 +12,7 @@
 - **#113** — Backend-controlled data boundary: playback_index in AppState, /api/bars respects boundary
 - **#114** — Fix Replay View v2 playback regressions (explanation panel, event/scale filtering, bar counter UI)
 - **#115** — Replay View v2 usability improvements (Escape to dismiss, scale filters in sidebar, bar counter)
+- **#117** — Four usability fixes: remove yellow pointer, preserve zoom, swing invalidation context, speed aggregation
 
 ---
 
