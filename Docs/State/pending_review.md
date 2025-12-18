@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2025-12-17
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#130 regression fix** — Fix navigation to use swings_by_scale instead of active_swings_by_scale
 - **#130** — Decouple swing navigation from display count; navigation now cycles through all swings for enabled scales
 - **#131** — Add stats panel toggle and fix swing H/L markers during playback
 - **#133** — Add self-referential separation for XL scale swings (reduced 17 redundant swings to 5)
