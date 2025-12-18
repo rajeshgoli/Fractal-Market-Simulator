@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { PlaybackState, BarData } from '../types';
+import { PlaybackState, BarData, FilterState, SwingScaleKey } from '../types';
 import { advanceReplay, ReplayEvent, ReplaySwingState } from '../lib/api';
 import { LINGER_DURATION_MS } from '../constants';
 
@@ -7,6 +7,8 @@ interface UseForwardPlaybackOptions {
   calibrationBarCount: number;
   calibrationBars: BarData[];
   playbackIntervalMs: number;
+  filters: FilterState[];  // Event type filters
+  enabledScales: Set<SwingScaleKey>;  // Scale filters
   onNewBars?: (bars: BarData[]) => void;
   onSwingStateChange?: (state: ReplaySwingState) => void;
   onRefreshAggregatedBars?: () => void;  // Called after advance to refresh chart bars
@@ -46,6 +48,8 @@ export function useForwardPlayback({
   calibrationBarCount,
   calibrationBars,
   playbackIntervalMs,
+  filters,
+  enabledScales,
   onNewBars,
   onSwingStateChange,
   onRefreshAggregatedBars,
@@ -190,6 +194,34 @@ export function useForwardPlayback({
     showCurrentEventRef.current();
   }, [clearTimers]);
 
+  // Filter events based on event type and scale filters
+  const filterEvents = useCallback((events: ReplayEvent[]): ReplayEvent[] => {
+    // Get enabled event types from filters
+    const enabledEventTypes = new Set(
+      filters.filter(f => f.isEnabled).map(f => f.id)
+    );
+
+    return events.filter(event => {
+      // Check event type filter
+      // Map backend event types to frontend types
+      let eventType = event.type;
+      if (eventType === 'SWING_INVALIDATED') eventType = 'INVALIDATION' as typeof event.type;
+      if (eventType === 'SWING_COMPLETED') eventType = 'COMPLETION' as typeof event.type;
+
+      if (!enabledEventTypes.has(eventType)) {
+        return false;
+      }
+
+      // Check scale filter
+      const eventScale = event.scale as SwingScaleKey;
+      if (!enabledScales.has(eventScale)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [filters, enabledScales]);
+
   // Advance one bar (call API)
   const advanceBar = useCallback(async () => {
     if (endOfData || advancePendingRef.current) return;
@@ -232,11 +264,16 @@ export function useForwardPlayback({
       setCurrentSwingState(response.swing_state);
       onSwingStateChange?.(response.swing_state);
 
-      // Accumulate events for navigation
+      // Accumulate all events for navigation history (unfiltered)
       if (response.events.length > 0) {
         setAllEvents(prev => [...prev, ...response.events]);
-        // Trigger linger
-        enterLinger(response.events);
+      }
+
+      // Filter events for linger based on event type and scale filters
+      const filteredEvents = filterEvents(response.events);
+      if (filteredEvents.length > 0) {
+        // Trigger linger only for filtered events
+        enterLinger(filteredEvents);
       }
     } catch (err) {
       console.error('Failed to advance replay:', err);
@@ -245,7 +282,7 @@ export function useForwardPlayback({
     } finally {
       advancePendingRef.current = false;
     }
-  }, [calibrationBarCount, currentPosition, endOfData, clearTimers, enterLinger, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
+  }, [calibrationBarCount, currentPosition, endOfData, clearTimers, enterLinger, filterEvents, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
 
   // Ref to hold the latest advanceBar function
   const advanceBarRef = useRef<() => Promise<void>>(async () => {});
@@ -437,13 +474,14 @@ export function useForwardPlayback({
       setVisibleBars(newVisibleBars);
       setCurrentPosition(targetBarIndex);
 
-      // Find events at this bar for linger display
+      // Find events at this bar for linger display (filtered)
       const eventsAtBar = allEvents.filter(e => e.bar_index === targetBarIndex);
-      if (eventsAtBar.length > 0) {
-        enterLinger(eventsAtBar);
+      const filteredEventsAtBar = filterEvents(eventsAtBar);
+      if (filteredEventsAtBar.length > 0) {
+        enterLinger(filteredEventsAtBar);
       }
     }
-  }, [allEvents, currentEventIndex, currentPosition, playbackState, exitLinger, clearTimers, calibrationBars, enterLinger]);
+  }, [allEvents, currentEventIndex, currentPosition, playbackState, exitLinger, clearTimers, calibrationBars, enterLinger, filterEvents]);
 
   // Jump to next event (advance until an event occurs)
   const jumpToNextEvent = useCallback(async () => {
@@ -515,10 +553,15 @@ export function useForwardPlayback({
         setCurrentSwingState(response.swing_state);
         onSwingStateChange?.(response.swing_state);
 
-        // Check for events
+        // Accumulate all events for navigation history
         if (response.events.length > 0) {
           setAllEvents(prev => [...prev, ...response.events]);
-          enterLinger(response.events);
+        }
+
+        // Check for filtered events (only linger on events matching filters)
+        const filteredEvents = filterEvents(response.events);
+        if (filteredEvents.length > 0) {
+          enterLinger(filteredEvents);
           foundEvent = true;
         }
       } catch (err) {
@@ -528,7 +571,7 @@ export function useForwardPlayback({
     }
 
     advancePendingRef.current = false;
-  }, [endOfData, playbackState, exitLinger, clearTimers, calibrationBarCount, currentPosition, enterLinger, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
+  }, [endOfData, playbackState, exitLinger, clearTimers, calibrationBarCount, currentPosition, enterLinger, filterEvents, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -3,7 +3,6 @@ export enum EventType {
   COMPLETION = 'COMPLETION',
   INVALIDATION = 'INVALIDATION',
   LEVEL_CROSS = 'LEVEL_CROSS',
-  SWING_TERMINATED = 'SWING_TERMINATED',
 }
 
 export enum SwingScale {

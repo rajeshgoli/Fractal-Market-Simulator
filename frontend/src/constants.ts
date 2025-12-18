@@ -28,12 +28,6 @@ export const INITIAL_FILTERS: FilterState[] = [
     description: 'Price crossed key Fib level (off by default - too frequent)',
     isEnabled: false
   },
-  {
-    id: EventType.SWING_TERMINATED,
-    label: 'Swing Terminated',
-    description: 'Swing ended logic (off by default - redundant)',
-    isEnabled: false
-  },
 ];
 
 // Speed multipliers: how many aggregated bars per second at the selected aggregation

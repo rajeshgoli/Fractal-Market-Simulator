@@ -8,7 +8,7 @@ import { ExplanationPanel } from '../components/ExplanationPanel';
 import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
-import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings, fetchSession, fetchDetectedSwings, fetchCalibration } from '../lib/api';
+import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings, fetchSession, fetchDetectedSwings, fetchCalibration, ReplayEvent } from '../lib/api';
 import { INITIAL_FILTERS, LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
@@ -27,6 +27,7 @@ import {
   SwingDisplayConfig,
   SwingScaleKey,
   DEFAULT_SWING_DISPLAY_CONFIG,
+  SwingData,
 } from '../types';
 import { useSwingDisplay } from '../hooks/useSwingDisplay';
 
@@ -93,6 +94,55 @@ function calibrationSwingToDetected(swing: CalibrationSwing, rank: number = 1): 
     fib_0382: swing.fib_0382,
     fib_1: swing.fib_1,
     fib_2: swing.fib_2,
+  };
+}
+
+/**
+ * Convert a ReplayEvent to SwingData for the explanation panel.
+ * This allows forward playback events to display swing details.
+ */
+function replayEventToSwingData(event: ReplayEvent, sourceBars: BarData[]): SwingData | null {
+  if (!event.swing) return null;
+
+  const swing = event.swing;
+
+  // Get timestamps from source bars if available
+  const highBar = sourceBars[swing.high_bar_index];
+  const lowBar = sourceBars[swing.low_bar_index];
+
+  const formatTimestamp = (bar: BarData | undefined): string => {
+    if (!bar) return '';
+    try {
+      const d = new Date(bar.timestamp * 1000);
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  // Calculate size percentage (relative to average of H/L)
+  const avgPrice = (swing.high_price + swing.low_price) / 2;
+  const sizePct = avgPrice > 0 ? (swing.size / avgPrice) * 100 : 0;
+
+  return {
+    id: swing.id,
+    scale: swing.scale,
+    direction: swing.direction.toLowerCase(),
+    highPrice: swing.high_price,
+    highBar: swing.high_bar_index,
+    highTime: formatTimestamp(highBar),
+    lowPrice: swing.low_price,
+    lowBar: swing.low_bar_index,
+    lowTime: formatTimestamp(lowBar),
+    size: swing.size,
+    sizePct,
+    // Note: scaleReason, isAnchor, and separation are not available in ReplayEvent
+    // These are calibration-specific fields
   };
 }
 
@@ -212,6 +262,8 @@ export const Replay: React.FC = () => {
     calibrationBarCount: calibrationData?.calibration_bar_count || 10000,
     calibrationBars,
     playbackIntervalMs: effectivePlaybackIntervalMs,
+    filters,
+    enabledScales: displayConfig.enabledScales,
     onNewBars: useCallback((newBars: BarData[]) => {
       // Append new bars to source bars for chart display
       setSourceBars(prev => [...prev, ...newBars]);
@@ -264,6 +316,16 @@ export const Replay: React.FC = () => {
     if (!currentActiveSwing) return undefined;
     return calibrationSwingToDetected(currentActiveSwing, 1);
   }, [currentActiveSwing]);
+
+  // Compute current swing for explanation panel based on calibration phase
+  const currentExplanationSwing = useMemo((): SwingData | null => {
+    if (calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.lingerEvent) {
+      // Convert ReplayEvent to SwingData for forward playback
+      return replayEventToSwingData(forwardPlayback.lingerEvent, sourceBars);
+    }
+    // Fall back to legacy playback swing
+    return playback.currentSwing;
+  }, [calibrationPhase, forwardPlayback.lingerEvent, playback.currentSwing, sourceBars]);
 
   // Navigation functions for active swing cycling
   const navigatePrevActiveSwing = useCallback(() => {
@@ -916,7 +978,7 @@ export const Replay: React.FC = () => {
           {/* Explanation Panel / Calibration Report */}
           <div className="h-48 md:h-56 shrink-0">
             <ExplanationPanel
-              swing={playback.currentSwing}
+              swing={currentExplanationSwing}
               previousSwing={playback.previousSwing}
               calibrationPhase={calibrationPhase}
               calibrationData={calibrationData}
