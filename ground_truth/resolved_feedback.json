@@ -1,0 +1,393 @@
+{
+  "schema_version": 1,
+  "description": "Observations that have been debugged and either fixed or have issues filed",
+  "resolved_observations": [
+    {
+      "original_session_id": "7cd0e92f-72b1-40ba-8772-2a3cf880f98b",
+      "observation_id": "5fed7497-7849-4e23-8cd7-3bada4bfdd9f",
+      "created_at": "2025-12-18T03:04:04.646305+00:00",
+      "playback_bar": 10011,
+      "event_context": {
+        "event_type": "SWING_FORMED",
+        "scale": "M",
+        "swing": {
+          "high_bar_index": 9163,
+          "low_bar_index": 8119,
+          "high_price": "2191.5",
+          "low_price": "2169.25",
+          "direction": "bear"
+        },
+        "detection_bar_index": 10000
+      },
+      "text": "Why did the swing get detected here. Price traded 0.382 from high 24 Aug 16 02:00.",
+      "resolution": {
+        "status": "fixed",
+        "issue": null,
+        "notes": "Fixed - calibration swings were not being filtered during playback"
+      }
+    },
+    {
+      "original_session_id": "7cd0e92f-72b1-40ba-8772-2a3cf880f98b",
+      "observation_id": "bec8f3bf-9317-4db4-8987-5e99a6d64208",
+      "created_at": "2025-12-18T03:06:44.113993+00:00",
+      "playback_bar": 10011,
+      "event_context": {
+        "event_type": "SWING_FORMED",
+        "scale": "M",
+        "swing": {
+          "high_bar_index": 9163,
+          "low_bar_index": 5697,
+          "high_price": "2191.5",
+          "low_price": "2159.75",
+          "direction": "bear"
+        },
+        "detection_bar_index": 10001
+      },
+      "text": "This low seems oddly chosen. Why did this low exist for this to pair with? I don't see a separation data shown to judge this. Even assuming the pairing is right, which doesn't seem right because of poor low choice, 0.382 was traded on 24 Aug 16 13:25. Why did this get detected here?",
+      "resolution": {
+        "status": "fixed",
+        "issue": null,
+        "notes": "Same fix as above - calibration swings not being filtered during playback"
+      }
+    },
+    {
+      "original_session_id": "b9884c91-c8eb-40d7-9946-54fcfc6b1eda",
+      "observation_id": "2e4bf615-e2e4-4c67-9bf9-df305c871bb1",
+      "created_at": "2025-12-18T05:53:33.586942+00:00",
+      "playback_bar": 10635,
+      "event_context": {
+        "event_type": "SWING_COMPLETED",
+        "scale": "M",
+        "swing": {
+          "high_bar_index": 10134,
+          "low_bar_index": 10397,
+          "high_price": "4760",
+          "low_price": "4732.75",
+          "direction": "bull"
+        },
+        "detection_bar_index": 10626
+      },
+      "text": "Why is this low used? If you see the structure after H is put in, L occurs at 8 Jan 24 3:35, this L is much higher than it. Furthermore, by this time, we're over 2x of teh swing. Why is it being detected here?",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#126 (get_level_band bug)",
+        "notes": "Root cause: get_level_band() returns -999 for all prices, breaking redundancy filter"
+      }
+    },
+    {
+      "original_session_id": "b9884c91-c8eb-40d7-9946-54fcfc6b1eda",
+      "observation_id": "b5222a59-ceef-4a16-9f73-c031235d5a6d",
+      "created_at": "2025-12-18T05:55:05.828290+00:00",
+      "playback_bar": 10635,
+      "event_context": {
+        "event_type": "SWING_COMPLETED",
+        "scale": "M",
+        "swing": {
+          "high_bar_index": 10134,
+          "low_bar_index": 10397,
+          "high_price": "4760",
+          "low_price": "4732.75",
+          "direction": "bull"
+        },
+        "detection_bar_index": 10626
+      },
+      "text": "During calibration only one XL swing was detected But I see some obvious swings like 20 Dec 23 swing high to swing low. That swing low also put in a high 28 Dec 23 whose 0382 was crossed 2 Jan. Why weren't these detected and used?",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#126 (get_level_band bug)",
+        "notes": "Root cause: get_level_band() checks levels[0].price (highest) instead of lowest, returns -999 for all prices, causing all swings to be filtered as redundant"
+      }
+    },
+    {
+      "original_session_id": "b9884c91-c8eb-40d7-9946-54fcfc6b1eda",
+      "observation_id": "e0f3c03e-6909-4b3b-8a35-eaa0be837fe9",
+      "created_at": "2025-12-18T05:57:21.278358+00:00",
+      "playback_bar": 10695,
+      "event_context": {
+        "event_type": "SWING_FORMED",
+        "scale": "M",
+        "swing": {
+          "high_bar_index": 10505,
+          "low_bar_index": 10681,
+          "high_price": "4798.75",
+          "low_price": "4767.5",
+          "direction": "bull"
+        },
+        "detection_bar_index": 10686
+      },
+      "text": "9 swings are found here, where 7 of them have highs that are not meaningfully separated, why? Also note that the real swing high is not used here. Why?",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#126 (get_level_band bug)",
+        "notes": "Same root cause - swings with similar highs not filtered as redundant due to get_level_band bug"
+      }
+    },
+    {
+      "original_session_id": "b9884c91-c8eb-40d7-9946-54fcfc6b1eda",
+      "observation_id": "6d75a170-1b27-4647-b17d-467f86bc36ba",
+      "created_at": "2025-12-18T05:58:15.862444+00:00",
+      "playback_bar": 10707,
+      "event_context": {
+        "event_type": "SWING_FORMED",
+        "scale": "M",
+        "swing": {
+          "high_bar_index": 10479,
+          "low_bar_index": 10695,
+          "high_price": "4803.25",
+          "low_price": "4775.75",
+          "direction": "bull"
+        },
+        "detection_bar_index": 10700
+      },
+      "text": "Now we see the real swing high being used, but note how it doesn't use the lowest point since the swing high. even though its 0.382 will also have been breached. Why?",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#128",
+        "notes": "Root cause: incremental detector creates duplicate swings for same high with different lows without deduplication"
+      }
+    },
+    {
+      "original_session_id": "2dffc98c-874d-4ea6-b91b-43af53e4d03d",
+      "observation_id": "89e68f45-d75a-4111-9bd7-d38596fbc140",
+      "created_at": "2025-12-18T16:24:01.584224+00:00",
+      "playback_bar": 9999,
+      "event_context": {
+        "state": "calibration_complete",
+        "window_offset": 1172207,
+        "bars_since_calibration": -1,
+        "current_bar_index": 9999,
+        "calibration_bar_count": 10000,
+        "swings_found": {
+          "XL": 17,
+          "L": 10,
+          "M": 3,
+          "S": 6
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0
+      },
+      "text": "3rd swing uses an impulse high (good!) which is lower than the high available after it. BUt it uses the poorer low from the 2nd XL swing. Why not use the best low available? I'm also dubious this pairing makes sense once we have a better high available. The impulse high level may be useful so in this case maybe we need to preserve the level and don't necessarily need the full swing.",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#135",
+        "notes": "Bug in price range check. Code requires current_price < 0.382 level, but correct rule is: (1) current_price in [0, 2x] range, (2) 0.382 historically breached after swing formed. Pairing (L@5145, H@7255) filtered because 4732.50 > 4723.98, even though 0.382 was historically breached. Different from #133 (separation)."
+      }
+    },
+    {
+      "original_session_id": "2dffc98c-874d-4ea6-b91b-43af53e4d03d",
+      "observation_id": "97c5c021-119d-4512-a2f4-92763d5b32bd",
+      "created_at": "2025-12-18T16:24:44.160399+00:00",
+      "playback_bar": 9999,
+      "event_context": {
+        "state": "calibration_complete",
+        "window_offset": 1172207,
+        "bars_since_calibration": -1,
+        "current_bar_index": 9999,
+        "calibration_bar_count": 10000,
+        "swings_found": {
+          "XL": 17,
+          "L": 10,
+          "M": 3,
+          "S": 6
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0
+      },
+      "text": "4th XL swing uses a much worse low than 1 or 2 XL swing. I can't explain why this would be chosen. No separation even at 5 min chart.",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#133",
+        "notes": "Same as #133 - XL separation issue. Swing #4 (L@5207) has only 0.137 FIB separation from swing #1 (L@4869), sharing the same high (H@8597). The worse low exists because algorithm creates ALL valid L-H pairings without enforcing FIB separation between swings."
+      }
+    },
+    {
+      "original_session_id": "2dffc98c-874d-4ea6-b91b-43af53e4d03d",
+      "observation_id": "e0afb6bf-581b-442e-900b-8de72fdd3d9c",
+      "created_at": "2025-12-18T16:25:40.999754+00:00",
+      "playback_bar": 9999,
+      "event_context": {
+        "state": "calibration_complete",
+        "window_offset": 1172207,
+        "bars_since_calibration": -1,
+        "current_bar_index": 9999,
+        "calibration_bar_count": 10000,
+        "swings_found": {
+          "XL": 17,
+          "L": 10,
+          "M": 3,
+          "S": 6
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0
+      },
+      "text": "5th XL swing uses a worse H and a L. There were 2 better Hs made after this (this H has been violated). there are 2 good Ls before the L that are lower and still meet all the criteria. This is not impulsive either. Why keep a swing like this?",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#133",
+        "notes": "Same as #133. Swing #5 (L@5395, H@7381) has 0.147 FIB low separation, 0.049 FIB high separation. Better endpoints exist but without separation enforcement, worse pairings pass through."
+      }
+    },
+    {
+      "original_session_id": "2dffc98c-874d-4ea6-b91b-43af53e4d03d",
+      "observation_id": "aa95c3f6-ab22-46a9-b311-567a96b968bd",
+      "created_at": "2025-12-18T16:26:42.378736+00:00",
+      "playback_bar": 9999,
+      "event_context": {
+        "state": "calibration_complete",
+        "window_offset": 1172207,
+        "bars_since_calibration": -1,
+        "current_bar_index": 9999,
+        "calibration_bar_count": 10000,
+        "swings_found": {
+          "XL": 17,
+          "L": 10,
+          "M": 3,
+          "S": 6
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0
+      },
+      "text": "#6 XL swing uses some random L that's after the Ls of 1,2,3 swings. H is also a worse H, it's before the highest H and after the impulse H and not meaninfgully separated from either. Seems completely random.",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#133",
+        "notes": "Same as #133. Swing #6 (L@5470, H@8585) has 0.190 FIB low separation, 0.007 FIB high separation. Algorithm doesn't select 'best' endpoint - it accepts all valid pairings. Proper separation enforcement would filter these near-duplicates."
+      }
+    },
+    {
+      "original_session_id": "2dffc98c-874d-4ea6-b91b-43af53e4d03d",
+      "observation_id": "c78d0405-bc5b-48a6-8b7d-f095122f8755",
+      "created_at": "2025-12-18T16:21:04.962624+00:00",
+      "playback_bar": 9999,
+      "event_context": {
+        "state": "calibration_complete",
+        "window_offset": 1172207,
+        "bars_since_calibration": -1,
+        "current_bar_index": 9999,
+        "calibration_bar_count": 10000,
+        "swings_found": {
+          "XL": 17,
+          "L": 10,
+          "M": 3,
+          "S": 6
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0
+      },
+      "text": "I take my observation about first swing back, when I see in the 5m data, the low is meaningfully separated (it is impulsive, while the lower lows below it are not).",
+      "resolution": {
+        "status": "retracted",
+        "issue": null,
+        "notes": "User corrected themselves after reviewing 5m data - the low IS meaningfully separated. No issue."
+      }
+    },
+    {
+      "original_session_id": "2dffc98c-874d-4ea6-b91b-43af53e4d03d",
+      "observation_id": "8e9ddeed-9ce2-46da-8f37-a55bd5f6e3c0",
+      "created_at": "2025-12-18T16:22:01.350435+00:00",
+      "playback_bar": 9999,
+      "event_context": {
+        "state": "calibration_complete",
+        "window_offset": 1172207,
+        "bars_since_calibration": -1,
+        "current_bar_index": 9999,
+        "calibration_bar_count": 10000,
+        "swings_found": {
+          "XL": 17,
+          "L": 10,
+          "M": 3,
+          "S": 6
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0
+      },
+      "text": "2nd XL swing, this is definitely not 1FIB away if we take the biggest one we detected as valid swing. Should this be a XL reference swing at all?",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#133",
+        "notes": "Same as #133. Swing #2 (L@5156) has only 0.063 FIB separation from swing #1 (L@4869). Already cited in #133 issue description."
+      }
+    },
+    {
+      "original_session_id": "f944831b-5338-4f7c-9728-baaa8b5f5ead",
+      "observation_id": "a2f2431c-1199-4316-b441-8a56292d791f",
+      "created_at": "2025-12-18T16:10:16.782556+00:00",
+      "playback_bar": 9999,
+      "event_context": {
+        "state": "calibration_complete",
+        "window_offset": 1172207,
+        "bars_since_calibration": -1,
+        "current_bar_index": 9999,
+        "calibration_bar_count": 10000,
+        "swings_found": {
+          "XL": 17,
+          "L": 10,
+          "M": 3,
+          "S": 6
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0
+      },
+      "text": "I'm reviewing the calibration results and noticing that the largest XL swing is not detecting the structural low. This appears to be because the 0.382 level was not crossed, assuming that threshold is being enforced. However, the move comes very close. If you look a few candles to the left, there is a slightly lower low, but it is not meaningfully separated at this scale.\n\nOne option would be to relax the requirement so that a 0.286 Fibonacci level qualifies at the XL scale. That would allow larger swings to be detected earlier. However, the more important rule to enforce is structural separation: if a low (or high) is not meaningfully separated from nearby lows (or highs) at the same scale, it should not be used as a reference swing, regardless of whether a specific Fibonacci threshold is marginally met.",
+      "resolution": {
+        "status": "retracted",
+        "issue": null,
+        "notes": "User retracted in next session (c78d0405): 'I take my observation about first swing back, when I see in the 5m data, the low is meaningfully separated (it is impulsive, while the lower lows below it are not).'"
+      }
+    },
+    {
+      "original_session_id": "eb3ca970-15ce-4c21-a6a5-9d677a23289c",
+      "observation_id": "7b1f06a3-5c00-4c85-ba7a-ba901d6c514e",
+      "created_at": "2025-12-18T19:54:21.237725+00:00",
+      "playback_bar": 9999,
+      "event_context": {
+        "state": "calibration_complete",
+        "window_offset": 1172207,
+        "bars_since_calibration": -1,
+        "current_bar_index": 9999,
+        "calibration_bar_count": 10000,
+        "swings_found": {
+          "XL": 2,
+          "L": 0,
+          "M": 0,
+          "S": 0
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0
+      },
+      "text": "Looking at the biggest XL swing here, I'm not sure if recursive find the best L has been applied as described in #136. There are other Ls that are adjacent to it that are better. Shouldn't there be a candidate reference swing with L arond 4541?",
+      "resolution": {
+        "status": "addressed",
+        "issue": null,
+        "notes": "XL swing L endpoint selection issue - addressed separately per user confirmation"
+      }
+    },
+    {
+      "original_session_id": "a63889d8-b3a6-4fa6-a0e6-d50c39ced31e",
+      "observation_id": "e67691cf-bbc8-453b-a8e8-e07eea0ae6bf",
+      "created_at": "2025-12-18T17:41:36.178187+00:00",
+      "playback_bar": 9999,
+      "event_context": {
+        "state": "calibration_complete",
+        "window_offset": 1172207,
+        "bars_since_calibration": -1,
+        "current_bar_index": 9999,
+        "calibration_bar_count": 10000,
+        "swings_found": {
+          "XL": 5,
+          "L": 2,
+          "M": 1,
+          "S": 2
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0
+      },
+      "text": "Looking at the 2nd XL swing now, I don't see anything prominent about either the high or the low. The high is a worse one, it has been breached since, it is not near an impulse. The low similarly is unremarkable",
+      "resolution": {
+        "status": "issue_filed",
+        "issue": "#136, #137",
+        "notes": "Diagnosed: High at bar 7167 (4821.50) was breached by bar 8597 (4841.50) but survived due to 10% tolerance. Low at bar 5506 (4619.25) is not the best - lower low at 4599.75 exists 73 bars earlier. Root cause: (1) protection tolerance applies too broadly, (2) no 'best endpoint' selection. #136 restricts tolerance to established anchors and adds endpoint optimization. #137 extends tolerance to impulse highs (future)."
+      }
+    }
+  ]
+}

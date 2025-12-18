@@ -73,18 +73,19 @@ Your defining skill is **judgment**: making these delicate tradeoffs precisely, 
 ## Workflow
 
 1. **Read**: GitHub issues marked for review OR `Docs/State/product_direction.md`
-2. **Evaluate**: Is this the right change? Is there a simpler way?
-3. **Fitness Check**: Does this work serve the stated Product objective?
-4. **Documentation Check**:
+2. **Checklist**: Run through Review Checklist in `architect_notes.md` (especially checks 1-4 for swing_analysis)
+3. **Evaluate**: Is this the right change? Is there a simpler way?
+4. **Fitness Check**: Does this work serve the stated Product objective?
+5. **Documentation Check**:
    - Verify `Docs/Reference/user_guide.md` and `Docs/Reference/developer_guide.md` are current. Call out discrepancies.
    - Update "Known debt" in `architect_notes.md` if debt identified or resolved
    - Verify "Core architectural decisions" in `architect_notes.md` still reflect reality
-5. **Decide**: Accepted / Accepted with notes / Requires follow-up / Blocked
-6. **Update `Docs/State/architect_notes.md`**: ALWAYS rewrite as forward-looking
-7. **Reset `Docs/State/pending_review.md`**: Set count to 0
-8. **Determine Owner(s) and Parallelism**: See Handoff section below
-9. **Communicate**: Create GitHub issue for Engineer, or add to `Docs/Comms/questions.md` for Product
-10. **Output**: Review summary with explicit handoff instructions
+6. **Decide**: Accepted / Accepted with notes / Requires follow-up / Blocked
+7. **Update `Docs/State/architect_notes.md`**: ALWAYS rewrite as forward-looking
+8. **Reset `Docs/State/pending_review.md`**: Set count to 0
+9. **Determine Owner(s) and Parallelism**: See Handoff section below
+10. **Communicate**: Create GitHub issue for Engineer, or add to `Docs/Comms/questions.md` for Product
+11. **Output**: Review summary with explicit handoff instructions
 
 ## Handoff Instructions
 

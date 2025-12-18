@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "description": "Feedback items currently under investigation - do not duplicate investigation efforts",
+  "investigating": [
+    {
+      "original_session_id": "4d6a84af-1a77-4078-a6a2-9343c0de22bc",
+      "investigation_started": "2025-12-18T20:30:00+00:00",
+      "issue_summary": "Bull swings formed with pre-violated and post-violated lows",
+      "github_issues": ["#140 (architectural fix - do first)", "#139 (specific bug)"],
+      "observations": [
+        {
+          "observation_id": "dba85ac9-cb71-4b96-8cf0-0083b2447bd3",
+          "created_at": "2025-12-18T20:23:18.443422+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 10022,
+                "low_bar_index": 10106,
+                "high_price": "4731.75",
+                "low_price": "4712.75",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10111
+            }
+          },
+          "text": "This swing is wrong. There's a H followed by a L. But that L was immediately violated. This can't be a valid bull range as it's L has been violated."
+        },
+        {
+          "observation_id": "4aef82b5-daf3-417e-b7d3-7b19a6f2ca09",
+          "created_at": "2025-12-18T20:23:44.648411+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 10040,
+                "low_bar_index": 10106,
+                "high_price": "4728.25",
+                "low_price": "4712.75",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10111
+            }
+          },
+          "text": "Same feedback as previous. This can't be a valid range as chosen L has been violated."
+        },
+        {
+          "observation_id": "7b2c3c0f-bfd5-4ede-9e09-6f026f27b50e",
+          "created_at": "2025-12-18T20:24:15.109367+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_INVALIDATED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 10051,
+                "low_bar_index": 10106,
+                "high_price": "4728.5",
+                "low_price": "4712.75",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10112
+            }
+          },
+          "text": "Until here all the swings detected have the same L. This L has been violated."
+        }
+      ],
+      "investigation_notes": "See GitHub issue for detailed diagnosis. Key findings: (1) Pre-formation check only validates HIGH wasn't violated, not LOW. (2) Multiple swings share same low_bar_index 10106 with low_price 4712.75. (3) Bar 10092 has lower low (4711.25) BEFORE the claimed low - pre-violation. (4) Bar 10115 has low 4702 AFTER formation - post-violation. (5) Only one swing (high 10051) was invalidated, but swings with high 10022 and 10040 were NOT invalidated."
+    }
+  ]
+}

@@ -1,0 +1,343 @@
+{
+  "schema_version": 1,
+  "playback_sessions": [
+    {
+      "session_id": "4d6a84af-1a77-4078-a6a2-9343c0de22bc",
+      "data_file": "test_data/es-5m.csv",
+      "offset": 1172207,
+      "started_at": "2025-12-18T20:23:18.442243+00:00",
+      "observations": [
+        {
+          "observation_id": "88f68e9d-4cbe-41d1-96fc-245a9bb70146",
+          "created_at": "2025-12-18T20:24:30.852510+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "L",
+              "swing": {
+                "high_bar_index": 9915,
+                "low_bar_index": 10112,
+                "high_price": "4747",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "This is the first good swing I see detected in this set."
+        },
+        {
+          "observation_id": "5cae05ea-df3b-45b2-8ea4-4073d67783da",
+          "created_at": "2025-12-18T20:24:40.704165+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 9941,
+                "low_bar_index": 10112,
+                "high_price": "4736.5",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "This is ok too."
+        },
+        {
+          "observation_id": "589a3352-feff-4226-9c45-daf3c3f70947",
+          "created_at": "2025-12-18T20:25:10.803002+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 9956,
+                "low_bar_index": 10112,
+                "high_price": "4736",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "This is effectively the same H as the previous swing. Why hasn't recursive filtering for better 1 eliminated this? already?"
+        },
+        {
+          "observation_id": "bd14f500-1262-4417-9d23-0d6e7bc25ad3",
+          "created_at": "2025-12-18T20:25:28.195726+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 9965,
+                "low_bar_index": 10112,
+                "high_price": "4736.25",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "Same feedback as previous, the H is practically the same as previous ones."
+        },
+        {
+          "observation_id": "b52eac66-af21-4895-a07d-18df91ef880a",
+          "created_at": "2025-12-18T20:25:45.082956+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 10003,
+                "low_bar_index": 10112,
+                "high_price": "4735",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "Same comment as previous"
+        },
+        {
+          "observation_id": "1428ae89-dc2e-475b-8566-7432bd5ead6f",
+          "created_at": "2025-12-18T20:25:54.187037+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 10022,
+                "low_bar_index": 10112,
+                "high_price": "4731.75",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "Same comment -- no H separation."
+        },
+        {
+          "observation_id": "69a1de04-2a7b-4413-9496-bdb09e8ab233",
+          "created_at": "2025-12-18T20:26:07.830702+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 10040,
+                "low_bar_index": 10112,
+                "high_price": "4728.25",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "This H does have a separation."
+        },
+        {
+          "observation_id": "8b3546d2-0efd-4a8a-b50a-4b87658fc9b9",
+          "created_at": "2025-12-18T20:26:43.683770+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 10051,
+                "low_bar_index": 10112,
+                "high_price": "4728.5",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "This does have a spearation, but is virually the same swing as previous. If the H and the L are within 5% tolerance of an existing swing maybe it should be DUP-d."
+        },
+        {
+          "observation_id": "5fee2573-cf90-4620-b37c-67b7131c7ae3",
+          "created_at": "2025-12-18T20:27:00.642153+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 10062,
+                "low_bar_index": 10112,
+                "high_price": "4725",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "Reasonable swing, but again within 5% tolerance I think."
+        },
+        {
+          "observation_id": "633a58a6-a476-46be-b0da-b877bad13f9f",
+          "created_at": "2025-12-18T20:27:23.062402+00:00",
+          "playback_bar": 10119,
+          "event_context": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 119,
+            "current_bar_index": 10119,
+            "calibration_bar_count": 10000,
+            "swings_found": {
+              "XL": 2,
+              "L": 1,
+              "M": 11,
+              "S": 6
+            },
+            "swings_invalidated": 17,
+            "swings_completed": 26,
+            "event_context": {
+              "event_type": "SWING_FORMED",
+              "scale": "M",
+              "swing": {
+                "high_bar_index": 10109,
+                "low_bar_index": 10112,
+                "high_price": "4724",
+                "low_price": "4702",
+                "direction": "bull"
+              },
+              "detection_bar_index": 10117
+            }
+          },
+          "text": "This is a good swing. Nice impulse. See if there's anything on it that says impulsive to you."
+        }
+      ]
+    }
+  ]
+}

@@ -22,6 +22,7 @@ Read in order:
 
 **Known debt:**
 - `detect_swings()` function (~400 LOC) — monolithic; filter pipeline not extracted
+- **Bull/bear asymmetric branching (#140)** — 38+ instances of `if direction == 'bull'` that should use symmetric ReferenceFrame coordinates; same bug exists in both batch and incremental detectors
 
 **Cleanup tasks (deferred):**
 - Delete `Docs/Archive/Proposals/Discretization/` once discretization pipeline is complete and documented in user_guide + developer_guide
@@ -157,3 +158,41 @@ The `is_candidate=True` swings need downstream handling:
 | Dec 16 | #78, #79, #81, #82, #83 — Discretization overlay, validation | All Accepted |
 | Dec 16 | #73, #74, #75, #76, #77 — Discretization core | All Accepted |
 | Dec 16 | #68, #69, #70, #71 — Phase 3 + Architecture Overhaul | All Accepted |
+
+---
+
+## Review Checklist
+
+**Why this exists:** Bull/bear asymmetry (#140) went undetected through 40+ reviews. 38 instances accumulated.
+
+### Must Check (Every Review)
+
+1. **Symmetric Code Paths**
+   - If `if direction == 'bull':` exists, verify both branches do symmetric operations
+   - Red flag: bull checks `highs` but bear checks `lows` (or vice versa)
+
+2. **Abstraction Adoption**
+   - Does new code use existing abstractions (e.g., `ReferenceFrame`) or reinvent them?
+   - If bypassed, is there a documented reason?
+
+3. **Pattern Proliferation**
+   - How many instances of this pattern exist now?
+   - Threshold: >5 instances should trigger abstraction discussion
+
+4. **Direction-Specific Logic** (swing_analysis only)
+   - Any new `if swing.is_bull` or `if direction ==`?
+   - Can it use coordinate-based logic instead? (ratio < 0 vs checking prices)
+
+### Also Check
+
+5. **Duplicated Logic** — >50 lines of parallel code should be unified
+6. **Magic Numbers** — New thresholds need: what it represents, why this value, single source
+7. **Core Decisions** — Aligned with list above?
+8. **Known Debt** — Add new debt, remove resolved debt
+
+### Outcomes
+
+- **Accept** — All checks pass
+- **Accept with Notes** — Minor issues tracked in Known debt or follow-up issue
+- **Requires Follow-up** — Create GitHub issue before accepting
+- **Blocked** — Critical issue, must fix first
