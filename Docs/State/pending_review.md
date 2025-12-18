@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-17
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - **#130** — Decouple swing navigation from display count; navigation now cycles through all swings for enabled scales
+- **#131** — Add stats panel toggle and fix swing H/L markers during playback
 
 ---
 
