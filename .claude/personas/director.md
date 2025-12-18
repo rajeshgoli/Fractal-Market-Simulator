@@ -30,18 +30,26 @@ Other roles **must not** edit these files. They escalate process issues to Direc
 ┌──────────┐   product_direction.md    ┌───────────┐
 │ Product  │ ────────────────────────► │ Architect │
 └──────────┘                           └───────────┘
-     ▲                                       │
-     │ questions.md                          │ GitHub Issue
-     │                                       ▼
-     │                                 ┌───────────┐
-     └──────────────────────────────── │ Engineer  │
-              (via Architect)          └───────────┘
-                                             │
-                                             │ pending_review.md
-                                             ▼
-                                       ┌───────────┐
-                                       │ Architect │ (review)
-                                       └───────────┘
+     │                                       │
+     │ GitHub Issue                          │ GitHub Issue
+     │ (UX/usability fixes)                  │ (technical work)
+     │                                       │
+     ▼                                       ▼
+┌─────────────────────────────────────────────────┐
+│                    Engineer                      │
+└─────────────────────────────────────────────────┘
+                       │
+                       │ pending_review.md
+                       ▼
+                 ┌───────────┐
+                 │ Architect │ (review)
+                 └───────────┘
+                       │
+                       │ questions.md
+                       ▼
+                 ┌───────────┐
+                 │ Product   │
+                 └───────────┘
 
 ┌──────────┐
 │ Director │ ◄─── Process issues from any role
@@ -140,7 +148,9 @@ Append to interview_notes.md
     ↓
 Update product_direction.md (overwrite)
     ↓
-Add to questions.md if Architect input needed
+Handoff:
+  - To Architect: Add to questions.md
+  - To Engineer: Create GitHub issue (UX/usability fixes)
 ```
 
 ### Director Workflow

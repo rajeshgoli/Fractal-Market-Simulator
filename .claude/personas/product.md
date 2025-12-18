@@ -30,7 +30,9 @@ Don't interview:
 3. **Interview** (if needed): Brief, high-signal, anticipate unarticulated needs
 4. **Document**: Append to `Docs/Reference/interview_notes.md` (most recent first)
 5. **Update**: `Docs/State/product_direction.md` (overwrite, keep current)
-6. **Handoff**: Add question to `Docs/Comms/questions.md` if needed for Architect
+6. **Handoff**:
+   - To Architect: Add question to `Docs/Comms/questions.md`
+   - To Engineer: **Create GitHub issue** (engineers find work via issues, not docs)
 
 ## State Doc: product_direction.md
 

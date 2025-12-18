@@ -4,6 +4,40 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 17, 2025 - Replay View v2 Usability Feedback (Session 2)
+
+**Context:** Continued testing of Replay View v2. Four additional usability issues identified.
+
+### Issues Reported
+
+**1. Yellow bar pointer should be removed**
+
+The yellow pointer indicating current bar position always stays on the last bar. User finds it unnecessary — remove it entirely.
+
+**2. Zoom level "dancing" / resetting**
+
+When there are no linger events, the zoom level keeps resetting. User wants zoom to stay where they set it as the chart continues rendering. Current behavior makes it hard to focus on specific price action.
+
+**3. Swing invalidation events missing context**
+
+For swing invalidation events:
+- No swing is rendered on the chart
+- No explanation appears in the explanation panel below
+
+User can't see what swing was invalidated or why.
+
+**4. Speed aggregation dropdown doesn't work**
+
+The aggregation dropdown (e.g., "per 1H bar") exists in the UI but doesn't change actual playback speed. 10x at 5m vs 10x at 1H feel identical.
+
+**Root cause hypothesis:** Backend is processing one source bar at a time regardless of aggregation setting. If source is 5m and user selects "1H", backend should skip 12 source bars per tick — but it's not. The dropdown is UI-only; backend aggregation isn't implemented.
+
+### Handoff
+
+Engineering to address all four issues. #1 is simple removal. #2-3 are likely related to event rendering logic. #4 requires speed control rework per earlier design.
+
+---
+
 ## December 17, 2025 - Replay View v2 Usability Feedback
 
 **Context:** User testing latest Replay View v2 build. Core functionality confirmed working. Usability feedback and detection observations collected.
