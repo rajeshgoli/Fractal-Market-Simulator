@@ -884,10 +884,10 @@ export const Replay: React.FC = () => {
             <PlaybackControls
               playbackState={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.playbackState : playback.playbackState}
               onPlayPause={calibrationPhase === CalibrationPhase.CALIBRATED ? handleStartPlayback : (calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.togglePlayPause : playback.togglePlayPause)}
-              onStepBack={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.stepBack : playback.stepBack}
-              onStepForward={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.stepForward : playback.stepForward}
-              onJumpToStart={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.jumpToStart : playback.jumpToStart}
-              onJumpToEnd={playback.jumpToEnd}
+              onStepBack={calibrationPhase === CalibrationPhase.CALIBRATED ? (() => {}) : (calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.stepBack : playback.stepBack)}
+              onStepForward={calibrationPhase === CalibrationPhase.CALIBRATED ? handleStartPlayback : (calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.stepForward : playback.stepForward)}
+              onJumpToStart={calibrationPhase === CalibrationPhase.CALIBRATED ? (() => {}) : (calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.jumpToStart : playback.jumpToStart)}
+              onJumpToEnd={calibrationPhase === CalibrationPhase.CALIBRATED ? undefined : (calibrationPhase === CalibrationPhase.PLAYING ? undefined : playback.jumpToEnd)}
               // Event navigation (only in PLAYING phase)
               onJumpToPreviousEvent={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.jumpToPreviousEvent : undefined}
               onJumpToNextEvent={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.jumpToNextEvent : undefined}

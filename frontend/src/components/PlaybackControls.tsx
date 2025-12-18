@@ -14,7 +14,7 @@ interface PlaybackControlsProps {
   onStepBack: () => void;
   onStepForward: () => void;
   onJumpToStart: () => void;
-  onJumpToEnd: () => void;
+  onJumpToEnd?: () => void;  // Optional: undefined disables the button (forward-only mode)
   // Event navigation
   onJumpToPreviousEvent?: () => void;
   onJumpToNextEvent?: () => void;
@@ -171,9 +171,14 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           </button>
           <button
             onClick={onJumpToEnd}
-            className="p-2 text-app-muted hover:text-white hover:bg-app-card rounded-full transition-colors"
+            disabled={!onJumpToEnd}
+            className={`p-2 rounded-full transition-colors ${
+              onJumpToEnd
+                ? 'text-app-muted hover:text-white hover:bg-app-card'
+                : 'text-app-muted/30 cursor-not-allowed'
+            }`}
             aria-label="Jump to End"
-            title="Jump to End"
+            title={onJumpToEnd ? "Jump to End" : "Not available in forward-only mode"}
           >
             <SkipForward size={18} />
           </button>

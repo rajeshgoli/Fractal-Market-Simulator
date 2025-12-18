@@ -2853,13 +2853,19 @@ def init_app(
     full_df = df
 
     # Apply offset and limit to window size
+    # Load extra bars beyond calibration window for forward playback in replay mode
+    # The calibration window uses window_size bars, and we load an additional buffer
+    # for streaming playback beyond calibration
+    playback_buffer = window_size  # Load same amount extra for playback (2x total)
+    total_bars_to_load = window_size + playback_buffer
+
     if window_offset > 0:
         df = df.iloc[window_offset:]
         logger.info(f"Applied offset of {window_offset} bars")
 
-    if len(df) > window_size:
-        df = df.head(window_size)
-        logger.info(f"Limited to {window_size} bars")
+    if len(df) > total_bars_to_load:
+        df = df.head(total_bars_to_load)
+        logger.info(f"Limited to {total_bars_to_load} bars (calibration: {window_size}, playback buffer: {playback_buffer})")
 
     # Convert to Bar objects
     source_bars = []
