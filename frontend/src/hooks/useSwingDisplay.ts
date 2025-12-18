@@ -44,6 +44,8 @@ export function useSwingDisplay(
 
     for (const scale of scaleOrder) {
       const scaleStat = calibrationData.stats_by_scale[scale];
+      // Use all swings for navigation (swings_by_scale), but active swings for display
+      const allSwings = calibrationData.swings_by_scale[scale] || [];
       const activeSwings = calibrationData.active_swings_by_scale[scale] || [];
 
       if (!scaleStat) continue;
@@ -51,18 +53,21 @@ export function useSwingDisplay(
       // Get displayed swings (top N by size if scale is enabled)
       let displayedSwings: CalibrationSwing[] = [];
       if (enabledScales.has(scale)) {
-        // Sort by size (descending)
-        const sortedSwings = [...activeSwings].sort((a, b) => b.size - a.size);
-
-        // All swings for navigation (ranked but not limited)
-        const rankedSwings = sortedSwings.map((swing, index) => ({
+        // All swings for navigation - sorted by size, ranked but not limited
+        const sortedAllSwings = [...allSwings].sort((a, b) => b.size - a.size);
+        const rankedAllSwings = sortedAllSwings.map((swing, index) => ({
           ...swing,
           rank: index + 1,  // Rank based on size order
         }));
-        allNavigableSwings.push(...rankedSwings);
+        allNavigableSwings.push(...rankedAllSwings);
 
-        // Take top N for chart display
-        displayedSwings = rankedSwings.slice(0, activeSwingCount);
+        // Active swings for chart display - sorted by size, take top N
+        const sortedActiveSwings = [...activeSwings].sort((a, b) => b.size - a.size);
+        const rankedActiveSwings = sortedActiveSwings.map((swing, index) => ({
+          ...swing,
+          rank: index + 1,
+        }));
+        displayedSwings = rankedActiveSwings.slice(0, activeSwingCount);
         filteredActiveSwings.push(...displayedSwings);
       }
 
