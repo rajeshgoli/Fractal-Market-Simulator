@@ -1,57 +1,94 @@
 # Product Direction
 
-**Last Updated:** December 17, 2025
+**Last Updated:** December 17, 2025 (PM session)
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Fix Replay View v2 regressions to unblock detection validation.**
+**Implement Replay View v2 usability improvements for efficient observation workflow.**
 
-Replay View v2 has polished UI and forward-only playback working. However, regressions from v1 broke the explanation panel and event filtering, blocking the validation workflow.
+Replay View v2 core functionality is working: swing detection explanations, linger events, level crossed handling, and navigation all confirmed. User is now actively observing detection behavior and needs usability improvements for efficient feedback capture.
 
-**User's goal:** Observe swing detection during forward playback to validate theories on detection improvements. Needs to see swing details when events occur.
+**User's goal:** Observe swing detection patterns during forward playback, capture feedback on specific events, and collect data on detection edge cases.
 
 ---
 
-## P0: Replay View v2 Regression Fixes
+## P0: Replay View v2 Usability Improvements
 
-**Status:** 4 regressions + 1 cleanup identified. Ready for engineering.
+**Status:** 3 usability items identified. Ready for engineering.
 
-### Regressions from v1
+### New Items (Dec 17)
 
-| # | Issue | Impact |
-|---|-------|--------|
-| 1 | **Explanation panel broken** — stuck on "advance playback..." text | Can't see swing details (H/L, fib levels) that worked in v1 |
-| 2 | **Empty chart on some events** — no markers render | Can't see what SWING_INVALIDATED/COMPLETED/LEVEL_CROSS refers to |
-| 3 | **Event type toggles ignored** — level cross still lingers when disabled | Can't filter out high-frequency S/M events |
-| 4 | **Scale filtering broken** — pauses on every event at every scale | Playback doesn't progress |
-
-### Cleanup
-
-| # | Issue | Action |
-|---|-------|--------|
-| 5 | **Remove SWING_TERMINATED toggle** | Redundant — it's just SWING_COMPLETED OR SWING_INVALIDATED |
-
-### Root Cause Hypothesis
-
-Issues 1-4 appear connected. Explanation panel regression broke swing context propagation, which means filters don't apply correctly, and missing context means nothing renders for some events.
+| # | Feature | Description |
+|---|---------|-------------|
+| 1 | **Escape key → dismiss** | Map Escape to X button for faster keyboard workflow |
+| 2 | **Scale filters during playback** | Add S/M/L/XL filter section to left panel below linger events, same design language |
+| 3 | **Feedback capture box** | Text input + submit below filters; typing pauses auto-advance timer; saves to ground_truth.json |
 
 ### Acceptance Criteria
 
-- [ ] Explanation panel updates on SWING_FORMED, SWING_COMPLETED, SWING_INVALIDATED events
-- [ ] Swing H/L markers and fib levels render for all event types
-- [ ] Event type toggles honored — disabled events don't linger
-- [ ] Scale filtering works — can focus on XL/L only
-- [ ] SWING_TERMINATED toggle removed from UI
+- [ ] Escape key dismisses current linger event (same as clicking X)
+- [ ] Scale filter section visible during forward playback
+- [ ] Filter toggles work to show/hide swings by scale
+- [ ] Feedback text box visible during linger events
+- [ ] Typing in feedback box pauses/removes auto-advance timer
+- [ ] Submit saves feedback to ground_truth.json with event context
 
-### What's Working (preserve)
+### Previous Regressions (Resolved)
 
+All v1 regressions fixed:
+- Explanation panel updates correctly
+- H/L markers and fib levels render
+- Event type toggles honored
+- Scale filtering works
+- SWING_TERMINATED toggle removed
+
+### What's Working (confirmed Dec 17)
+
+- Swing detection explanations showing correctly
+- Linger events working as expected
+- Level crossed events stop lingering properly
+- Left/right navigation through multiple swings
+- X to dismiss works
 - UI polish ("awesome", "smooth")
-- Forward-only playback mechanics
-- Chart rendering with H/L markers during calibration
-- Calibration phase swing cycling
+
+---
+
+## Detection Observations (Pending Data)
+
+**Status:** Observations noted. Will revisit when feedback capture provides concrete examples.
+
+These are patterns observed during Replay View testing. User wants to collect specific instances via the feedback capture box before deciding on algorithmic changes.
+
+### Observation A: Cascading Swing Detection
+
+**What happens:**
+- Price makes a high, then a low, with intermediate highs between them
+- As price retraces upward, smaller intermediate swings hit their 0.382 threshold first
+- Progressively larger swings get detected as price continues climbing
+- Results in a sequence of swing detected events from small to large
+
+**Assessment:** Working as designed (0.382 threshold), but noisy.
+
+**Potential future fix:** Once a larger swing is confirmed in motion, suppress/kill smaller swings that are now subsumed.
+
+**Data needed:** Capture specific instances where this noise is problematic.
+
+### Observation B: False Positive After Target Achieved
+
+**What happens:**
+- Swing exists (high → low)
+- Price achieves 1.5x or 2x target (swing should be "complete")
+- Price comes back into the range
+- System fires swing detected event (shouldn't happen)
+
+**Assessment:** Appears to be a bug. Swing detection should not fire for swings that have already achieved their targets.
+
+**Data needed:** Capture swing H/L, detection bar, and price at detection to debug what logic triggered the false positive.
+
+**Action:** Once captured, create issue for engineering investigation.
 
 ---
 

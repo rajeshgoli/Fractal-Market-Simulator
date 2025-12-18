@@ -4,6 +4,76 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 17, 2025 - Replay View v2 Usability Feedback
+
+**Context:** User testing latest Replay View v2 build. Core functionality confirmed working. Usability feedback and detection observations collected.
+
+### What's Working
+
+- Swing detection explanations showing up correctly
+- Linger events working as expected
+- Level crossed events stop lingering properly
+- Left/right navigation through multiple swings works
+- X to dismiss works
+
+### Usability Requests (For Engineering)
+
+**1. Escape key → dismiss linger**
+
+Currently X button dismisses linger events. User wants Escape key mapped to X for faster keyboard-driven workflow.
+
+**2. Scale filters during playback**
+
+Calibration phase has S/M/L/XL filters that disappear during forward playback. User wants:
+- Add filter section to left panel (below linger events section)
+- Same design language as linger events section
+- Toggle S/M/L/XL visibility during playback
+
+**3. Feedback capture during linger events**
+
+New section on left panel (below filter controls):
+- Text box with submit button
+- When user starts typing, pause/remove auto-advance timer
+- Save feedback to ground_truth.json
+- Purpose: capture real-time observations about swing detection behavior
+
+### Detection Observations (Document for Later)
+
+User wants to observe more before deciding on action. These are patterns to watch for:
+
+**Observation A: Cascading swing detection**
+
+When price retraces from a high through a low and then starts climbing:
+- Smaller intermediate swings hit their 0.382 first (threshold for detection)
+- Progressively larger swings detected as price continues climbing
+- This is working as designed (0.382 threshold), but creates noise
+- Potential future fix: kill smaller swings once a larger swing is confirmed in motion
+
+**Observation B: False positive after target achieved**
+
+User observed:
+- Swing existed (high → low)
+- Price achieved 1.5x or 2x target (swing should be "done")
+- Price came back into the range
+- System then fired swing detected event
+
+This shouldn't happen. User wants to capture context (swing H/L, detection bar) when this occurs to debug the logic triggering it.
+
+### Data Collection Strategy
+
+User wants to use the new feedback text box (#3) to capture specific instances of observations A and B. Will revisit with concrete data before deciding on algorithmic changes.
+
+### Handoff
+
+Engineering to implement:
+1. Escape key mapping
+2. Scale filters during playback
+3. Feedback capture text box with timer pause
+
+Product direction updated with detection observations for future reference.
+
+---
+
 ## December 17, 2025 - Replay View v2 Testing Feedback
 
 **Context:** User tested Replay View v2 (post forward-playback fixes). UI polish confirmed, but explanation panel regression blocks validation workflow.
