@@ -95,7 +95,7 @@ A swing is "active" at calibration end if:
 - Not completed (hasn't reached 2.0 extension)
 - Current price is within 0.382-2.0 zone
 
-The currently selected active swing displays on both charts with Fib levels.
+The currently selected active swing displays on both charts with Fib levels and H/L markers highlighting the high and low candles.
 
 ### Forward-Only Playback
 
@@ -199,6 +199,10 @@ When significant events occur during playback, the view auto-pauses:
 **Scale Filters (Sidebar):**
 
 During forward playback, the sidebar also shows scale filters (S/M/L/XL). Toggle these to show/hide events for specific scales. Filters persist during playback.
+
+**Show Stats Toggle (Sidebar):**
+
+During playback, a "Show Stats" toggle appears in the sidebar. When enabled, it displays the calibration stats panel (thresholds, swing counts by scale) instead of the swing explanation panel. This is useful for referencing calibration data while observing playback events.
 
 **Multiple Events:**
 When multiple events occur at the same bar, they are queued and shown sequentially. The indicator displays queue position (e.g., "1/3"). Use ◀/▶ buttons or arrow keys to navigate between events.
