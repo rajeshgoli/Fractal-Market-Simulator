@@ -493,9 +493,13 @@ def _optimize_defended_pivot(swing: Dict[str, Any], highs: np.ndarray,
     """
     Recursively optimize the defended pivot ("1") endpoint selection per issue #136.
 
+    FIB grid labeling (per issue #138):
+    - Bull swing (upswing): 0 = LOW (origin), 1 = HIGH (defended pivot), 2 = extension above
+    - Bear swing (downswing): 0 = HIGH (origin), 1 = LOW (defended pivot), 2 = extension below
+
     For a swing, the defended pivot is:
-    - Bull reference (High BEFORE Low): The LOW is the defended pivot
-    - Bear reference (Low BEFORE High): The HIGH is the defended pivot
+    - Bull swing: The HIGH is the defended pivot → optimize by finding highest high
+    - Bear swing: The LOW is the defended pivot → optimize by finding lowest low
 
     Algorithm:
     1. Recursively find the best "1" endpoint:
@@ -528,71 +532,9 @@ def _optimize_defended_pivot(swing: Dict[str, Any], highs: np.ndarray,
         return optimized
 
     if direction == 'bull':
-        # Bull reference: High BEFORE Low
-        # Origin "0" is high, defended pivot "1" is low
-        high_idx = swing['high_bar_index']
-        origin_price = swing['high_price']
-        low_idx = swing['low_bar_index']
-        current_pivot_idx = low_idx
-        current_pivot_price = swing['low_price']
-
-        # Get all lows in the valid region (from origin to current pivot)
-        start_idx = high_idx
-        end_idx = low_idx + 1  # inclusive of low_idx
-        if start_idx >= end_idx or end_idx > len(lows):
-            return optimized
-
-        # Recursive optimization: keep finding best until separated
-        while True:
-            # Calculate min_separation based on current swing size
-            current_size = origin_price - current_pivot_price
-            if current_size <= 0:
-                break
-            min_separation = separation_fib * current_size
-
-            # Find the best (lowest) low in the region
-            region_lows = lows[start_idx:current_pivot_idx + 1]
-            if len(region_lows) == 0:
-                break
-
-            best_low = float(np.min(region_lows))
-            best_low_offset = int(np.argmin(region_lows))
-            best_low_idx = start_idx + best_low_offset
-
-            # Check separation: is current pivot separated from the best?
-            if abs(current_pivot_price - best_low) >= min_separation:
-                # Current pivot is well-separated, done
-                break
-
-            # Not separated - move to the best low
-            if best_low_idx == current_pivot_idx and best_low == current_pivot_price:
-                # Already at the best, done
-                break
-
-            current_pivot_idx = best_low_idx
-            current_pivot_price = best_low
-
-        # Update swing with final best pivot
-        optimized['low_bar_index'] = current_pivot_idx
-        optimized['low_price'] = current_pivot_price
-
-        # Recalculate size and levels
-        new_size = origin_price - current_pivot_price
-        optimized['size'] = new_size
-        if new_size > 0:
-            optimized['level_0382'] = current_pivot_price + (0.382 * new_size)
-            optimized['level_2x'] = current_pivot_price + (2.0 * new_size)
-
-        # Check retracement: how far has price retraced from "0" toward "1"?
-        # For bull: retracement ratio = (origin - current_price) / size
-        if new_size > 0:
-            retracement_ratio = (origin_price - current_price) / new_size
-        else:
-            retracement_ratio = 0.0
-
-    else:
-        # Bear reference: Low BEFORE High
-        # Origin "0" is low, defended pivot "1" is high
+        # Bull swing: upward price movement (Low → High)
+        # FIB grid: 0 = LOW (origin), 1 = HIGH (defended pivot), 2 = extension above high
+        # We optimize the defended pivot (HIGH) by finding the highest high
         low_idx = swing['low_bar_index']
         origin_price = swing['low_price']
         high_idx = swing['high_bar_index']
@@ -644,12 +586,76 @@ def _optimize_defended_pivot(swing: Dict[str, Any], highs: np.ndarray,
         optimized['size'] = new_size
         if new_size > 0:
             optimized['level_0382'] = current_pivot_price - (0.382 * new_size)
+            optimized['level_2x'] = current_pivot_price + (2.0 * new_size)
+
+        # Check retracement: how far has price retraced from "0" toward "1"?
+        # For bull: retracement ratio = (current_price - origin) / size
+        if new_size > 0:
+            retracement_ratio = (current_price - origin_price) / new_size
+        else:
+            retracement_ratio = 0.0
+
+    else:
+        # Bear swing: downward price movement (High → Low)
+        # FIB grid: 0 = HIGH (origin), 1 = LOW (defended pivot), 2 = extension below low
+        # We optimize the defended pivot (LOW) by finding the lowest low
+        high_idx = swing['high_bar_index']
+        origin_price = swing['high_price']
+        low_idx = swing['low_bar_index']
+        current_pivot_idx = low_idx
+        current_pivot_price = swing['low_price']
+
+        # Get all lows in the valid region (from origin to current pivot)
+        start_idx = high_idx
+        end_idx = low_idx + 1  # inclusive of low_idx
+        if start_idx >= end_idx or end_idx > len(lows):
+            return optimized
+
+        # Recursive optimization: keep finding best until separated
+        while True:
+            # Calculate min_separation based on current swing size
+            current_size = origin_price - current_pivot_price
+            if current_size <= 0:
+                break
+            min_separation = separation_fib * current_size
+
+            # Find the best (lowest) low in the region
+            region_lows = lows[start_idx:current_pivot_idx + 1]
+            if len(region_lows) == 0:
+                break
+
+            best_low = float(np.min(region_lows))
+            best_low_offset = int(np.argmin(region_lows))
+            best_low_idx = start_idx + best_low_offset
+
+            # Check separation: is current pivot separated from the best?
+            if abs(current_pivot_price - best_low) >= min_separation:
+                # Current pivot is well-separated, done
+                break
+
+            # Not separated - move to the best low
+            if best_low_idx == current_pivot_idx and best_low == current_pivot_price:
+                # Already at the best, done
+                break
+
+            current_pivot_idx = best_low_idx
+            current_pivot_price = best_low
+
+        # Update swing with final best pivot
+        optimized['low_bar_index'] = current_pivot_idx
+        optimized['low_price'] = current_pivot_price
+
+        # Recalculate size and levels
+        new_size = origin_price - current_pivot_price
+        optimized['size'] = new_size
+        if new_size > 0:
+            optimized['level_0382'] = current_pivot_price + (0.382 * new_size)
             optimized['level_2x'] = current_pivot_price - (2.0 * new_size)
 
         # Check retracement: how far has price retraced from "0" toward "1"?
-        # For bear: retracement ratio = (current_price - origin) / size
+        # For bear: retracement ratio = (origin - current_price) / size
         if new_size > 0:
-            retracement_ratio = (current_price - origin_price) / new_size
+            retracement_ratio = (origin_price - current_price) / new_size
         else:
             retracement_ratio = 0.0
 

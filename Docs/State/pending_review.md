@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-18
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(None)
+- **#138** — Fixed inverted endpoint optimization: bull swings now find highest HIGH, bear swings find lowest LOW
 
 ---
 
