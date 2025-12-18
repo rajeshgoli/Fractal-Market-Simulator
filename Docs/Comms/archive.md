@@ -2,6 +2,152 @@
 
 ---
 
+## Q-2025-12-17-2: Replay View Playback Redesign (Issue #112)
+
+**From:** Engineer
+**To:** Architect
+**Date:** December 17, 2025
+**Status:** Resolved
+
+### Context
+
+Replay View playback not working as expected. The current architecture pre-loads ALL source bars at startup via `fetchBars('S')`, meaning the algorithm has "seen" all data including bars meant for playback. The frontend filtering approach is cosmetic - it hides bars that were already processed during calibration.
+
+### Questions Asked
+
+1. **Data loading:** Should the frontend only load calibration bars initially? Or should the backend limit what it returns based on a "playback window"?
+2. **Incremental detection:** Is re-running detection per bar correct, or should detection state be maintained incrementally?
+3. **Chart data:** How should aggregated bars be handled during playback - fetched incrementally or computed from new source bars?
+4. **State management:** Where should the "current playback position" boundary be enforced - frontend, backend, or both?
+
+### Resolution (Architect)
+
+**Recommendation: Backend-controlled data boundary**
+
+The backend should be the single source of truth for what bars are "visible" at any point in time.
+
+**Rationale:**
+1. Single responsibility - backend owns data loading; frontend owns visualization
+2. No trust issue - frontend cannot accidentally receive future data
+3. Simpler frontend - no complex filtering logic with potential bugs
+4. Testable - backend behavior can be unit tested in isolation
+
+**Architecture Changes:**
+
+#### 1. Data Loading (Two-phase)
+
+**Phase 1 - Calibration:**
+- `init_app()` only loads calibration window into `source_bars`
+- Store `total_bars_available` and file reference for later loading
+- Track `playback_index` in `AppState`
+
+**Phase 2 - Playback:**
+- `/api/replay/advance` loads bars from disk/cache (not pre-loaded array)
+- Extend `source_bars` with newly loaded bars
+- Run detection on entire visible window (now includes new bar)
+
+#### 2. API Changes
+
+- Modify `/api/bars` to respect `playback_index` when returning bars
+- Modify `/api/replay/advance` to load from disk instead of slicing `source_bars`
+
+#### 3. Frontend Changes
+
+- Remove `filteredChart1Bars` / `filteredChart2Bars` memos
+- Trust backend returns only what's visible
+- Re-fetch aggregated bars after advance (or batch every N bars)
+
+#### 4. Detection Strategy
+
+**Answer:** Re-run detection per bar (current approach) is correct.
+- Detection is O(N log N) where N is visible bars
+- At bar 10,001, this is ~130K comparisons = <10ms
+- Incremental detection would add complexity for minimal gain
+
+**Implementation Checklist:**
+
+1. Backend: Modify `init_app()` to only load calibration window
+2. Backend: Add `playback_index` tracking to `AppState`
+3. Backend: `/api/replay/advance` loads from disk/cache
+4. Backend: `/api/bars` respects `playback_index`
+5. Frontend: Remove client-side filtering logic
+6. Frontend: Re-fetch aggregated bars after advance
+
+**Alternative Rejected:** Client-side filtering cannot work because detection runs on the full dataset server-side. Even if frontend filters bars, swing detection results are contaminated by look-ahead.
+
+---
+
+## Q-2025-12-17-1: Replay View Architecture Redesign
+
+**From:** Product
+**To:** Architect
+**Date:** December 17, 2025
+**Status:** Resolved
+
+### Context
+
+User tested Replay View. UI is polished but replay model is fundamentally wrong for the intended purpose (causal evaluation of swing detection).
+
+### Issues Identified
+
+1. **No swings detected** — 10K 5m bars yields zero swings
+2. **Look-ahead bias** — Current preload-and-scrub model shows entire future upfront
+3. **Speed reference** — Currently tied to source resolution (5m), should be relative to chart aggregation
+4. **Navigation** — `<<` / `>>` navigate by bar, should navigate by event
+
+### Resolution (Architect)
+
+**Bug Diagnosis: Zero Swings Detected**
+
+**Root cause:** The `current_price` filter in `detect_swings()` (lines 1020-1024, 1091-1095 in `swing_detector.py`) is designed for **live detection** but breaks on **historical replay**.
+
+When Replay View loads 10K bars:
+1. `current_price` is set to the close of bar 9999 (the final bar)
+2. A swing formed at bar 2000 must have its 0.382-2.0 zone bracket the price at bar 9999
+3. Over 10K 5m bars (~35 hours), price moves substantially
+4. Most swings fail this check because they were formed in a different price regime
+
+**Why Ground Truth Annotator works:** Uses windowed data (e.g., 5K bar windows). Within a small window, the final price is more likely to bracket swings formed in that window.
+
+**Fix required:** Add `current_bar_index` parameter to `detect_swings()`. When provided, use that bar's close as the reference price instead of the dataset end.
+
+**Architecture Design: Calibration-First, Forward-Only Playback**
+
+| Phase | Behavior |
+|-------|----------|
+| **Calibration** | Load window, detect active swings, show calibration report |
+| **Pre-playback** | Allow cycling through active swings |
+| **Forward-only playback** | Advance beyond window, new bars appear, events surface in real-time |
+
+Key components:
+- **Backend:** New `POST /api/replay/advance` endpoint for incremental bar loading and detection
+- **Frontend:** State machine with phases (calibrating, pre-playback, playing, paused)
+- **Speed control:** Relative to chart aggregation, not source resolution
+- **Navigation:** Event-based (`<<`/`>>` jump to previous/next event)
+
+**Technical Concerns Addressed:**
+
+| Concern | Resolution |
+|---------|------------|
+| Incremental detection efficient? | Yes — O(N log N) detection takes <100ms for 10K bars |
+| Multiple events at same bar? | Queue them, show sequentially |
+| Memory with large datasets? | Stream bars on demand, calibration window is max footprint |
+
+**Issue Decomposition:**
+
+| Issue | Scope |
+|-------|-------|
+| #99 | Zero swings bug fix (add `current_bar_index` param) |
+| #100 | Calibration phase |
+| #101 | Forward-only playback |
+| #102 | Speed control redesign |
+| #103 | Event navigation |
+| #104 | Active swing display (toggles, colors, markers) |
+
+**Full design:** See `Docs/State/architect_notes.md`
+
+---
+
 ## Q-2025-12-15-2: FIB-Based Structural Separation for Extrema Selection
 
 **From:** Product
