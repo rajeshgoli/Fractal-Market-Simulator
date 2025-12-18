@@ -191,7 +191,10 @@ export const Replay: React.FC = () => {
   });
 
   // Use hook to filter and rank swings based on display config
-  const { filteredActiveSwings, filteredStats } = useSwingDisplay(calibrationData, displayConfig);
+  // filteredActiveSwings is limited by activeSwingCount (for chart display)
+  // allNavigableSwings includes all swings for enabled scales (for navigation)
+  const { filteredActiveSwings: _filteredActiveSwings, allNavigableSwings, filteredStats } = useSwingDisplay(calibrationData, displayConfig);
+  void _filteredActiveSwings; // Suppress unused warning - available for future chart display limiting
 
   // Chart refs for syncing
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -317,13 +320,13 @@ export const Replay: React.FC = () => {
     return discretizationSwingToDetected(swing);
   }, [calibrationPhase, forwardPlayback.lingerEvent, playback.lingerSwingId, swings]);
 
-  // Compute current active swing for calibration mode
+  // Compute current active swing for calibration mode (navigate through all swings, not just displayed)
   const currentActiveSwing = useMemo((): CalibrationSwing | null => {
-    if (calibrationPhase !== CalibrationPhase.CALIBRATED || filteredActiveSwings.length === 0) {
+    if (calibrationPhase !== CalibrationPhase.CALIBRATED || allNavigableSwings.length === 0) {
       return null;
     }
-    return filteredActiveSwings[currentActiveSwingIndex] || null;
-  }, [calibrationPhase, filteredActiveSwings, currentActiveSwingIndex]);
+    return allNavigableSwings[currentActiveSwingIndex] || null;
+  }, [calibrationPhase, allNavigableSwings, currentActiveSwingIndex]);
 
   // Convert current active swing to DetectedSwing for chart overlay
   const calibrationHighlightedSwing = useMemo((): DetectedSwing | undefined => {
@@ -406,20 +409,20 @@ export const Replay: React.FC = () => {
     sessionInfo?.windowOffset,
   ]);
 
-  // Navigation functions for active swing cycling
+  // Navigation functions for active swing cycling (navigate through all swings, not just displayed)
   const navigatePrevActiveSwing = useCallback(() => {
-    if (filteredActiveSwings.length === 0) return;
+    if (allNavigableSwings.length === 0) return;
     setCurrentActiveSwingIndex(prev =>
-      prev === 0 ? filteredActiveSwings.length - 1 : prev - 1
+      prev === 0 ? allNavigableSwings.length - 1 : prev - 1
     );
-  }, [filteredActiveSwings.length]);
+  }, [allNavigableSwings.length]);
 
   const navigateNextActiveSwing = useCallback(() => {
-    if (filteredActiveSwings.length === 0) return;
+    if (allNavigableSwings.length === 0) return;
     setCurrentActiveSwingIndex(prev =>
-      prev === filteredActiveSwings.length - 1 ? 0 : prev + 1
+      prev === allNavigableSwings.length - 1 ? 0 : prev + 1
     );
-  }, [filteredActiveSwings.length]);
+  }, [allNavigableSwings.length]);
 
   // Handler for toggling scale filter
   const handleToggleScale = useCallback((scale: SwingScaleKey) => {
@@ -1093,7 +1096,7 @@ export const Replay: React.FC = () => {
               calibrationData={calibrationData}
               currentActiveSwing={currentActiveSwing}
               currentActiveSwingIndex={currentActiveSwingIndex}
-              totalActiveSwings={filteredActiveSwings.length}
+              totalActiveSwings={allNavigableSwings.length}
               onNavigatePrev={navigatePrevActiveSwing}
               onNavigateNext={navigateNextActiveSwing}
               onStartPlayback={handleStartPlayback}

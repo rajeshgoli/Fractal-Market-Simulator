@@ -7,8 +7,10 @@ import {
 } from '../types';
 
 interface UseSwingDisplayResult {
-  /** Filtered and ranked active swings based on display config */
+  /** Filtered and ranked active swings based on display config (limited by activeSwingCount for chart display) */
   filteredActiveSwings: CalibrationSwing[];
+  /** All active swings for enabled scales (not limited - for navigation) */
+  allNavigableSwings: CalibrationSwing[];
   /** Filtered stats by scale (only enabled scales) */
   filteredStats: Record<string, { total_swings: number; active_swings: number; displayed_swings: number }>;
 }
@@ -28,6 +30,7 @@ export function useSwingDisplay(
     if (!calibrationData) {
       return {
         filteredActiveSwings: [],
+        allNavigableSwings: [],
         filteredStats: {},
       };
     }
@@ -36,6 +39,7 @@ export function useSwingDisplay(
     const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
 
     const filteredActiveSwings: CalibrationSwing[] = [];
+    const allNavigableSwings: CalibrationSwing[] = [];
     const filteredStats: Record<string, { total_swings: number; active_swings: number; displayed_swings: number }> = {};
 
     for (const scale of scaleOrder) {
@@ -47,15 +51,18 @@ export function useSwingDisplay(
       // Get displayed swings (top N by size if scale is enabled)
       let displayedSwings: CalibrationSwing[] = [];
       if (enabledScales.has(scale)) {
-        // Sort by size (descending) and take top N
-        displayedSwings = [...activeSwings]
-          .sort((a, b) => b.size - a.size)
-          .slice(0, activeSwingCount)
-          .map((swing, index) => ({
-            ...swing,
-            rank: index + 1,  // Re-rank based on display order
-          }));
+        // Sort by size (descending)
+        const sortedSwings = [...activeSwings].sort((a, b) => b.size - a.size);
 
+        // All swings for navigation (ranked but not limited)
+        const rankedSwings = sortedSwings.map((swing, index) => ({
+          ...swing,
+          rank: index + 1,  // Rank based on size order
+        }));
+        allNavigableSwings.push(...rankedSwings);
+
+        // Take top N for chart display
+        displayedSwings = rankedSwings.slice(0, activeSwingCount);
         filteredActiveSwings.push(...displayedSwings);
       }
 
@@ -69,6 +76,7 @@ export function useSwingDisplay(
 
     return {
       filteredActiveSwings,
+      allNavigableSwings,
       filteredStats,
     };
   }, [calibrationData, displayConfig]);
