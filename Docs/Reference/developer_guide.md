@@ -579,6 +579,71 @@ Event diffing logic compares previous vs new swing state to detect:
 - Swings reaching 2.0 extension (SWING_COMPLETED)
 - Price crossing significant Fib levels (LEVEL_CROSS)
 
+**Playback Feedback API:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/playback/feedback` | POST | Submit observation with rich context snapshot |
+
+**POST /api/playback/feedback:**
+
+Request body:
+```json
+{
+  "text": "Observation text here",
+  "playback_bar": 10500,
+  "snapshot": {
+    "state": "playing",
+    "window_offset": 0,
+    "bars_since_calibration": 500,
+    "current_bar_index": 10500,
+    "calibration_bar_count": 10000,
+    "swings_found": {
+      "XL": 2,
+      "L": 5,
+      "M": 12,
+      "S": 28
+    },
+    "swings_invalidated": 3,
+    "swings_completed": 1,
+    "event_context": {
+      "event_type": "SWING_FORMED",
+      "scale": "M",
+      "swing": {
+        "high_bar_index": 10480,
+        "low_bar_index": 10495,
+        "high_price": "5125.50",
+        "low_price": "5098.25",
+        "direction": "bull"
+      },
+      "detection_bar_index": 10500
+    }
+  }
+}
+```
+
+Snapshot fields:
+- `state`: Current playback state (calibrating, calibration_complete, playing, paused)
+- `window_offset`: Offset into source data for this session
+- `bars_since_calibration`: Bars advanced beyond calibration window
+- `current_bar_index`: Current position in source data
+- `calibration_bar_count`: Size of calibration window
+- `swings_found`: Active swing counts by scale
+- `swings_invalidated`: Count of swings invalidated during playback
+- `swings_completed`: Count of swings that reached 2.0 extension
+- `event_context`: Optional context if submitting during a linger event
+
+Returns:
+```json
+{
+  "success": true,
+  "observation_id": "uuid-string",
+  "message": "Observation saved successfully"
+}
+```
+
+Storage: Observations persist to `ground_truth/playback_feedback.json` grouped by playback session.
+
 ---
 
 ## Data Models
