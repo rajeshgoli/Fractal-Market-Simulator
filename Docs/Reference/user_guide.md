@@ -231,6 +231,25 @@ During linger pauses on SWING_FORMED events:
 - Blue: Retracement zone (0.382, 0.5, 0.618)
 - Green: Completion target (2.0)
 
+### Playback Feedback Capture
+
+During linger events, a feedback input appears in the sidebar to capture observations:
+
+**How it works:**
+- Text input appears only during linger pauses
+- Type observations about the event (e.g., "Swing detected but price already hit 2x target")
+- Submit with `Ctrl+Enter` or click Save
+- Timer pauses when input is focused (won't auto-advance while typing)
+- Timer resumes when input loses focus
+
+**Event Context:** Each observation captures full context:
+- Event type (SWING_FORMED, LEVEL_CROSS, etc.)
+- Scale (S, M, L, XL)
+- Swing details (if applicable)
+- Playback bar index
+
+**Storage:** Observations persist to `ground_truth/playback_feedback.json` grouped by session.
+
 ---
 
 ## Ground Truth Annotator

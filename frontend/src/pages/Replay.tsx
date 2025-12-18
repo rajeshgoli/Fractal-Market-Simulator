@@ -939,6 +939,11 @@ export const Replay: React.FC = () => {
             showScaleFilters={calibrationPhase === CalibrationPhase.PLAYING}
             displayConfig={displayConfig}
             onToggleScale={handleToggleScale}
+            isLingering={calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.isLingering}
+            lingerEvent={forwardPlayback.lingerEvent}
+            currentPlaybackBar={forwardPlayback.currentPosition}
+            onFeedbackFocus={forwardPlayback.pauseLingerTimer}
+            onFeedbackBlur={forwardPlayback.resumeLingerTimer}
           />
         </div>
 

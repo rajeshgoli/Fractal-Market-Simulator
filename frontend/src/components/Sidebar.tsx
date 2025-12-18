@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { FilterState, EventType, SwingDisplayConfig, SwingScaleKey } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers } from 'lucide-react';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send } from 'lucide-react';
+import { submitPlaybackFeedback, PlaybackFeedbackEventContext, ReplayEvent } from '../lib/api';
 
 interface SidebarProps {
   filters: FilterState[];
@@ -12,6 +13,12 @@ interface SidebarProps {
   showScaleFilters?: boolean;
   displayConfig?: SwingDisplayConfig;
   onToggleScale?: (scale: SwingScaleKey) => void;
+  // Feedback props (shown during linger events)
+  isLingering?: boolean;
+  lingerEvent?: ReplayEvent;
+  currentPlaybackBar?: number;
+  onFeedbackFocus?: () => void;
+  onFeedbackBlur?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -22,8 +29,72 @@ export const Sidebar: React.FC<SidebarProps> = ({
   showScaleFilters = false,
   displayConfig,
   onToggleScale,
+  isLingering = false,
+  lingerEvent,
+  currentPlaybackBar,
+  onFeedbackFocus,
+  onFeedbackBlur,
 }) => {
   const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
+  const [feedbackText, setFeedbackText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleFeedbackSubmit = useCallback(async () => {
+    if (!feedbackText.trim() || !lingerEvent || currentPlaybackBar === undefined) return;
+
+    setIsSubmitting(true);
+    setSubmitStatus('idle');
+
+    try {
+      // Build event context from linger event
+      const eventContext: PlaybackFeedbackEventContext = {
+        event_type: lingerEvent.type,
+        scale: lingerEvent.scale,
+      };
+
+      if (lingerEvent.swing) {
+        eventContext.swing = {
+          high_bar_index: lingerEvent.swing.high_bar_index,
+          low_bar_index: lingerEvent.swing.low_bar_index,
+          high_price: String(lingerEvent.swing.high_price),
+          low_price: String(lingerEvent.swing.low_price),
+          direction: lingerEvent.swing.direction,
+        };
+        eventContext.detection_bar_index = lingerEvent.bar_index;
+      }
+
+      await submitPlaybackFeedback(feedbackText, currentPlaybackBar, eventContext);
+      setFeedbackText('');
+      setSubmitStatus('success');
+      // Clear success status after 2 seconds
+      setTimeout(() => setSubmitStatus('idle'), 2000);
+    } catch (err) {
+      console.error('Failed to submit feedback:', err);
+      setSubmitStatus('error');
+      // Clear error status after 3 seconds
+      setTimeout(() => setSubmitStatus('idle'), 3000);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [feedbackText, lingerEvent, currentPlaybackBar]);
+
+  const handleInputFocus = useCallback(() => {
+    onFeedbackFocus?.();
+  }, [onFeedbackFocus]);
+
+  const handleInputBlur = useCallback(() => {
+    onFeedbackBlur?.();
+  }, [onFeedbackBlur]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Submit on Ctrl+Enter or Cmd+Enter
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleFeedbackSubmit();
+    }
+  }, [handleFeedbackSubmit]);
   const getIconForType = (type: string) => {
     switch (type) {
       case EventType.SWING_FORMED:
@@ -119,6 +190,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </label>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Section (shown during linger events) */}
+      {isLingering && lingerEvent && (
+        <div className="p-4 border-t border-app-border bg-app-bg/30">
+          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
+            <MessageSquare size={14} />
+            Observation
+          </h2>
+          <div className="space-y-2">
+            <textarea
+              ref={inputRef}
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
+              onKeyDown={handleKeyDown}
+              placeholder="Type observation... (Ctrl+Enter to submit)"
+              className="w-full h-20 px-3 py-2 text-sm bg-app-card border border-app-border rounded resize-none focus:outline-none focus:border-trading-blue placeholder:text-app-muted"
+              disabled={isSubmitting}
+            />
+            <div className="flex items-center justify-between">
+              <span className={`text-xs ${
+                submitStatus === 'success' ? 'text-trading-bull' :
+                submitStatus === 'error' ? 'text-trading-bear' :
+                'text-app-muted'
+              }`}>
+                {submitStatus === 'success' && 'Saved!'}
+                {submitStatus === 'error' && 'Failed to save'}
+                {submitStatus === 'idle' && lingerEvent.scale && `${lingerEvent.scale} - ${lingerEvent.type}`}
+              </span>
+              <button
+                onClick={handleFeedbackSubmit}
+                disabled={isSubmitting || !feedbackText.trim()}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded transition-colors ${
+                  isSubmitting || !feedbackText.trim()
+                    ? 'bg-app-border text-app-muted cursor-not-allowed'
+                    : 'bg-trading-blue text-white hover:bg-blue-600'
+                }`}
+              >
+                <Send size={12} />
+                {isSubmitting ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         </div>
       )}

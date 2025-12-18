@@ -43,6 +43,9 @@ interface UseForwardPlaybackReturn {
   navigatePrevEvent: () => void;
   navigateNextEvent: () => void;
   dismissLinger: () => void;
+  // Timer pause (for feedback input)
+  pauseLingerTimer: () => void;
+  resumeLingerTimer: () => void;
 }
 
 export function useForwardPlayback({
@@ -83,6 +86,8 @@ export function useForwardPlayback({
   const eventIndexRef = useRef(0);
   const advancePendingRef = useRef(false);
   const isPlayingRef = useRef(false); // Ref to avoid stale closures in setTimeout chain
+  const lingerPausedRef = useRef(false); // Whether linger timer is paused (for feedback input)
+  const lingerRemainingRef = useRef(0); // Remaining time when paused
 
   // Ref to hold the latest functions (avoids stale closures)
   const showCurrentEventRef = useRef<() => void>(() => {});
@@ -412,6 +417,79 @@ export function useForwardPlayback({
     startPlayback();
   }, [playbackState, exitLinger, startPlayback]);
 
+  // Pause linger timer (for feedback input focus)
+  const pauseLingerTimer = useCallback(() => {
+    if (playbackState !== PlaybackState.LINGERING || lingerPausedRef.current) return;
+
+    lingerPausedRef.current = true;
+
+    // Calculate remaining time
+    if (lingerStartRef.current !== null) {
+      const elapsed = Date.now() - lingerStartRef.current;
+      lingerRemainingRef.current = Math.max(0, LINGER_DURATION_MS - elapsed);
+    }
+
+    // Clear the auto-advance timer
+    if (lingerTimerRef.current) {
+      clearTimeout(lingerTimerRef.current);
+      lingerTimerRef.current = null;
+    }
+
+    // Stop animation frame (freeze the countdown)
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+  }, [playbackState]);
+
+  // Resume linger timer (for feedback input blur)
+  const resumeLingerTimer = useCallback(() => {
+    if (playbackState !== PlaybackState.LINGERING || !lingerPausedRef.current) return;
+
+    lingerPausedRef.current = false;
+
+    // Restart from remaining time
+    const remaining = lingerRemainingRef.current;
+    if (remaining <= 0) {
+      // Timer already expired, advance
+      eventIndexRef.current++;
+      if (eventIndexRef.current < eventQueueRef.current.length) {
+        showCurrentEventRef.current();
+      } else {
+        exitLingerRef.current();
+        startPlaybackRef.current();
+      }
+      return;
+    }
+
+    // Update start time to account for already elapsed time
+    lingerStartRef.current = Date.now() - (LINGER_DURATION_MS - remaining);
+
+    // Restart animation
+    const animateTimer = () => {
+      if (lingerStartRef.current === null || lingerPausedRef.current) return;
+      const elapsed = Date.now() - lingerStartRef.current;
+      const timeLeft = Math.max(0, (LINGER_DURATION_MS - elapsed) / 1000);
+      setLingerTimeLeft(timeLeft);
+
+      if (timeLeft > 0 && !lingerPausedRef.current) {
+        animationFrameRef.current = requestAnimationFrame(animateTimer);
+      }
+    };
+    animationFrameRef.current = requestAnimationFrame(animateTimer);
+
+    // Restart auto-advance timer with remaining time
+    lingerTimerRef.current = window.setTimeout(() => {
+      eventIndexRef.current++;
+      if (eventIndexRef.current < eventQueueRef.current.length) {
+        showCurrentEventRef.current();
+      } else {
+        exitLingerRef.current();
+        startPlaybackRef.current();
+      }
+    }, remaining);
+  }, [playbackState]);
+
   // Compute current event index (index of last event at or before current position)
   const currentEventIndex = useMemo(() => {
     if (allEvents.length === 0) return -1;
@@ -610,5 +688,8 @@ export function useForwardPlayback({
     navigatePrevEvent,
     navigateNextEvent,
     dismissLinger,
+    // Timer pause (for feedback input)
+    pauseLingerTimer,
+    resumeLingerTimer,
   };
 }

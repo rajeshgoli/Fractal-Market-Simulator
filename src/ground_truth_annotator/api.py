@@ -27,9 +27,9 @@ from pydantic import BaseModel
 from .cascade_controller import CascadeController
 from .comparison_analyzer import ComparisonAnalyzer, ComparisonResult
 from .csv_utils import escape_csv_field
-from .models import AnnotationSession, SwingAnnotation
+from .models import AnnotationSession, SwingAnnotation, PlaybackObservation
 from .review_controller import ReviewController
-from .storage import AnnotationStorage, ReviewStorage
+from .storage import AnnotationStorage, ReviewStorage, PlaybackFeedbackStorage
 from ..data.ohlc_loader import load_ohlc
 from ..discretization import (
     Discretizer,
@@ -397,6 +397,8 @@ class AppState:
     # Replay playback state (backend-controlled data boundary)
     playback_index: Optional[int] = None  # Current visible bar index (None = full dataset)
     calibration_bar_count: Optional[int] = None  # Bars loaded for calibration
+    # Playback feedback storage
+    playback_feedback_storage: Optional[PlaybackFeedbackStorage] = None
 
 
 # Global state
@@ -2383,6 +2385,33 @@ class ReplayAdvanceResponse(BaseModel):
     end_of_data: bool
 
 
+# ============================================================================
+# Playback Feedback Models
+# ============================================================================
+
+
+class PlaybackFeedbackEventContext(BaseModel):
+    """Event context for playback feedback."""
+    event_type: str  # SWING_FORMED, SWING_COMPLETED, LEVEL_CROSS, etc.
+    scale: str  # S, M, L, XL
+    swing: Optional[Dict] = None  # Swing details if applicable
+    detection_bar_index: Optional[int] = None  # When swing was detected
+
+
+class PlaybackFeedbackRequest(BaseModel):
+    """Request to submit playback feedback."""
+    text: str  # Free-form observation text
+    playback_bar: int  # Current playback position
+    event_context: PlaybackFeedbackEventContext
+
+
+class PlaybackFeedbackResponse(BaseModel):
+    """Response from feedback submission."""
+    success: bool
+    observation_id: str
+    message: str
+
+
 # Global cache for replay state (avoids recomputing swings every advance)
 _replay_cache: Dict[str, any] = {
     "last_bar_index": -1,
@@ -2802,6 +2831,65 @@ async def advance_replay(request: ReplayAdvanceRequest):
         current_bar_index=final_bar_index,
         current_price=final_price,
         end_of_data=final_bar_index >= len(s.source_bars) - 1,
+    )
+
+
+# ============================================================================
+# Playback Feedback Endpoint
+# ============================================================================
+
+
+@app.post("/api/playback/feedback", response_model=PlaybackFeedbackResponse)
+async def submit_playback_feedback(request: PlaybackFeedbackRequest):
+    """
+    Submit playback feedback observation.
+
+    Captures free-form text feedback during Replay View playback linger events.
+    Creates a playback session if none exists for the current data file.
+
+    Request body:
+        - text: Free-form observation text
+        - playback_bar: Current playback bar index
+        - event_context: Event context (type, scale, swing details)
+
+    Returns:
+        - success: Whether the observation was saved
+        - observation_id: UUID of the created observation
+        - message: Human-readable result message
+    """
+    s = get_state()
+
+    # Initialize feedback storage if needed
+    if s.playback_feedback_storage is None:
+        s.playback_feedback_storage = PlaybackFeedbackStorage()
+
+    # Validate text is not empty
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Observation text cannot be empty")
+
+    # Build event context dict from Pydantic model
+    event_context = {
+        "event_type": request.event_context.event_type,
+        "scale": request.event_context.scale,
+    }
+    if request.event_context.swing:
+        event_context["swing"] = request.event_context.swing
+    if request.event_context.detection_bar_index is not None:
+        event_context["detection_bar_index"] = request.event_context.detection_bar_index
+
+    # Add observation
+    observation = s.playback_feedback_storage.add_observation(
+        data_file=s.data_file or "unknown",
+        playback_bar=request.playback_bar,
+        event_context=event_context,
+        text=text,
+    )
+
+    return PlaybackFeedbackResponse(
+        success=True,
+        observation_id=observation.observation_id,
+        message="Observation saved successfully",
     )
 
 

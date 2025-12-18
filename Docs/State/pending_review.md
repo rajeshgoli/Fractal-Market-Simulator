@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-17
 
@@ -8,11 +8,7 @@
 
 ## Pending Changes
 
-- **#112** — Fixed: Chart filtering to respect playback position (stream bars beyond calibration)
-- **#113** — Backend-controlled data boundary: playback_index in AppState, /api/bars respects boundary
-- **#114** — Fix Replay View v2 playback regressions (explanation panel, event/scale filtering, bar counter UI)
-- **#115** — Replay View v2 usability improvements (Escape to dismiss, scale filters in sidebar, bar counter)
-- **#117** — Four usability fixes: remove yellow pointer, preserve zoom, swing invalidation context, speed aggregation
+- #116: Playback feedback capture during Replay View linger events
 
 ---
 
@@ -20,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 17 | #112, #113, #114, #115, #117 — Replay View v2 architecture fix + usability | All Accepted |
 | Dec 17 | #101, #102, #104, #105, #111 — Calibration, forward playback, event nav, scale toggles, swing markers | All Accepted, Epic #99 closed |
 | Dec 17 | #100, #103, #107, #108, #109 — Zero swings fix, speed control, swing overlay, multi-swing nav | All Accepted |
 | Dec 17 | Q-2025-12-17-1 — Zero swing bug diagnosis + forward-only playback design | Designed → Ready for engineering |

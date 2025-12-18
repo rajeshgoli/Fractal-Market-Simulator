@@ -324,6 +324,105 @@ class SwingFeedback:
 
 
 @dataclass
+class PlaybackObservation:
+    """
+    A single observation captured during Replay View playback.
+
+    Captures free-form text feedback with full event context, allowing
+    users to document observations during swing detection review.
+    """
+    observation_id: str           # UUID
+    created_at: datetime
+    playback_bar: int             # Playback position when observation was made
+    event_context: Dict[str, Any]  # Full event context (type, scale, swing details)
+    text: str                     # Free-form observation text
+
+    @classmethod
+    def create(
+        cls,
+        playback_bar: int,
+        event_context: Dict[str, Any],
+        text: str
+    ) -> 'PlaybackObservation':
+        """Factory method to create a new observation with auto-generated ID and timestamp."""
+        return cls(
+            observation_id=str(uuid.uuid4()),
+            created_at=datetime.now(timezone.utc),
+            playback_bar=playback_bar,
+            event_context=event_context,
+            text=text
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary for JSON storage."""
+        return {
+            'observation_id': self.observation_id,
+            'created_at': self.created_at.isoformat(),
+            'playback_bar': self.playback_bar,
+            'event_context': self.event_context,
+            'text': self.text
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'PlaybackObservation':
+        """Deserialize from dictionary."""
+        return cls(
+            observation_id=data['observation_id'],
+            created_at=datetime.fromisoformat(data['created_at']),
+            playback_bar=data['playback_bar'],
+            event_context=data['event_context'],
+            text=data['text']
+        )
+
+
+@dataclass
+class PlaybackSession:
+    """
+    A playback session containing observations made during Replay View.
+
+    Groups observations by data file and session start time. Observations
+    are append-only - there is no cascade workflow like annotation sessions.
+    """
+    session_id: str
+    data_file: str                # Source data file being reviewed
+    started_at: datetime
+    observations: List[PlaybackObservation] = field(default_factory=list)
+
+    @classmethod
+    def create(cls, data_file: str) -> 'PlaybackSession':
+        """Factory method to create a new playback session."""
+        return cls(
+            session_id=str(uuid.uuid4()),
+            data_file=data_file,
+            started_at=datetime.now(timezone.utc),
+            observations=[]
+        )
+
+    def add_observation(self, observation: PlaybackObservation) -> None:
+        """Add an observation to the session."""
+        self.observations.append(observation)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary for JSON storage."""
+        return {
+            'session_id': self.session_id,
+            'data_file': self.data_file,
+            'started_at': self.started_at.isoformat(),
+            'observations': [o.to_dict() for o in self.observations]
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'PlaybackSession':
+        """Deserialize from dictionary."""
+        return cls(
+            session_id=data['session_id'],
+            data_file=data['data_file'],
+            started_at=datetime.fromisoformat(data['started_at']),
+            observations=[PlaybackObservation.from_dict(o) for o in data.get('observations', [])]
+        )
+
+
+@dataclass
 class ReviewSession:
     """
     Review feedback for a single annotation session.

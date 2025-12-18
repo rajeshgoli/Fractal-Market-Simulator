@@ -26,16 +26,20 @@ from typing import Any, Dict, List, Optional, Tuple
 from .csv_utils import escape_csv_field
 from .models import (
     AnnotationSession, SwingAnnotation, ReviewSession, SwingFeedback,
-    REVIEW_SCHEMA_VERSION
+    REVIEW_SCHEMA_VERSION, PlaybackSession, PlaybackObservation
 )
 
 # Ground truth directory structure
 GROUND_TRUTH_DIR = Path("ground_truth")
 GROUND_TRUTH_FILE = GROUND_TRUTH_DIR / "ground_truth.json"
 GROUND_TRUTH_SESSIONS_DIR = GROUND_TRUTH_DIR / "sessions"
+PLAYBACK_FEEDBACK_FILE = GROUND_TRUTH_DIR / "playback_feedback.json"
 
 # Schema version for ground_truth.json
 GROUND_TRUTH_SCHEMA_VERSION = 1
+
+# Schema version for playback_feedback.json
+PLAYBACK_FEEDBACK_SCHEMA_VERSION = 1
 
 # Maximum age for stale sessions (3 hours in seconds)
 STALE_SESSION_MAX_AGE_HOURS = 3
@@ -867,3 +871,187 @@ class ReviewStorage:
             lines.append(line)
 
         return "\n".join(lines)
+
+
+class PlaybackFeedbackStorage:
+    """
+    JSON-backed storage for playback feedback observations.
+
+    Stores observations in a separate file from ground truth annotations,
+    following the schema defined in architect_notes.md.
+
+    File structure:
+    {
+        "schema_version": 1,
+        "playback_sessions": [
+            {
+                "session_id": "uuid",
+                "data_file": "es-5m.csv",
+                "started_at": "2025-12-17T14:30:00Z",
+                "observations": [...]
+            }
+        ]
+    }
+
+    ## Single-User Assumption
+
+    Like AnnotationStorage, this is designed for single-user operation.
+    """
+
+    def __init__(self, feedback_file: Optional[str] = None):
+        """
+        Initialize storage with path to feedback file.
+
+        Args:
+            feedback_file: Path to playback_feedback.json.
+                          Defaults to 'ground_truth/playback_feedback.json'.
+        """
+        self._feedback_file = Path(feedback_file) if feedback_file else PLAYBACK_FEEDBACK_FILE
+        self._feedback_file.parent.mkdir(parents=True, exist_ok=True)
+        # Cache for current session (to avoid re-reading file on every add)
+        self._current_session: Optional[PlaybackSession] = None
+
+    def _load_feedback_data(self) -> Dict[str, Any]:
+        """Load the playback feedback file or create new structure."""
+        if self._feedback_file.exists():
+            with open(self._feedback_file, 'r') as f:
+                return json.load(f)
+        return {
+            "schema_version": PLAYBACK_FEEDBACK_SCHEMA_VERSION,
+            "playback_sessions": []
+        }
+
+    def _save_feedback_data(self, data: Dict[str, Any]) -> None:
+        """Save the playback feedback file."""
+        with open(self._feedback_file, 'w') as f:
+            json.dump(data, f, indent=2)
+
+    def get_or_create_session(self, data_file: str) -> PlaybackSession:
+        """
+        Get the current session for a data file, or create a new one.
+
+        Sessions are identified by data_file. A new session is created
+        if no session exists for the current data file in this instance.
+
+        Args:
+            data_file: The data file being reviewed
+
+        Returns:
+            PlaybackSession (existing or newly created)
+        """
+        # Check cached session
+        if self._current_session and self._current_session.data_file == data_file:
+            return self._current_session
+
+        # Create new session for this data file
+        session = PlaybackSession.create(data_file)
+        self._current_session = session
+
+        # Persist immediately
+        data = self._load_feedback_data()
+        data["playback_sessions"].append(session.to_dict())
+        self._save_feedback_data(data)
+
+        return session
+
+    def add_observation(
+        self,
+        data_file: str,
+        playback_bar: int,
+        event_context: Dict[str, Any],
+        text: str
+    ) -> PlaybackObservation:
+        """
+        Add an observation to the current session.
+
+        Creates a session if none exists for the data file.
+
+        Args:
+            data_file: Source data file being reviewed
+            playback_bar: Current playback bar index
+            event_context: Full event context (type, scale, swing details)
+            text: Free-form observation text
+
+        Returns:
+            The created PlaybackObservation
+        """
+        # Get or create session
+        session = self.get_or_create_session(data_file)
+
+        # Create observation
+        observation = PlaybackObservation.create(
+            playback_bar=playback_bar,
+            event_context=event_context,
+            text=text
+        )
+        session.add_observation(observation)
+
+        # Persist
+        data = self._load_feedback_data()
+
+        # Find and update the session in the file
+        for i, s in enumerate(data["playback_sessions"]):
+            if s["session_id"] == session.session_id:
+                data["playback_sessions"][i] = session.to_dict()
+                break
+
+        self._save_feedback_data(data)
+        return observation
+
+    def get_sessions(self, data_file: Optional[str] = None) -> List[PlaybackSession]:
+        """
+        Get all playback sessions, optionally filtered by data file.
+
+        Args:
+            data_file: Optional filter by data file
+
+        Returns:
+            List of PlaybackSession objects
+        """
+        data = self._load_feedback_data()
+        sessions = [
+            PlaybackSession.from_dict(s)
+            for s in data["playback_sessions"]
+        ]
+
+        if data_file:
+            sessions = [s for s in sessions if s.data_file == data_file]
+
+        return sorted(sessions, key=lambda s: s.started_at, reverse=True)
+
+    def get_observations(
+        self,
+        data_file: Optional[str] = None,
+        scale: Optional[str] = None,
+        event_type: Optional[str] = None,
+        date_filter: Optional[str] = None  # Format: "YYYY-MM-DD"
+    ) -> List[PlaybackObservation]:
+        """
+        Query observations with optional filters.
+
+        Args:
+            data_file: Filter by source data file
+            scale: Filter by swing scale (S, M, L, XL)
+            event_type: Filter by event type (SWING_FORMED, etc.)
+            date_filter: Filter by date (YYYY-MM-DD)
+
+        Returns:
+            List of matching PlaybackObservation objects
+        """
+        sessions = self.get_sessions(data_file)
+        observations: List[PlaybackObservation] = []
+
+        for session in sessions:
+            for obs in session.observations:
+                # Apply filters
+                if scale and obs.event_context.get("scale") != scale:
+                    continue
+                if event_type and obs.event_context.get("event_type") != event_type:
+                    continue
+                if date_filter:
+                    obs_date = obs.created_at.strftime("%Y-%m-%d")
+                    if obs_date != date_filter:
+                        continue
+                observations.append(obs)
+
+        return observations

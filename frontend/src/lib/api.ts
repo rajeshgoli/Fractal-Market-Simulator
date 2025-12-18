@@ -176,3 +176,46 @@ export async function advanceReplay(
   }
   return response.json();
 }
+
+// Types for playback feedback
+export interface PlaybackFeedbackEventContext {
+  event_type: string;
+  scale: string;
+  swing?: {
+    high_bar_index: number;
+    low_bar_index: number;
+    high_price: string;
+    low_price: string;
+    direction: string;
+  };
+  detection_bar_index?: number;
+}
+
+export interface PlaybackFeedbackResponse {
+  success: boolean;
+  observation_id: string;
+  message: string;
+}
+
+export async function submitPlaybackFeedback(
+  text: string,
+  playbackBar: number,
+  eventContext: PlaybackFeedbackEventContext
+): Promise<PlaybackFeedbackResponse> {
+  const response = await fetch(`${API_BASE}/playback/feedback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text,
+      playback_bar: playbackBar,
+      event_context: eventContext,
+    }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to submit feedback: ${response.statusText}`);
+  }
+  return response.json();
+}
