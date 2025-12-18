@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-17
 
@@ -8,9 +8,7 @@
 
 ## Pending Changes
 
-- #116: Playback feedback capture during Replay View linger events
-- #118: Collision detection now checks ground_truth.json for existing filenames
-- #119: Lazy session creation for replay-only usage (prevents orphan session files)
+- **#122** — Add trigger_explanation field to replay events for human-readable explanations
 
 ---
 
@@ -18,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 17 | #116, #118, #119, #120, #121 — Feedback capture, collision fix, lazy sessions, incremental detection, stale filtering | All Accepted |
 | Dec 17 | #112, #113, #114, #115, #117 — Replay View v2 architecture fix + usability | All Accepted |
 | Dec 17 | #101, #102, #104, #105, #111 — Calibration, forward playback, event nav, scale toggles, swing markers | All Accepted, Epic #99 closed |
 | Dec 17 | #100, #103, #107, #108, #109 — Zero swings fix, speed control, swing overlay, multi-swing nav | All Accepted |

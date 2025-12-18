@@ -19,6 +19,90 @@ import numpy as np
 from sortedcontainers import SortedList
 
 
+def _format_trigger_explanation(
+    event_type: str,
+    swing: 'ActiveSwing',
+    current_price: float,
+    level: Optional[float] = None,
+    previous_level: Optional[float] = None,
+    excess_amount: Optional[float] = None,
+) -> str:
+    """
+    Generate a human-readable explanation for why an event triggered.
+
+    Args:
+        event_type: SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED, LEVEL_CROSS
+        swing: The swing involved in the event
+        current_price: Price at the time of the event
+        level: For LEVEL_CROSS/SWING_COMPLETED, the level crossed
+        previous_level: For LEVEL_CROSS, the previous level
+        excess_amount: For SWING_INVALIDATED, how far past the pivot
+
+    Returns:
+        Human-readable explanation string
+    """
+    swing_range = swing.high_price - swing.low_price
+
+    if event_type == "SWING_FORMED":
+        if swing.direction == 'bull':
+            # Bull: defended pivot is low, price rises toward high
+            fib_0382 = swing.low_price + swing_range * 0.382
+            fib_2 = swing.low_price + swing_range * 2.0
+            return (
+                f"Price ({current_price:.2f}) entered zone above 0.382 ({fib_0382:.2f})\n"
+                f"Active range: {fib_0382:.2f} → {fib_2:.2f}"
+            )
+        else:
+            # Bear: defended pivot is high, price falls toward low
+            fib_0382 = swing.high_price - swing_range * 0.382
+            fib_2 = swing.high_price - swing_range * 2.0
+            return (
+                f"Price ({current_price:.2f}) entered zone below 0.382 ({fib_0382:.2f})\n"
+                f"Active range: {fib_0382:.2f} → {fib_2:.2f}"
+            )
+
+    elif event_type == "SWING_INVALIDATED":
+        if swing.direction == 'bull':
+            pivot_type = "low"
+            pivot_price = swing.low_price
+        else:
+            pivot_type = "high"
+            pivot_price = swing.high_price
+        excess = abs(excess_amount) if excess_amount else 0
+        return (
+            f"Price ({current_price:.2f}) broke {pivot_type} ({pivot_price:.2f}) by {excess:.2f} pts\n"
+            f"Pivot exceeded — swing invalidated"
+        )
+
+    elif event_type == "SWING_COMPLETED":
+        if swing.direction == 'bull':
+            fib_2 = swing.low_price + swing_range * 2.0
+        else:
+            fib_2 = swing.high_price - swing_range * 2.0
+        return (
+            f"Price ({current_price:.2f}) reached 2x target ({fib_2:.2f})\n"
+            f"Full extension achieved"
+        )
+
+    elif event_type == "LEVEL_CROSS":
+        level_val = level or 0
+        prev_val = previous_level or 0
+
+        # Compute level price
+        if swing.direction == 'bull':
+            level_price = swing.low_price + swing_range * level_val
+            prev_side = "below" if prev_val < level_val else "above"
+            curr_side = "above" if prev_val < level_val else "below"
+        else:
+            level_price = swing.high_price - swing_range * level_val
+            prev_side = "above" if prev_val < level_val else "below"
+            curr_side = "below" if prev_val < level_val else "above"
+
+        return f"Crossed {level_val} ({level_price:.2f}): {prev_side} → {curr_side}"
+
+    return ""
+
+
 @dataclass
 class SwingPoint:
     """A confirmed swing point (local extremum)."""
@@ -96,6 +180,7 @@ class IncrementalEvent:
     swing: Optional[ActiveSwing] = None
     level: Optional[float] = None
     previous_level: Optional[float] = None
+    trigger_explanation: Optional[str] = None
 
 
 @dataclass
@@ -301,6 +386,9 @@ def _pair_new_high(
             direction='bear',
             swing_id=swing_id,
             swing=swing,
+            trigger_explanation=_format_trigger_explanation(
+                "SWING_FORMED", swing, current_price
+            ),
         ))
 
     return events
@@ -376,6 +464,9 @@ def _pair_new_low(
             direction='bull',
             swing_id=swing_id,
             swing=swing,
+            trigger_explanation=_format_trigger_explanation(
+                "SWING_FORMED", swing, current_price
+            ),
         ))
 
     return events
@@ -431,6 +522,11 @@ def advance_bar_incremental(
     for swing_id, swing in state.active_swings.items():
         if swing.is_pivot_violated(bar_low, bar_high, state.protection_tolerance):
             to_remove.append(swing_id)
+            # Calculate excess amount for explanation
+            if swing.direction == 'bull':
+                excess = swing.low_price - bar_low
+            else:
+                excess = bar_high - swing.high_price
             events.append(IncrementalEvent(
                 event_type="SWING_INVALIDATED",
                 bar_index=current_bar,
@@ -438,6 +534,9 @@ def advance_bar_incremental(
                 direction=swing.direction,
                 swing_id=swing_id,
                 swing=swing,
+                trigger_explanation=_format_trigger_explanation(
+                    "SWING_INVALIDATED", swing, bar_close, excess_amount=excess
+                ),
             ))
 
     for swing_id in to_remove:
@@ -462,6 +561,9 @@ def advance_bar_incremental(
                 swing=swing,
                 level=2.0,
                 previous_level=old_level,
+                trigger_explanation=_format_trigger_explanation(
+                    "SWING_COMPLETED", swing, bar_close, level=2.0, previous_level=old_level
+                ),
             ))
         # Check for significant level crosses
         elif new_level > old_level:
@@ -477,6 +579,9 @@ def advance_bar_incremental(
                         swing=swing,
                         level=lvl,
                         previous_level=old_level,
+                        trigger_explanation=_format_trigger_explanation(
+                            "LEVEL_CROSS", swing, bar_close, level=lvl, previous_level=old_level
+                        ),
                     ))
                     break  # Only emit one level cross per bar per swing
 

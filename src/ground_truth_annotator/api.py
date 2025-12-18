@@ -2484,6 +2484,7 @@ class ReplayEventResponse(BaseModel):
     swing: Optional[CalibrationSwingResponse] = None  # For SWING_FORMED
     level: Optional[float] = None  # For LEVEL_CROSS (e.g., 0.382, 0.618)
     previous_level: Optional[float] = None  # For LEVEL_CROSS
+    trigger_explanation: Optional[str] = None  # Human-readable explanation of why event fired
 
 
 class ReplaySwingState(BaseModel):
@@ -2726,6 +2727,90 @@ def _swing_to_response(swing: dict, is_active: bool) -> CalibrationSwingResponse
     )
 
 
+def _format_trigger_explanation_dict(
+    event_type: str,
+    swing: dict,
+    current_price: float,
+    level: Optional[float] = None,
+    previous_level: Optional[float] = None,
+) -> str:
+    """
+    Generate a human-readable explanation for legacy dict-based swings.
+
+    Args:
+        event_type: SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED, LEVEL_CROSS
+        swing: Dictionary with swing data (high_price, low_price, direction)
+        current_price: Price at the time of the event
+        level: For LEVEL_CROSS/SWING_COMPLETED, the level crossed
+        previous_level: For LEVEL_CROSS, the previous level
+
+    Returns:
+        Human-readable explanation string
+    """
+    high_price = swing.get('high_price', 0)
+    low_price = swing.get('low_price', 0)
+    direction = swing.get('direction', 'bull')
+    swing_range = high_price - low_price
+
+    if swing_range <= 0:
+        return ""
+
+    if event_type == "SWING_FORMED":
+        if direction == 'bull':
+            fib_0382 = low_price + swing_range * 0.382
+            fib_2 = low_price + swing_range * 2.0
+            return (
+                f"Price ({current_price:.2f}) entered zone above 0.382 ({fib_0382:.2f})\n"
+                f"Active range: {fib_0382:.2f} → {fib_2:.2f}"
+            )
+        else:
+            fib_0382 = high_price - swing_range * 0.382
+            fib_2 = high_price - swing_range * 2.0
+            return (
+                f"Price ({current_price:.2f}) entered zone below 0.382 ({fib_0382:.2f})\n"
+                f"Active range: {fib_0382:.2f} → {fib_2:.2f}"
+            )
+
+    elif event_type == "SWING_INVALIDATED":
+        if direction == 'bull':
+            pivot_type = "low"
+            pivot_price = low_price
+        else:
+            pivot_type = "high"
+            pivot_price = high_price
+        return (
+            f"Price ({current_price:.2f}) broke {pivot_type} ({pivot_price:.2f})\n"
+            f"Pivot exceeded — swing invalidated"
+        )
+
+    elif event_type == "SWING_COMPLETED":
+        if direction == 'bull':
+            fib_2 = low_price + swing_range * 2.0
+        else:
+            fib_2 = high_price - swing_range * 2.0
+        return (
+            f"Price ({current_price:.2f}) reached 2x target ({fib_2:.2f})\n"
+            f"Full extension achieved"
+        )
+
+    elif event_type == "LEVEL_CROSS":
+        level_val = level or 0
+        prev_val = previous_level or 0
+
+        if direction == 'bull':
+            level_price = low_price + swing_range * level_val
+            prev_side = "below" if prev_val < level_val else "above"
+            curr_side = "above" if prev_val < level_val else "below"
+        else:
+            level_price = high_price - swing_range * level_val
+            prev_side = "above" if prev_val < level_val else "below"
+            curr_side = "below" if prev_val < level_val else "above"
+
+        return f"Crossed {level_val} ({level_price:.2f}): {prev_side} → {curr_side}"
+
+    return ""
+
+
 def _diff_swing_states(
     prev_swings: Dict[str, dict],
     new_swings: Dict[str, dict],
@@ -2771,6 +2856,9 @@ def _diff_swing_states(
             direction=swing['direction'],
             swing_id=swing_id,
             swing=_swing_to_response(swing, True),
+            trigger_explanation=_format_trigger_explanation_dict(
+                "SWING_FORMED", swing, current_price
+            ),
         ))
 
     # SWING_INVALIDATED: Swings that disappeared
@@ -2784,6 +2872,9 @@ def _diff_swing_states(
             direction=swing['direction'],
             swing_id=swing_id,
             swing=_swing_to_response(swing, False),  # is_active=False since invalidated
+            trigger_explanation=_format_trigger_explanation_dict(
+                "SWING_INVALIDATED", swing, current_price
+            ),
         ))
 
     # Check continuing swings for LEVEL_CROSS and COMPLETION
@@ -2804,6 +2895,9 @@ def _diff_swing_states(
                 level=2.0,
                 previous_level=prev_level,
                 swing=_swing_to_response(swing, True),  # Include swing data for explanation
+                trigger_explanation=_format_trigger_explanation_dict(
+                    "SWING_COMPLETED", swing, current_price, level=2.0, previous_level=prev_level
+                ),
             ))
         # LEVEL_CROSS: crossed a significant fib level
         elif new_level != prev_level and new_level > prev_level:
@@ -2820,6 +2914,9 @@ def _diff_swing_states(
                         level=lvl,
                         previous_level=prev_level,
                         swing=_swing_to_response(swing, True),  # Include swing data for explanation
+                        trigger_explanation=_format_trigger_explanation_dict(
+                            "LEVEL_CROSS", swing, current_price, level=lvl, previous_level=prev_level
+                        ),
                     ))
                     break  # Only emit one level cross per bar
 
@@ -2875,6 +2972,7 @@ def _incremental_event_to_response(
         swing=swing_response,
         level=event.level,
         previous_level=event.previous_level,
+        trigger_explanation=event.trigger_explanation,
     )
 
 

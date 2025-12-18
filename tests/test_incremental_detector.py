@@ -23,6 +23,7 @@ from src.swing_analysis.incremental_detector import (
     is_swing_low,
     advance_bar_incremental,
     initialize_from_calibration,
+    _format_trigger_explanation,
 )
 
 
@@ -540,3 +541,231 @@ class TestSwingPoint:
 
         indices = [p.bar_index for p in points]
         assert indices == [5, 10, 15]
+
+
+class TestTriggerExplanation:
+    """Tests for trigger explanation generation."""
+
+    def _create_bull_swing(self) -> ActiveSwing:
+        """Create a test bull swing."""
+        return ActiveSwing(
+            swing_id="test-bull",
+            direction="bull",
+            scale="M",
+            high_price=110.0,
+            high_bar_index=10,
+            low_price=100.0,
+            low_bar_index=20,
+            size=10.0,
+            rank=1,
+            formation_bar=20,
+        )
+
+    def _create_bear_swing(self) -> ActiveSwing:
+        """Create a test bear swing."""
+        return ActiveSwing(
+            swing_id="test-bear",
+            direction="bear",
+            scale="M",
+            high_price=110.0,
+            high_bar_index=20,
+            low_price=100.0,
+            low_bar_index=10,
+            size=10.0,
+            rank=1,
+            formation_bar=20,
+        )
+
+    def test_swing_formed_bull_explanation(self):
+        """Test trigger explanation for bull SWING_FORMED."""
+        swing = self._create_bull_swing()
+        current_price = 105.0
+
+        explanation = _format_trigger_explanation(
+            "SWING_FORMED", swing, current_price
+        )
+
+        # Bull swing: fib_0382 = 100 + 10 * 0.382 = 103.82
+        # fib_2 = 100 + 10 * 2.0 = 120
+        assert "105.00" in explanation
+        assert "103.82" in explanation
+        assert "120.00" in explanation
+        assert "above 0.382" in explanation
+        assert "Active range" in explanation
+
+    def test_swing_formed_bear_explanation(self):
+        """Test trigger explanation for bear SWING_FORMED."""
+        swing = self._create_bear_swing()
+        current_price = 105.0
+
+        explanation = _format_trigger_explanation(
+            "SWING_FORMED", swing, current_price
+        )
+
+        # Bear swing: fib_0382 = 110 - 10 * 0.382 = 106.18
+        # fib_2 = 110 - 10 * 2.0 = 90
+        assert "105.00" in explanation
+        assert "106.18" in explanation
+        assert "90.00" in explanation
+        assert "below 0.382" in explanation
+        assert "Active range" in explanation
+
+    def test_swing_invalidated_bull_explanation(self):
+        """Test trigger explanation for bull SWING_INVALIDATED."""
+        swing = self._create_bull_swing()
+        current_price = 98.0
+        excess = 2.0  # Price went 2 pts below pivot
+
+        explanation = _format_trigger_explanation(
+            "SWING_INVALIDATED", swing, current_price, excess_amount=excess
+        )
+
+        assert "98.00" in explanation
+        assert "low" in explanation
+        assert "100.00" in explanation
+        assert "2.00" in explanation
+        assert "invalidated" in explanation
+
+    def test_swing_invalidated_bear_explanation(self):
+        """Test trigger explanation for bear SWING_INVALIDATED."""
+        swing = self._create_bear_swing()
+        current_price = 112.0
+        excess = 2.0  # Price went 2 pts above pivot
+
+        explanation = _format_trigger_explanation(
+            "SWING_INVALIDATED", swing, current_price, excess_amount=excess
+        )
+
+        assert "112.00" in explanation
+        assert "high" in explanation
+        assert "110.00" in explanation
+        assert "2.00" in explanation
+        assert "invalidated" in explanation
+
+    def test_swing_completed_bull_explanation(self):
+        """Test trigger explanation for bull SWING_COMPLETED."""
+        swing = self._create_bull_swing()
+        current_price = 120.5
+
+        explanation = _format_trigger_explanation(
+            "SWING_COMPLETED", swing, current_price, level=2.0, previous_level=1.9
+        )
+
+        # fib_2 = 100 + 10 * 2.0 = 120
+        assert "120.50" in explanation
+        assert "2x target" in explanation
+        assert "120.00" in explanation
+        assert "Full extension achieved" in explanation
+
+    def test_swing_completed_bear_explanation(self):
+        """Test trigger explanation for bear SWING_COMPLETED."""
+        swing = self._create_bear_swing()
+        current_price = 89.5
+
+        explanation = _format_trigger_explanation(
+            "SWING_COMPLETED", swing, current_price, level=2.0, previous_level=1.9
+        )
+
+        # fib_2 = 110 - 10 * 2.0 = 90
+        assert "89.50" in explanation
+        assert "2x target" in explanation
+        assert "90.00" in explanation
+        assert "Full extension achieved" in explanation
+
+    def test_level_cross_bull_explanation(self):
+        """Test trigger explanation for bull LEVEL_CROSS."""
+        swing = self._create_bull_swing()
+        current_price = 106.5
+
+        explanation = _format_trigger_explanation(
+            "LEVEL_CROSS", swing, current_price, level=0.618, previous_level=0.5
+        )
+
+        # level_price = 100 + 10 * 0.618 = 106.18
+        assert "Crossed 0.618" in explanation
+        assert "106.18" in explanation
+        assert "below" in explanation
+        assert "above" in explanation
+
+    def test_level_cross_bear_explanation(self):
+        """Test trigger explanation for bear LEVEL_CROSS."""
+        swing = self._create_bear_swing()
+        current_price = 103.5
+
+        explanation = _format_trigger_explanation(
+            "LEVEL_CROSS", swing, current_price, level=0.618, previous_level=0.5
+        )
+
+        # level_price = 110 - 10 * 0.618 = 103.82
+        assert "Crossed 0.618" in explanation
+        assert "103.82" in explanation
+
+    def test_events_include_trigger_explanation(self):
+        """Test that events generated by advance_bar_incremental include trigger_explanation."""
+        state = IncrementalSwingState(
+            median_candle=5.0,
+            price_range=100.0,
+            scale_thresholds={"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
+            highs=[100.0],
+            lows=[90.0],
+            closes=[95.0],
+            lookback=5,
+            protection_tolerance=0.1,
+        )
+
+        # Add an active bull swing
+        swing = self._create_bull_swing()
+        state.active_swings["test-bull"] = swing
+        state.fib_levels["test-bull"] = 0.4
+
+        # Advance with a bar that crosses 0.5 level
+        events = advance_bar_incremental(
+            bar_high=106.0,
+            bar_low=104.0,
+            bar_close=105.5,
+            state=state
+        )
+
+        # Find level cross event
+        level_cross_events = [e for e in events if e.event_type == "LEVEL_CROSS"]
+        assert len(level_cross_events) == 1
+
+        # Check trigger_explanation is populated
+        event = level_cross_events[0]
+        assert event.trigger_explanation is not None
+        assert len(event.trigger_explanation) > 0
+        assert "Crossed 0.5" in event.trigger_explanation
+
+    def test_invalidation_event_includes_explanation(self):
+        """Test that invalidation events include trigger_explanation."""
+        state = IncrementalSwingState(
+            median_candle=5.0,
+            price_range=100.0,
+            scale_thresholds={"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
+            highs=[100.0],
+            lows=[90.0],
+            closes=[95.0],
+            lookback=5,
+            protection_tolerance=0.1,
+        )
+
+        # Add an active bull swing
+        swing = self._create_bull_swing()
+        state.active_swings["test-bull"] = swing
+        state.fib_levels["test-bull"] = 0.5
+
+        # Advance with a bar that violates the pivot
+        events = advance_bar_incremental(
+            bar_high=105.0,
+            bar_low=98.0,  # Below threshold
+            bar_close=100.0,
+            state=state
+        )
+
+        invalidation_events = [e for e in events if e.event_type == "SWING_INVALIDATED"]
+        assert len(invalidation_events) == 1
+
+        event = invalidation_events[0]
+        assert event.trigger_explanation is not None
+        assert "invalidated" in event.trigger_explanation
+        assert "low" in event.trigger_explanation

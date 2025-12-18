@@ -53,6 +53,7 @@ export interface SwingData {
     fromSwingId: string;
   };
   previousSwingId?: string;
+  triggerExplanation?: string;
 }
 
 export interface ChartDataPoint {

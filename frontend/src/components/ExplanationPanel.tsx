@@ -359,9 +359,20 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
           )}
         </div>
 
-        {/* Column 3: Separation / Context */}
+        {/* Column 3: Trigger Explanation / Separation / Context */}
         <div className="p-4 flex flex-col justify-center space-y-4">
-          {swing.isAnchor ? (
+          {swing.triggerExplanation ? (
+            <div className="space-y-3">
+              <span className="text-xs text-app-muted font-medium uppercase tracking-wider block">
+                Trigger Explanation
+              </span>
+              <div className="bg-app-card/30 rounded border border-app-border/50 p-3">
+                <pre className="text-xs text-app-text whitespace-pre-wrap font-mono leading-relaxed">
+                  {swing.triggerExplanation}
+                </pre>
+              </div>
+            </div>
+          ) : swing.isAnchor ? (
             <div className="bg-trading-purple/20 text-trading-purple rounded border border-trading-purple/30 p-4 text-center">
               <span className="text-sm font-semibold">Anchor Swing</span>
               <p className="text-xs mt-1 opacity-80">Largest swing in calibration window</p>

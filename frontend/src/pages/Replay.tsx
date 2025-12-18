@@ -143,6 +143,7 @@ function replayEventToSwingData(event: ReplayEvent, sourceBars: BarData[]): Swin
     sizePct,
     // Note: scaleReason, isAnchor, and separation are not available in ReplayEvent
     // These are calibration-specific fields
+    triggerExplanation: event.trigger_explanation,
   };
 }
 

@@ -137,6 +137,7 @@ export interface ReplayEvent {
   };
   level?: number;
   previous_level?: number;
+  trigger_explanation?: string;
 }
 
 export interface ReplaySwingState {
