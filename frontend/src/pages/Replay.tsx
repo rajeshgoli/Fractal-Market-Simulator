@@ -224,17 +224,22 @@ export const Replay: React.FC = () => {
     return options;
   }, [chart1Aggregation, chart2Aggregation]);
 
-  // Calculate effective playback interval in ms
-  // Speed = N aggregated bars per second at selected aggregation
-  // effectiveSourceBarsPerSecond = speedMultiplier * (aggMinutes / sourceMinutes)
-  // interval = 1000 / effectiveSourceBarsPerSecond
-  const effectivePlaybackIntervalMs = useMemo(() => {
+  // Calculate bars per advance (aggregation factor)
+  // This determines how many source bars to skip per playback tick
+  // e.g., if source is 5m and user selects "1H" aggregation, skip 12 bars per tick
+  const barsPerAdvance = useMemo(() => {
     const aggMinutes = getAggregationMinutes(speedAggregation);
-    const aggregationFactor = aggMinutes / sourceResolutionMinutes;
-    const effectiveSourceBarsPerSecond = speedMultiplier * aggregationFactor;
-    // Clamp to minimum 10ms interval for stability
-    return Math.max(10, Math.round(1000 / effectiveSourceBarsPerSecond));
-  }, [speedMultiplier, speedAggregation, sourceResolutionMinutes]);
+    return Math.max(1, Math.round(aggMinutes / sourceResolutionMinutes));
+  }, [speedAggregation, sourceResolutionMinutes]);
+
+  // Calculate playback interval in ms
+  // Speed = N ticks per second (each tick advances barsPerAdvance source bars)
+  // So "10x at 1H" means 10 aggregated bars per second = 10 ticks per second
+  const effectivePlaybackIntervalMs = useMemo(() => {
+    // Each tick is one aggregated bar, so interval = 1000ms / speedMultiplier
+    // Clamp to minimum 50ms interval for stability
+    return Math.max(50, Math.round(1000 / speedMultiplier));
+  }, [speedMultiplier]);
 
   // Legacy playback hook (used for calibration phase scrubbing, not forward playback)
   const playback = usePlayback({
@@ -268,6 +273,7 @@ export const Replay: React.FC = () => {
     calibrationBarCount: calibrationData?.calibration_bar_count || 10000,
     calibrationBars,
     playbackIntervalMs: effectivePlaybackIntervalMs,
+    barsPerAdvance,  // How many source bars to skip per tick (aggregation factor)
     filters,
     enabledScales: displayConfig.enabledScales,
     onNewBars: useCallback((newBars: BarData[]) => {
@@ -532,7 +538,7 @@ export const Replay: React.FC = () => {
     return closest.timestamp;
   }, []);
 
-  // Update all markers (position + swing markers) using a single markers plugin
+  // Update all markers (swing markers only) using a single markers plugin
   const updateAllMarkers = useCallback((
     markersPlugin: ISeriesMarkersPluginApi<Time> | null,
     bars: BarData[],
@@ -543,19 +549,6 @@ export const Replay: React.FC = () => {
     if (!markersPlugin || bars.length === 0) return;
 
     const markers: SeriesMarker<Time>[] = [];
-
-    // Add position marker
-    const aggIndex = findAggBarForSourceIndex(bars, sourceIndex);
-    if (aggIndex >= 0 && aggIndex < bars.length) {
-      const bar = bars[aggIndex];
-      markers.push({
-        time: bar.timestamp as Time,
-        position: 'aboveBar',
-        color: '#f7d63e',
-        shape: 'arrowDown',
-        text: '',
-      });
-    }
 
     // Determine which swings to show markers for
     let visibleSwings: DetectedSwing[];
@@ -618,6 +611,7 @@ export const Replay: React.FC = () => {
   // The /api/bars endpoint automatically respects the current playback position
 
   // Sync charts to current position (scrolling only - markers handled separately)
+  // IMPORTANT: This preserves user's zoom level and only scrolls when current bar is out of view
   const syncChartsToPosition = useCallback((sourceIndex: number) => {
     const syncChart = (
       chart: IChartApi | null,
@@ -629,21 +623,33 @@ export const Replay: React.FC = () => {
       const aggIndex = findAggBarForSourceIndex(bars, sourceIndex);
       const visibleRange = chart.timeScale().getVisibleLogicalRange();
 
-      if (!forceCenter && visibleRange) {
-        // Check if current bar is visible with margin
-        const rangeSize = visibleRange.to - visibleRange.from;
-        const margin = rangeSize * 0.1;
+      if (!visibleRange) {
+        // No visible range yet - use default 100 bar window
+        const barsToShow = 100;
+        const halfWindow = Math.floor(barsToShow / 2);
+        let from = Math.max(0, aggIndex - halfWindow);
+        let to = Math.min(bars.length - 1, aggIndex + halfWindow);
+        chart.timeScale().setVisibleLogicalRange({ from, to });
+        return;
+      }
+
+      const rangeSize = visibleRange.to - visibleRange.from;
+
+      if (!forceCenter) {
+        // Check if current bar is visible with small margin (5%)
+        const margin = rangeSize * 0.05;
         if (aggIndex >= visibleRange.from + margin && aggIndex <= visibleRange.to - margin) {
           return; // Already visible - no scroll needed
         }
       }
 
-      // Center on current bar with ~100 bars visible
-      const barsToShow = 100;
-      const halfWindow = Math.floor(barsToShow / 2);
-      let from = aggIndex - halfWindow;
-      let to = aggIndex + halfWindow;
+      // Scroll to show current bar while PRESERVING the user's zoom level (range size)
+      // Position current bar at 80% of the way through the visible range
+      const positionRatio = 0.8;
+      let from = aggIndex - rangeSize * positionRatio;
+      let to = from + rangeSize;
 
+      // Clamp to valid range
       if (from < 0) {
         to -= from;
         from = 0;

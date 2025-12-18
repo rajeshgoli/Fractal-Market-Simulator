@@ -7,6 +7,7 @@ interface UseForwardPlaybackOptions {
   calibrationBarCount: number;
   calibrationBars: BarData[];
   playbackIntervalMs: number;
+  barsPerAdvance: number;  // How many source bars to advance per tick (aggregation factor)
   filters: FilterState[];  // Event type filters
   enabledScales: Set<SwingScaleKey>;  // Scale filters
   onNewBars?: (bars: BarData[]) => void;
@@ -48,6 +49,7 @@ export function useForwardPlayback({
   calibrationBarCount,
   calibrationBars,
   playbackIntervalMs,
+  barsPerAdvance,
   filters,
   enabledScales,
   onNewBars,
@@ -222,13 +224,13 @@ export function useForwardPlayback({
     });
   }, [filters, enabledScales]);
 
-  // Advance one bar (call API)
+  // Advance bars (call API with barsPerAdvance)
   const advanceBar = useCallback(async () => {
     if (endOfData || advancePendingRef.current) return;
 
     advancePendingRef.current = true;
     try {
-      const response = await advanceReplay(calibrationBarCount, currentPosition, 1);
+      const response = await advanceReplay(calibrationBarCount, currentPosition, barsPerAdvance);
 
       // Update end of data
       if (response.end_of_data) {
@@ -282,7 +284,7 @@ export function useForwardPlayback({
     } finally {
       advancePendingRef.current = false;
     }
-  }, [calibrationBarCount, currentPosition, endOfData, clearTimers, enterLinger, filterEvents, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
+  }, [calibrationBarCount, currentPosition, barsPerAdvance, endOfData, clearTimers, enterLinger, filterEvents, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
 
   // Ref to hold the latest advanceBar function
   const advanceBarRef = useRef<() => Promise<void>>(async () => {});

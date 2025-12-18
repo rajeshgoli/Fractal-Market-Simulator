@@ -2608,6 +2608,7 @@ def _diff_swing_states(
         new_fib_levels[swing_id] = _get_current_fib_level(swing, current_price)
 
     # SWING_INVALIDATED: Swings that disappeared
+    # Include swing data so UI can show what was invalidated
     for swing_id in prev_ids - new_ids:
         swing = prev_swings[swing_id]
         events.append(ReplayEventResponse(
@@ -2616,6 +2617,7 @@ def _diff_swing_states(
             scale=swing['scale'],
             direction=swing['direction'],
             swing_id=swing_id,
+            swing=_swing_to_response(swing, False),  # is_active=False since invalidated
         ))
 
     # Check continuing swings for LEVEL_CROSS and COMPLETION
@@ -2635,6 +2637,7 @@ def _diff_swing_states(
                 swing_id=swing_id,
                 level=2.0,
                 previous_level=prev_level,
+                swing=_swing_to_response(swing, True),  # Include swing data for explanation
             ))
         # LEVEL_CROSS: crossed a significant fib level
         elif new_level != prev_level and new_level > prev_level:
@@ -2650,6 +2653,7 @@ def _diff_swing_states(
                         swing_id=swing_id,
                         level=lvl,
                         previous_level=prev_level,
+                        swing=_swing_to_response(swing, True),  # Include swing data for explanation
                     ))
                     break  # Only emit one level cross per bar
 
