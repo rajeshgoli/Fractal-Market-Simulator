@@ -101,6 +101,9 @@ class SessionResponse(BaseModel):
     data_file: str
     resolution: str
     window_size: int
+    window_offset: int
+    total_source_bars: int  # Total bars in file (before offset/windowing)
+    calibration_bar_count: Optional[int]  # Bars used for calibration (if calibrated)
     scale: str
     created_at: str
     annotation_count: int
@@ -710,6 +713,9 @@ async def get_session():
         data_file=s.session.data_file,
         resolution=s.session.resolution,
         window_size=s.session.window_size,
+        window_offset=s.session.window_offset,
+        total_source_bars=s.total_source_bars,
+        calibration_bar_count=s.calibration_bar_count,
         scale=current_scale,
         created_at=s.session.created_at.isoformat(),
         annotation_count=len(s.session.annotations),

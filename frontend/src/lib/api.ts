@@ -7,6 +7,9 @@ export interface SessionInfo {
   data_file: string;
   resolution: string;
   window_size: number;
+  window_offset: number;
+  total_source_bars: number;
+  calibration_bar_count: number | null;
   scale: string;
   created_at: string;
   annotation_count: number;

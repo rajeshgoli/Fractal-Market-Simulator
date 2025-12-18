@@ -171,6 +171,12 @@ export const Replay: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Session metadata (for playback controls display)
+  const [sessionInfo, setSessionInfo] = useState<{
+    windowOffset: number;
+    totalSourceBars: number;
+  } | null>(null);
+
   // Calibration state
   const [calibrationPhase, setCalibrationPhase] = useState<CalibrationPhase>(CalibrationPhase.NOT_STARTED);
   const [calibrationData, setCalibrationData] = useState<CalibrationData | null>(null);
@@ -383,6 +389,12 @@ export const Replay: React.FC = () => {
         const session = await fetchSession();
         const resolutionMinutes = parseResolutionToMinutes(session.resolution);
         setSourceResolutionMinutes(resolutionMinutes);
+
+        // Store session metadata for playback controls
+        setSessionInfo({
+          windowOffset: session.window_offset,
+          totalSourceBars: session.total_source_bars,
+        });
 
         // Load source bars
         const source = await fetchBars('S');
@@ -959,6 +971,10 @@ export const Replay: React.FC = () => {
               totalEvents={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.allEvents.length : 0}
               currentBar={calibrationPhase === CalibrationPhase.CALIBRATED ? (calibrationData?.calibration_bar_count ?? 0) - 1 : (calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition)}
               totalBars={sourceBars.length}
+              // Forward playback metadata (only show new UI in PLAYING phase)
+              calibrationBarCount={calibrationPhase === CalibrationPhase.PLAYING ? calibrationData?.calibration_bar_count : undefined}
+              windowOffset={calibrationPhase === CalibrationPhase.PLAYING ? sessionInfo?.windowOffset : undefined}
+              totalSourceBars={calibrationPhase === CalibrationPhase.PLAYING ? sessionInfo?.totalSourceBars : undefined}
               speedMultiplier={speedMultiplier}
               onSpeedMultiplierChange={setSpeedMultiplier}
               speedAggregation={speedAggregation}
