@@ -67,7 +67,7 @@ Your defining skill is **judgment**: making these delicate tradeoffs precisely, 
 
 - Engineer handoff (issues ready for review)
 - Product request (`Docs/State/product_direction.md` updated)
-- **FORCED: `Docs/State/pending_review.md` count >= 5**
+- **FORCED: `Docs/State/pending_review.md` count >= 10**
 - Periodic full review (~weekly or at milestones)
 
 ## Workflow

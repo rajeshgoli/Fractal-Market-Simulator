@@ -24,7 +24,7 @@ As engineer, read GitHub issue #31 and implement the CSV export feature.
 ```
 
 ```
-As architect, read Docs/State/pending_review.md and review the 5 accumulated changes.
+As architect, read Docs/State/pending_review.md and review the 10 accumulated changes.
 ```
 
 ```

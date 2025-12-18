@@ -1,19 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 0
 
-**Last Review:** 2025-12-17
+**Last Review:** 2025-12-18
 
 ---
 
 ## Pending Changes
 
-- **#130 regression fix** — Fix navigation to use swings_by_scale instead of active_swings_by_scale
-- **#130** — Decouple swing navigation from display count; navigation now cycles through all swings for enabled scales
-- **#131** — Add stats panel toggle and fix swing H/L markers during playback
-- **#133** — Add self-referential separation for XL scale swings (reduced 17 redundant swings to 5)
-- **#134** — Modularize api.py (3,514 lines) into 7 routers and schemas.py
-- **#136** — Restrict protection tolerance to XL anchors, improve "1" endpoint selection, relax entry threshold to 0.236
+(None)
 
 ---
 
@@ -21,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 18 | #130/regression, #131 (+ 3 fixes), #133, #134, #136 — Navigation, stats toggle, XL separation, API modularization, endpoint selection | All Accepted |
 | Dec 17 | #122, #123, #126, #127, #128 — Trigger explanations, always-on feedback, level band fix, offset storage, deduplication | All Accepted |
 | Dec 17 | #116, #118, #119, #120, #121 — Feedback capture, collision fix, lazy sessions, incremental detection, stale filtering | All Accepted |
 | Dec 17 | #112, #113, #114, #115, #117 — Replay View v2 architecture fix + usability | All Accepted |

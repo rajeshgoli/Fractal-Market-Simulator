@@ -17,9 +17,11 @@ Read in order:
 - Calibration-first playback for causal evaluation
 - Backend-controlled data boundary for replay (single source of truth)
 - Incremental detection for playback (O(active) vs O(N log N))
+- Self-referential separation at XL scale (no larger_swings available)
+- Candidate swings: pending 0.236 validation before promotion to reference
 
 **Known debt:**
-- `detect_swings()` function (~333 LOC) — monolithic; filter pipeline not extracted
+- `detect_swings()` function (~400 LOC) — monolithic; filter pipeline not extracted
 
 **Cleanup tasks (deferred):**
 - Delete `Docs/Archive/Proposals/Discretization/` once discretization pipeline is complete and documented in user_guide + developer_guide
@@ -30,48 +32,50 @@ Read in order:
 
 ### Status
 
-**Replay View v2 is feature-complete.** All observation capture infrastructure is operational:
-- Always-on feedback capture with rich context snapshots
-- Trigger explanations for all event types (SWING_FORMED, INVALIDATED, COMPLETED, LEVEL_CROSS)
-- Critical bug fix: `get_level_band()` now correctly identifies Fib bands (was causing all swings to filter as "redundant")
-- Incremental detector deduplicates swings using same pivot
+**Replay View v2 is feature-complete.** Detection quality improvements deployed:
+- Self-referential separation for XL swings (17 → 5 in test case)
+- Recursive endpoint optimization for best "1" selection
+- Candidate swing tracking for pending 0.236 validation
+- Protection tolerance restricted to established anchors
+- API modularized into 7 domain-specific routers
 
-**Current milestone:** User testing to collect detection quality observations.
+**Current milestone:** User testing to validate detection quality improvements.
 
 ---
 
-## Recently Completed (Dec 17, PM — Review 2)
+## Recently Completed (Dec 18 — Review 3)
 
 | Issue | Feature | Verdict |
 |-------|---------|---------|
-| #122 | Trigger explanation for replay events | Accepted |
-| #123 | Always-on feedback capture with rich context | Accepted |
-| #126 | **Critical:** Fix `get_level_band()` bug causing valid swings to be filtered | Accepted |
-| #127 | Store offset in playback_feedback.json | Accepted |
-| #128 | Deduplicate swings using same pivot in incremental detector | Accepted |
+| #130 (+ regression) | Navigation decoupled from display count | Accepted |
+| #131 (+ 3 follow-ups) | Stats panel toggle, swing H/L markers | Accepted |
+| #133 | Self-referential separation for XL scale | Accepted |
+| #134 | API modularization (3,514 → 550 lines in api.py) | Accepted |
+| #136 | Endpoint optimization, candidate swings, protection tolerance | Accepted |
 
-**Key fixes:**
+**Key improvements:**
 
-1. **get_level_band() Bug (#126):**
-   - Root cause: Code assumed `levels[0]` was lowest price, but levels are ordered by **multiplier** (-0.1, 0, 0.1, ..., 1), not price
-   - Impact: ALL swings returned band `-999`, making them all "redundant" with anchor
-   - Result: Only largest swing survived filtering — explains "calibration found only 1 XL swing"
-   - Fix: Check against actual lowest price in levels list
+1. **Self-Referential Separation (#133):**
+   - XL swings now require both endpoints to be > 0.1 FIB from existing swings
+   - 17 redundant swings → 5 distinct swings in test case
+   - Same rally to ATH no longer generates 12+ nearly-identical references
 
-2. **Incremental Detector Deduplication (#128):**
-   - Problem: New lows were paired with ALL valid highs, creating duplicate swings
-   - Fix: Check if swing with same pivot already exists before creating new one
-   - Result: Only optimal pairing kept; suboptimal duplicates prevented
+2. **Endpoint Selection (#136):**
+   - Recursive `_optimize_defended_pivot()` finds best "1" endpoint
+   - Stops when either well-separated (≥ 0.1 FIB) OR at absolute best extremum
+   - Candidate swings (`is_candidate=True`) track pending 0.236 validation
+   - Protection tolerance (0.1) only applies when larger_swings context exists
 
-3. **Trigger Explanations (#122):**
-   - Human-readable explanations for why events fired
-   - Examples: "Price entered zone below 0.382", "Pivot exceeded — swing invalidated"
-   - Replaces "No separation data available" with meaningful content
+3. **API Modularization (#134):**
+   - 7 routers: annotations, session, cascade, comparison, review, discretization, replay
+   - schemas.py with all Pydantic models
+   - api.py reduced to app factory and core routes
 
-4. **Always-On Feedback (#123):**
-   - Feedback box visible at all times (not just during linger)
-   - Auto-pause on focus
-   - Rich context: state, offset, bars since calibration, swing counts, event context
+4. **UX Fixes (#130, #131):**
+   - Navigation cycles through ALL swings (e.g., 1/17 to 17/17)
+   - Display count (dropdown) controls chart density, not navigation
+   - "Show Stats" toggle brings calibration panel back during playback
+   - Swing H/L markers visible during both calibration and playback
 
 ---
 
@@ -79,13 +83,14 @@ Read in order:
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Swing Detector | **Healthy** | `get_level_band()` fix deployed |
-| Incremental Detector | **Healthy** | Deduplication added |
+| Swing Detector | **Healthy** | Self-referential separation + endpoint optimization |
+| Incremental Detector | Healthy | Deduplication + frozen calibration stats |
 | Ground Truth Annotator | Healthy | Two-click annotation + Review Mode |
 | Discretization Pipeline | Healthy | Core complete, visual overlay done |
 | Replay View | **Complete** | Full observation workflow with feedback capture |
-| Test Suite | Healthy | 834 tests passing |
-| Documentation | **Current** | Both guides updated Dec 17 |
+| API Layer | **Refactored** | 7 routers, clean separation |
+| Test Suite | Healthy | 865 tests passing |
+| Documentation | **Current** | Both guides updated Dec 18 |
 
 ---
 
@@ -93,25 +98,23 @@ Read in order:
 
 ### 1. User Testing (Active)
 
-With observation workflow complete and critical bugs fixed, user can:
-- Run forward playback with true incremental detection
-- See meaningful trigger explanations for all events
-- Capture observations at any time via always-on feedback
-- Verify that calibration now finds expected swing counts
+With detection improvements deployed, user can validate:
+- XL swing quality (fewer redundant swings)
+- Endpoint selection (best "1" found, not just any valid one)
+- Candidate swing behavior (pending 0.236 validation)
+- Protection tolerance behavior (strict at XL, tolerant with context)
 
 **Observations to collect:**
-- Cascading swing detection noise patterns
-- False positives after target achieved
-- Detection timing issues
-- Any remaining missing swing issues
+- Do the 5 XL swings (vs 17) feel right for the test window?
+- Are candidate swings being promoted at the right time?
+- Any remaining endpoint selection issues?
 
-### 2. Detection Algorithm Improvements (Pending Data)
+### 2. Candidate Swing Promotion (Pending Data)
 
-Per `product_direction.md`, two observations pending investigation:
-- **Observation A:** Cascading swing detection (smaller swings fire before larger)
-- **Observation B:** False positives after target achieved (2x extension)
-
-Wait for concrete examples via feedback capture before designing fixes.
+The `is_candidate=True` swings need downstream handling:
+- Incremental detector should emit LEVEL_CROSS at 0.236 for promotion
+- Discretization module should track candidate → reference transitions
+- This can be implemented once user testing validates the candidate concept
 
 ---
 
@@ -119,8 +122,8 @@ Wait for concrete examples via feedback capture before designing fixes.
 
 | Document | Status | Action Needed |
 |----------|--------|---------------|
-| `Docs/Reference/developer_guide.md` | **Current** | Updated Dec 17 |
-| `Docs/Reference/user_guide.md` | **Current** | Updated Dec 17 |
+| `Docs/Reference/developer_guide.md` | **Current** | Updated Dec 18 with filter pipeline, routers |
+| `Docs/Reference/user_guide.md` | **Current** | Updated Dec 18 with Show Stats toggle |
 | `CLAUDE.md` | Current | - |
 
 ---
@@ -134,6 +137,7 @@ Wait for concrete examples via feedback capture before designing fixes.
 - **Lean codebase:** 4 modules (data, swing_analysis, discretization, ground_truth_annotator)
 - **Backend-controlled boundaries:** Backend owns data visibility; frontend visualizes
 - **Event filtering:** Stale events suppressed at API layer, not detection layer
+- **Self-referential separation:** XL scale uses itself for FIB-based deduplication
 
 ---
 
@@ -141,6 +145,7 @@ Wait for concrete examples via feedback capture before designing fixes.
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 18 | #130/regression, #131 (+ 3 fixes), #133, #134, #136 — Navigation, stats toggle, XL separation, API modularization, endpoint selection | All Accepted |
 | Dec 17 | #122, #123, #126, #127, #128 — Trigger explanations, always-on feedback, level band fix, offset storage, deduplication | All Accepted |
 | Dec 17 | #116, #118, #119, #120, #121 — Feedback capture, collision fix, lazy sessions, incremental detection, stale filtering | All Accepted |
 | Dec 17 | #112, #113, #114, #115, #117 — Replay View v2 architecture fix + usability | All Accepted |

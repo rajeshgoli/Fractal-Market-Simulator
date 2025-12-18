@@ -96,7 +96,7 @@ project/
 ```
 PRE-FLIGHT: Check pending_review.md count
     ↓
-IF count >= 5 → Output instruction to Architect, EXIT
+IF count >= 10 → Output instruction to Architect, EXIT
     ↓
 Check GitHub issues for tasks
     ↓
@@ -114,7 +114,7 @@ Handoff: Signal ready for review
 
 ### Architect Workflow
 ```
-Triggered by: engineer handoff, product request, OR pending_review >= 5
+Triggered by: engineer handoff, product request, OR pending_review >= 10
     ↓
 Review GitHub issues and/or product_direction.md
     ↓

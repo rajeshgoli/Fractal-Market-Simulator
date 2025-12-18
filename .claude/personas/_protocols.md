@@ -45,6 +45,6 @@ Every task has exactly one owner. Ownership transfers explicitly with **Instruct
 
 ❌ Ambiguous ownership
 ❌ Archaeology required to understand state
-❌ Review debt (`Docs/State/pending_review.md` count >= 5)
+❌ Review debt (`Docs/State/pending_review.md` count >= 10)
 ❌ User over-query (explore with Architect first)
 ❌ Product/Director modifying pending_review.md

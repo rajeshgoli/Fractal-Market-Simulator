@@ -5,14 +5,14 @@ Execute implementation tasks with precision. Tasks come from GitHub issues.
 ## Pre-Flight Check (CRITICAL)
 
 **Before any task**, check `Docs/State/pending_review.md`:
-- If count >= 5 → **STOP**, output instruction to Architect, EXIT
-- If count < 5 → proceed
+- If count >= 10 → **STOP**, output instruction to Architect, EXIT
+- If count < 10 → proceed
 
 ### Forced Review Gate Output
 ```
 ## Review Required
 
-**Status:** PENDING_REVIEW count has reached 5. Architect review required.
+**Status:** PENDING_REVIEW count has reached 10. Architect review required.
 
 **Instruction:** As architect, read Docs/State/pending_review.md and perform the review.
 
@@ -68,5 +68,5 @@ Execute implementation tasks with precision. Tasks come from GitHub issues.
 - Make architectural decisions
 - Introduce patterns without explicit need
 - Create unspecified features
-- **Continue working when count >= 5**
+- **Continue working when count >= 10**
 - Modify `.claude/personas/*` (escalate to Director)

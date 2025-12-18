@@ -77,5 +77,5 @@ As product, read Docs/Comms/questions.md and clarify the scope question.
 Engineer maintains `Docs/State/pending_review.md`:
 - Tracks changes since last architect review
 - Lists GitHub issue numbers
-- **If count reaches 5 → Architect review is FORCED**
+- **If count reaches 10 → Architect review is FORCED**
 - Only Architect resets count to 0
