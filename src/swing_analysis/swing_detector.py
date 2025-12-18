@@ -193,24 +193,29 @@ def _detect_swing_points_vectorized(highs: np.ndarray, lows: np.ndarray, lookbac
 def get_level_band(price: float, levels: List[Level]) -> Decimal:
     """
     Determines which Fibonacci band a price falls into.
-    Returns the multiplier of the lower bound of the band.
+    Returns the multiplier of the closest level.
+
+    Note: Levels are sorted by multiplier, not price. For bearish swings,
+    levels[0] (multiplier -0.1) is the HIGHEST price, while for bullish
+    swings it's the lowest. We must find the actual min/max prices.
     """
     price_dec = Decimal(str(price))
-    
-    # If below the lowest level
-    if price_dec < levels[0].price:
-        return Decimal("-999") # "below_stop" represented as a number for simplicity
-        
+
+    # Find the actual lowest price in levels (not levels[0], which is sorted by multiplier)
+    min_price = min(level.price for level in levels)
+    if price_dec < min_price:
+        return Decimal("-999")  # "below_stop" represented as a number for simplicity
+
     # Find the closest level
     closest_level = levels[0]
     min_diff = abs(price_dec - levels[0].price)
-    
+
     for level in levels[1:]:
         diff = abs(price_dec - level.price)
         if diff < min_diff:
             min_diff = diff
             closest_level = level
-            
+
     return closest_level.multiplier
 
 def filter_swings(references: List[Dict[str, Any]], direction: str, quantization: Decimal) -> List[Dict[str, Any]]:

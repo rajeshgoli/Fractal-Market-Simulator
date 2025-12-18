@@ -1,6 +1,8 @@
 import pytest
 import pandas as pd
-from src.swing_analysis.swing_detector import detect_swings
+from decimal import Decimal
+from src.swing_analysis.swing_detector import detect_swings, get_level_band, filter_swings
+from src.swing_analysis.level_calculator import calculate_levels
 
 def create_df(prices):
     """Helper to create a DataFrame from a list of close prices.
@@ -539,3 +541,204 @@ def test_case_fourteen_structurally_distinct():
     pairs = [(r["high_price"], r["low_price"]) for r in large_refs]
     assert (200.0, 100.0) in pairs
     assert (220.0, 100.0) in pairs  # Cross-pairing that IS structurally valid
+
+
+class TestGetLevelBandBug:
+    """Tests for #126: get_level_band() bug with bearish levels.
+
+    The bug: levels are sorted by multiplier, not price. For bearish swings,
+    levels[0] (multiplier -0.1) is the HIGHEST price, not lowest. The original
+    code assumed levels[0] was lowest, causing all bearish prices to return -999.
+    """
+
+    def test_get_level_band_bearish_not_all_negative_999(self):
+        """Bearish levels should return valid bands, not -999 for all prices.
+
+        For bearish swing high=200, low=100 (size 100):
+          - Multiplier -0.1: price = 200 - (100 * -0.1) = 210 (highest)
+          - Multiplier 0: price = 200 (the high)
+          - Multiplier 1: price = 100 (the low)
+          - Multiplier 2: price = 0 (lowest)
+
+        A price of 150 should NOT return -999 (it's between 0 and 210).
+        """
+        levels = calculate_levels(
+            high=Decimal("200"),
+            low=Decimal("100"),
+            direction="bearish",
+            quantization=Decimal("0.25")
+        )
+
+        # Price 150 is well within the bearish level range
+        band = get_level_band(150.0, levels)
+        assert band != Decimal("-999"), "Price 150 should not return -999 for bearish levels"
+
+        # It should be closest to the 0.5 level (200 - 50 = 150)
+        assert band == Decimal("0.5")
+
+    def test_get_level_band_bearish_various_prices(self):
+        """Test bearish bands for various prices within the swing range."""
+        levels = calculate_levels(
+            high=Decimal("200"),
+            low=Decimal("100"),
+            direction="bearish",
+            quantization=Decimal("0.25")
+        )
+
+        # Test prices at known FIB levels
+        # 0.382 level = 200 - (100 * 0.382) = 161.8
+        band = get_level_band(162.0, levels)
+        assert band == Decimal("0.382")
+
+        # 0.618 level = 200 - (100 * 0.618) = 138.2
+        band = get_level_band(138.0, levels)
+        assert band == Decimal("0.618")
+
+        # 1.0 level = 200 - 100 = 100 (the low)
+        band = get_level_band(100.0, levels)
+        assert band == Decimal("1")
+
+    def test_get_level_band_bullish_still_works(self):
+        """Verify bullish levels still work after the fix."""
+        levels = calculate_levels(
+            high=Decimal("200"),
+            low=Decimal("100"),
+            direction="bullish",
+            quantization=Decimal("0.25")
+        )
+
+        # Price 150 should be closest to the 0.5 level (100 + 50 = 150)
+        band = get_level_band(150.0, levels)
+        assert band == Decimal("0.5")
+
+        # Price below lowest level should return -999
+        # Lowest level is multiplier -0.1: 100 + (100 * -0.1) = 90
+        band = get_level_band(80.0, levels)
+        assert band == Decimal("-999")
+
+    def test_get_level_band_below_min_returns_negative_999(self):
+        """Price below the minimum level should return -999 for both directions."""
+        # Bearish: min price is at multiplier 2: 200 - 200 = 0
+        bearish_levels = calculate_levels(
+            high=Decimal("200"),
+            low=Decimal("100"),
+            direction="bearish",
+            quantization=Decimal("0.25")
+        )
+        band = get_level_band(-10.0, bearish_levels)
+        assert band == Decimal("-999")
+
+        # Bullish: min price is at multiplier -0.1: 100 - 10 = 90
+        bullish_levels = calculate_levels(
+            high=Decimal("200"),
+            low=Decimal("100"),
+            direction="bullish",
+            quantization=Decimal("0.25")
+        )
+        band = get_level_band(80.0, bullish_levels)
+        assert band == Decimal("-999")
+
+
+class TestFilterSwingsBearish:
+    """Tests for filter_swings with bearish direction after #126 fix."""
+
+    def test_filter_swings_bearish_keeps_distinct_swings(self):
+        """Multiple distinct bearish swings should NOT all be filtered as redundant.
+
+        This was the core bug: all swings returned band -999, making them all
+        'redundant' with each other. Only the anchor (largest) survived.
+        """
+        # Two distinct bearish swings
+        references = [
+            {
+                "high_price": 200.0,
+                "low_price": 100.0,
+                "high_bar_index": 100,
+                "low_bar_index": 0,
+                "size": 100.0,
+            },
+            {
+                "high_price": 180.0,  # Different high level
+                "low_price": 120.0,   # Different low level
+                "high_bar_index": 200,
+                "low_bar_index": 110,
+                "size": 60.0,
+            },
+        ]
+
+        result = filter_swings(references, "bearish", Decimal("0.25"))
+
+        # Both should be kept (they're in different FIB bands)
+        assert len(result) == 2, "Both distinct bearish swings should be kept"
+
+    def test_filter_swings_bearish_removes_true_redundants(self):
+        """Swings that ARE truly in the same FIB band should be filtered."""
+        # Two swings with nearly identical endpoints (same FIB bands)
+        references = [
+            {
+                "high_price": 200.0,
+                "low_price": 100.0,
+                "high_bar_index": 100,
+                "low_bar_index": 0,
+                "size": 100.0,
+            },
+            {
+                "high_price": 199.0,  # Same band as 200 (both at 1.0 level)
+                "low_price": 101.0,   # Same band as 100 (both at 1.0 level)
+                "high_bar_index": 95,
+                "low_bar_index": 5,
+                "size": 98.0,
+            },
+        ]
+
+        result = filter_swings(references, "bearish", Decimal("0.25"))
+
+        # Only the larger one should be kept (they're in the same band)
+        assert len(result) == 1
+        assert result[0]["size"] == 100.0
+
+
+class TestBearishSwingDetectionIntegration:
+    """Integration tests for bearish swing detection after #126 fix."""
+
+    def test_multiple_bearish_swings_detected(self):
+        """Verify multiple distinct bearish swings survive the full pipeline."""
+        # Create price data with two distinct bearish swings
+        prices = [150.0] * 100
+
+        # First bearish swing: Low 100 (bar 10) -> High 200 (bar 30)
+        prices[10] = 100
+        for i in range(1, 6):
+            prices[10-i] = 110
+            prices[10+i] = 110
+        prices[30] = 200
+        for i in range(1, 6):
+            prices[30-i] = 190
+            prices[30+i] = 190
+
+        # Second bearish swing: Low 120 (bar 50) -> High 180 (bar 70)
+        prices[50] = 120
+        for i in range(1, 6):
+            prices[50-i] = 130
+            prices[50+i] = 130
+        prices[70] = 180
+        for i in range(1, 6):
+            prices[70-i] = 170
+            prices[70+i] = 170
+
+        # Current price valid for both bearish refs
+        # First: 200 - 0.382*100 = 161.8, 200 - 2*100 = 0 -> valid if 0 < price < 161.8
+        # Second: 180 - 0.382*60 = 157.08, 180 - 2*60 = 60 -> valid if 60 < price < 157.08
+        prices[-1] = 140
+
+        df = create_df(prices)
+        result = detect_swings(df, lookback=5, filter_redundant=True)
+
+        # Should have at least 2 bearish references (might have more from cross-pairings)
+        assert len(result["bear_references"]) >= 2, \
+            f"Expected >= 2 bear refs after fix, got {len(result['bear_references'])}"
+
+        # Verify both original swings are present
+        bear_pairs = [(r["low_price"], r["high_price"]) for r in result["bear_references"]]
+        assert (100.0, 200.0) in bear_pairs, "First bearish swing should be detected"
+        assert (120.0, 180.0) in bear_pairs, "Second bearish swing should be detected"
