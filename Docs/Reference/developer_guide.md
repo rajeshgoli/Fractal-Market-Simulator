@@ -218,8 +218,18 @@ The detection pipeline applies filters in order. Understanding this is essential
 └───────────────────────────────────────────────────────────────────┘
                                  ↓
 ┌───────────────────────────────────────────────────────────────────┐
+│ 3b. DEFENDED PIVOT OPTIMIZATION (#136)                            │
+│    _optimize_defended_pivot() — recursively find best "1" endpoint│
+│    until no candidates within 0.1 FIB separation, then classify:  │
+│    • >= 0.236 retracement: valid swing (is_candidate=False)       │
+│    • 0.1-0.236 retracement: candidate swing (is_candidate=True)   │
+│    • < 0.1 retracement: rejected (None)                           │
+└───────────────────────────────────────────────────────────────────┘
+                                 ↓
+┌───────────────────────────────────────────────────────────────────┐
 │ 4. PROTECTION VALIDATION (protection_tolerance)                   │
 │    _apply_protection_filter() — reject violated swing points      │
+│    Note: At XL scale (no larger_swings), uses 0 tolerance         │
 └───────────────────────────────────────────────────────────────────┘
                                  ↓
 ┌───────────────────────────────────────────────────────────────────┐
@@ -326,6 +336,9 @@ result = detect_swings(
 - `rank` (by size or combined score)
 - `impulse`, `size_rank`, `impulse_rank`, `combined_score` (if quota set)
 - `structurally_separated`, `containing_swing_id` (if larger_swings provided)
+- `is_candidate` (True if pending 0.236 validation, False if fully valid)
+- `pending_level` (0.236 if candidate, None if valid)
+- `current_retracement` (retracement ratio, only on candidates)
 
 **Multi-scale detection pattern:**
 
