@@ -769,3 +769,273 @@ class TestTriggerExplanation:
         assert event.trigger_explanation is not None
         assert "invalidated" in event.trigger_explanation
         assert "low" in event.trigger_explanation
+
+
+class TestDuplicateSwingPrevention:
+    """Tests for duplicate swing prevention (issue #128).
+
+    When a new swing low is confirmed, the detector should not create duplicate
+    swings using the same high. Only the largest swing should be kept.
+    """
+
+    def test_bull_swing_deduplication_skip_smaller(self):
+        """Test that smaller bull swings using same high are skipped."""
+        state = IncrementalSwingState(
+            median_candle=5.0,
+            price_range=100.0,
+            scale_thresholds={"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
+            highs=[],
+            lows=[],
+            closes=[],
+            lookback=2,
+            protection_tolerance=0.1,
+        )
+
+        # Build a pattern where:
+        # - We have a swing high at bar 4 (price 120)
+        # - First swing low at bar 8 (price 80) → creates swing size 40
+        # - Second swing low at bar 12 (price 85) → should be SKIPPED (size 35 < 40)
+        test_bars = [
+            # Initial rise to swing high
+            (100, 98, 99),   # 0
+            (105, 103, 104), # 1
+            (110, 108, 109), # 2
+            (115, 113, 114), # 3
+            (120, 118, 119), # 4 <- swing high candidate
+            (115, 113, 114), # 5
+            (110, 108, 109), # 6 <- swing high confirmed
+            # First drop to swing low
+            (105, 103, 104), # 7
+            (85, 80, 82),    # 8 <- swing low candidate (size 40)
+            (90, 88, 89),    # 9
+            (95, 93, 94),    # 10 <- swing low at 8 confirmed
+            # Second potential low (higher = smaller swing)
+            (88, 85, 86),    # 11 <- swing low candidate (size 35)
+            (92, 90, 91),    # 12
+            (97, 95, 96),    # 13 <- swing low at 11 confirmed, but should be skipped
+        ]
+
+        for h, l, c in test_bars:
+            advance_bar_incremental(h, l, c, state)
+
+        # Should only have ONE bull swing using high at bar 4
+        bull_swings = [s for s in state.active_swings.values() if s.direction == 'bull']
+        swings_with_high_4 = [s for s in bull_swings if s.high_bar_index == 4]
+
+        assert len(swings_with_high_4) <= 1, \
+            f"Expected at most 1 swing using high at bar 4, got {len(swings_with_high_4)}"
+
+        if swings_with_high_4:
+            # Should be the larger swing (low at 80)
+            swing = swings_with_high_4[0]
+            assert swing.low_price == 80.0, \
+                f"Expected low price 80, got {swing.low_price}"
+
+    def test_bull_swing_deduplication_replace_with_larger(self):
+        """Test that larger bull swings replace existing ones with same high."""
+        state = IncrementalSwingState(
+            median_candle=5.0,
+            price_range=100.0,
+            scale_thresholds={"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
+            highs=[],
+            lows=[],
+            closes=[],
+            lookback=2,
+            protection_tolerance=0.1,
+        )
+
+        # Build a pattern where:
+        # - We have a swing high at bar 4 (price 120)
+        # - First swing low at bar 8 (price 90) → creates swing size 30
+        # - Second swing low at bar 12 (price 75) → should REPLACE (size 45 > 30)
+        test_bars = [
+            # Initial rise to swing high
+            (100, 98, 99),   # 0
+            (105, 103, 104), # 1
+            (110, 108, 109), # 2
+            (115, 113, 114), # 3
+            (120, 118, 119), # 4 <- swing high candidate
+            (115, 113, 114), # 5
+            (110, 108, 109), # 6 <- swing high confirmed
+            # First drop to swing low
+            (105, 103, 104), # 7
+            (95, 90, 92),    # 8 <- swing low candidate (size 30)
+            (100, 98, 99),   # 9
+            (105, 103, 104), # 10 <- swing low at 8 confirmed
+            # Second deeper low (lower = larger swing)
+            (100, 98, 99),   # 11
+            (80, 75, 77),    # 12 <- swing low candidate (size 45)
+            (85, 83, 84),    # 13
+            (95, 90, 92),    # 14 <- swing low at 12 confirmed
+        ]
+
+        for h, l, c in test_bars:
+            advance_bar_incremental(h, l, c, state)
+
+        # Should only have ONE bull swing using high at bar 4
+        bull_swings = [s for s in state.active_swings.values() if s.direction == 'bull']
+        swings_with_high_4 = [s for s in bull_swings if s.high_bar_index == 4]
+
+        assert len(swings_with_high_4) <= 1, \
+            f"Expected at most 1 swing using high at bar 4, got {len(swings_with_high_4)}"
+
+        if swings_with_high_4:
+            # Should be the larger swing (low at 75)
+            swing = swings_with_high_4[0]
+            assert swing.low_price == 75.0, \
+                f"Expected low price 75, got {swing.low_price}"
+            assert swing.size == 45.0, \
+                f"Expected size 45, got {swing.size}"
+
+    def test_bear_swing_deduplication_skip_smaller(self):
+        """Test that smaller bear swings using same low are skipped."""
+        state = IncrementalSwingState(
+            median_candle=5.0,
+            price_range=100.0,
+            scale_thresholds={"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
+            highs=[],
+            lows=[],
+            closes=[],
+            lookback=2,
+            protection_tolerance=0.1,
+        )
+
+        # Build a pattern where:
+        # - We have a swing low at bar 4 (price 80)
+        # - First swing high at bar 8 (price 120) → creates swing size 40
+        # - Second swing high at bar 12 (price 115) → should be SKIPPED (size 35 < 40)
+        test_bars = [
+            # Initial drop to swing low
+            (100, 98, 99),   # 0
+            (95, 93, 94),    # 1
+            (90, 88, 89),    # 2
+            (85, 83, 84),    # 3
+            (82, 80, 81),    # 4 <- swing low candidate
+            (85, 83, 84),    # 5
+            (90, 88, 89),    # 6 <- swing low confirmed
+            # First rise to swing high
+            (100, 98, 99),   # 7
+            (125, 120, 122), # 8 <- swing high candidate (size 40)
+            (115, 113, 114), # 9
+            (110, 108, 109), # 10 <- swing high at 8 confirmed
+            # Second potential high (lower = smaller swing)
+            (118, 115, 116), # 11 <- swing high candidate (size 35)
+            (110, 108, 109), # 12
+            (105, 103, 104), # 13 <- swing high at 11 confirmed, but should be skipped
+        ]
+
+        for h, l, c in test_bars:
+            advance_bar_incremental(h, l, c, state)
+
+        # Should only have ONE bear swing using low at bar 4
+        bear_swings = [s for s in state.active_swings.values() if s.direction == 'bear']
+        swings_with_low_4 = [s for s in bear_swings if s.low_bar_index == 4]
+
+        assert len(swings_with_low_4) <= 1, \
+            f"Expected at most 1 swing using low at bar 4, got {len(swings_with_low_4)}"
+
+        if swings_with_low_4:
+            # Should be the larger swing (high at 120)
+            swing = swings_with_low_4[0]
+            assert swing.high_price == 120.0, \
+                f"Expected high price 120, got {swing.high_price}"
+
+    def test_bear_swing_deduplication_replace_with_larger(self):
+        """Test that larger bear swings replace existing ones with same low."""
+        state = IncrementalSwingState(
+            median_candle=5.0,
+            price_range=100.0,
+            scale_thresholds={"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
+            highs=[],
+            lows=[],
+            closes=[],
+            lookback=2,
+            protection_tolerance=0.1,
+        )
+
+        # Build a pattern where:
+        # - We have a swing low at bar 4 (price 80)
+        # - First swing high at bar 8 (price 110) → creates swing size 30
+        # - Second swing high at bar 12 (price 125) → should REPLACE (size 45 > 30)
+        test_bars = [
+            # Initial drop to swing low
+            (100, 98, 99),   # 0
+            (95, 93, 94),    # 1
+            (90, 88, 89),    # 2
+            (85, 83, 84),    # 3
+            (82, 80, 81),    # 4 <- swing low candidate
+            (85, 83, 84),    # 5
+            (90, 88, 89),    # 6 <- swing low confirmed
+            # First rise to swing high
+            (100, 98, 99),   # 7
+            (115, 110, 112), # 8 <- swing high candidate (size 30)
+            (105, 103, 104), # 9
+            (100, 98, 99),   # 10 <- swing high at 8 confirmed
+            # Second higher high (higher = larger swing)
+            (110, 108, 109), # 11
+            (130, 125, 127), # 12 <- swing high candidate (size 45)
+            (120, 118, 119), # 13
+            (112, 110, 111), # 14 <- swing high at 12 confirmed
+        ]
+
+        for h, l, c in test_bars:
+            advance_bar_incremental(h, l, c, state)
+
+        # Should only have ONE bear swing using low at bar 4
+        bear_swings = [s for s in state.active_swings.values() if s.direction == 'bear']
+        swings_with_low_4 = [s for s in bear_swings if s.low_bar_index == 4]
+
+        assert len(swings_with_low_4) <= 1, \
+            f"Expected at most 1 swing using low at bar 4, got {len(swings_with_low_4)}"
+
+        if swings_with_low_4:
+            # Should be the larger swing (high at 125)
+            swing = swings_with_low_4[0]
+            assert swing.high_price == 125.0, \
+                f"Expected high price 125, got {swing.high_price}"
+            assert swing.size == 45.0, \
+                f"Expected size 45, got {swing.size}"
+
+    def test_no_false_deduplication_different_highs(self):
+        """Test that swings using different highs are not deduplicated."""
+        state = IncrementalSwingState(
+            median_candle=5.0,
+            price_range=100.0,
+            scale_thresholds={"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
+            highs=[],
+            lows=[],
+            closes=[],
+            lookback=2,
+            protection_tolerance=0.1,
+        )
+
+        # Build a pattern with two separate swing highs
+        test_bars = [
+            # First swing high
+            (100, 98, 99),   # 0
+            (105, 103, 104), # 1
+            (112, 110, 111), # 2 <- swing high #1
+            (105, 103, 104), # 3
+            (100, 98, 99),   # 4 <- high #1 confirmed
+            # Second swing high
+            (105, 103, 104), # 5
+            (122, 120, 121), # 6 <- swing high #2
+            (115, 113, 114), # 7
+            (110, 108, 109), # 8 <- high #2 confirmed
+            # Swing low that pairs with both
+            (100, 98, 99),   # 9
+            (85, 80, 82),    # 10 <- swing low
+            (90, 88, 89),    # 11
+            (95, 93, 94),    # 12 <- low confirmed
+        ]
+
+        for h, l, c in test_bars:
+            advance_bar_incremental(h, l, c, state)
+
+        # Both swings should be valid since they use different highs
+        bull_swings = [s for s in state.active_swings.values() if s.direction == 'bull']
+
+        # Can have up to 2 swings (one from each high)
+        unique_high_indices = set(s.high_bar_index for s in bull_swings)
+        assert len(unique_high_indices) == len(bull_swings), \
+            "Each bull swing should use a unique high"

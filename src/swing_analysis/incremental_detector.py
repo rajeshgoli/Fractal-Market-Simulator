@@ -325,6 +325,9 @@ def _pair_new_high(
     Pair a new swing high with previous lows to form bear swings.
 
     Bear swing: low BEFORE high (upswing).
+
+    Deduplication: If an active bear swing already uses the same low,
+    only create a new swing if it's larger (better high), replacing the old one.
     """
     events = []
 
@@ -358,6 +361,24 @@ def _pair_new_high(
         fib_level = (new_high.price - current_price) / size
         if fib_level < 0.382 or fib_level > 2.0:
             continue
+
+        # Deduplication: Check if an active bear swing already uses this low
+        existing_swing_id = None
+        for swing_id, swing in state.active_swings.items():
+            if (swing.direction == 'bear' and
+                swing.low_bar_index == low_point.bar_index):
+                existing_swing_id = swing_id
+                break
+
+        if existing_swing_id:
+            existing_swing = state.active_swings[existing_swing_id]
+            if size <= existing_swing.size:
+                # New swing is not larger, skip it
+                continue
+            # New swing is larger, remove the old one
+            del state.active_swings[existing_swing_id]
+            if existing_swing_id in state.fib_levels:
+                del state.fib_levels[existing_swing_id]
 
         # Create swing
         state._bear_counter += 1
@@ -403,6 +424,9 @@ def _pair_new_low(
     Pair a new swing low with previous highs to form bull swings.
 
     Bull swing: high BEFORE low (downswing).
+
+    Deduplication: If an active bull swing already uses the same high,
+    only create a new swing if it's larger (better low), replacing the old one.
     """
     events = []
 
@@ -436,6 +460,24 @@ def _pair_new_low(
         fib_level = (current_price - new_low.price) / size
         if fib_level < 0.382 or fib_level > 2.0:
             continue
+
+        # Deduplication: Check if an active bull swing already uses this high
+        existing_swing_id = None
+        for swing_id, swing in state.active_swings.items():
+            if (swing.direction == 'bull' and
+                swing.high_bar_index == high_point.bar_index):
+                existing_swing_id = swing_id
+                break
+
+        if existing_swing_id:
+            existing_swing = state.active_swings[existing_swing_id]
+            if size <= existing_swing.size:
+                # New swing is not larger, skip it
+                continue
+            # New swing is larger, remove the old one
+            del state.active_swings[existing_swing_id]
+            if existing_swing_id in state.fib_levels:
+                del state.fib_levels[existing_swing_id]
 
         # Create swing
         state._bull_counter += 1

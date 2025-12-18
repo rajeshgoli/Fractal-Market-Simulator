@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-17
 
@@ -9,6 +9,10 @@
 ## Pending Changes
 
 - **#122** — Add trigger_explanation field to replay events for human-readable explanations
+- **#123** — Always-on feedback capture in Replay View with rich context snapshots
+- **#126** — Fix get_level_band() bug causing valid bearish swings to be filtered as redundant
+- **#127** — Store offset in playback_feedback.json for debugging
+- **#128** — Deduplicate swings using same pivot in incremental detector
 
 ---
 
