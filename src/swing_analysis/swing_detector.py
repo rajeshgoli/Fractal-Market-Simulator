@@ -484,6 +484,119 @@ def _adjust_to_best_extrema(swing: Dict[str, Any], highs: np.ndarray,
     return adjusted
 
 
+def _optimize_defended_pivot(swing: Dict[str, Any], highs: np.ndarray,
+                              lows: np.ndarray, direction: str,
+                              separation_fib: float = 0.1) -> Dict[str, Any]:
+    """
+    Optimize the defended pivot ("1") endpoint selection per issue #136.
+
+    For a swing, the defended pivot is:
+    - Bull reference (High BEFORE Low): The LOW is the defended pivot
+    - Bear reference (Low BEFORE High): The HIGH is the defended pivot
+
+    Algorithm:
+    1. Check if the current defended pivot is separated from other candidates
+       in the valid region by at least separation_fib (0.1 FIB)
+    2. If separated: Accept the current pivot
+    3. If NOT separated: Replace with the best pivot (lowest low for bull,
+       highest high for bear)
+
+    Args:
+        swing: Reference swing dictionary with adjusted endpoints
+        highs: Full numpy array of high prices
+        lows: Full numpy array of low prices
+        direction: 'bull' or 'bear'
+        separation_fib: Minimum separation in FIB terms (default 0.1)
+
+    Returns:
+        Swing with potentially updated defended pivot
+    """
+    optimized = swing.copy()
+    size = swing['size']
+
+    if size <= 0:
+        return optimized
+
+    min_separation = separation_fib * size
+
+    if direction == 'bull':
+        # Bull reference: High BEFORE Low
+        # Origin "0" is high, defended pivot "1" is low
+        # Valid region: from high_bar_index to low_bar_index
+        high_idx = swing['high_bar_index']
+        low_idx = swing['low_bar_index']
+        current_pivot = swing['low_price']
+
+        # Get all lows in the valid region (from origin to pivot)
+        start_idx = high_idx
+        end_idx = low_idx + 1  # inclusive of low_idx
+        if start_idx >= end_idx or end_idx > len(lows):
+            return optimized
+
+        region_lows = lows[start_idx:end_idx]
+        region_indices = np.arange(start_idx, end_idx)
+
+        # Find the best (lowest) low in the region
+        best_low = float(np.min(region_lows))
+        best_low_offset = int(np.argmin(region_lows))
+        best_low_idx = start_idx + best_low_offset
+
+        # Check separation: is the current pivot separated from the best?
+        if abs(current_pivot - best_low) >= min_separation:
+            # Current pivot is well-separated, keep it
+            return optimized
+
+        # Not separated - use the best low as the defended pivot
+        optimized['low_bar_index'] = best_low_idx
+        optimized['low_price'] = best_low
+
+        # Recalculate size and levels
+        new_size = optimized['high_price'] - optimized['low_price']
+        optimized['size'] = new_size
+        if new_size > 0:
+            optimized['level_0382'] = optimized['low_price'] + (0.382 * new_size)
+            optimized['level_2x'] = optimized['low_price'] + (2.0 * new_size)
+
+    else:
+        # Bear reference: Low BEFORE High
+        # Origin "0" is low, defended pivot "1" is high
+        # Valid region: from low_bar_index to high_bar_index
+        low_idx = swing['low_bar_index']
+        high_idx = swing['high_bar_index']
+        current_pivot = swing['high_price']
+
+        # Get all highs in the valid region (from origin to pivot)
+        start_idx = low_idx
+        end_idx = high_idx + 1  # inclusive of high_idx
+        if start_idx >= end_idx or end_idx > len(highs):
+            return optimized
+
+        region_highs = highs[start_idx:end_idx]
+
+        # Find the best (highest) high in the region
+        best_high = float(np.max(region_highs))
+        best_high_offset = int(np.argmax(region_highs))
+        best_high_idx = start_idx + best_high_offset
+
+        # Check separation: is the current pivot separated from the best?
+        if abs(current_pivot - best_high) >= min_separation:
+            # Current pivot is well-separated, keep it
+            return optimized
+
+        # Not separated - use the best high as the defended pivot
+        optimized['high_bar_index'] = best_high_idx
+        optimized['high_price'] = best_high
+
+        # Recalculate size and levels
+        new_size = optimized['high_price'] - optimized['low_price']
+        optimized['size'] = new_size
+        if new_size > 0:
+            optimized['level_0382'] = optimized['high_price'] - (0.382 * new_size)
+            optimized['level_2x'] = optimized['high_price'] - (2.0 * new_size)
+
+    return optimized
+
+
 def _apply_quota(references: List[Dict[str, Any]], quota: int) -> List[Dict[str, Any]]:
     """
     Rank swings by combined score and return top N.
@@ -1053,6 +1166,14 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
     suffix_min_lows = _build_suffix_min(lows) if protection_tolerance is not None else None
     suffix_max_highs = _build_suffix_max(highs) if protection_tolerance is not None else None
 
+    # Per issue #136: Protection tolerance only applies when established structural context exists
+    # At XL scale (larger_swings=None): No established anchor, so no tolerance - all swings
+    # must have their pivots strictly unbreached. This prevents random local extrema from
+    # getting the same tolerance as truly significant structural anchors.
+    # At L/M/S scales (larger_swings provided): Operating within established XL structure,
+    # so tolerance can apply since the structural context is already defined.
+    effective_tolerance = protection_tolerance if larger_swings is not None else 0.0
+
     # Calculate context metrics for size filtering
     candle_heights = highs - lows
     median_candle = float(np.median(candle_heights)) if len(candle_heights) > 0 else 0.0
@@ -1098,9 +1219,11 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                 continue
 
             # CHEAP CHECK 2: price range validity (eliminates most pairs)
+            # Entry threshold relaxed from 0.382 to 0.236 per issue #136
+            level_0236 = low_price + (0.236 * size)
             level_0382 = low_price + (0.382 * size)
             level_2x = low_price + (2.0 * size)
-            if not (level_0382 < current_price < level_2x):
+            if not (level_0236 < current_price < level_2x):
                 continue
 
             # EXPENSIVE CHECK: structural validity using numpy range query
@@ -1125,8 +1248,9 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                         continue  # High was violated before low formed
 
                 # POST-FORMATION PROTECTION: swing low not violated by subsequent price action
+                # Use effective_tolerance (0 at XL scale per issue #136)
                 if protection_tolerance is not None and suffix_min_lows is not None:
-                    violation_threshold = low_price - (protection_tolerance * size)
+                    violation_threshold = low_price - (effective_tolerance * size)
                     # Check all bars after the swing low (O(1) suffix query)
                     if low_idx + 1 < len(suffix_min_lows):
                         min_subsequent_low = suffix_min_lows[low_idx + 1]
@@ -1169,9 +1293,11 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                 continue
 
             # CHEAP CHECK 2: price range validity (eliminates most pairs)
+            # Entry threshold relaxed from 0.382 to 0.236 per issue #136
+            level_0236 = high_price - (0.236 * size)
             level_0382 = high_price - (0.382 * size)
             level_2x = high_price - (2.0 * size)
-            if not (level_2x < current_price < level_0382):
+            if not (level_2x < current_price < level_0236):
                 continue
 
             # EXPENSIVE CHECK: structural validity using numpy range query
@@ -1196,8 +1322,9 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
                         continue  # Low was violated before high formed
 
                 # POST-FORMATION PROTECTION: swing high not violated by subsequent price action
+                # Use effective_tolerance (0 at XL scale per issue #136)
                 if protection_tolerance is not None and suffix_max_highs is not None:
-                    violation_threshold = high_price + (protection_tolerance * size)
+                    violation_threshold = high_price + (effective_tolerance * size)
                     # Check all bars after the swing high (O(1) suffix query)
                     if high_idx + 1 < len(suffix_max_highs):
                         max_subsequent_high = suffix_max_highs[high_idx + 1]
@@ -1227,16 +1354,28 @@ def detect_swings(df: pd.DataFrame, lookback: int = 5, filter_redundant: bool = 
             for ref in bear_references
         ]
 
+    # 3b. Defended Pivot Optimization (issue #136)
+    # Ensures the "1" endpoint is either well-separated (0.1 FIB) or is the best available
+    bull_references = [
+        _optimize_defended_pivot(ref, highs, lows, 'bull')
+        for ref in bull_references
+    ]
+    bear_references = [
+        _optimize_defended_pivot(ref, highs, lows, 'bear')
+        for ref in bear_references
+    ]
+
     # 4. Protection Validation (after adjustment when adjust_extrema=True)
     # Re-validates protection with potentially adjusted endpoints
+    # effective_tolerance computed above: 0 at XL scale (issue #136)
     if adjust_extrema and protection_tolerance is not None:
         bull_references = _apply_protection_filter(
             bull_references, 'bull', highs, lows,
-            protection_tolerance, suffix_max_highs, suffix_min_lows
+            effective_tolerance, suffix_max_highs, suffix_min_lows
         )
         bear_references = _apply_protection_filter(
             bear_references, 'bear', highs, lows,
-            protection_tolerance, suffix_max_highs, suffix_min_lows
+            effective_tolerance, suffix_max_highs, suffix_min_lows
         )
 
     # 5. Apply Size Filter (after protection, before prominence)

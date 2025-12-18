@@ -183,22 +183,25 @@ def test_case_three_multiple_lows():
 
 def test_case_four_no_valid_bull_low_price():
     """
-    Test 4: No valid references because price below 0.382.
-    High 200 (20), Low 110 (40), Current 120.
+    Test 4: No valid references because price below 0.236 entry threshold.
+    High 200 (20), Low 100 (40), Current 105.
+
+    Note: Entry threshold was relaxed from 0.382 to 0.236 per issue #136.
+    We need current price below the 0.236 level for the swing to be invalid.
     """
     prices = [150] * 50
     prices[20] = 200
     for i in range(1, 6): prices[20-i]=190; prices[20+i]=190
-    
-    prices[40] = 110
-    for i in range(1, 6): prices[40-i]=120; prices[40+i]=120
-    
-    prices[-1] = 120
-    
+
+    prices[40] = 100  # Lower low to increase swing size
+    for i in range(1, 6): prices[40-i]=110; prices[40+i]=110
+
+    prices[-1] = 105  # Current price well below 0.236 level
+
     df = create_df(prices)
     result = detect_swings(df, lookback=5)
-    
-    # Size 90. 0.382 = 110 + 34.38 = 144.38. Current 120 < 144.38. Invalid.
+
+    # Size 100 (200-100). 0.236 level = 100 + 23.6 = 123.6. Current 105 < 123.6. Invalid.
     assert len(result["bull_references"]) == 0
 
 def test_case_five_no_valid_bull_high_price():

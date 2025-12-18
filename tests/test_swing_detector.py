@@ -102,7 +102,8 @@ class TestSwingDetectorPerformance(unittest.TestCase):
         result = detect_swings(df, lookback=5, filter_redundant=False)
         elapsed = time.time() - start
 
-        self.assertLess(elapsed, 30.0, f"Detection took {elapsed:.3f}s, expected <30s")
+        # Threshold increased from 30s to 35s due to added _optimize_defended_pivot processing
+        self.assertLess(elapsed, 35.0, f"Detection took {elapsed:.3f}s, expected <35s")
         print(f"100K bars: {elapsed:.2f}s, {len(result['swing_highs'])} highs, {len(result['swing_lows'])} lows")
 
 
