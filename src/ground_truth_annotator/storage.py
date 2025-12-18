@@ -442,7 +442,7 @@ class AnnotationStorage:
         """
         Find the collision number needed for a filename with given timestamp and label.
 
-        Checks if the base filename exists; if so, scans for -try<N> suffixes.
+        Checks both the working directory AND ground_truth.json for existing filenames.
         Returns 0 if no collision, or the next try number if collision exists.
 
         Args:
@@ -454,15 +454,34 @@ class AnnotationStorage:
         """
         version = REVIEW_SCHEMA_VERSION
 
-        # Check if the base filename (without -try<N>) exists
+        # Build the base filename (without -try<N>)
         if label:
             sanitized_label = sanitize_label(label)
             base_filename = f"{timestamp_base}-ver{version}-{sanitized_label}.json"
         else:
             base_filename = f"{timestamp_base}-ver{version}.json"
 
-        base_path = self._storage_dir / base_filename
-        if not base_path.exists():
+        # Collect existing filenames from both sources
+        existing_filenames: set = set()
+
+        # Source 1: Working directory files
+        for path in self._storage_dir.glob("*.json"):
+            existing_filenames.add(path.name)
+
+        # Source 2: ground_truth.json entries
+        if self._ground_truth_file.exists():
+            try:
+                with open(self._ground_truth_file, 'r') as f:
+                    ground_truth = json.load(f)
+                    for session_entry in ground_truth.get("sessions", []):
+                        orig_filename = session_entry.get("original_filename")
+                        if orig_filename:
+                            existing_filenames.add(orig_filename)
+            except (json.JSONDecodeError, OSError):
+                pass  # If we can't read ground truth, proceed with working dir only
+
+        # Check if base filename exists in either source
+        if base_filename not in existing_filenames:
             # No collision - use base filename
             return 0
 
@@ -479,8 +498,8 @@ class AnnotationStorage:
             )
 
         max_try = 1  # Start at 2 since base filename (try 1 implicitly) exists
-        for path in self._storage_dir.glob("*.json"):
-            match = pattern.match(path.name)
+        for filename in existing_filenames:
+            match = pattern.match(filename)
             if match:
                 try_num = int(match.group(1))
                 max_try = max(max_try, try_num)

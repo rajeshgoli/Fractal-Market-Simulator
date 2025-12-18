@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-17
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - #116: Playback feedback capture during Replay View linger events
+- #118: Collision detection now checks ground_truth.json for existing filenames
 
 ---
 

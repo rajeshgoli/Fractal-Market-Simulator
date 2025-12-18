@@ -266,3 +266,82 @@ class TestAnnotationStorageCollision:
         assert len(ground_truth["sessions"]) == 1
         assert ground_truth["sessions"][0]["original_filename"] == path_id
         assert ground_truth["sessions"][0]["session"]["session_id"] == session.session_id
+
+    def test_collision_detects_ground_truth_entries(self):
+        """Test collision detection checks ground_truth.json (fixes #118)."""
+        import json
+
+        # Create ground_truth.json with an existing entry
+        ground_truth_file = Path(self.temp_dir) / "ground_truth.json"
+        ground_truth = {
+            "metadata": {"schema_version": 1},
+            "sessions": [
+                {"original_filename": f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}.json"}
+            ]
+        }
+        with open(ground_truth_file, 'w') as f:
+            json.dump(ground_truth, f)
+
+        # No file in working directory, but exists in ground_truth.json
+        collision = self.storage._find_collision_number("2025-dec-15-0830")
+        assert collision == 2  # Should detect collision from ground_truth.json
+
+    def test_collision_finds_max_try_from_ground_truth(self):
+        """Test finding max try number from ground_truth.json entries."""
+        import json
+
+        # Create ground_truth.json with base + try files
+        ground_truth_file = Path(self.temp_dir) / "ground_truth.json"
+        ground_truth = {
+            "metadata": {"schema_version": 1},
+            "sessions": [
+                {"original_filename": f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}.json"},
+                {"original_filename": f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}-try2.json"},
+                {"original_filename": f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}-try5.json"},
+            ]
+        }
+        with open(ground_truth_file, 'w') as f:
+            json.dump(ground_truth, f)
+
+        collision = self.storage._find_collision_number("2025-dec-15-0830")
+        assert collision == 6  # Next after try5
+
+    def test_collision_combines_working_dir_and_ground_truth(self):
+        """Test collision detection merges both sources."""
+        import json
+
+        # Create try2 in ground_truth.json
+        ground_truth_file = Path(self.temp_dir) / "ground_truth.json"
+        ground_truth = {
+            "metadata": {"schema_version": 1},
+            "sessions": [
+                {"original_filename": f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}.json"},
+                {"original_filename": f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}-try2.json"},
+            ]
+        }
+        with open(ground_truth_file, 'w') as f:
+            json.dump(ground_truth, f)
+
+        # Create try4 in working directory
+        try4_file = f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}-try4.json"
+        (Path(self.temp_dir) / try4_file).write_text("{}")
+
+        collision = self.storage._find_collision_number("2025-dec-15-0830")
+        assert collision == 5  # Next after try4 (highest from either source)
+
+    def test_collision_with_label_checks_ground_truth(self):
+        """Test labeled collision detection checks ground_truth.json."""
+        import json
+
+        ground_truth_file = Path(self.temp_dir) / "ground_truth.json"
+        ground_truth = {
+            "metadata": {"schema_version": 1},
+            "sessions": [
+                {"original_filename": f"2025-dec-15-0830-ver{REVIEW_SCHEMA_VERSION}-trending.json"}
+            ]
+        }
+        with open(ground_truth_file, 'w') as f:
+            json.dump(ground_truth, f)
+
+        collision = self.storage._find_collision_number("2025-dec-15-0830", "trending")
+        assert collision == 2
