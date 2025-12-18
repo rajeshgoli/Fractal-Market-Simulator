@@ -777,6 +777,13 @@ export const Replay: React.FC = () => {
 
       // Playing mode: event navigation and linger navigation
       if (calibrationPhase === CalibrationPhase.PLAYING) {
+        // Escape key dismisses linger
+        if (e.key === 'Escape' && forwardPlayback.isLingering) {
+          e.preventDefault();
+          forwardPlayback.dismissLinger();
+          return;
+        }
+
         // Linger queue navigation (when multiple events at same bar)
         if (forwardPlayback.isLingering && forwardPlayback.lingerQueuePosition && forwardPlayback.lingerQueuePosition.total > 1) {
           // Arrow keys navigate within linger queue
@@ -857,6 +864,7 @@ export const Replay: React.FC = () => {
     forwardPlayback.jumpToNextEvent,
     forwardPlayback.stepBack,
     forwardPlayback.stepForward,
+    forwardPlayback.dismissLinger,
     playback.isLingering,
     playback.lingerQueuePosition,
     playback.navigatePrevEvent,
@@ -922,6 +930,9 @@ export const Replay: React.FC = () => {
             onToggleFilter={handleToggleFilter}
             onResetDefaults={handleResetFilters}
             className="w-64"
+            showScaleFilters={calibrationPhase === CalibrationPhase.PLAYING}
+            displayConfig={displayConfig}
+            onToggleScale={handleToggleScale}
           />
         </div>
 

@@ -1,21 +1,29 @@
 import React from 'react';
-import { FilterState, EventType } from '../types';
+import { FilterState, EventType, SwingDisplayConfig, SwingScaleKey } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle } from 'lucide-react';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers } from 'lucide-react';
 
 interface SidebarProps {
   filters: FilterState[];
   onToggleFilter: (id: string) => void;
   onResetDefaults: () => void;
   className?: string;
+  // Scale filter props (shown during playback)
+  showScaleFilters?: boolean;
+  displayConfig?: SwingDisplayConfig;
+  onToggleScale?: (scale: SwingScaleKey) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   filters,
   onToggleFilter,
   onResetDefaults,
-  className = ''
+  className = '',
+  showScaleFilters = false,
+  displayConfig,
+  onToggleScale,
 }) => {
+  const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
   const getIconForType = (type: string) => {
     switch (type) {
       case EventType.SWING_FORMED:
@@ -76,6 +84,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         ))}
       </div>
+
+      {/* Scale Filters Section (shown during playback) */}
+      {showScaleFilters && displayConfig && onToggleScale && (
+        <div className="p-4 border-t border-app-border">
+          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
+            <Layers size={14} />
+            Scale Filters
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {scaleOrder.map(scale => {
+              const isEnabled = displayConfig.enabledScales.has(scale);
+              return (
+                <label
+                  key={scale}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border cursor-pointer transition-colors ${
+                    isEnabled
+                      ? 'bg-trading-blue/20 border-trading-blue text-trading-blue'
+                      : 'bg-app-card border-app-border text-app-muted hover:border-app-text/30'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isEnabled}
+                    onChange={() => onToggleScale(scale)}
+                    className="sr-only"
+                  />
+                  <span className={`w-3 h-3 rounded-sm border flex items-center justify-center ${
+                    isEnabled ? 'bg-trading-blue border-trading-blue' : 'border-app-muted'
+                  }`}>
+                    {isEnabled && <span className="text-white text-[10px]">✓</span>}
+                  </span>
+                  <span className="text-xs font-semibold">{scale}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Bottom Actions */}
       <div className="p-4 border-t border-app-border bg-app-bg/30">

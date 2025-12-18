@@ -335,8 +335,14 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
         {/* Bar Counter - different display for forward playback vs legacy */}
         {isForwardPlayback ? (
-          // Forward playback: show calibrated on, offset, remaining
+          // Forward playback: show bar counter, calibrated, offset, remaining
           <div className="flex items-center gap-4">
+            <div className="text-right">
+              <span className="text-[10px] text-app-muted uppercase tracking-wider block">Bar</span>
+              <div className="font-mono text-sm tabular-nums text-white font-bold">
+                {formatCount(Math.max(1, currentBar - calibrationBarCount! + 2))}
+              </div>
+            </div>
             <div className="text-right">
               <span className="text-[10px] text-app-muted uppercase tracking-wider block">Calibrated</span>
               <div className="font-mono text-sm tabular-nums text-trading-blue font-bold">
