@@ -77,6 +77,9 @@ class SwingNode:
     parents: List["SwingNode"] = field(default_factory=list)
     children: List["SwingNode"] = field(default_factory=list)
 
+    # Cached depth (computed lazily, invalidated when parents change)
+    _cached_depth: int = field(default=-1, repr=False)
+
     @staticmethod
     def generate_id() -> str:
         """
@@ -156,6 +159,7 @@ class SwingNode:
         """
         if parent not in self.parents:
             self.parents.append(parent)
+            self._invalidate_depth_cache()  # Depth may have changed
         if self not in parent.children:
             parent.children.append(self)
 
@@ -171,6 +175,7 @@ class SwingNode:
         """
         if parent in self.parents:
             self.parents.remove(parent)
+            self._invalidate_depth_cache()  # Depth may have changed
         if self in parent.children:
             parent.children.remove(self)
 
@@ -192,19 +197,38 @@ class SwingNode:
         """
         self.status = "completed"
 
+    def _invalidate_depth_cache(self) -> None:
+        """
+        Invalidate cached depth for this node and all descendants.
+
+        Called when parent links change to ensure depth is recomputed.
+        """
+        if self._cached_depth != -1:
+            self._cached_depth = -1
+            # Also invalidate children since their depth depends on ours
+            for child in self.children:
+                child._invalidate_depth_cache()
+
     def get_depth(self) -> int:
         """
         Calculate hierarchy depth from root.
 
         Returns 0 if this swing has no parents (is a root).
         Returns 1 + max(parent depths) otherwise.
+        Uses caching to avoid repeated traversals.
 
         Returns:
             Integer depth in the hierarchy.
         """
+        if self._cached_depth >= 0:
+            return self._cached_depth
+
         if not self.parents:
-            return 0
-        return 1 + max(p.get_depth() for p in self.parents)
+            self._cached_depth = 0
+        else:
+            self._cached_depth = 1 + max(p.get_depth() for p in self.parents)
+
+        return self._cached_depth
 
     def __repr__(self) -> str:
         return (

@@ -225,20 +225,48 @@ When a retracement drops below the defended pivot (decisively), you prune. This 
 
 ## Current State
 
+**Performance target achieved (#158):** 4.06s for 10K bars.
+
 - **Location**: `src/swing_analysis/hierarchical_detector.py`
-- **Hot path**: `_try_form_direction_swings()` (lines ~700-800)
-- **Bottleneck**: `_check_pre_formation()` called 1M+ times for 1k bars
+- **Algorithm**: DAG-based streaming with bar type classification
+
+---
+
+## Remaining Issue: Sibling Swing Detection (#161, #162)
+
+**Problem discovered during validation:** The algorithm fails to detect sibling swings that share the same 0 but have different 1s.
+
+### Root Causes
+
+1. **Lost origins**: When a leg is invalidated, its 1 is discarded. But that 1 can be the origin of a larger swing.
+
+2. **Redundant separation check**: `_check_separation_for_leg` checks both 0 AND 1 separation, blocking sibling swings.
+
+### Solution: Orphaned Origins with 10% Pruning
+
+**Rule:** When a leg is invalidated, preserve its 1 as an "orphaned origin."
+
+**Pruning (each bar):**
+1. Current low/high is working 0
+2. For all orphaned 1s: if two are within 10% of the larger range → prune smaller
+3. Threshold scales with move size — noise gets eliminated as move grows
+
+**At formation:** Pair ALL surviving 1s with defended 0. No separation check needed — DAG pruning already ensures 10% separation.
+
+**Recursive property:** Small legs preserve their noise (small threshold). When invalidated, nested 1s get pruned by larger threshold. Fractal structure emerges naturally.
+
+See `Docs/Working/DAG_spec.md` for full specification.
 
 ---
 
 ## Next Steps
 
-See `Docs/Working/DAG_spec.md` for the full specification.
-
-1. Validate spec against current test suite expectations
-2. Implement prototype and compare outputs with current HierarchicalDetector
-3. Benchmark performance on 10K bar dataset
-4. Refine pruning rules based on empirical results
+1. ~~Validate spec against current test suite~~ Done
+2. ~~Implement DAG algorithm~~ Done (#158)
+3. ~~Benchmark performance~~ Achieved: 4.06s for 10K
+4. Implement orphaned origins (#161)
+5. Remove redundant separation check (#162)
+6. Validate L1-L7 from valid_swings.md
 
 ---
 

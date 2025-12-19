@@ -493,11 +493,66 @@ Reference answers: "Which swings are useful?" (semantic/trading logic)
 
 ---
 
+## Sibling Swing Detection (#161, #162)
+
+**Problem discovered during validation (Dec 19):** The current implementation fails to detect sibling swings that share the same 0 (defended pivot) but have different 1s (origins).
+
+### Issue 1: Lost Origins
+
+When a leg is invalidated, its 1 is discarded. But that 1 can be the origin of a larger swing that forms later.
+
+**Example:**
+```
+1. Bull leg forms: 0=5525, 1=5837
+2. Price drops below 5525 - 0.382×312 ≈ 5406
+3. Leg is invalidated and pruned — 1=5837 is LOST
+4. Price continues to 4832, reverses
+5. Swing (1=5837, 0=4832) cannot form because 5837 isn't tracked
+```
+
+### Issue 2: Redundant Separation Check
+
+The original `_check_separation_for_leg` checks both origin AND pivot separation. This blocks sibling swings with same 0.
+
+### Solution: Orphaned Origins with 10% Pruning
+
+**Rule:** When a leg is invalidated, preserve its 1 as an "orphaned origin" candidate.
+
+**Pruning (applied each bar):**
+1. Current low (for bull) / high (for bear) is working 0
+2. For all orphaned 1s: calculate range from that 1 to working 0
+3. If any two orphaned 1s are within 10% of the larger range → prune the smaller
+4. As 0 extends, threshold grows, naturally eliminating noise
+
+**Trace example:**
+
+| Working 0 | Range (from 5837) | 10% threshold | 5763 survives? |
+|-----------|-------------------|---------------|----------------|
+| 5500 | 337 | 33.7 | Yes (74 > 33.7) |
+| 5000 | 837 | 83.7 | No (74 < 83.7) — pruned |
+| 4832 | 1005 | — | Only 5837 remains |
+
+**Recursive property:** Small forming legs can preserve their own noise (10% of small range is small). When invalidated, their nested 1s join the larger pool and get pruned by the larger threshold. Fractal structure emerges naturally.
+
+### No Separation Check at Formation
+
+**Key insight:** If DAG pruning ensures surviving 1s are 10%+ apart (relative to working 0), then at formation time they are already separated by construction.
+
+**Simplified flow:**
+1. DAG prunes orphaned 1s each bar (10% rule)
+2. At formation: pair ALL surviving 1s with defended 0
+3. No `_check_separation_for_leg` needed — redundant
+
+**Complexity:** O(orphaned origins) per bar, stays sparse due to aggressive pruning.
+
+---
+
 ## Next Steps
 
-**Status:** Spec approved by Architecture (Dec 19). Ready for implementation.
+**Status:** Core algorithm implemented (#158). Sibling detection pending (#161, #162).
 
-1. Implement DAG-based algorithm as drop-in replacement for HierarchicalDetector
-2. Benchmark performance on 10K+ bar datasets (target: <5s for 10K)
-3. Validate output correctness through manual inspection (no trusted baseline)
-4. Refine pruning rules (2x staleness) based on empirical results
+1. ~~Implement DAG-based algorithm as drop-in replacement for HierarchicalDetector~~ Done
+2. ~~Benchmark performance on 10K+ bar datasets (target: <5s for 10K)~~ Achieved: 4.06s
+3. Implement orphaned origins mechanism (#161)
+4. Remove redundant separation check (#162)
+5. Validate L1-L7 from valid_swings.md all detected
