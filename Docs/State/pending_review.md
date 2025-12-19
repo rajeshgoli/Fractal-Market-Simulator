@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-19
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-*No pending changes.*
+- **#168** — Add leg lifecycle events to HierarchicalDetector (LegCreatedEvent, LegPrunedEvent, LegInvalidatedEvent)
 
 ---
 
