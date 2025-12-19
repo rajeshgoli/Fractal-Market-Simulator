@@ -466,11 +466,7 @@ class HierarchicalDetector:
 
     def _update_candidates_original(self, bar: Bar) -> None:
         """
-        Original candidate tracking: use all bars in lookback window.
-
-        Maintains lists of recent highs and lows that could form
-        swing endpoints. Old candidates outside lookback window
-        are removed.
+        Original candidate tracking: all bars in lookback window.
 
         Args:
             bar: Current bar being processed.
@@ -824,20 +820,6 @@ class HierarchicalDetector:
         Returns:
             True if pre-formation check passes, False if violated.
         """
-        # We only have candidates in our sliding window, so we can only check
-        # what we have. The pre-formation check verifies that between origin
-        # and pivot, the origin wasn't exceeded and the pivot wasn't violated.
-
-        # Since we're processing bar-by-bar, we track candidates as (index, price).
-        # The pre-formation check needs bar data we may not have stored.
-        #
-        # For now, we rely on the candidate selection itself - candidates are
-        # local extrema within the lookback window. A more robust implementation
-        # would store actual bar data and check comprehensively.
-        #
-        # This simplified check ensures the origin is the max/min in candidates
-        # between origin and pivot indices.
-
         if direction == "bull":
             # Bull: origin is high, pivot is low
             # Check no high in between exceeded origin

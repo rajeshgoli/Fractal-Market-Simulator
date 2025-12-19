@@ -502,6 +502,10 @@ async def calibrate_replay(
 
     Processes the first N bars and returns detected swings grouped by scale.
     """
+    import time
+    start_time = time.time()
+    logger.info(f"Calibration request received: bar_count={bar_count}")
+
     global _replay_cache
     from ..api import get_state
 
@@ -514,9 +518,14 @@ async def calibrate_replay(
             detail="Need at least 10 bars for calibration"
         )
 
+    logger.info(f"Running calibration on {actual_bar_count} bars...")
+    calibrate_start = time.time()
+
     # Run calibration using HierarchicalDetector
     calibration_bars = s.source_bars[:actual_bar_count]
     detector, events = calibrate(calibration_bars)
+
+    logger.info(f"Calibration processing took {time.time() - calibrate_start:.2f}s")
 
     current_price = calibration_bars[-1].close
 
@@ -552,9 +561,10 @@ async def calibrate_replay(
     _replay_cache["calibration_events"] = events
     _replay_cache["scale_thresholds"] = scale_thresholds
 
+    total_time = time.time() - start_time
     logger.info(
         f"Calibration complete: {actual_bar_count} bars, "
-        f"{len(active_swings)} active swings"
+        f"{len(active_swings)} active swings, total time: {total_time:.2f}s"
     )
 
     return CalibrationResponse(
