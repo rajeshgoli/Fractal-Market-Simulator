@@ -101,6 +101,7 @@ class Leg:
     last_modified_bar: int = 0
     price_at_creation: Decimal = Decimal("0")
     leg_id: str = field(default_factory=lambda: SwingNode.generate_id())
+    swing_id: Optional[str] = None  # Set when leg forms into swing (#174)
 
     @property
     def range(self) -> Decimal:
@@ -199,6 +200,7 @@ class DetectorState:
                 "last_modified_bar": leg.last_modified_bar,
                 "price_at_creation": str(leg.price_at_creation),
                 "leg_id": leg.leg_id,
+                "swing_id": leg.swing_id,
             })
 
         # Serialize pending pivots
@@ -311,6 +313,7 @@ class DetectorState:
                 last_modified_bar=leg_data.get("last_modified_bar", 0),
                 price_at_creation=Decimal(leg_data.get("price_at_creation", "0")),
                 leg_id=leg_data.get("leg_id", SwingNode.generate_id()),
+                swing_id=leg_data.get("swing_id"),
             )
             active_legs.append(leg)
 
@@ -977,6 +980,9 @@ class HierarchicalDetector:
                 formed_at_bar=bar.index,
             )
 
+        # Link leg to swing (#174)
+        leg.swing_id = swing.swing_id
+
         # Find parents
         parents = self._find_parents(swing)
         for parent in parents:
@@ -1134,16 +1140,21 @@ class HierarchicalDetector:
 
     def _check_leg_invalidations(
         self, bar: Bar, timestamp: datetime, bar_high: Decimal, bar_low: Decimal
-    ) -> List[SwingFormedEvent]:
+    ) -> List[SwingEvent]:
         """
         Check for decisive invalidation (0.382 rule) of legs.
 
         A leg is decisively invalidated when price moves 38.2% of the
         leg's range beyond the defended pivot.
 
-        When a leg is invalidated, its origin is preserved as an "orphaned origin"
-        for potential sibling swing formation (#163).
+        When a leg is invalidated:
+        - Its origin is preserved as an "orphaned origin" for sibling swing formation (#163)
+        - If the leg formed into a swing, that swing is also invalidated (#174)
+
+        Returns:
+            List of SwingInvalidatedEvent for any swings invalidated due to leg invalidation.
         """
+        events: List[SwingEvent] = []
         invalidation_threshold = Decimal("0.382")
         invalidated_legs: List[Leg] = []
 
@@ -1175,10 +1186,23 @@ class HierarchicalDetector:
             if origin_tuple not in self.state.orphaned_origins[leg.direction]:
                 self.state.orphaned_origins[leg.direction].append(origin_tuple)
 
+            # Propagate invalidation to swing if leg formed into one (#174)
+            if leg.swing_id:
+                for swing in self.state.active_swings:
+                    if swing.swing_id == leg.swing_id and swing.status == 'active':
+                        swing.invalidate()
+                        events.append(SwingInvalidatedEvent(
+                            bar_index=bar.index,
+                            timestamp=timestamp,
+                            swing_id=swing.swing_id,
+                            reason="leg_invalidated",
+                        ))
+                        break
+
         # Remove invalidated legs
         self.state.active_legs = [leg for leg in self.state.active_legs if leg.status != 'invalidated']
 
-        return []  # Leg invalidation doesn't emit events (only swing invalidation does)
+        return events
 
     def _check_staleness(self, bar: Bar) -> None:
         """

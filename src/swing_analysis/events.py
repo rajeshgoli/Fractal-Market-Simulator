@@ -120,6 +120,7 @@ class SwingInvalidatedEvent(SwingEvent):
         event_type: Always "SWING_INVALIDATED".
         violation_price: Price at which the violation occurred.
         excess_amount: How far past the pivot the price went.
+        reason: Why the swing was invalidated ("leg_invalidated", "tolerance_exceeded", etc.)
 
     Example:
         >>> from datetime import datetime
@@ -130,6 +131,7 @@ class SwingInvalidatedEvent(SwingEvent):
         ...     swing_id="abc12345",
         ...     violation_price=Decimal("4990.00"),
         ...     excess_amount=Decimal("10.00"),
+        ...     reason="leg_invalidated",
         ... )
         >>> event.event_type
         'SWING_INVALIDATED'
@@ -140,6 +142,7 @@ class SwingInvalidatedEvent(SwingEvent):
     )
     violation_price: Decimal = field(default_factory=lambda: Decimal("0"))
     excess_amount: Decimal = field(default_factory=lambda: Decimal("0"))
+    reason: str = ""  # Why invalidated: "leg_invalidated", "tolerance_exceeded", etc. (#174)
 
     def get_explanation(self) -> str:
         """

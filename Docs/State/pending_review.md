@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 8
 
 **Last Review:** 2025-12-19
 
@@ -15,6 +15,7 @@
 - **#164** — Remove legacy candidate lists and redundant separation filtering
 - **#165** — Simplify Reference Layer: hierarchy-based big/small, completion rules
 - **#166** — Redesign calibration UI: tree navigation filters, structure summary, validation quick-checks
+- **#174** — Propagate leg invalidation to swing invalidation (O(n²) performance fix)
 
 ---
 
