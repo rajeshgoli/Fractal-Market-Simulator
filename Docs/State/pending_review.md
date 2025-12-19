@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-19
 
@@ -12,6 +12,7 @@
 - **#169** — Add DAG state API endpoint (`/api/dag/state`) for visualization
 - **#170** — Add linger toggle to playback controls (lingerEnabled option, toggle button)
 - **#171** — Add DAG state panel for displaying internal algorithm state (active legs, orphaned origins, pending pivots, recent events)
+- **#172** — Add leg visualization on charts with DAG Build mode (--mode dag CLI flag, LegOverlay component, DAGView page)
 
 ---
 
