@@ -275,6 +275,19 @@ export interface CalibrationDataHierarchical extends CalibrationData {
   active_swings_by_depth: SwingsByDepth;
 }
 
+// ============================================================================
+// DAG State Types (Issue #171 - DAG State Panel)
+// ============================================================================
+
+export interface LegEvent {
+  type: 'LEG_CREATED' | 'LEG_PRUNED' | 'LEG_INVALIDATED';
+  leg_id: string;
+  bar_index: number;
+  direction: 'bull' | 'bear';
+  reason?: string;  // For pruned/invalidated events
+  timestamp?: number;  // For display ordering
+}
+
 // Aggregation scale options (timeframes not S/M/L/XL)
 export const AGGREGATION_OPTIONS = [
   { value: 'S', label: '5m', minutes: 5 },

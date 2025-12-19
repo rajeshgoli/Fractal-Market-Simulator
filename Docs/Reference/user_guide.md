@@ -239,6 +239,18 @@ During forward playback, the sidebar also shows scale filters (S/M/L/XL). Toggle
 
 During playback, a "Show Stats" toggle appears in the sidebar. When enabled, it displays the calibration stats panel (thresholds, swing counts by scale) instead of the swing explanation panel. This is useful for referencing calibration data while observing playback events.
 
+**DAG State Panel Toggle:**
+
+During playback, tab buttons appear above the bottom panel allowing you to switch between:
+- **Swings**: The default swing explanation panel showing formed swings and details
+- **DAG State**: Internal algorithm state visualization showing:
+  - **Active Legs**: Pre-formation candidate legs with pivot/origin prices and retracement percentages
+  - **Orphaned Origins**: Preserved origins from invalidated legs awaiting sibling swing formation
+  - **Pending Pivots**: Potential pivots awaiting confirmation for each direction
+  - **Recent Events**: Log of leg lifecycle events (created, pruned, invalidated)
+
+This is useful for understanding how the DAG algorithm detects swings and why certain swings form or fail to form.
+
 **Multiple Events:**
 When multiple events occur at the same bar, they are queued and shown sequentially. The indicator displays queue position (e.g., "1/3"). Use ◀/▶ buttons or arrow keys to navigate between events.
 

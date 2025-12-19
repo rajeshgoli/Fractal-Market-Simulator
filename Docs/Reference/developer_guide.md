@@ -590,6 +590,7 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `SwingOverlay.tsx` | Fib level rendering on charts |
 | `PlaybackControls.tsx` | Play/pause/step transport |
 | `ExplanationPanel.tsx` | Calibration report and swing details |
+| `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots) |
 | `usePlayback.ts` | Legacy playback (calibration scrubbing) |
 | `useForwardPlayback.ts` | Forward-only playback after calibration |
 | `useSwingDisplay.ts` | Scale filtering and swing ranking |

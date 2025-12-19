@@ -5,10 +5,11 @@ import { Sidebar } from '../components/Sidebar';
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { ExplanationPanel } from '../components/ExplanationPanel';
+import { DAGStatePanel } from '../components/DAGStatePanel';
 import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
-import { fetchBars, fetchSession, fetchDetectedSwings, fetchCalibration, ReplayEvent } from '../lib/api';
+import { fetchBars, fetchSession, fetchDetectedSwings, fetchCalibration, fetchDagState, ReplayEvent, DagStateResponse } from '../lib/api';
 import { INITIAL_FILTERS, LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
@@ -36,6 +37,7 @@ import {
   DepthFilterKey,
   SwingStatusKey,
   SwingDirectionKey,
+  LegEvent,
 } from '../types';
 import { useSwingDisplay, useHierarchicalDisplay } from '../hooks/useSwingDisplay';
 
@@ -211,6 +213,12 @@ export const Replay: React.FC = () => {
 
   // Linger toggle (pause on events)
   const [lingerEnabled, setLingerEnabled] = useState(true);
+
+  // DAG visualization mode state (Issue #171)
+  const [dagVisualizationMode, setDagVisualizationMode] = useState(false);
+  const [dagState, setDagState] = useState<DagStateResponse | null>(null);
+  const [recentLegEvents, setRecentLegEvents] = useState<LegEvent[]>([]);
+  const [isDagLoading, setIsDagLoading] = useState(false);
 
   // Use hook to filter and rank swings based on display config
   // filteredActiveSwings is limited by activeSwingCount (for chart display)
@@ -920,6 +928,59 @@ export const Replay: React.FC = () => {
     };
   }, [playback.currentPosition]);
 
+  // Fetch DAG state when in DAG visualization mode (Issue #171)
+  useEffect(() => {
+    if (!dagVisualizationMode || calibrationPhase !== CalibrationPhase.PLAYING) {
+      return;
+    }
+
+    const fetchState = async () => {
+      setIsDagLoading(true);
+      try {
+        const state = await fetchDagState();
+        setDagState(state);
+      } catch (err) {
+        console.error('Failed to fetch DAG state:', err);
+      } finally {
+        setIsDagLoading(false);
+      }
+    };
+
+    // Fetch initially
+    fetchState();
+
+    // Refetch when position changes significantly (every 5 bars)
+    const positionInterval = setInterval(() => {
+      if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
+        fetchState();
+      }
+    }, 500);
+
+    return () => clearInterval(positionInterval);
+  }, [dagVisualizationMode, calibrationPhase, forwardPlayback.playbackState]);
+
+  // Collect leg events from forward playback events (Issue #171)
+  useEffect(() => {
+    if (!dagVisualizationMode) return;
+
+    // Extract leg events from allEvents
+    const legEvents: LegEvent[] = [];
+    for (const event of forwardPlayback.allEvents) {
+      if (event.type === 'LEG_CREATED' || event.type === 'LEG_PRUNED' || event.type === 'LEG_INVALIDATED') {
+        legEvents.push({
+          type: event.type as LegEvent['type'],
+          leg_id: event.swing_id,
+          bar_index: event.bar_index,
+          direction: event.direction as 'bull' | 'bear',
+          reason: event.trigger_explanation,
+        });
+      }
+    }
+
+    // Keep only the most recent 20 events
+    setRecentLegEvents(legEvents.slice(-20).reverse());
+  }, [dagVisualizationMode, forwardPlayback.allEvents]);
+
   // Handle chart ready callbacks - create marker plugins
   const handleChart1Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
     chart1Ref.current = chart;
@@ -1211,34 +1272,69 @@ export const Replay: React.FC = () => {
             />
           </div>
 
-          {/* Explanation Panel / Calibration Report */}
-          <div className="h-48 md:h-56 shrink-0">
-            <ExplanationPanel
-              swing={currentExplanationSwing}
-              previousSwing={playback.previousSwing}
-              calibrationPhase={calibrationPhase}
-              calibrationData={calibrationData}
-              currentActiveSwing={currentActiveSwing}
-              currentActiveSwingIndex={currentActiveSwingIndex}
-              totalActiveSwings={allNavigableSwings.length}
-              onNavigatePrev={navigatePrevActiveSwing}
-              onNavigateNext={navigateNextActiveSwing}
-              onStartPlayback={handleStartPlayback}
-              // Legacy display config
-              displayConfig={displayConfig}
-              filteredStats={filteredStats}
-              onToggleScale={handleToggleScale}
-              onSetActiveSwingCount={handleSetActiveSwingCount}
-              // Hierarchical display config (Issue #166)
-              hierarchicalConfig={hierarchicalConfig}
-              statsByDepth={statsByDepth}
-              onSetDepthFilter={handleSetDepthFilter}
-              onToggleStatus={handleToggleStatus}
-              onToggleDirection={handleToggleDirection}
-              onSetHierarchicalActiveSwingCount={handleSetHierarchicalActiveSwingCount}
-              onBrowseDepth={handleBrowseDepth}
-              showStats={showStats}
-            />
+          {/* Explanation Panel / DAG State Panel - with toggle during PLAYING phase */}
+          <div className="h-48 md:h-56 shrink-0 relative">
+            {/* Panel toggle tabs (only in PLAYING phase) */}
+            {calibrationPhase === CalibrationPhase.PLAYING && (
+              <div className="absolute -top-7 right-4 flex gap-1 z-10">
+                <button
+                  onClick={() => setDagVisualizationMode(false)}
+                  className={`px-3 py-1 text-xs rounded-t border-t border-l border-r transition-colors ${
+                    !dagVisualizationMode
+                      ? 'bg-app-secondary border-app-border text-app-text'
+                      : 'bg-app-bg border-transparent text-app-muted hover:text-app-text'
+                  }`}
+                >
+                  Swings
+                </button>
+                <button
+                  onClick={() => setDagVisualizationMode(true)}
+                  className={`px-3 py-1 text-xs rounded-t border-t border-l border-r transition-colors ${
+                    dagVisualizationMode
+                      ? 'bg-app-secondary border-app-border text-app-text'
+                      : 'bg-app-bg border-transparent text-app-muted hover:text-app-text'
+                  }`}
+                >
+                  DAG State
+                </button>
+              </div>
+            )}
+
+            {/* Conditionally render panel */}
+            {dagVisualizationMode && calibrationPhase === CalibrationPhase.PLAYING ? (
+              <DAGStatePanel
+                dagState={dagState}
+                recentLegEvents={recentLegEvents}
+                isLoading={isDagLoading}
+              />
+            ) : (
+              <ExplanationPanel
+                swing={currentExplanationSwing}
+                previousSwing={playback.previousSwing}
+                calibrationPhase={calibrationPhase}
+                calibrationData={calibrationData}
+                currentActiveSwing={currentActiveSwing}
+                currentActiveSwingIndex={currentActiveSwingIndex}
+                totalActiveSwings={allNavigableSwings.length}
+                onNavigatePrev={navigatePrevActiveSwing}
+                onNavigateNext={navigateNextActiveSwing}
+                onStartPlayback={handleStartPlayback}
+                // Legacy display config
+                displayConfig={displayConfig}
+                filteredStats={filteredStats}
+                onToggleScale={handleToggleScale}
+                onSetActiveSwingCount={handleSetActiveSwingCount}
+                // Hierarchical display config (Issue #166)
+                hierarchicalConfig={hierarchicalConfig}
+                statsByDepth={statsByDepth}
+                onSetDepthFilter={handleSetDepthFilter}
+                onToggleStatus={handleToggleStatus}
+                onToggleDirection={handleToggleDirection}
+                onSetHierarchicalActiveSwingCount={handleSetHierarchicalActiveSwingCount}
+                onBrowseDepth={handleBrowseDepth}
+                showStats={showStats}
+              />
+            )}
           </div>
         </main>
       </div>
