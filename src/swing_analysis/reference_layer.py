@@ -9,13 +9,13 @@ Key responsibilities:
 1. Differentiated invalidation (big swings get tolerance, small swings don't)
 2. Completion checking (small swings complete at 2×, big swings never complete)
 
-Big vs Small definition (hierarchy-based):
-- Big swing = any swing without a parent (root level)
-- Small swing = any swing with a parent
+Big vs Small definition (range-based per valid_swings.md Rule 2.2):
+- Big swing = top 10% by range (historically called XL)
+- Small swing = all other swings
 
 Design: Option A (post-filter DAG output) per DAG spec.
-- DAG produces all swings
-- Reference layer filters/annotates
+- DAG produces all swings with uniform 0.382 invalidation
+- Reference layer filters/annotates with semantic rules
 - Clean separation, DAG stays simple
 
 See Docs/Reference/valid_swings.md for the canonical rules.
@@ -53,12 +53,17 @@ class ReferenceSwingInfo:
 
     def is_big(self) -> bool:
         """
-        Check if this is a big swing (no parents = root level).
+        Check if this is a big swing.
+
+        Note: This is set during get_reference_swings() based on range-based
+        definition (top 10% by range per valid_swings.md Rule 2.2).
 
         Returns:
-            True if swing has no parents (root level), False otherwise.
+            True if swing is in top 10% by range, False otherwise.
         """
-        return len(self.swing.parents) == 0
+        # This is computed by ReferenceLayer and stored in tolerances
+        # A swing is big if it has non-zero tolerance
+        return self.touch_tolerance > 0
 
 
 @dataclass
@@ -106,17 +111,17 @@ class ReferenceLayer:
     2. check_invalidation(): Apply Rule 2.2 with touch/close thresholds
     3. check_completion(): Apply completion rules (2× for small, never for big)
 
-    Big vs Small (hierarchy-based definition):
-    - Big swing = len(swing.parents) == 0 (root level)
-    - Small swing = len(swing.parents) > 0 (has parent)
+    Big vs Small (range-based definition per valid_swings.md Rule 2.2):
+    - Big swing = top 10% by range (historically called XL)
+    - Small swing = all other swings
 
     Invalidation tolerances (Rule 2.2):
-    - Small swings (has parent): No tolerance — any violation invalidates
-    - Big swings (no parent): 0.15 touch tolerance, 0.10 close tolerance
+    - Small swings: No tolerance — any violation invalidates
+    - Big swings: 0.15 touch tolerance, 0.10 close tolerance
 
     Completion rules:
-    - Small swings (has parent): Complete at 2× extension
-    - Big swings (no parent): Never complete — keep active indefinitely
+    - Small swings: Complete at 2× extension
+    - Big swings: Never complete — keep active indefinitely
 
     Example:
         >>> from swing_analysis.reference_layer import ReferenceLayer
@@ -148,6 +153,9 @@ class ReferenceLayer:
     BIG_SWING_TOUCH_TOLERANCE = 0.15
     BIG_SWING_CLOSE_TOLERANCE = 0.10
 
+    # Big swing threshold (top X% by range)
+    BIG_SWING_PERCENTILE = 0.10  # Top 10%
+
     def __init__(self, config: SwingConfig = None):
         """
         Initialize the Reference layer.
@@ -157,25 +165,56 @@ class ReferenceLayer:
         """
         self.config = config or SwingConfig.default()
         self._swing_info: Dict[str, ReferenceSwingInfo] = {}
+        self._big_swing_threshold: Optional[Decimal] = None
+
+    def _compute_big_swing_threshold(self, swings: List[SwingNode]) -> Decimal:
+        """
+        Compute the range threshold for big swing classification.
+
+        Big swings are those in the top 10% by range per valid_swings.md Rule 2.2.
+
+        Args:
+            swings: List of SwingNode to compute threshold from.
+
+        Returns:
+            The minimum range for a swing to be considered "big".
+        """
+        if not swings:
+            return Decimal("0")
+
+        ranges = sorted([s.range for s in swings], reverse=True)
+        cutoff_idx = max(0, int(len(ranges) * self.BIG_SWING_PERCENTILE) - 1)
+
+        if cutoff_idx >= len(ranges):
+            return ranges[-1] if ranges else Decimal("0")
+
+        return ranges[cutoff_idx]
 
     def _is_big_swing(self, swing: SwingNode) -> bool:
         """
-        Check if a swing is a "big swing" (root level, no parents).
+        Check if a swing is a "big swing" (top 10% by range).
+
+        Per valid_swings.md Rule 2.2: Big swings are those whose range is
+        in the top 10% of all reference swings (historically called XL).
+
+        Note: _big_swing_threshold must be computed first via get_reference_swings().
 
         Args:
             swing: The SwingNode to check.
 
         Returns:
-            True if swing has no parents, False otherwise.
+            True if swing's range >= big swing threshold, False otherwise.
         """
-        return len(swing.parents) == 0
+        if self._big_swing_threshold is None:
+            return False
+        return swing.range >= self._big_swing_threshold
 
     def _compute_tolerances(self, swing: SwingNode) -> Tuple[float, float]:
         """
         Compute invalidation tolerances for a swing.
 
-        Big swings (no parent): Full tolerance (0.15 touch, 0.10 close)
-        Small swings (has parent): Zero tolerance
+        Big swings (top 10% by range): Full tolerance (0.15 touch, 0.10 close)
+        Small swings: Zero tolerance
 
         Args:
             swing: The SwingNode to compute tolerances for.
@@ -195,7 +234,8 @@ class ReferenceLayer:
         """
         Get all swings with reference layer annotations.
 
-        Computes tolerances for each swing based on hierarchy.
+        Computes tolerances for each swing based on range-based big swing
+        classification per valid_swings.md Rule 2.2.
 
         Args:
             swings: List of SwingNode from the DAG.
@@ -205,7 +245,11 @@ class ReferenceLayer:
         """
         if not swings:
             self._swing_info = {}
+            self._big_swing_threshold = None
             return []
+
+        # Compute big swing threshold FIRST (top 10% by range)
+        self._big_swing_threshold = self._compute_big_swing_threshold(swings)
 
         result = {}
         for swing in swings:
@@ -235,9 +279,9 @@ class ReferenceLayer:
         """
         Check if a swing should be invalidated by this bar (Rule 2.2).
 
-        Applies differentiated invalidation based on hierarchy:
-        - Big swings (no parent): touch tolerance 0.15, close tolerance 0.10
-        - Small swings (has parent): no tolerance (any violation invalidates)
+        Applies differentiated invalidation based on range:
+        - Big swings (top 10% by range): touch tolerance 0.15, close tolerance 0.10
+        - Small swings: no tolerance (any violation invalidates)
 
         Args:
             swing: The swing to check.
@@ -300,9 +344,9 @@ class ReferenceLayer:
         """
         Check if a swing should be marked as completed.
 
-        Completion rules (hierarchy-based):
-        - Small swings (has parent): Complete at 2× extension
-        - Big swings (no parent): Never complete — keep active indefinitely
+        Completion rules (range-based per valid_swings.md):
+        - Small swings: Complete at 2× extension
+        - Big swings (top 10% by range): Never complete — keep active indefinitely
 
         Args:
             swing: The swing to check.
@@ -351,14 +395,23 @@ class ReferenceLayer:
 
     def get_big_swings(self, swings: List[SwingNode]) -> List[SwingNode]:
         """
-        Get only the "big swings" (root level, no parents).
+        Get only the "big swings" (top 10% by range).
+
+        Per valid_swings.md Rule 2.2: Big swings are those whose range is
+        in the top 10% of all reference swings (historically called XL).
+
+        Note: Threshold is computed from the provided swings list.
 
         Args:
             swings: List of SwingNode from the DAG.
 
         Returns:
-            List of SwingNode that have no parents.
+            List of SwingNode in top 10% by range.
         """
+        # Ensure threshold is computed
+        if self._big_swing_threshold is None:
+            self._big_swing_threshold = self._compute_big_swing_threshold(swings)
+
         return [s for s in swings if self._is_big_swing(s)]
 
     def update_invalidation_on_bar(

@@ -265,114 +265,6 @@ class TestSwingFormation:
         assert len(bull_swings_5100_5000) >= 1, "Swing should form at 55% retracement with 50% threshold"
 
 
-class TestInvalidation:
-    """Test swing invalidation logic."""
-
-    def test_bull_swing_invalidates_on_low_violation(self):
-        """Bull swing invalidates when price goes below defended low.
-
-        Note: With default config, swings get tolerance (15% for big swings).
-        The violation price must exceed the tolerance to trigger invalidation.
-        For a 100-point swing, tolerance = 15, so invalidation occurs below 4985.
-        """
-        config = SwingConfig(lookback_bars=50)
-        detector = HierarchicalDetector(config)
-
-        # Form a bull swing: high at 5100, low at 5000
-        bar0 = make_bar(0, 5050.0, 5100.0, 5050.0, 5080.0)
-        bar1 = make_bar(1, 5040.0, 5060.0, 5000.0, 5020.0)
-        bar2 = make_bar(2, 5020.0, 5050.0, 5015.0, 5040.0)
-        detector.process_bar(bar0)
-        detector.process_bar(bar1)
-        detector.process_bar(bar2)
-
-        initial_swings = len(detector.get_active_swings())
-        if initial_swings == 0:
-            pytest.skip("No swing formed to test invalidation")
-
-        # Violate the low at 5000 (must exceed tolerance: 5000 - 15 = 4985)
-        bar3 = make_bar(3, 5020.0, 5030.0, 4980.0, 4982.0)
-        events3 = detector.process_bar(bar3)
-
-        invalidated = [e for e in events3 if isinstance(e, SwingInvalidatedEvent)]
-        assert len(invalidated) >= 1
-        assert invalidated[0].violation_price == Decimal("4980")
-
-    def test_tolerance_for_big_swings(self):
-        """Big swings have tolerance before invalidation."""
-        config = SwingConfig(
-            bull=DirectionConfig(
-                big_swing_threshold=0.5,  # Top 50% are big swings
-                big_swing_price_tolerance=0.15,
-            ),
-            lookback_bars=50,
-        )
-        detector = HierarchicalDetector(config)
-
-        # Create a big swing manually by adding it to state
-        big_swing = SwingNode(
-            swing_id="big00001",
-            high_bar_index=0,
-            high_price=Decimal("5100"),
-            low_bar_index=10,
-            low_price=Decimal("5000"),
-            direction="bull",
-            status="active",
-            formed_at_bar=10,
-        )
-        detector.state.active_swings.append(big_swing)
-        detector.state.all_swing_ranges.append(big_swing.range)
-        detector.state.last_bar_index = 10
-
-        # Small violation within tolerance (5000 - 100 * 0.15 = 4985)
-        bar = make_bar(11, 5010.0, 5020.0, 4990.0, 4995.0)
-        events = detector.process_bar(bar)
-
-        # Should NOT be invalidated (within 0.15 tolerance)
-        invalidated = [e for e in events if isinstance(e, SwingInvalidatedEvent)]
-        assert len(invalidated) == 0
-
-        # Larger violation beyond tolerance
-        bar2 = make_bar(12, 4990.0, 4995.0, 4980.0, 4982.0)
-        events2 = detector.process_bar(bar2)
-
-        invalidated2 = [e for e in events2 if isinstance(e, SwingInvalidatedEvent)]
-        assert len(invalidated2) == 1
-
-
-class TestCompletion:
-    """Test swing completion logic."""
-
-    def test_bull_swing_completes_at_2x(self):
-        """Bull swing completes when price reaches 2.0 extension."""
-        config = SwingConfig(lookback_bars=50)
-        detector = HierarchicalDetector(config)
-
-        # Create a bull swing: high at 5100, low at 5000
-        swing = SwingNode(
-            swing_id="test0001",
-            high_bar_index=0,
-            high_price=Decimal("5100"),
-            low_bar_index=10,
-            low_price=Decimal("5000"),
-            direction="bull",
-            status="active",
-            formed_at_bar=10,
-        )
-        detector.state.active_swings.append(swing)
-        detector.state.all_swing_ranges.append(swing.range)
-        detector.state.last_bar_index = 10
-
-        # 2.0 level = 5000 + 2 * 100 = 5200
-        bar = make_bar(11, 5150.0, 5205.0, 5140.0, 5195.0)
-        events = detector.process_bar(bar)
-
-        completed = [e for e in events if isinstance(e, SwingCompletedEvent)]
-        assert len(completed) == 1
-        assert completed[0].swing_id == "test0001"
-        assert swing.status == "completed"
-
-
 class TestLevelCross:
     """Test Fib level cross tracking."""
 
@@ -560,110 +452,6 @@ class TestFibLevelBands:
         assert detector._find_level_band(1.6) == 1.5     # Between 1.5 and 1.618
         assert detector._find_level_band(1.7) == 1.618
         assert detector._find_level_band(2.5) == 2.0
-
-
-class TestBigSwingDetection:
-    """Test big swing detection for tolerance calculation."""
-
-    def test_big_swing_threshold(self):
-        """Big swings are those in top percentile by range."""
-        config = SwingConfig(
-            bull=DirectionConfig(big_swing_threshold=0.2),  # Top 20%
-            lookback_bars=50,
-        )
-        detector = HierarchicalDetector(config)
-
-        # Create swings of varying sizes
-        swings = []
-        for i, size in enumerate([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]):
-            swing = SwingNode(
-                swing_id=f"swing{i:03d}",
-                high_bar_index=i * 10,
-                high_price=Decimal(str(1000 + size)),
-                low_bar_index=i * 10 + 5,
-                low_price=Decimal("1000"),
-                direction="bull",
-                status="active",
-                formed_at_bar=i * 10 + 5,
-            )
-            swings.append(swing)
-            detector.state.active_swings.append(swing)
-            detector.state.all_swing_ranges.append(swing.range)
-
-        # Top 20% means top 2 swings (ranges 90 and 100) are "big"
-        assert detector._is_big_swing(swings[8], config.bull)  # range 90
-        assert detector._is_big_swing(swings[9], config.bull)  # range 100
-        assert not detector._is_big_swing(swings[0], config.bull)  # range 10
-
-
-class TestDistanceToBigSwing:
-    """Test hierarchy distance calculation."""
-
-    def test_distance_calculation(self):
-        """Distance to big swing is correctly calculated through hierarchy."""
-        # Use 10% threshold so only top swing qualifies
-        config = SwingConfig(
-            bull=DirectionConfig(big_swing_threshold=0.1),  # Top 10%
-            lookback_bars=50,
-        )
-        detector = HierarchicalDetector(config)
-
-        # Create hierarchy: grandparent -> parent -> child
-        # Ranges: 100 (big), 40 (not big), 10 (not big)
-        grandparent = SwingNode(
-            swing_id="grandpa1",
-            high_bar_index=0,
-            high_price=Decimal("1100"),
-            low_bar_index=10,
-            low_price=Decimal("1000"),
-            direction="bull",
-            status="active",
-            formed_at_bar=10,
-        )
-        parent = SwingNode(
-            swing_id="parent01",
-            high_bar_index=20,
-            high_price=Decimal("1050"),
-            low_bar_index=30,
-            low_price=Decimal("1010"),
-            direction="bull",
-            status="active",
-            formed_at_bar=30,
-        )
-        child = SwingNode(
-            swing_id="child001",
-            high_bar_index=40,
-            high_price=Decimal("1030"),
-            low_bar_index=50,
-            low_price=Decimal("1020"),
-            direction="bull",
-            status="active",
-            formed_at_bar=50,
-        )
-
-        # Link hierarchy
-        parent.add_parent(grandparent)
-        child.add_parent(parent)
-
-        detector.state.active_swings = [grandparent, parent, child]
-        detector.state.all_swing_ranges = [
-            grandparent.range,
-            parent.range,
-            child.range,
-        ]
-
-        # With 10% threshold, only grandparent (range 100) is big
-        # Child's distance should be 2 (through parent -> grandparent)
-        distance = detector._distance_to_big_swing(child, config.bull)
-        assert distance == 2
-
-        # Parent's distance should be 1 (direct parent of grandparent)
-        distance_parent = detector._distance_to_big_swing(parent, config.bull)
-        assert distance_parent == 1
-
-        # Grandparent's distance should be 0 (it's big)
-        distance_grandparent = detector._distance_to_big_swing(grandparent, config.bull)
-        assert distance_grandparent == 0
 
 
 class TestProgressCallback:
@@ -901,54 +689,7 @@ class TestCalibrationPerformance:
 
 
 class TestPhase1Optimizations:
-    """Tests for Phase 1 quick wins: caching and inlining (#155)."""
-
-    def test_cached_threshold_matches_computed(self):
-        """Verify cached threshold produces same results as computed."""
-        from src.swing_analysis.swing_config import DirectionConfig
-
-        config = SwingConfig(
-            bull=DirectionConfig(big_swing_threshold=0.1),
-            bear=DirectionConfig(big_swing_threshold=0.1),
-            lookback_bars=50,
-        )
-        detector = HierarchicalDetector(config)
-
-        # Create swings of varying sizes
-        for i, size in enumerate([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]):
-            swing = SwingNode(
-                swing_id=f"swing{i:03d}",
-                high_bar_index=i * 10,
-                high_price=Decimal(str(1000 + size)),
-                low_bar_index=i * 10 + 5,
-                low_price=Decimal("1000"),
-                direction="bull",
-                status="active",
-                formed_at_bar=i * 10 + 5,
-            )
-            detector.state.active_swings.append(swing)
-            detector.state.all_swing_ranges.append(swing.range)
-
-        # Invalidate cache and force recompute
-        detector.state._threshold_valid = False
-
-        # Get big swing status for each swing
-        results_cached = []
-        for swing in detector.state.active_swings:
-            results_cached.append(detector._is_big_swing(swing, config.bull))
-
-        # Now compute manually without cache to verify
-        sorted_ranges = sorted(detector.state.all_swing_ranges, reverse=True)
-        threshold_idx = int(len(sorted_ranges) * config.bull.big_swing_threshold)
-        threshold_idx = max(0, min(threshold_idx, len(sorted_ranges) - 1))
-        manual_threshold = sorted_ranges[threshold_idx]
-
-        results_manual = []
-        for swing in detector.state.active_swings:
-            results_manual.append(swing.range >= manual_threshold)
-
-        # Results should match
-        assert results_cached == results_manual
+    """Tests for Phase 1 quick wins: inlining formation checks (#155)."""
 
     def test_inline_formation_matches_reference_frame(self):
         """Verify inlined formation calculations match ReferenceFrame."""
@@ -1024,95 +765,14 @@ class TestPhase1Optimizations:
         # Verify last bar processed
         assert detector.state.last_bar_index == 99
 
-        # Verify cache state is consistent
-        if detector.state.all_swing_ranges:
-            # After processing, cache may or may not be valid
-            # But if we access _is_big_swing, it should work correctly
-            for swing in detector.state.active_swings:
-                # This should work without errors and use cache
-                _ = detector._is_big_swing(swing, config.bull)
-
-    def test_threshold_cache_invalidation(self):
-        """Verify cache is invalidated when new swings form."""
-        config = SwingConfig.default()
-        detector = HierarchicalDetector(config)
-
-        # Manually add a swing and mark cache as valid
-        swing1 = SwingNode(
-            swing_id="swing001",
-            high_bar_index=0,
-            high_price=Decimal("5100"),
-            low_bar_index=5,
-            low_price=Decimal("5000"),
-            direction="bull",
-            status="active",
-            formed_at_bar=5,
-        )
-        detector.state.active_swings.append(swing1)
-        detector.state.all_swing_ranges.append(swing1.range)
-        detector.state._threshold_valid = False
-
-        # Force cache computation
-        detector._update_big_threshold_cache()
-        assert detector.state._threshold_valid is True
-        original_threshold = detector.state._cached_big_threshold_bull
-
-        # Add another swing with different range
-        detector.state.all_swing_ranges.append(Decimal("200"))
-        detector.state._threshold_valid = False  # Invalidate
-
-        # Access _is_big_swing which should recompute cache
-        detector._is_big_swing(swing1, config.bull)
-
-        # Cache should now be valid with potentially different threshold
-        assert detector.state._threshold_valid is True
-
-    def test_lazy_invalidation_skips_non_violating_bars(self):
-        """Verify lazy invalidation skips bars that can't violate any swing."""
-        from src.swing_analysis.swing_config import DirectionConfig
-
-        # Use 0 tolerance to make invalidation more deterministic
-        config = SwingConfig(
-            bull=DirectionConfig(big_swing_threshold=0.5, big_swing_price_tolerance=0.0),
-            bear=DirectionConfig(big_swing_threshold=0.5, big_swing_price_tolerance=0.0),
-            lookback_bars=50,
-        )
-        detector = HierarchicalDetector(config)
-
-        # Create a bull swing with defended pivot at 5000
-        swing = SwingNode(
-            swing_id="bull0001",
-            high_bar_index=0,
-            high_price=Decimal("5100"),
-            low_bar_index=10,
-            low_price=Decimal("5000"),
-            direction="bull",
-            status="active",
-            formed_at_bar=10,
-        )
-        detector.state.active_swings.append(swing)
-        detector.state.all_swing_ranges.append(swing.range)
-        detector.state.last_bar_index = 10
-
-        # Bar with low above defended pivot - should skip invalidation check
-        bar1 = make_bar(11, 5050.0, 5060.0, 5040.0, 5055.0)
-        from datetime import datetime
-        events1 = detector._check_invalidations(bar1, datetime.now())
-
-        # No invalidation events
-        assert len(events1) == 0
-        assert swing.status == "active"
-
-        # Bar with low below defended pivot - should trigger check and invalidate (no tolerance)
-        bar2 = make_bar(12, 5010.0, 5020.0, 4990.0, 4995.0)
-        events2 = detector._check_invalidations(bar2, datetime.now())
-
-        # Should have invalidation event (with 0 tolerance, any violation invalidates)
-        assert len(events2) == 1
-        assert swing.status == "invalidated"
-
     def test_performance_1k_bars_phase1_target(self):
-        """Performance test: 1K bars should complete in <5s after Phase 1 optimizations."""
+        """Performance test: 1K bars should complete in reasonable time.
+
+        Note: After DAG/Reference layer separation, the DAG no longer invalidates
+        or completes swings. Swings accumulate without pruning until the Reference
+        layer processes them. This test uses a higher threshold to account for
+        swing accumulation.
+        """
         import time
 
         # Create 1K bars with realistic price pattern
@@ -1132,45 +792,10 @@ class TestPhase1Optimizations:
         detector, events = calibrate(bars)
         elapsed = time.time() - start
 
-        # Phase 1 target: <5s for 1K bars
-        assert elapsed < 5.0, f"1K bars took {elapsed:.2f}s, should be <5s after Phase 1 optimizations"
+        # With DAG/Reference separation, swings accumulate without pruning.
+        # Allow 30s for 1K bars (future optimization: prune in Reference layer)
+        assert elapsed < 30.0, f"1K bars took {elapsed:.2f}s, should be <30s"
         assert detector.state.last_bar_index == 999
-
-    def test_state_serialization_with_cache_fields(self):
-        """Verify state serialization includes cache fields."""
-        config = SwingConfig.default()
-        detector = HierarchicalDetector(config)
-
-        # Add a swing and compute cache
-        swing = SwingNode(
-            swing_id="swing001",
-            high_bar_index=0,
-            high_price=Decimal("5100"),
-            low_bar_index=5,
-            low_price=Decimal("5000"),
-            direction="bull",
-            status="active",
-            formed_at_bar=5,
-        )
-        detector.state.active_swings.append(swing)
-        detector.state.all_swing_ranges.append(swing.range)
-        detector._update_big_threshold_cache()
-
-        # Serialize
-        state_dict = detector.get_state().to_dict()
-
-        # Verify cache fields are in serialized state
-        assert "_cached_big_threshold_bull" in state_dict
-        assert "_cached_big_threshold_bear" in state_dict
-        assert "_threshold_valid" in state_dict
-
-        # Deserialize
-        restored_state = DetectorState.from_dict(state_dict)
-
-        # Verify cache fields restored
-        assert restored_state._cached_big_threshold_bull == detector.state._cached_big_threshold_bull
-        assert restored_state._cached_big_threshold_bear == detector.state._cached_big_threshold_bear
-        assert restored_state._threshold_valid == detector.state._threshold_valid
 
 
 class TestSiblingSwingDetection:

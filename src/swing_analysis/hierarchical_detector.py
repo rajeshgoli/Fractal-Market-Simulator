@@ -1,13 +1,24 @@
 """
-Hierarchical Swing Detector (DAG-Based Algorithm)
+DAG-Based Swing Detector (Structural Layer)
 
-Incremental swing detector with hierarchical model. Processes one bar at a time
-via process_bar(). Uses a DAG-based streaming approach that achieves O(n log k)
-complexity instead of O(n × k³).
+The DAG layer is responsible for structural tracking of price extremas. It processes
+one bar at a time via process_bar() and emits events for swing formation and Fib
+level crosses.
 
-Core insight: Instead of generating O(k²) candidate pairs and filtering by rules,
-build a structure where rules are enforced by construction. Temporal ordering is
-established through bar relationships, not post-hoc filtering.
+**This layer handles:**
+- Leg tracking with 0.382 invalidation threshold
+- Swing formation detection
+- Level cross event tracking
+- Parent-child relationship assignment
+- Orphaned origin preservation for sibling detection
+
+**This layer does NOT handle (see reference_layer.py):**
+- Swing invalidation (tolerance-based rules)
+- Swing completion (big swings never complete)
+- Big swing classification (top 10% by range)
+
+The separation allows the DAG to stay simple and O(n log k), while semantic/trading
+rules can evolve independently in the Reference layer.
 
 See Docs/Working/DAG_spec.md for full specification.
 See Docs/Working/Performance_question.md for design rationale.
@@ -971,9 +982,7 @@ class HierarchicalDetector:
         for parent in parents:
             swing.add_parent(parent)
 
-        # Track swing range and add to active swings
-        self.state.all_swing_ranges.append(swing.range)
-        self.state._threshold_valid = False
+        # Add to active swings
         self.state.active_swings.append(swing)
 
         # Initialize level tracking
@@ -1096,9 +1105,7 @@ class HierarchicalDetector:
             for parent in parents:
                 swing.add_parent(parent)
 
-            # Track and add swing
-            self.state.all_swing_ranges.append(swing.range)
-            self.state._threshold_valid = False
+            # Add to active swings
             self.state.active_swings.append(swing)
 
             # Initialize level tracking
@@ -1293,125 +1300,12 @@ class HierarchicalDetector:
         # Create timestamp from bar
         timestamp = datetime.fromtimestamp(bar.timestamp) if bar.timestamp else datetime.now()
 
-        # 1. Check invalidations of formed swings
-        events.extend(self._check_invalidations(bar, timestamp))
-
-        # 2. Check completions
-        events.extend(self._check_completions(bar, timestamp))
-
-        # 3. Check level crosses
+        # 1. Check level crosses (structural tracking)
         events.extend(self._check_level_crosses(bar, timestamp))
 
         # 4. Update DAG state and form new swings (O(1) per bar)
         dag_events = self._update_dag_state(bar, timestamp)
         events.extend(dag_events)
-
-        return events
-
-    def _check_invalidations(
-        self, bar: Bar, timestamp: datetime
-    ) -> List[SwingInvalidatedEvent]:
-        """
-        Check each active swing for defended pivot violation.
-
-        Uses tolerance based on distance to big swing per Rule 2.2.
-        Includes quick rejection to avoid creating ReferenceFrame for
-        swings that can't possibly be invalidated by this bar.
-
-        Args:
-            bar: Current bar being processed.
-            timestamp: Timestamp for events.
-
-        Returns:
-            List of SwingInvalidatedEvent for any invalidated swings.
-        """
-        events = []
-        # Pre-convert bar prices once
-        bar_low = Decimal(str(bar.low))
-        bar_high = Decimal(str(bar.high))
-
-        for swing in self.state.active_swings:
-            if swing.status != "active":
-                continue
-
-            # Quick rejection: can this swing possibly be invalidated?
-            # Avoid expensive tolerance lookup and ReferenceFrame creation
-            # if the bar's price can't possibly violate the defended pivot.
-            if swing.is_bull:
-                # Bull swing: invalidated if bar.low violates defended low
-                # Quick check: if bar.low >= defended_pivot, can't be invalidated
-                if bar_low >= swing.defended_pivot:
-                    continue
-            else:
-                # Bear swing: invalidated if bar.high violates defended high
-                # Quick check: if bar.high <= defended_pivot, can't be invalidated
-                if bar_high <= swing.defended_pivot:
-                    continue
-
-            # Passed quick check - now do full invalidation check
-            check_price = bar_low if swing.is_bull else bar_high
-            tolerance = self._get_tolerance(swing)
-
-            # Full check with tolerance using ReferenceFrame
-            frame = ReferenceFrame(
-                anchor0=swing.defended_pivot,
-                anchor1=swing.origin,
-                direction="BULL" if swing.is_bull else "BEAR",
-            )
-
-            if frame.is_violated(check_price, tolerance):
-                swing.invalidate()
-                excess = abs(check_price - swing.defended_pivot)
-                events.append(
-                    SwingInvalidatedEvent(
-                        bar_index=bar.index,
-                        timestamp=timestamp,
-                        swing_id=swing.swing_id,
-                        violation_price=check_price,
-                        excess_amount=excess,
-                    )
-                )
-
-        return events
-
-    def _check_completions(
-        self, bar: Bar, timestamp: datetime
-    ) -> List[SwingCompletedEvent]:
-        """
-        Check each active swing for 2.0 target reached.
-
-        Args:
-            bar: Current bar being processed.
-            timestamp: Timestamp for events.
-
-        Returns:
-            List of SwingCompletedEvent for any completed swings.
-        """
-        events = []
-        for swing in self.state.active_swings:
-            if swing.status != "active":
-                continue
-
-            frame = ReferenceFrame(
-                anchor0=swing.defended_pivot,
-                anchor1=swing.origin,
-                direction="BULL" if swing.is_bull else "BEAR",
-            )
-
-            # Check price: high for bull (checking if 2.0 extension is reached above)
-            # low for bear (checking if 2.0 extension is reached below)
-            check_price = Decimal(str(bar.high if swing.is_bull else bar.low))
-
-            if frame.is_completed(check_price):
-                swing.complete()
-                events.append(
-                    SwingCompletedEvent(
-                        bar_index=bar.index,
-                        timestamp=timestamp,
-                        swing_id=swing.swing_id,
-                        completion_price=check_price,
-                    )
-                )
 
         return events
 
@@ -1521,115 +1415,6 @@ class HierarchicalDetector:
                 parents.append(swing)
 
         return parents
-
-    def _get_tolerance(self, swing: SwingNode) -> float:
-        """
-        Get invalidation tolerance based on distance to big swing (Rule 2.2).
-
-        - Big swing (top 10% by range): full tolerance (0.15 price)
-        - Child of big swing: basic tolerance (0.10)
-        - Other: no tolerance (0)
-
-        Args:
-            swing: The swing to get tolerance for.
-
-        Returns:
-            Tolerance as fraction of range.
-        """
-        config = self.config.bull if swing.is_bull else self.config.bear
-        distance = self._distance_to_big_swing(swing, config)
-
-        if distance == 0:
-            # Big swing itself - full tolerance
-            return config.big_swing_price_tolerance
-        elif distance <= 2:
-            # Child or grandchild of big swing - basic tolerance
-            return config.child_swing_tolerance
-        else:
-            # No big swing ancestor - absolute (no tolerance)
-            return 0.0
-
-    def _distance_to_big_swing(
-        self, swing: SwingNode, config: DirectionConfig
-    ) -> int:
-        """
-        Calculate hierarchy distance to nearest big swing ancestor.
-
-        Returns:
-            0 if swing itself is big
-            1 if parent is big
-            2 if grandparent is big
-            999 if no big swing ancestor within 2 levels
-        """
-        if self._is_big_swing(swing, config):
-            return 0
-
-        for parent in swing.parents:
-            if self._is_big_swing(parent, config):
-                return 1
-            for grandparent in parent.parents:
-                if self._is_big_swing(grandparent, config):
-                    return 2
-
-        return 999
-
-    def _update_big_threshold_cache(self) -> None:
-        """
-        Recompute cached big swing thresholds.
-
-        This is called when the cache is invalidated (after a new swing forms).
-        Sorting all_swing_ranges once and caching the thresholds avoids
-        repeated O(n log n) sorts in _is_big_swing().
-        """
-        if not self.state.all_swing_ranges:
-            self.state._cached_big_threshold_bull = Decimal("0")
-            self.state._cached_big_threshold_bear = Decimal("0")
-        else:
-            sorted_ranges = sorted(self.state.all_swing_ranges, reverse=True)
-
-            # Bull threshold
-            bull_idx = int(len(sorted_ranges) * self.config.bull.big_swing_threshold)
-            bull_idx = max(0, min(bull_idx, len(sorted_ranges) - 1))
-            self.state._cached_big_threshold_bull = sorted_ranges[bull_idx]
-
-            # Bear threshold
-            bear_idx = int(len(sorted_ranges) * self.config.bear.big_swing_threshold)
-            bear_idx = max(0, min(bear_idx, len(sorted_ranges) - 1))
-            self.state._cached_big_threshold_bear = sorted_ranges[bear_idx]
-
-        self.state._threshold_valid = True
-
-    def _is_big_swing(self, swing: SwingNode, config: DirectionConfig) -> bool:
-        """
-        Check if swing is a "big swing" (top percentile by range).
-
-        Big swings are those whose range is in the top X% of all swings,
-        where X is determined by config.big_swing_threshold.
-
-        Uses cached thresholds to avoid O(n log n) sort on every call.
-
-        Args:
-            swing: The swing to check.
-            config: DirectionConfig with big_swing_threshold.
-
-        Returns:
-            True if swing is in top percentile by range.
-        """
-        if not self.state.all_swing_ranges:
-            return False
-
-        # Recompute cache if invalidated
-        if not self.state._threshold_valid:
-            self._update_big_threshold_cache()
-
-        # Use cached threshold based on swing direction
-        threshold = (
-            self.state._cached_big_threshold_bull
-            if swing.is_bull
-            else self.state._cached_big_threshold_bear
-        )
-
-        return swing.range >= threshold
 
     def get_active_swings(self) -> List[SwingNode]:
         """

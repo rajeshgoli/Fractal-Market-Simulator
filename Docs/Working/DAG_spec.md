@@ -471,19 +471,50 @@ class SwingDAG:
 
 | Layer | Responsibility | Rules |
 |-------|----------------|-------|
-| **DAG** | Track extremas efficiently | 0.382 invalidation, 2x staleness |
-| **Reference** | Define "good reference" for trading | 0.15/0.1 separation thresholds |
+| **DAG** (`hierarchical_detector.py`) | Structural tracking | 0.382 leg invalidation, 2x staleness |
+| **Reference** (`reference_layer.py`) | Semantic filtering | Big swing tolerance, completion |
 
 The DAG answers: "What pivots exist?" (structural tracking)
 Reference answers: "Which swings are useful?" (semantic/trading logic)
 
-**Why separate:**
+### DAG Layer Responsibilities
+
+The DAG (`HierarchicalDetector`) handles:
+- **Leg tracking**: Track active legs with 0.382 invalidation threshold
+- **Swing formation**: Detect when legs reach formation threshold
+- **Level cross events**: Track price movement through Fib levels
+- **Parent assignment**: Assign parent-child relationships based on containment
+- **Orphaned origins**: Preserve origins from invalidated legs for sibling detection
+
+The DAG does NOT handle:
+- Swing invalidation (moved to Reference layer)
+- Swing completion (moved to Reference layer)
+- Big swing classification (moved to Reference layer)
+- Tolerance-based rules (moved to Reference layer)
+
+### Reference Layer Responsibilities
+
+The Reference layer (`ReferenceLayer`) handles:
+- **Big swing classification**: Top 10% by range per valid_swings.md Rule 2.2
+- **Tolerance-based invalidation**: Big swings get 0.15 touch / 0.10 close tolerance
+- **Completion checking**: Small swings complete at 2×, big swings never complete
+- **Reference swing filtering**: Which swings are useful for trading
+
+### Why Separate
+
 - DAG stays simple and O(n log k)
 - Reference logic can evolve without touching DAG
 - No business rules baked into the data structure
 - Easy to experiment with different reference definitions
 
-**Implementation:** DAG produces all valid extremas. Reference layer filters/selects from DAG output using separation and other criteria.
+### Pipeline Integration
+
+The replay pipeline should:
+1. Call `detector.process_bar(bar)` for DAG events (formed, level cross)
+2. Call `ref_layer.update_invalidation_on_bar(swings, bar)` for invalidation
+3. Call `ref_layer.update_completion_on_bar(swings, bar)` for completion
+
+Note: Without Reference layer integration, swings accumulate without pruning.
 
 ---
 

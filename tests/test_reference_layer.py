@@ -82,64 +82,69 @@ class TestReferenceLayerInitialization:
         assert layer.config.bull.big_swing_threshold == 0.20
 
 
-class TestHierarchyBasedBigSwing:
-    """Test big swing detection based on hierarchy (no parents = big)."""
+class TestRangeBasedBigSwing:
+    """Test big swing detection based on range (top 10% by range = big)."""
 
-    def test_swing_without_parent_is_big(self):
-        """Swing without parents is big."""
+    def test_single_swing_is_big(self):
+        """Single swing is always big (top 100% = top 10%)."""
         layer = ReferenceLayer()
-        swing = make_swing("s1", 110.0, 100.0)  # No parents
+        swing = make_swing("s1", 110.0, 100.0)
 
         result = layer.get_reference_swings([swing])
 
         assert len(result) == 1
         assert result[0].is_big() is True
 
-    def test_swing_with_parent_is_small(self):
-        """Swing with parent is small."""
+    def test_larger_swing_is_big(self):
+        """Larger swing is big, smaller is not (range-based)."""
         layer = ReferenceLayer()
-        parent = make_swing("parent", 200.0, 100.0)
-        child = make_swing("child", 170.0, 130.0)
-        child.add_parent(parent)
+        large = make_swing("large", 200.0, 100.0)  # range 100
+        small = make_swing("small", 170.0, 130.0)  # range 40
 
-        result = layer.get_reference_swings([parent, child])
+        result = layer.get_reference_swings([large, small])
 
-        parent_info = next((r for r in result if r.swing.swing_id == "parent"), None)
-        child_info = next((r for r in result if r.swing.swing_id == "child"), None)
-        assert parent_info.is_big() is True
-        assert child_info.is_big() is False
+        large_info = next((r for r in result if r.swing.swing_id == "large"), None)
+        small_info = next((r for r in result if r.swing.swing_id == "small"), None)
+        assert large_info.is_big() is True
+        assert small_info.is_big() is False
 
-    def test_get_big_swings_returns_root_level_only(self):
-        """get_big_swings returns only swings without parents."""
+    def test_get_big_swings_returns_top_by_range(self):
+        """get_big_swings returns swings in top 10% by range."""
         layer = ReferenceLayer()
-        parent = make_swing("parent", 200.0, 100.0)
-        child = make_swing("child", 170.0, 130.0)
-        child.add_parent(parent)
+        large = make_swing("large", 200.0, 100.0)  # range 100
+        small = make_swing("small", 170.0, 130.0)  # range 40
 
-        big_swings = layer.get_big_swings([parent, child])
+        big_swings = layer.get_big_swings([large, small])
 
         assert len(big_swings) == 1
-        assert big_swings[0].swing_id == "parent"
+        assert big_swings[0].swing_id == "large"
 
-    def test_all_root_swings_are_big(self):
-        """Multiple swings without parents are all big."""
+    def test_top_10_percent_are_big(self):
+        """With 10 swings, only the top 1 (10%) is big."""
         layer = ReferenceLayer()
-        # Two unrelated root-level swings
-        swing1 = make_swing("s1", 200.0, 100.0)
-        swing2 = make_swing("s2", 150.0, 120.0)
+        # Create 10 swings with different ranges
+        swings = []
+        for i in range(10):
+            swing = make_swing(f"s{i}", 100.0 + (i + 1) * 10, 100.0)  # ranges 10-100
+            swings.append(swing)
 
-        result = layer.get_reference_swings([swing1, swing2])
+        result = layer.get_reference_swings(swings)
+        big_count = sum(1 for info in result if info.is_big())
 
-        assert all(info.is_big() for info in result)
+        # Top 10% of 10 = 1 swing (the one with range 100)
+        assert big_count == 1
+        # The biggest swing (s9, range 100) should be big
+        s9_info = next((r for r in result if r.swing.swing_id == "s9"), None)
+        assert s9_info.is_big() is True
 
 
-class TestHierarchyBasedTolerances:
-    """Test invalidation tolerances based on hierarchy."""
+class TestRangeBasedTolerances:
+    """Test invalidation tolerances based on range (top 10% = big = has tolerance)."""
 
     def test_big_swing_has_tolerance(self):
-        """Big swings (no parents) have non-zero tolerance."""
+        """Big swings (top 10% by range) have non-zero tolerance."""
         layer = ReferenceLayer()
-        swing = make_swing("s1", 110.0, 100.0)  # No parents = big
+        swing = make_swing("s1", 110.0, 100.0)  # Single swing = big
 
         result = layer.get_reference_swings([swing])
 
@@ -147,17 +152,16 @@ class TestHierarchyBasedTolerances:
         assert result[0].close_tolerance == 0.10
 
     def test_small_swing_no_tolerance(self):
-        """Small swings (with parent) have zero tolerance."""
+        """Small swings (not in top 10% by range) have zero tolerance."""
         layer = ReferenceLayer()
-        parent = make_swing("parent", 200.0, 100.0)
-        child = make_swing("child", 170.0, 130.0)
-        child.add_parent(parent)
+        large = make_swing("large", 200.0, 100.0)  # range 100 = big
+        small = make_swing("small", 170.0, 130.0)  # range 40 = small
 
-        result = layer.get_reference_swings([parent, child])
+        result = layer.get_reference_swings([large, small])
 
-        child_info = next((r for r in result if r.swing.swing_id == "child"), None)
-        assert child_info.touch_tolerance == 0.0
-        assert child_info.close_tolerance == 0.0
+        small_info = next((r for r in result if r.swing.swing_id == "small"), None)
+        assert small_info.touch_tolerance == 0.0
+        assert small_info.close_tolerance == 0.0
 
 
 class TestTouchInvalidation:
