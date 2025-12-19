@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 10
 
 **Last Review:** 2025-12-18
 
@@ -17,6 +17,7 @@
 - **#148** — Calibration as loop: calibrate(), calibrate_from_dataframe(), dataframe_to_bars() helpers
 - **#149** — ReferenceSwing compatibility adapter: swing_node_to_reference_swing, detect_swings_compat
 - **#150** — Replay router update: uses HierarchicalDetector, adds hierarchy info (depth, parent_ids)
+- **#151** — Discretizer SwingNode support: accepts both ReferenceSwing and SwingNode via adapter
 
 ---
 

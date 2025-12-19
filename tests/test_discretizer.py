@@ -1115,3 +1115,239 @@ class TestSwingFormedExplanation:
         # Timestamps should be ISO 8601 format
         assert "2021-01-01" in explanation["high_timestamp"]
         assert "2021-01-01" in explanation["low_timestamp"]
+
+
+# =============================================================================
+# SwingNode Input Tests (#151)
+# =============================================================================
+
+
+from decimal import Decimal as D
+from src.swing_analysis.swing_node import SwingNode
+
+
+def make_swing_node(
+    high_price: float,
+    low_price: float,
+    high_bar: int,
+    low_bar: int,
+    direction: str = "bull",
+) -> SwingNode:
+    """Create a SwingNode for testing."""
+    formed_bar = max(high_bar, low_bar)
+    return SwingNode(
+        swing_id=SwingNode.generate_id(),
+        high_price=D(str(high_price)),
+        high_bar_index=high_bar,
+        low_price=D(str(low_price)),
+        low_bar_index=low_bar,
+        direction=direction,
+        status="active",
+        formed_at_bar=formed_bar,
+    )
+
+
+class TestSwingNodeInput:
+    """Tests for SwingNode input support (#151)."""
+
+    def test_swing_node_discretization(self):
+        """Discretizer should accept SwingNode input and produce valid output."""
+        discretizer = Discretizer()
+
+        # Create SwingNode instead of ReferenceSwing
+        swing = make_swing_node(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),  # Bar 0
+            (1001, 108, 108, 100, 102),  # Bar 1: swing forms
+            (1002, 102, 105, 101, 104),  # Bar 2
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+
+        # Should have SWING_FORMED event
+        formed_events = [e for e in log.events if e.event_type == EventType.SWING_FORMED]
+        assert len(formed_events) == 1
+        assert formed_events[0].bar == 1
+        assert formed_events[0].data["direction"] == "bull"
+        assert formed_events[0].data["scale"] == "M"
+
+    def test_swing_node_level_crossing(self):
+        """SwingNode input should correctly produce level crossing events."""
+        config = DiscretizerConfig(level_set=[0.0, 0.382, 0.5, 0.618, 1.0, 2.0])
+        discretizer = Discretizer(config)
+
+        swing = make_swing_node(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),  # Bar 0
+            (1001, 108, 108, 100, 102),  # Bar 1: swing forms, close below 0.382
+            (1002, 102, 106, 102, 106),  # Bar 2: crosses levels
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+
+        # Should have level crossings
+        cross_events = [
+            e for e in log.events
+            if e.event_type == EventType.LEVEL_CROSS and e.bar == 2
+        ]
+        assert len(cross_events) >= 1
+
+    def test_swing_node_completion(self):
+        """SwingNode should reach completion at 2.0 level."""
+        config = DiscretizerConfig(level_set=[0.0, 0.5, 1.0, 2.0])
+        discretizer = Discretizer(config)
+
+        swing = make_swing_node(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),  # Bar 0
+            (1001, 108, 108, 100, 102),  # Bar 1: swing forms
+            (1002, 102, 125, 102, 122),  # Bar 2: crosses 2.0
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+
+        # Should have COMPLETION event
+        completion_events = [e for e in log.events if e.event_type == EventType.COMPLETION]
+        assert len(completion_events) == 1
+        assert log.swings[0].status == "completed"
+
+    def test_swing_node_invalidation(self):
+        """SwingNode should be invalidated when price falls below threshold."""
+        config = DiscretizerConfig(
+            level_set=[-0.15, -0.10, 0.0, 0.5, 1.0, 2.0],
+            invalidation_thresholds={"M": -0.10},
+        )
+        discretizer = Discretizer(config)
+
+        swing = make_swing_node(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),
+            (1001, 108, 108, 100, 102),
+            (1002, 102, 103, 98, 98),  # Below -0.10
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+
+        inv_events = [e for e in log.events if e.event_type == EventType.INVALIDATION]
+        assert len(inv_events) == 1
+        assert log.swings[0].status == "invalidated"
+
+    def test_mixed_input_swing_types(self):
+        """Discretizer should accept mixed ReferenceSwing and SwingNode input."""
+        discretizer = Discretizer()
+
+        # One ReferenceSwing
+        ref_swing = make_swing(
+            high_price=120,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        # One SwingNode
+        node_swing = make_swing_node(
+            high_price=115,
+            low_price=105,
+            high_bar=2,
+            low_bar=3,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 120, 105, 118),   # Bar 0
+            (1001, 118, 118, 100, 102),   # Bar 1: ref_swing forms
+            (1002, 102, 115, 102, 114),   # Bar 2
+            (1003, 114, 114, 105, 107),   # Bar 3: node_swing forms
+            (1004, 107, 112, 107, 111),   # Bar 4
+        ])
+
+        log = discretizer.discretize(ohlc, {"XL": [ref_swing], "M": [node_swing]})
+
+        # Should have swings at both scales
+        scales = {s.scale for s in log.swings}
+        assert "XL" in scales
+        assert "M" in scales
+
+        # Should have formed events for both
+        formed_events = [e for e in log.events if e.event_type == EventType.SWING_FORMED]
+        assert len(formed_events) == 2
+
+    def test_swing_node_bear_swing(self):
+        """Bear SwingNode should work correctly."""
+        discretizer = Discretizer()
+
+        swing = make_swing_node(
+            high_price=110,
+            low_price=100,
+            high_bar=1,
+            low_bar=0,
+            direction="bear",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 105, 100, 102),  # Bar 0: forms low
+            (1001, 102, 110, 102, 108),  # Bar 1: forms high, swing complete
+            (1002, 108, 109, 106, 107),  # Bar 2
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+
+        formed_events = [e for e in log.events if e.event_type == EventType.SWING_FORMED]
+        assert len(formed_events) == 1
+        assert formed_events[0].data["direction"] == "bear"
+
+    def test_swing_node_fib_levels_calculated(self):
+        """SwingNode conversion should correctly calculate Fib levels for explanation."""
+        discretizer = Discretizer()
+
+        swing = make_swing_node(
+            high_price=110,
+            low_price=100,
+            high_bar=0,
+            low_bar=1,
+            direction="bull",
+        )
+
+        ohlc = make_ohlc([
+            (1000, 105, 110, 105, 108),
+            (1001, 108, 108, 100, 102),
+        ])
+
+        log = discretizer.discretize(ohlc, {"M": [swing]})
+
+        formed = [e for e in log.events if e.event_type == EventType.SWING_FORMED][0]
+        explanation = formed.data["explanation"]
+
+        # Verify the high/low data came through correctly
+        assert explanation["high_price"] == 110
+        assert explanation["low_price"] == 100
+        assert explanation["size_pts"] == 10

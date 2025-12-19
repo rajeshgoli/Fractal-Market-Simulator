@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from statistics import median
-from typing import Any, Deque, Dict, List, Literal, Optional, Tuple
+from typing import Any, Deque, Dict, List, Literal, Optional, Tuple, Union
 import uuid
 
 import numpy as np
@@ -44,6 +44,12 @@ from ..swing_analysis.constants import (
 )
 from ..swing_analysis.reference_frame import ReferenceFrame
 from ..swing_analysis.swing_detector import ReferenceSwing
+from ..swing_analysis.swing_node import SwingNode
+from ..swing_analysis.adapters import swing_node_to_reference_swing
+
+
+# Type alias for transition period: accept both old and new swing formats
+SwingType = Union[ReferenceSwing, SwingNode]
 
 
 # Version identifier for discretizer implementation
@@ -126,6 +132,37 @@ class _ActiveSwingState:
     previous_band: Optional[str] = None
     dwell_state: Optional[_BandDwellState] = None
     terminated: bool = False
+
+
+def _normalize_swings(
+    swings: Dict[str, List[SwingType]],
+) -> Dict[str, List[ReferenceSwing]]:
+    """
+    Normalize swing input to ReferenceSwing format.
+
+    Supports transition period by accepting both SwingNode and ReferenceSwing.
+    If SwingNode is provided, converts it to ReferenceSwing using the adapter.
+
+    Args:
+        swings: Dict mapping scale to list of swings (ReferenceSwing or SwingNode).
+
+    Returns:
+        Dict mapping scale to list of ReferenceSwing objects.
+    """
+    normalized: Dict[str, List[ReferenceSwing]] = {}
+
+    for scale, swing_list in swings.items():
+        normalized_list: List[ReferenceSwing] = []
+        for swing in swing_list:
+            if isinstance(swing, SwingNode):
+                # Convert SwingNode to ReferenceSwing via adapter
+                normalized_list.append(swing_node_to_reference_swing(swing))
+            else:
+                # Already a ReferenceSwing
+                normalized_list.append(swing)
+        normalized[scale] = normalized_list
+
+    return normalized
 
 
 def _get_band(ratio: float, level_set: List[float]) -> str:
@@ -224,7 +261,7 @@ class Discretizer:
     def discretize(
         self,
         ohlc: pd.DataFrame,
-        swings: Dict[str, List[ReferenceSwing]],
+        swings: Dict[str, List[SwingType]],
         instrument: str = "unknown",
         source_resolution: str = "1m",
     ) -> DiscretizationLog:
@@ -234,13 +271,18 @@ class Discretizer:
         Args:
             ohlc: DataFrame with columns: timestamp, open, high, low, close
                   Index should be sequential bar indices.
-            swings: Dict mapping scale ("XL", "L", "M", "S") to list of ReferenceSwing
+            swings: Dict mapping scale ("XL", "L", "M", "S") to list of swings.
+                    Accepts both ReferenceSwing (legacy) and SwingNode (hierarchical).
+                    SwingNode inputs are automatically converted via the adapter.
             instrument: Instrument identifier (e.g., "ES")
             source_resolution: Source data resolution (e.g., "1m", "5m")
 
         Returns:
             DiscretizationLog with all events and swing entries
         """
+        # Normalize input: convert SwingNode to ReferenceSwing if needed
+        normalized_swings = _normalize_swings(swings)
+
         # Initialize state
         events: List[DiscretizationEvent] = []
         swing_entries: List[SwingEntry] = []
@@ -262,7 +304,7 @@ class Discretizer:
 
         # Build swing lookup by formation bar
         swings_by_bar: Dict[int, List[Tuple[str, ReferenceSwing]]] = {}
-        for scale, swing_list in swings.items():
+        for scale, swing_list in normalized_swings.items():
             for swing in swing_list:
                 formed_bar = max(swing.high_bar_index, swing.low_bar_index)
                 if formed_bar not in swings_by_bar:

@@ -497,7 +497,7 @@ discretizer = Discretizer(config)
 
 log = discretizer.discretize(
     ohlc=df,                              # DataFrame with timestamp, open, high, low, close
-    swings={"XL": xl_swings, "L": l_swings, ...},  # Dict[scale, List[ReferenceSwing]]
+    swings={"XL": xl_swings, "L": l_swings, ...},  # Dict[scale, List[ReferenceSwing | SwingNode]]
     instrument="ES",
     source_resolution="1m",
 )
