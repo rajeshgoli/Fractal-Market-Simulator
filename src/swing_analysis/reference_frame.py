@@ -116,6 +116,104 @@ class ReferenceFrame:
                 direction="BEAR",
             )
 
+    def is_violated(self, price: Decimal, tolerance: float = 0) -> bool:
+        """
+        Check if defended pivot (0) is violated within tolerance.
+
+        A swing is violated when price moves beyond the defended pivot
+        (ratio < 0). The tolerance parameter allows for a small exceedance
+        before considering it a true violation.
+
+        Args:
+            price: Current price to check
+            tolerance: Fraction of range allowed beyond 0 (e.g., 0.10 = 10%)
+                      Must be non-negative.
+
+        Returns:
+            True if price is below -tolerance in ratio terms
+
+        Examples:
+            >>> frame = ReferenceFrame(Decimal("5000"), Decimal("5100"), "BULL")
+            >>> frame.is_violated(Decimal("4990"))  # -0.1 ratio, no tolerance
+            True
+            >>> frame.is_violated(Decimal("4990"), tolerance=0.15)  # within tolerance
+            False
+        """
+        ratio = self.ratio(price)
+        return ratio < Decimal(str(-tolerance))
+
+    def is_formed(self, price: Decimal, formation_fib: float = 0.287) -> bool:
+        """
+        Check if price has breached formation threshold.
+
+        A swing is "formed" when price moves beyond the formation_fib
+        level from the defended pivot toward the target. This confirms
+        the swing is structurally significant.
+
+        Args:
+            price: Current price to check
+            formation_fib: Fib level that triggers formation (default 0.287)
+
+        Returns:
+            True if price is at or beyond formation_fib
+
+        Examples:
+            >>> frame = ReferenceFrame(Decimal("5000"), Decimal("5100"), "BULL")
+            >>> frame.is_formed(Decimal("5020"))  # ratio 0.2
+            False
+            >>> frame.is_formed(Decimal("5030"))  # ratio 0.3
+            True
+        """
+        ratio = self.ratio(price)
+        return ratio >= Decimal(str(formation_fib))
+
+    def is_completed(self, price: Decimal) -> bool:
+        """
+        Check if swing has reached 2.0 target.
+
+        A swing is completed when price reaches or exceeds the 2x extension
+        level, indicating full structural completion.
+
+        Args:
+            price: Current price to check
+
+        Returns:
+            True if price is at or beyond 2.0 extension
+
+        Examples:
+            >>> frame = ReferenceFrame(Decimal("5000"), Decimal("5100"), "BULL")
+            >>> frame.is_completed(Decimal("5190"))  # ratio 1.9
+            False
+            >>> frame.is_completed(Decimal("5200"))  # ratio 2.0
+            True
+        """
+        ratio = self.ratio(price)
+        return ratio >= Decimal("2.0")
+
+    def get_fib_price(self, level: float) -> Decimal:
+        """
+        Get the absolute price for a given Fib level.
+
+        Convenience method for getting prices at standard Fib levels
+        without manually calling price() with Decimal conversion.
+
+        Args:
+            level: Fib level (0, 0.382, 0.5, 0.618, 1.0, 2.0, etc.)
+
+        Returns:
+            Absolute price at that level
+
+        Examples:
+            >>> frame = ReferenceFrame(Decimal("5000"), Decimal("5100"), "BULL")
+            >>> frame.get_fib_price(0)
+            Decimal('5000')
+            >>> frame.get_fib_price(0.618)
+            Decimal('5061.8')
+            >>> frame.get_fib_price(2.0)
+            Decimal('5200.0')
+        """
+        return self.price(Decimal(str(level)))
+
     def __repr__(self) -> str:
         """Human-readable representation."""
         return (

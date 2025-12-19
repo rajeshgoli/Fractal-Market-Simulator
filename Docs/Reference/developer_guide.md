@@ -428,6 +428,13 @@ price = frame.price(Decimal("0.618"))  # Returns 5061.8
 
 # Properties
 frame.range  # Signed: positive for bull, negative for bear
+
+# Tolerance checks (rewrite Phase 1)
+frame.is_violated(Decimal("4990"))                # True: below defended pivot
+frame.is_violated(Decimal("4990"), tolerance=0.15) # False: within 15% tolerance
+frame.is_formed(Decimal("5030"))                  # True: above 0.287 formation threshold
+frame.is_completed(Decimal("5200"))               # True: reached 2.0 extension
+frame.get_fib_price(0.618)                        # Returns Decimal("5061.8")
 ```
 
 **Ratio interpretation:**
@@ -438,6 +445,14 @@ frame.range  # Signed: positive for bull, negative for bear
 | 1 | Origin extremum |
 | 2 | Completion target |
 | < 0 | Invalidation territory |
+
+**Tolerance check methods:**
+| Method | Description |
+|--------|-------------|
+| `is_violated(price, tolerance=0)` | Check if defended pivot is violated (ratio < -tolerance) |
+| `is_formed(price, formation_fib=0.287)` | Check if formation threshold breached |
+| `is_completed(price)` | Check if swing reached 2.0 target |
+| `get_fib_price(level)` | Get absolute price for a Fib level |
 
 ---
 
