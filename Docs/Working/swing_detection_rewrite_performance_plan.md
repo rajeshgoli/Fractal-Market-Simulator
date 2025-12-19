@@ -280,14 +280,18 @@ def _check_invalidations(self, bar: Bar, timestamp: datetime):
 
 **Phase 1 target:** 6.5s → ~5s for 1K bars (~30% improvement)
 
-### Phase 2: Candidate Reduction (4-8 hours engineering)
+### ~~Phase 2: Candidate Reduction~~ (CLOSED — #156)
 
-| Change | Expected Savings | Risk |
-|--------|------------------|------|
-| Dominant extrema tracking | 4-5s (50-60%) | Medium |
-| Early termination per origin | 0.5s (additional) | Low |
+**Status:** Not needed. Closed in favor of hierarchical architecture.
 
-**Phase 2 target:** ~5s → ~0.5s for 1K bars (~90% improvement from baseline)
+**Why:** Once L1-L3 swings exist (via #157), child swing detection is bounded by parent's time range:
+- L4 search: ~864 bars (3 days) — brute force OK
+- L5 search: ~72 bars (6 hours) — trivially fast
+- L6+ search: <12 bars — instant
+
+Dominant extrema tracking would save ~1s on L4 detection, which only runs when a new L3 forms. Not worth the complexity.
+
+See #156 closing comment for full rationale.
 
 ### Phase 3: Multi-Timeframe Candidate Generation (Recommended)
 
@@ -394,19 +398,19 @@ class HierarchicalDetector:
 
 **Rationale:** 100-280x reduction in candidate pairs × Phase 1+2 improvements = potentially 1000x+ total improvement.
 
-## Performance Targets (Updated with Phase 3)
+## Performance Targets (Final)
 
-| Dataset | Current | Phase 1 | Phase 2 | Phase 3 | Target |
-|---------|---------|---------|---------|---------|--------|
-| 1K bars | 8.2s | ~5s | ~0.5s | ~0.05s | <1s |
-| 10K bars | ~80s | ~50s | ~5s | ~0.5s | <5s |
-| 100K bars | ~800s | ~500s | ~50s | ~5s | <30s |
-| 1M bars | - | - | ~500s | ~50s | <60s |
-| 6M bars | - | - | - | ~300s | <60s |
+| Dataset | Current | Phase 1 (#155) | Phase 3 (#157) | Target |
+|---------|---------|----------------|----------------|--------|
+| 1K bars | 8.2s | ~5s | ~0.05s | <1s |
+| 10K bars | ~80s | ~50s | ~0.5s | <5s |
+| 100K bars | ~800s | ~500s | ~5s | <30s |
+| 1M bars | - | - | ~50s | <60s |
+| 6M bars | - | - | ~300s | <60s |
 
-**Phase 3 is the key enabler.** Multi-timeframe candidate generation provides 100-280x reduction in pair evaluations. Combined with Phase 1+2 improvements, this achieves the 1000x improvement needed.
+**Phase 3 (#157) is the key enabler.** Multi-timeframe candidate generation provides 100-280x reduction in pair evaluations for L1-L3 detection. Hierarchical bounds handle L4+ naturally.
 
-**Recommendation:** Implement Phase 3 as the primary optimization. Phase 1+2 can be done in parallel as quick wins.
+**Recommendation:** Implement #157 first, then #155 for incremental gains. #156 is closed (not needed).
 
 ## Verification Strategy
 
