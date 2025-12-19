@@ -13,7 +13,7 @@ See Docs/Reference/valid_swings.md for the canonical rules.
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Dict, Tuple, Optional, Callable
+from typing import List, Dict, Tuple, Optional, Callable, Set
 
 import pandas as pd
 
@@ -28,10 +28,21 @@ from .events import (
 )
 from .reference_frame import ReferenceFrame
 from .types import Bar
+from .bar_aggregator import BarAggregator
 
 
 # Fibonacci levels to track for level cross events
 FIB_LEVELS = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.382, 1.5, 1.618, 2.0]
+
+# Higher timeframes for multi-TF candidate generation (in minutes)
+MULTI_TF_TIMEFRAMES = [60, 240, 1440]  # 1h, 4h, 1d
+
+# Lookback limits for each timeframe (how many TF bars to keep as candidates)
+MULTI_TF_LOOKBACKS = {
+    60: 12,   # Last 12 1h bars = 12 hours
+    240: 6,   # Last 6 4h bars = 24 hours
+    1440: 5,  # Last 5 daily bars = 5 days
+}
 
 
 @dataclass
@@ -49,6 +60,7 @@ class DetectorState:
         last_bar_index: Most recent bar index processed.
         fib_levels_crossed: Map of swing_id -> last Fib level for cross tracking.
         all_swing_ranges: List of all swing ranges seen, for big swing calculation.
+        seen_tf_bars: Map of timeframe -> set of aggregated bar indices already processed.
     """
 
     active_swings: List[SwingNode] = field(default_factory=list)
@@ -57,6 +69,7 @@ class DetectorState:
     last_bar_index: int = -1
     fib_levels_crossed: Dict[str, float] = field(default_factory=dict)
     all_swing_ranges: List[Decimal] = field(default_factory=list)
+    seen_tf_bars: Dict[int, Set[int]] = field(default_factory=lambda: {60: set(), 240: set(), 1440: set()})
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization."""
@@ -82,6 +95,7 @@ class DetectorState:
             "last_bar_index": self.last_bar_index,
             "fib_levels_crossed": self.fib_levels_crossed,
             "all_swing_ranges": [str(r) for r in self.all_swing_ranges],
+            "seen_tf_bars": {str(tf): list(bars) for tf, bars in self.seen_tf_bars.items()},
         }
 
     @classmethod
@@ -112,6 +126,14 @@ class DetectorState:
                 if parent_id in swing_map:
                     swing.add_parent(swing_map[parent_id])
 
+        # Deserialize seen_tf_bars
+        seen_tf_bars_raw = data.get("seen_tf_bars", {})
+        seen_tf_bars = {60: set(), 240: set(), 1440: set()}
+        for tf_str, bars_list in seen_tf_bars_raw.items():
+            tf = int(tf_str)
+            if tf in seen_tf_bars:
+                seen_tf_bars[tf] = set(bars_list)
+
         return cls(
             active_swings=list(swing_map.values()),
             candidate_highs=[
@@ -126,6 +148,7 @@ class DetectorState:
             all_swing_ranges=[
                 Decimal(r) for r in data.get("all_swing_ranges", [])
             ],
+            seen_tf_bars=seen_tf_bars,
         )
 
 
@@ -154,16 +177,40 @@ class HierarchicalDetector:
         >>> detector2 = HierarchicalDetector.from_state(state, config)
     """
 
-    def __init__(self, config: SwingConfig = None):
+    def __init__(
+        self,
+        config: SwingConfig = None,
+        source_bars: Optional[List[Bar]] = None,
+        source_resolution_minutes: int = 5,
+    ):
         """
         Initialize detector with configuration.
 
         Args:
             config: SwingConfig with detection parameters.
                    If None, uses SwingConfig.default().
+            source_bars: Optional list of source bars for multi-timeframe candidate
+                        generation. When provided, enables performance optimization
+                        that uses higher-timeframe bars (1h, 4h, 1d) as candidates
+                        instead of all source bars.
+            source_resolution_minutes: Resolution of source bars in minutes (default: 5).
+                        Used for BarAggregator initialization.
         """
         self.config = config or SwingConfig.default()
         self.state = DetectorState()
+
+        # Multi-timeframe candidate generation
+        self.aggregator: Optional[BarAggregator] = None
+        self._use_multi_tf = False
+
+        if source_bars and len(source_bars) > 0:
+            try:
+                self.aggregator = BarAggregator(source_bars, source_resolution_minutes)
+                self._use_multi_tf = True
+            except ValueError:
+                # Fall back to original behavior if aggregator can't be initialized
+                self.aggregator = None
+                self._use_multi_tf = False
 
     def process_bar(self, bar: Bar) -> List[SwingEvent]:
         """
@@ -368,6 +415,21 @@ class HierarchicalDetector:
         """
         Update sliding window of candidate extrema.
 
+        Uses multi-timeframe candidate generation when aggregator is available
+        (source_bars provided at init). Falls back to original behavior otherwise.
+
+        Args:
+            bar: Current bar being processed.
+        """
+        if self._use_multi_tf:
+            self._update_candidates_multi_tf(bar)
+        else:
+            self._update_candidates_original(bar)
+
+    def _update_candidates_original(self, bar: Bar) -> None:
+        """
+        Original candidate tracking: use all bars in lookback window.
+
         Maintains lists of recent highs and lows that could form
         swing endpoints. Old candidates outside lookback window
         are removed.
@@ -392,6 +454,155 @@ class HierarchicalDetector:
         self.state.candidate_lows = [
             (idx, price) for idx, price in self.state.candidate_lows if idx >= cutoff
         ]
+
+    def _update_candidates_multi_tf(self, bar: Bar) -> None:
+        """
+        Multi-timeframe candidate tracking for performance optimization.
+
+        Instead of tracking all source bars, uses completed higher-timeframe
+        bars (1h, 4h, 1d) as candidates. A 1h bar's high/low is the true
+        maximum/minimum of 12 5m bars — a natural "dominant extremum".
+
+        Key insight: Valid swing origins must be local maxima. If a 5m high
+        is NOT a 1h high, it was exceeded within that hour, which means
+        any swing using it as origin would violate Rule 2.1 (pre-formation).
+
+        Causality: Only COMPLETED higher-TF bars are used. A 1h bar covering
+        10:00-10:59 is complete only after the 10:55 5m bar.
+
+        Hybrid approach: For short datasets or early bars before any higher-TF
+        bars complete, also track source bars to ensure swing formation can occur.
+
+        Args:
+            bar: Current bar being processed.
+        """
+        if not self.aggregator:
+            return self._update_candidates_original(bar)
+
+        tf_candidates_added = 0
+
+        # Check each higher timeframe for newly completed bars
+        for tf_minutes in MULTI_TF_TIMEFRAMES:
+            # Skip timeframes not available in aggregator
+            if tf_minutes not in self.aggregator.available_timeframes:
+                continue
+
+            # Get the most recently CLOSED bar at this timeframe
+            closed_bar = self.aggregator.get_closed_bar_at_source_time(
+                tf_minutes, bar.index
+            )
+
+            if closed_bar is None:
+                continue
+
+            # Check if we've already processed this TF bar
+            if closed_bar.index in self.state.seen_tf_bars[tf_minutes]:
+                continue
+
+            # Mark as seen
+            self.state.seen_tf_bars[tf_minutes].add(closed_bar.index)
+            tf_candidates_added += 1
+
+            # Get the last source bar index covered by this TF bar
+            # This preserves temporal ordering for swing formation
+            # Pass current bar.index for causality (no lookahead)
+            last_source_idx = self._get_last_source_idx_for_tf_bar(
+                closed_bar, tf_minutes, bar.index
+            )
+
+            # Add this bar's extrema as candidates
+            self.state.candidate_highs.append(
+                (last_source_idx, Decimal(str(closed_bar.high)))
+            )
+            self.state.candidate_lows.append(
+                (last_source_idx, Decimal(str(closed_bar.low)))
+            )
+
+        # Hybrid fallback: For short datasets or periods without TF bar completions,
+        # also track source bars to ensure swings can form. This maintains the
+        # performance benefit for large datasets while ensuring correctness for
+        # small datasets or early calibration.
+        # Keep a small window of recent source bars as candidates.
+        total_tf_bars_seen = sum(len(bars) for bars in self.state.seen_tf_bars.values())
+        if total_tf_bars_seen < 3:
+            # Not enough TF bars yet - use source bar tracking as fallback
+            bar_high = Decimal(str(bar.high))
+            bar_low = Decimal(str(bar.low))
+            self.state.candidate_highs.append((bar.index, bar_high))
+            self.state.candidate_lows.append((bar.index, bar_low))
+
+        # Prune old TF candidates based on per-TF lookback limits
+        self._prune_old_tf_candidates()
+
+    def _get_last_source_idx_for_tf_bar(
+        self, tf_bar: Bar, tf_minutes: int, current_bar_index: int
+    ) -> int:
+        """
+        Get the last source bar index covered by a timeframe bar.
+
+        This is needed for temporal ordering in swing formation — the candidate's
+        index must reflect when the extremum was "confirmed" (at the close of
+        the higher-TF bar).
+
+        IMPORTANT: To maintain causality (no lookahead), we limit the result to
+        be at most the current bar index. The aggregator mapping might contain
+        future information, but we only use what we've processed so far.
+
+        Args:
+            tf_bar: The timeframe bar.
+            tf_minutes: Timeframe in minutes.
+            current_bar_index: The current bar being processed (for causality).
+
+        Returns:
+            The last source bar index that maps to this TF bar, limited to
+            current_bar_index for causality.
+        """
+        if not self.aggregator:
+            return min(tf_bar.index, current_bar_index)
+
+        mapping = self.aggregator._source_to_agg_mapping.get(tf_minutes, {})
+
+        # Find max source index that maps to this TF bar, but limit to what
+        # we've processed so far to avoid lookahead
+        max_source_idx = 0
+        for source_idx, agg_idx in mapping.items():
+            if agg_idx == tf_bar.index and source_idx <= current_bar_index:
+                max_source_idx = max(max_source_idx, source_idx)
+
+        return max_source_idx
+
+    def _prune_old_tf_candidates(self) -> None:
+        """
+        Remove candidates from TF bars older than their respective lookbacks.
+
+        Each timeframe has its own lookback limit:
+        - 1h: 12 bars (12 hours of candidates)
+        - 4h: 6 bars (24 hours)
+        - 1d: 5 bars (5 days)
+
+        This naturally scales the candidate window with timeframe importance.
+        """
+        # Prune seen_tf_bars based on lookback limits
+        for tf_minutes, max_count in MULTI_TF_LOOKBACKS.items():
+            if len(self.state.seen_tf_bars[tf_minutes]) > max_count * 2:
+                # Remove oldest entries
+                sorted_bars = sorted(self.state.seen_tf_bars[tf_minutes])
+                to_remove = sorted_bars[:-max_count]
+                for bar_idx in to_remove:
+                    self.state.seen_tf_bars[tf_minutes].discard(bar_idx)
+
+        # Also limit total candidates to prevent unbounded growth
+        # Keep roughly 50 candidates per side (similar to original lookback)
+        max_candidates = 50
+        if len(self.state.candidate_highs) > max_candidates * 2:
+            # Keep the most recent candidates by source index
+            self.state.candidate_highs = sorted(
+                self.state.candidate_highs, key=lambda x: x[0]
+            )[-max_candidates:]
+        if len(self.state.candidate_lows) > max_candidates * 2:
+            self.state.candidate_lows = sorted(
+                self.state.candidate_lows, key=lambda x: x[0]
+            )[-max_candidates:]
 
     def _try_form_swings(
         self, bar: Bar, timestamp: datetime
@@ -835,17 +1046,21 @@ def calibrate(
     bars: List[Bar],
     config: SwingConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    source_resolution_minutes: int = 5,
 ) -> Tuple["HierarchicalDetector", List[SwingEvent]]:
     """
     Run detection on historical bars.
 
     This is process_bar() in a loop — guarantees identical behavior
-    to incremental playback.
+    to incremental playback. When called with bars, enables multi-timeframe
+    candidate generation for improved performance.
 
     Args:
         bars: Historical bars to process.
         config: Detection configuration (defaults to SwingConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
+        source_resolution_minutes: Resolution of source bars in minutes (default: 5).
+            Used for multi-timeframe aggregation.
 
     Returns:
         Tuple of (detector with state, all events generated).
@@ -863,7 +1078,11 @@ def calibrate(
         >>> detector, events = calibrate(bars, progress_callback=on_progress)
     """
     config = config or SwingConfig.default()
-    detector = HierarchicalDetector(config)
+
+    # Initialize detector with source bars for multi-TF optimization
+    detector = HierarchicalDetector(
+        config, source_bars=bars, source_resolution_minutes=source_resolution_minutes
+    )
     all_events: List[SwingEvent] = []
     total = len(bars)
 
@@ -942,6 +1161,7 @@ def calibrate_from_dataframe(
     df: pd.DataFrame,
     config: SwingConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    source_resolution_minutes: int = 5,
 ) -> Tuple["HierarchicalDetector", List[SwingEvent]]:
     """
     Convenience wrapper for DataFrame input.
@@ -952,6 +1172,8 @@ def calibrate_from_dataframe(
         df: DataFrame with OHLC columns (open, high, low, close).
         config: Detection configuration (defaults to SwingConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
+        source_resolution_minutes: Resolution of source bars in minutes (default: 5).
+            Used for multi-timeframe aggregation.
 
     Returns:
         Tuple of (detector with state, all events generated).
@@ -963,4 +1185,4 @@ def calibrate_from_dataframe(
         >>> print(f"Detected {len(detector.get_active_swings())} active swings")
     """
     bars = dataframe_to_bars(df)
-    return calibrate(bars, config, progress_callback)
+    return calibrate(bars, config, progress_callback, source_resolution_minutes)

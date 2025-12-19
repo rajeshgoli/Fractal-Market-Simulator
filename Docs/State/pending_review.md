@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-18
 
@@ -10,6 +10,7 @@
 
 - **#152** — Added V2 API schemas for hierarchical swings (HierarchicalSwingResponse, SwingEventResponse, CalibrationSwingResponseV2, CalibrationResponseV2) with test coverage
 - **#153** — Removed old swing detection code (swing_detector.py, incremental_detector.py, scale_calibrator.py), moved ReferenceSwing to adapters.py, updated all imports and documentation
+- **#157** — Phase 3: Multi-timeframe candidate generation. Integrates BarAggregator into HierarchicalDetector to use higher-TF bars (1h, 4h, 1d) as candidates instead of O(lookback²) source bars. Includes hybrid fallback for short datasets, causality enforcement, serialization support, and 8 new tests.
 
 ---
 

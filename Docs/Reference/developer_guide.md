@@ -270,13 +270,20 @@ def on_progress(current: int, total: int):
 
 detector, events = calibrate(bars, progress_callback=on_progress)
 
-# Option 4: Process bars incrementally
+# Option 4: Process bars incrementally with multi-TF optimization
+# Pass source_bars to enable multi-timeframe candidate generation
 config = SwingConfig.default()
-detector = HierarchicalDetector(config)
+detector = HierarchicalDetector(config, source_bars=bars)
 for bar in bars:
     events = detector.process_bar(bar)
     for event in events:
         print(f"{event.event_type}: {event.swing_id}")
+
+# Option 5: Process bars incrementally without multi-TF (legacy mode)
+# Omit source_bars to use original O(lookback²) candidate tracking
+detector = HierarchicalDetector(config)  # No source_bars
+for bar in bars:
+    events = detector.process_bar(bar)
 
 # Convert DataFrame to Bar list manually
 bars = dataframe_to_bars(df)  # Handles various column naming conventions
@@ -292,8 +299,8 @@ detector2 = HierarchicalDetector.from_state(restored_state, config)
 **Calibration functions:**
 | Function | Purpose |
 |----------|---------|
-| `calibrate(bars, config, progress_callback)` | Run detection on Bar list |
-| `calibrate_from_dataframe(df, config, progress_callback)` | Convenience wrapper for DataFrame input |
+| `calibrate(bars, config, progress_callback, source_resolution_minutes=5)` | Run detection on Bar list |
+| `calibrate_from_dataframe(df, config, progress_callback, source_resolution_minutes=5)` | Convenience wrapper for DataFrame input |
 | `dataframe_to_bars(df)` | Convert DataFrame with OHLC columns to Bar list |
 
 **Key design principles:**
@@ -301,6 +308,7 @@ detector2 = HierarchicalDetector.from_state(restored_state, config)
 - **Single code path** — Calibration calls `process_bar()` in a loop
 - **Independent invalidation** — Each swing checks its own defended pivot (no cascade)
 - **DAG hierarchy** — Swings can have multiple parents for structural context
+- **Multi-TF optimization** — Uses higher-timeframe bars (1h, 4h, 1d) as candidates for O(1) candidate pairs vs O(lookback²)
 
 **Event types:**
 | Event | When emitted |

@@ -597,11 +597,12 @@ class TestCalibrateFunction:
         bars = [make_bar(i, 100.0 + i % 10, 105.0 + i % 10, 95.0 + i % 10, 102.0 + i % 10) for i in range(50)]
         config = SwingConfig.default()
 
-        # Calibrate
+        # Calibrate (uses multi-TF optimization when source_bars provided)
         detector1, events1 = calibrate(bars, config)
 
-        # Manual loop
-        detector2 = HierarchicalDetector(config)
+        # Manual loop with same multi-TF setup for apples-to-apples comparison
+        # Pass source_bars to get the same behavior as calibrate()
+        detector2 = HierarchicalDetector(config, source_bars=bars)
         events2 = []
         for bar in bars:
             events2.extend(detector2.process_bar(bar))
@@ -1005,3 +1006,160 @@ class TestCalibrationPerformance:
         assert detector.state.last_bar_index == 99
         # Should detect some swings in this pattern
         assert isinstance(events, list)
+
+
+class TestMultiTimeframeCandidates:
+    """Tests for multi-timeframe candidate generation (Phase 3 optimization)."""
+
+    def test_multi_tf_enabled_with_source_bars(self):
+        """Multi-TF mode is enabled when source_bars are provided."""
+        bars = [make_bar(i, 100.0 + i, 105.0 + i, 95.0 + i, 102.0 + i) for i in range(100)]
+        config = SwingConfig.default()
+
+        # With source_bars
+        detector = HierarchicalDetector(config, source_bars=bars)
+        assert detector._use_multi_tf is True
+        assert detector.aggregator is not None
+
+        # Without source_bars
+        detector2 = HierarchicalDetector(config)
+        assert detector2._use_multi_tf is False
+        assert detector2.aggregator is None
+
+    def test_multi_tf_fallback_for_short_datasets(self):
+        """Multi-TF falls back to source bar tracking for short datasets."""
+        # Short dataset with only a few bars (won't have any completed 1h bars)
+        bars = [make_bar(i, 100.0 + i, 105.0 + i, 95.0 + i, 102.0 + i) for i in range(20)]
+        config = SwingConfig.default()
+
+        detector = HierarchicalDetector(config, source_bars=bars)
+        for bar in bars:
+            detector.process_bar(bar)
+
+        # Should still have candidates despite no TF bars completing
+        assert len(detector.state.candidate_highs) > 0
+        assert len(detector.state.candidate_lows) > 0
+
+    def test_no_lookahead_multi_tf(self):
+        """Verify multi-TF candidates only come from completed TF bars (no lookahead)."""
+        # Create 1000 bars with proper 5m timestamps spanning multiple hours
+        base_ts = 1700000000  # Nov 14, 2023
+        bars = []
+        for i in range(1000):
+            ts = base_ts + i * 300  # 5-minute bars (300 seconds)
+            bars.append(make_bar(i, 5000.0 + (i % 50), 5010.0 + (i % 50),
+                                 4990.0 + (i % 50), 5005.0 + (i % 50), timestamp=ts))
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config, source_bars=bars)
+
+        for i, bar in enumerate(bars):
+            # Before processing this bar, all candidates should have index < current
+            for cand_idx, _ in detector.state.candidate_highs:
+                assert cand_idx <= bar.index, f"Lookahead! Candidate at {cand_idx} before bar {bar.index}"
+
+            for cand_idx, _ in detector.state.candidate_lows:
+                assert cand_idx <= bar.index, f"Lookahead! Candidate at {cand_idx} before bar {bar.index}"
+
+            detector.process_bar(bar)
+
+    def test_seen_tf_bars_tracking(self):
+        """Verify TF bars are only processed once via seen_tf_bars tracking."""
+        # Create bars spanning several hours
+        base_ts = 1700000000
+        bars = []
+        for i in range(200):  # ~16 hours of 5m data
+            ts = base_ts + i * 300
+            bars.append(make_bar(i, 5000.0, 5010.0, 4990.0, 5005.0, timestamp=ts))
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config, source_bars=bars)
+
+        for bar in bars:
+            detector.process_bar(bar)
+
+        # After processing, seen_tf_bars should contain the TF bars we've seen
+        # With 200 5m bars (~16.7 hours), we should have ~16 1h bars
+        total_seen = sum(len(bars) for bars in detector.state.seen_tf_bars.values())
+        assert total_seen > 0, "Should have seen some TF bars"
+
+    def test_calibrate_uses_multi_tf(self):
+        """calibrate() enables multi-TF mode automatically."""
+        bars = [make_bar(i, 100.0 + i, 105.0 + i, 95.0 + i, 102.0 + i) for i in range(100)]
+        config = SwingConfig.default()
+
+        detector, events = calibrate(bars, config)
+
+        # Detector should have multi-TF enabled
+        assert detector._use_multi_tf is True
+        assert detector.aggregator is not None
+
+    def test_state_serialization_with_seen_tf_bars(self):
+        """State serialization preserves seen_tf_bars."""
+        base_ts = 1700000000
+        bars = []
+        for i in range(100):
+            ts = base_ts + i * 300
+            bars.append(make_bar(i, 5000.0, 5010.0, 4990.0, 5005.0, timestamp=ts))
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config, source_bars=bars)
+
+        for bar in bars:
+            detector.process_bar(bar)
+
+        # Serialize and deserialize state
+        state_dict = detector.get_state().to_dict()
+        restored_state = DetectorState.from_dict(state_dict)
+
+        # Verify seen_tf_bars preserved
+        for tf in [60, 240, 1440]:
+            assert detector.state.seen_tf_bars[tf] == restored_state.seen_tf_bars[tf]
+
+
+class TestMultiTimeframePerformance:
+    """Performance tests for multi-timeframe optimization."""
+
+    def test_candidate_count_bounded(self):
+        """Verify candidate count is bounded with multi-TF mode."""
+        # Create a larger dataset
+        base_ts = 1700000000
+        bars = []
+        for i in range(500):
+            ts = base_ts + i * 300  # 5-minute bars
+            bars.append(make_bar(i, 5000.0 + (i % 100), 5050.0 + (i % 100),
+                                 4950.0 + (i % 100), 5025.0 + (i % 100), timestamp=ts))
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config, source_bars=bars)
+
+        for bar in bars:
+            detector.process_bar(bar)
+
+        # With multi-TF, candidates should be bounded
+        # The pruning logic keeps at most 50 candidates per side
+        assert len(detector.state.candidate_highs) <= 100, \
+            f"Too many high candidates: {len(detector.state.candidate_highs)}"
+        assert len(detector.state.candidate_lows) <= 100, \
+            f"Too many low candidates: {len(detector.state.candidate_lows)}"
+
+    def test_performance_1k_bars_multi_tf(self):
+        """Performance test: 1K bars should complete in reasonable time."""
+        import time
+
+        # Create 1K bars with proper timestamps
+        base_ts = 1700000000
+        bars = []
+        for i in range(1000):
+            ts = base_ts + i * 300
+            bars.append(make_bar(i, 5000.0 + (i % 100), 5050.0 + (i % 100),
+                                 4950.0 + (i % 100), 5025.0 + (i % 100), timestamp=ts))
+
+        start = time.time()
+        detector, events = calibrate(bars)
+        elapsed = time.time() - start
+
+        # Should complete in under 10 seconds (provides margin for CI variance)
+        # Phase 3 target is <1s but with hybrid fallback in effect, allow more
+        assert elapsed < 10.0, f"1K bars took {elapsed:.2f}s, should be <10s"
+        assert detector.state.last_bar_index == 999
