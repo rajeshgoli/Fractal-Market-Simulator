@@ -50,6 +50,10 @@ from ..schemas import (
     ReplayAdvanceResponse,
     PlaybackFeedbackRequest,
     PlaybackFeedbackResponse,
+    # New hierarchical models (Issue #166)
+    TreeStatistics,
+    SwingsByDepth,
+    CalibrationResponseHierarchical,
 )
 
 if TYPE_CHECKING:
@@ -415,6 +419,218 @@ def _group_swings_by_scale(
 
 
 # ============================================================================
+# Tree Statistics Helpers (Issue #166)
+# ============================================================================
+
+
+def _compute_tree_statistics(
+    all_swings: List[SwingNode],
+    active_swings: List[SwingNode],
+    calibration_bar_count: int,
+    recent_lookback: int = 10,
+) -> TreeStatistics:
+    """
+    Compute tree structure statistics for hierarchical UI.
+
+    Args:
+        all_swings: All swings from the DAG.
+        active_swings: Currently active (defended) swings.
+        calibration_bar_count: Total bars in calibration window.
+        recent_lookback: Number of bars to look back for "recently invalidated".
+
+    Returns:
+        TreeStatistics with hierarchy metrics.
+    """
+    import statistics
+
+    if not all_swings:
+        return TreeStatistics(
+            root_swings=0,
+            root_bull=0,
+            root_bear=0,
+            total_nodes=0,
+            max_depth=0,
+            avg_children=0.0,
+            defended_by_depth={"1": 0, "2": 0, "3": 0, "deeper": 0},
+            largest_range=0.0,
+            largest_swing_id=None,
+            median_range=0.0,
+            smallest_range=0.0,
+            recently_invalidated=0,
+            roots_have_children=True,
+            siblings_detected=False,
+            no_orphaned_nodes=True,
+        )
+
+    # Root swings (no parents)
+    root_swings = [s for s in all_swings if len(s.parents) == 0]
+    root_bull = sum(1 for s in root_swings if s.direction == "bull")
+    root_bear = sum(1 for s in root_swings if s.direction == "bear")
+
+    # Max depth
+    max_depth = max((s.get_depth() for s in all_swings), default=0)
+
+    # Average children per node
+    total_children = sum(len(s.children) for s in all_swings)
+    avg_children = total_children / len(all_swings) if all_swings else 0.0
+
+    # Defended swings by depth
+    defended_by_depth = {"1": 0, "2": 0, "3": 0, "deeper": 0}
+    for swing in active_swings:
+        depth = swing.get_depth()
+        if depth == 0:
+            defended_by_depth["1"] += 1  # depth_1 = root (depth 0)
+        elif depth == 1:
+            defended_by_depth["2"] += 1
+        elif depth == 2:
+            defended_by_depth["3"] += 1
+        else:
+            defended_by_depth["deeper"] += 1
+
+    # Range distribution
+    ranges = [float(s.high_price - s.low_price) for s in all_swings]
+    sorted_ranges = sorted(ranges, reverse=True)
+    largest_range = sorted_ranges[0] if sorted_ranges else 0.0
+    median_range = statistics.median(ranges) if ranges else 0.0
+    smallest_range = sorted_ranges[-1] if sorted_ranges else 0.0
+
+    # Find the largest swing ID
+    largest_swing_id = None
+    for swing in all_swings:
+        if float(swing.high_price - swing.low_price) == largest_range:
+            largest_swing_id = swing.swing_id
+            break
+
+    # Recently invalidated (swings invalidated after calibration_bar_count - recent_lookback)
+    recent_threshold = max(0, calibration_bar_count - recent_lookback)
+    recently_invalidated = sum(
+        1 for s in all_swings
+        if s.status == "invalidated"
+        and hasattr(s, 'invalidated_at_bar')
+        and s.invalidated_at_bar is not None
+        and s.invalidated_at_bar >= recent_threshold
+    )
+
+    # Validation quick-checks
+    # 1. All root swings have at least one child
+    roots_have_children = all(len(s.children) > 0 for s in root_swings) if root_swings else True
+
+    # 2. Siblings detected (swings sharing same defended pivot but different origins)
+    siblings_detected = _check_siblings_exist(all_swings)
+
+    # 3. No orphaned nodes (all non-root swings have parents)
+    no_orphaned_nodes = all(
+        len(s.parents) > 0 or s.get_depth() == 0
+        for s in all_swings
+    )
+
+    return TreeStatistics(
+        root_swings=len(root_swings),
+        root_bull=root_bull,
+        root_bear=root_bear,
+        total_nodes=len(all_swings),
+        max_depth=max_depth,
+        avg_children=round(avg_children, 1),
+        defended_by_depth=defended_by_depth,
+        largest_range=round(largest_range, 2),
+        largest_swing_id=largest_swing_id,
+        median_range=round(median_range, 2),
+        smallest_range=round(smallest_range, 2),
+        recently_invalidated=recently_invalidated,
+        roots_have_children=roots_have_children,
+        siblings_detected=siblings_detected,
+        no_orphaned_nodes=no_orphaned_nodes,
+    )
+
+
+def _check_siblings_exist(swings: List[SwingNode]) -> bool:
+    """
+    Check if sibling swings exist (same defended pivot, different origins).
+
+    Siblings share the same anchor0 (defended pivot) but have different
+    anchor1 (origin) values.
+
+    Args:
+        swings: List of all swings.
+
+    Returns:
+        True if siblings are detected.
+    """
+    # Group swings by defended pivot (anchor0) and direction
+    pivot_groups: Dict[tuple, List[SwingNode]] = {}
+    for swing in swings:
+        if swing.direction == "bull":
+            pivot = float(swing.low_price)  # defended pivot for bull
+        else:
+            pivot = float(swing.high_price)  # defended pivot for bear
+
+        key = (pivot, swing.direction)
+        if key not in pivot_groups:
+            pivot_groups[key] = []
+        pivot_groups[key].append(swing)
+
+    # Check if any group has multiple swings with different origins
+    for swings_in_group in pivot_groups.values():
+        if len(swings_in_group) >= 2:
+            # Get unique origins
+            origins = set()
+            for s in swings_in_group:
+                if s.direction == "bull":
+                    origins.add(float(s.high_price))
+                else:
+                    origins.add(float(s.low_price))
+            if len(origins) >= 2:
+                return True
+
+    return False
+
+
+def _group_swings_by_depth(
+    swings: List[SwingNode],
+    scale_thresholds: Dict[str, float],
+) -> SwingsByDepth:
+    """
+    Group swings by hierarchy depth for the new UI.
+
+    Args:
+        swings: List of SwingNode objects.
+        scale_thresholds: Size thresholds for scale assignment (backward compat).
+
+    Returns:
+        SwingsByDepth with swings grouped by depth level.
+    """
+    result = SwingsByDepth()
+
+    # Sort by size descending for ranking
+    sorted_swings = sorted(
+        swings,
+        key=lambda s: float(s.high_price - s.low_price),
+        reverse=True
+    )
+
+    for rank, swing in enumerate(sorted_swings, start=1):
+        is_active = swing.status == "active"
+        response = _swing_node_to_calibration_response(
+            swing,
+            is_active=is_active,
+            rank=rank,
+            scale_thresholds=scale_thresholds,
+        )
+
+        depth = swing.get_depth()
+        if depth == 0:
+            result.depth_1.append(response)
+        elif depth == 1:
+            result.depth_2.append(response)
+        elif depth == 2:
+            result.depth_3.append(response)
+        else:
+            result.deeper.append(response)
+
+    return result
+
+
+# ============================================================================
 # Endpoints
 # ============================================================================
 
@@ -501,14 +717,16 @@ async def get_windowed_swings(
     )
 
 
-@router.get("/api/replay/calibrate", response_model=CalibrationResponse)
+@router.get("/api/replay/calibrate", response_model=CalibrationResponseHierarchical)
 async def calibrate_replay(
     bar_count: int = Query(10000, description="Number of bars for calibration window"),
 ):
     """
     Run calibration for Replay View using HierarchicalDetector.
 
-    Processes the first N bars and returns detected swings grouped by scale.
+    Processes the first N bars and returns detected swings grouped by hierarchy
+    depth with tree statistics. Also maintains legacy scale-based grouping for
+    backward compatibility.
     """
     import time
     start_time = time.time()
@@ -560,11 +778,11 @@ async def calibrate_replay(
     # Calculate scale thresholds based on swing sizes
     scale_thresholds = _calculate_scale_thresholds(all_swings)
 
-    # Group swings by scale
+    # Group swings by scale (legacy compatibility)
     swings_by_scale = _group_swings_by_scale(all_swings, scale_thresholds, current_price)
     active_swings_by_scale = _group_swings_by_scale(active_swings, scale_thresholds, current_price)
 
-    # Compute stats
+    # Compute legacy stats
     stats_by_scale = {
         scale: CalibrationScaleStats(
             total_swings=len(swings_by_scale[scale]),
@@ -572,6 +790,18 @@ async def calibrate_replay(
         )
         for scale in ["XL", "L", "M", "S"]
     }
+
+    # NEW: Compute tree statistics (Issue #166)
+    tree_stats = _compute_tree_statistics(
+        all_swings=all_swings,
+        active_swings=active_swings,
+        calibration_bar_count=actual_bar_count,
+        recent_lookback=10,
+    )
+
+    # NEW: Group swings by depth
+    swings_by_depth = _group_swings_by_depth(all_swings, scale_thresholds)
+    active_swings_by_depth = _group_swings_by_depth(active_swings, scale_thresholds)
 
     # Update app state
     s.playback_index = actual_bar_count - 1
@@ -589,12 +819,19 @@ async def calibrate_replay(
     total_time = time.time() - start_time
     logger.info(
         f"Calibration complete: {actual_bar_count} bars, "
-        f"{len(active_swings)} active swings, total time: {total_time:.2f}s"
+        f"{len(active_swings)} active swings, "
+        f"tree: {tree_stats.root_swings} roots, depth {tree_stats.max_depth}, "
+        f"total time: {total_time:.2f}s"
     )
 
-    return CalibrationResponse(
+    return CalibrationResponseHierarchical(
         calibration_bar_count=actual_bar_count,
         current_price=current_price,
+        # New hierarchical data
+        tree_stats=tree_stats,
+        swings_by_depth=swings_by_depth,
+        active_swings_by_depth=active_swings_by_depth,
+        # Legacy compatibility
         swings_by_scale=swings_by_scale,
         active_swings_by_scale=active_swings_by_scale,
         scale_thresholds=scale_thresholds,

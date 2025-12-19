@@ -54,43 +54,71 @@ python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10
 
 When loading Replay View, a calibration phase runs automatically:
 
-1. **Calibrating**: First 10K bars are analyzed for swings at all scales (XL, L, M, S)
-2. **Calibrated**: Report displays with active swings ready for review
+1. **Calibrating**: First 10K bars are analyzed to build the hierarchical swing tree
+2. **Calibrated**: Report displays with tree statistics and active swings ready for review
 3. **Playing**: After starting playback, normal replay mode begins
 
 **Calibration Report shows:**
-- Scale filters to toggle which scales to display
-- Active swings count dropdown (how many to show per scale)
-- Calibration report with swings detected per scale
-- Scale thresholds (XL ≥ 100 pts, L ≥ 40 pts, M ≥ 15 pts, S = all)
+- Tree navigation filters (depth, status, direction)
+- Active swings count dropdown (how many largest defended swings to show)
+- Structure summary with hierarchy statistics
+- Range distribution and validation quick-checks
 - Navigation through active swings with `[` / `]` keys
 - Start Playback button (also Space/Enter)
 
-### Scale Filters and Active Swing Count
+### Tree Filters and Display Configuration
 
-The calibration panel includes controls for filtering displayed swings:
+The calibration panel now uses a **hierarchical tree-based UI** instead of S/M/L/XL scale filtering:
 
-**Scale Filters (checkboxes):**
-- XL, L, M, S toggles to enable/disable each scale
-- Default: XL, L, M enabled; S disabled (S swings are often too noisy)
-- Disabled scales appear grayed out in the calibration report
+**Tree Filters (Column 1):**
 
-**Active Swings Count (dropdown):**
-- Shows 1-5 options
-- Default: 2 (shows top 2 biggest swings per enabled scale)
-- Swings are ranked by size (pts) within each scale
-- Changing this updates the navigation total immediately
+| Filter | Options | Default | Description |
+|--------|---------|---------|-------------|
+| Depth | Root only, 2 levels, 3 levels, All | All | How many tree levels to show |
+| Status | Defended, Completed, Invalidated | Defended + Completed | Which swing statuses to include |
+| Direction | Bull, Bear | Both | Filter by swing direction |
+| Active Count | 1-5 | 2 | Top N largest defended swings to display |
 
-**Calibration Report columns:**
-| Column | Description |
+**Structure Summary (Column 2):**
+
+| Metric | Description |
 |--------|-------------|
-| Scale Filters | Toggle checkboxes + count dropdown |
-| Calibration Report | Swing counts per scale (N shown) |
-| Scale Thresholds | Size requirements per scale |
-| Navigation | Swing cycling + Start Playback |
+| Root swings | Count of swings with no parents (+ bull/bear breakdown) |
+| Total nodes | Total swings in the tree |
+| Max depth | Deepest hierarchy level |
+| Avg children/node | Average branching factor |
+| Defended by Depth | Counts of defended swings at each tree level |
+| Recently invalidated | Swings invalidated in last 10 bars |
+
+**Defended by Depth** shows clickable counts for each depth level:
+- **Depth 1 (roots)**: Top-level swings (no parents)
+- **Depth 2**: Children of root swings
+- **Depth 3**: Grandchildren
+- **Deeper**: All deeper levels combined
+
+Click "Browse →" to filter navigation to that depth level.
+
+**Range Distribution + Validation (Column 3):**
+
+| Metric | Description |
+|--------|-------------|
+| Largest | Largest swing range in points |
+| Median | Median swing range |
+| Smallest | Smallest swing range |
+
+**Validation Quick-Check:**
+- Root swings have children (green check if all roots have children)
+- Sibling swings detected (green check if siblings exist)
+- No orphaned nodes (green check if all non-root swings have parents)
+
+**Navigation (Column 4):**
+- Shows current/total swing count
+- Displays depth level badge (D0, D1, D2, etc.) and direction (BULL/BEAR)
+- Navigation with `[` / `]` keys or arrow buttons
+- Start Playback button
 
 **Active Swing Definition:**
-A swing is "active" at calibration end if:
+A swing is "active" (defended) at calibration end if:
 - Not invalidated (defended pivot intact)
 - Not completed (hasn't reached 2.0 extension)
 - Current price is within 0.382-2.0 zone

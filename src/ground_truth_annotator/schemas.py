@@ -381,3 +381,69 @@ class CalibrationResponseV2(BaseModel):
     # Hierarchy stats (replaces per-scale stats)
     max_depth: int
     swing_count_by_depth: Dict[str, int]  # {"0": 2, "1": 5, "2": 12, ...}
+
+
+# ============================================================================
+# Tree Statistics Models (Hierarchical UI - Issue #166)
+# ============================================================================
+
+
+class TreeStatistics(BaseModel):
+    """Tree structure statistics for hierarchical calibration UI.
+
+    Replaces S/M/L/XL scale-based display with hierarchy-based display.
+    """
+    root_swings: int  # Swings with no parents (depth 0)
+    root_bull: int  # Bull swings at root level
+    root_bear: int  # Bear swings at root level
+    total_nodes: int  # Total swing count
+    max_depth: int  # Maximum hierarchy depth
+    avg_children: float  # Average children per node
+
+    # Defended swings grouped by depth
+    defended_by_depth: Dict[str, int]  # {"1": 12, "2": 38, "3": 94, "deeper": 186}
+
+    # Range distribution
+    largest_range: float  # Largest swing range in points
+    largest_swing_id: Optional[str] = None  # ID of largest swing
+    median_range: float  # Median swing range
+    smallest_range: float  # Smallest swing range
+
+    # Recently invalidated count
+    recently_invalidated: int  # Swings invalidated in last N bars
+
+    # Validation quick-checks
+    roots_have_children: bool  # All root swings have at least one child
+    siblings_detected: bool  # Sibling swings exist (same 0, different 1s)
+    no_orphaned_nodes: bool  # All non-root swings have parents
+
+
+class SwingsByDepth(BaseModel):
+    """Swings grouped by hierarchy depth for the new UI."""
+    depth_1: List[CalibrationSwingResponse] = []  # Root swings (depth 0)
+    depth_2: List[CalibrationSwingResponse] = []  # Depth 1
+    depth_3: List[CalibrationSwingResponse] = []  # Depth 2
+    deeper: List[CalibrationSwingResponse] = []  # Depth 3+
+
+
+class CalibrationResponseHierarchical(BaseModel):
+    """Calibration response with hierarchical tree statistics.
+
+    This is the new response format for issue #166 that replaces
+    scale-based (S/M/L/XL) display with hierarchy-based display.
+    """
+    calibration_bar_count: int
+    current_price: float
+
+    # Tree statistics (new)
+    tree_stats: TreeStatistics
+
+    # Swings grouped by depth (replaces swings_by_scale)
+    swings_by_depth: SwingsByDepth
+    active_swings_by_depth: SwingsByDepth
+
+    # Legacy compatibility - keep for backward compatibility during transition
+    swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
+    active_swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
+    scale_thresholds: Dict[str, float]
+    stats_by_scale: Dict[str, CalibrationScaleStats]

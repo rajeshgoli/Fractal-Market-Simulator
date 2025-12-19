@@ -8,9 +8,17 @@ import {
   SwingDisplayConfig,
   SwingScaleKey,
   ACTIVE_SWING_COUNT_OPTIONS,
+  // Hierarchical types
+  HierarchicalDisplayConfig,
+  CalibrationDataHierarchical,
+  TreeStatistics,
+  DepthFilterKey,
+  SwingStatusKey,
+  SwingDirectionKey,
+  DEPTH_FILTER_OPTIONS,
 } from '../types';
 import { Badge } from './ui/Badge';
-import { Info, GitCommit, Target, Ruler, ArrowRight, CheckCircle, ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import { Info, GitCommit, Target, Ruler, ArrowRight, CheckCircle, ChevronLeft, ChevronRight, Play, TreeDeciduous, BarChart2, Shield, Check, X, AlertTriangle } from 'lucide-react';
 
 interface ExplanationPanelProps {
   swing: SwingData | null;
@@ -24,11 +32,19 @@ interface ExplanationPanelProps {
   onNavigatePrev?: () => void;
   onNavigateNext?: () => void;
   onStartPlayback?: () => void;
-  // Display config props
+  // Legacy display config props (scale-based)
   displayConfig?: SwingDisplayConfig;
   filteredStats?: Record<string, { total_swings: number; active_swings: number; displayed_swings: number }>;
   onToggleScale?: (scale: SwingScaleKey) => void;
   onSetActiveSwingCount?: (count: number) => void;
+  // Hierarchical display config props (new)
+  hierarchicalConfig?: HierarchicalDisplayConfig;
+  statsByDepth?: Record<string, { total_swings: number; defended_swings: number; displayed_swings: number }>;
+  onSetDepthFilter?: (depth: DepthFilterKey) => void;
+  onToggleStatus?: (status: SwingStatusKey) => void;
+  onToggleDirection?: (direction: SwingDirectionKey) => void;
+  onSetHierarchicalActiveSwingCount?: (count: number) => void;
+  onBrowseDepth?: (depth: string) => void;
   // Show stats toggle (for playback mode)
   showStats?: boolean;
 }
@@ -37,6 +53,18 @@ interface ExplanationPanelProps {
 const formatPrice = (value: number | null | undefined, decimals: number = 2): string => {
   return (value ?? 0).toFixed(decimals);
 };
+
+// Validation check component for tree validation
+const ValidationCheck: React.FC<{ label: string; passed: boolean }> = ({ label, passed }) => (
+  <div className="flex items-center gap-2 text-xs">
+    {passed ? (
+      <Check size={12} className="text-trading-bull" />
+    ) : (
+      <X size={12} className="text-trading-bear" />
+    )}
+    <span className={passed ? 'text-app-text' : 'text-app-muted'}>{label}</span>
+  </div>
+);
 
 export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
   swing,
@@ -53,6 +81,14 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
   filteredStats,
   onToggleScale,
   onSetActiveSwingCount,
+  // Hierarchical props
+  hierarchicalConfig,
+  statsByDepth,
+  onSetDepthFilter,
+  onToggleStatus,
+  onToggleDirection,
+  onSetHierarchicalActiveSwingCount,
+  onBrowseDepth,
   showStats = false,
 }) => {
   // Show calibration report when calibrated, or during playback if showStats is enabled
@@ -60,24 +96,18 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
     (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) ||
     (calibrationPhase === CalibrationPhase.PLAYING && showStats && calibrationData);
 
-  if (shouldShowStats && calibrationData) {
-    const thresholds = calibrationData.scale_thresholds;
-    const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
-    // Use filteredStats if available, otherwise fall back to calibration stats
-    const statsToDisplay = filteredStats || Object.fromEntries(
-      scaleOrder.map(scale => [scale, {
-        total_swings: calibrationData.stats_by_scale[scale]?.total_swings || 0,
-        active_swings: calibrationData.stats_by_scale[scale]?.active_swings || 0,
-        displayed_swings: calibrationData.stats_by_scale[scale]?.active_swings || 0,
-      }])
-    );
+  // Check if we have hierarchical data
+  const hasHierarchicalData = calibrationData && 'tree_stats' in calibrationData;
+  const hierarchicalData = hasHierarchicalData ? calibrationData as CalibrationDataHierarchical : null;
+  const treeStats = hierarchicalData?.tree_stats;
 
+  if (shouldShowStats && calibrationData) {
     return (
       <div className="h-full bg-app-secondary border-t border-app-border flex flex-col font-sans text-sm">
         {/* Panel Header */}
         <div className="flex items-center gap-3 px-4 py-2 border-b border-app-border bg-app-bg/40">
           <div className="flex items-center gap-2 text-app-text font-semibold tracking-wider uppercase">
-            <CheckCircle size={16} className={calibrationPhase === CalibrationPhase.PLAYING ? "text-trading-blue" : "text-trading-bull"} />
+            <TreeDeciduous size={16} className={calibrationPhase === CalibrationPhase.PLAYING ? "text-trading-blue" : "text-trading-bull"} />
             <span>{calibrationPhase === CalibrationPhase.PLAYING ? "Calibration Stats" : "Calibration Complete"}</span>
           </div>
           <div className="h-4 w-px bg-app-border mx-2"></div>
@@ -86,47 +116,104 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
           </span>
         </div>
 
-        {/* Content Grid */}
+        {/* Content Grid - New Hierarchical Layout */}
         <div className="flex-1 grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-app-border/50 overflow-hidden">
-          {/* Column 1: Scale Filters */}
+          {/* Column 1: Tree Filters */}
           <div className="p-4 flex flex-col justify-center">
             <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-3">
-              Scale Filters
+              Tree Filters
             </span>
-            <div className="flex flex-wrap gap-2">
-              {scaleOrder.map(scale => {
-                const isEnabled = displayConfig?.enabledScales.has(scale) ?? (scale !== 'S');
-                return (
-                  <label
-                    key={scale}
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded border cursor-pointer transition-colors ${
-                      isEnabled
-                        ? 'bg-trading-blue/20 border-trading-blue text-trading-blue'
-                        : 'bg-app-card border-app-border text-app-muted hover:border-app-text/30'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isEnabled}
-                      onChange={() => onToggleScale?.(scale)}
-                      className="sr-only"
-                    />
-                    <span className={`w-3 h-3 rounded-sm border flex items-center justify-center ${
-                      isEnabled ? 'bg-trading-blue border-trading-blue' : 'border-app-muted'
-                    }`}>
-                      {isEnabled && <span className="text-white text-[10px]">✓</span>}
-                    </span>
-                    <span className="text-xs font-semibold">{scale}</span>
-                  </label>
-                );
-              })}
-            </div>
-            {/* Active swings dropdown */}
-            <div className="mt-4">
-              <label className="text-xs text-app-muted block mb-1">Active swings to show:</label>
+
+            {/* Depth Filter */}
+            <div className="mb-3">
+              <label className="text-xs text-app-muted block mb-1">Depth:</label>
               <select
-                value={displayConfig?.activeSwingCount ?? 2}
-                onChange={(e) => onSetActiveSwingCount?.(parseInt(e.target.value, 10))}
+                value={hierarchicalConfig?.depthFilter ?? 'all'}
+                onChange={(e) => onSetDepthFilter?.(e.target.value as DepthFilterKey)}
+                className="bg-app-card border border-app-border rounded px-2 py-1 text-sm text-app-text focus:outline-none focus:border-trading-blue w-full"
+              >
+                {DEPTH_FILTER_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status Filters */}
+            <div className="mb-3">
+              <label className="text-xs text-app-muted block mb-1">Status:</label>
+              <div className="flex flex-wrap gap-1">
+                {(['defended', 'completed', 'invalidated'] as SwingStatusKey[]).map(status => {
+                  const isEnabled = hierarchicalConfig?.enabledStatuses.has(status) ?? (status !== 'invalidated');
+                  return (
+                    <label
+                      key={status}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded border cursor-pointer transition-colors text-[10px] ${
+                        isEnabled
+                          ? 'bg-trading-blue/20 border-trading-blue text-trading-blue'
+                          : 'bg-app-card border-app-border text-app-muted hover:border-app-text/30'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isEnabled}
+                        onChange={() => onToggleStatus?.(status)}
+                        className="sr-only"
+                      />
+                      <span className={`w-2 h-2 rounded-sm border flex items-center justify-center ${
+                        isEnabled ? 'bg-trading-blue border-trading-blue' : 'border-app-muted'
+                      }`}>
+                        {isEnabled && <span className="text-white text-[8px]">✓</span>}
+                      </span>
+                      <span className="capitalize">{status}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Direction Filters */}
+            <div className="mb-3">
+              <label className="text-xs text-app-muted block mb-1">Direction:</label>
+              <div className="flex gap-2">
+                {(['bull', 'bear'] as SwingDirectionKey[]).map(dir => {
+                  const isEnabled = hierarchicalConfig?.enabledDirections.has(dir) ?? true;
+                  return (
+                    <label
+                      key={dir}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded border cursor-pointer transition-colors text-[10px] ${
+                        isEnabled
+                          ? dir === 'bull' ? 'bg-trading-bull/20 border-trading-bull text-trading-bull' : 'bg-trading-bear/20 border-trading-bear text-trading-bear'
+                          : 'bg-app-card border-app-border text-app-muted hover:border-app-text/30'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isEnabled}
+                        onChange={() => onToggleDirection?.(dir)}
+                        className="sr-only"
+                      />
+                      <span className={`w-2 h-2 rounded-sm border flex items-center justify-center ${
+                        isEnabled ? (dir === 'bull' ? 'bg-trading-bull border-trading-bull' : 'bg-trading-bear border-trading-bear') : 'border-app-muted'
+                      }`}>
+                        {isEnabled && <span className="text-white text-[8px]">✓</span>}
+                      </span>
+                      <span className="capitalize">{dir}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Active swings dropdown */}
+            <div>
+              <label className="text-xs text-app-muted block mb-1">Show largest defended:</label>
+              <select
+                value={hierarchicalConfig?.activeSwingCount ?? displayConfig?.activeSwingCount ?? 2}
+                onChange={(e) => {
+                  const count = parseInt(e.target.value, 10);
+                  onSetHierarchicalActiveSwingCount?.(count);
+                  onSetActiveSwingCount?.(count);
+                }}
                 className="bg-app-card border border-app-border rounded px-2 py-1 text-sm text-app-text focus:outline-none focus:border-trading-blue"
               >
                 {ACTIVE_SWING_COUNT_OPTIONS.map(n => (
@@ -136,56 +223,142 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
             </div>
           </div>
 
-          {/* Column 2: Calibration Report */}
+          {/* Column 2: Structure Summary */}
           <div className="p-4 flex flex-col justify-center">
             <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-3">
-              Calibration Report
+              Structure Summary
             </span>
-            <div className="space-y-2">
-              {scaleOrder.map(scale => {
-                const scaleStat = statsToDisplay[scale];
-                const isEnabled = displayConfig?.enabledScales.has(scale) ?? (scale !== 'S');
-                if (!scaleStat) return null;
-                return (
-                  <div
-                    key={scale}
-                    className={`flex items-center justify-between ${!isEnabled ? 'opacity-40' : ''}`}
-                  >
+
+            {treeStats ? (
+              <div className="space-y-2">
+                {/* Root swings */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-app-muted">Root swings:</span>
+                  <span className="text-xs font-mono text-app-text">
+                    {treeStats.root_swings} <span className="text-app-muted">({treeStats.root_bull} bull, {treeStats.root_bear} bear)</span>
+                  </span>
+                </div>
+                {/* Total nodes */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-app-muted">Total nodes:</span>
+                  <span className="text-xs font-mono text-app-text">{treeStats.total_nodes}</span>
+                </div>
+                {/* Max depth */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-app-muted">Max depth:</span>
+                  <span className="text-xs font-mono text-app-text">{treeStats.max_depth}</span>
+                </div>
+                {/* Avg children */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-app-muted">Avg children/node:</span>
+                  <span className="text-xs font-mono text-app-text">{treeStats.avg_children}</span>
+                </div>
+
+                <div className="h-px bg-app-border/30 my-2"></div>
+
+                {/* Defended swings by depth */}
+                <span className="text-[10px] text-app-muted uppercase tracking-wider">Defended by Depth</span>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-app-muted">Depth 1 (roots):</span>
                     <div className="flex items-center gap-2">
-                      <Badge variant="neutral" className="min-w-[2rem] justify-center text-xs">{scale}</Badge>
-                      <span className="text-app-text font-mono text-xs">{scaleStat.total_swings} swings</span>
+                      <span className="font-mono text-app-text">{treeStats.defended_by_depth['1'] ?? 0}</span>
+                      <button
+                        onClick={() => onBrowseDepth?.('depth_1')}
+                        className="text-trading-blue hover:underline text-[10px]"
+                      >
+                        Browse →
+                      </button>
                     </div>
-                    <span className="text-xs text-trading-blue">
-                      ({scaleStat.displayed_swings} shown)
-                    </span>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-app-muted">Depth 2:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-app-text">{treeStats.defended_by_depth['2'] ?? 0}</span>
+                      <button
+                        onClick={() => onBrowseDepth?.('depth_2')}
+                        className="text-trading-blue hover:underline text-[10px]"
+                      >
+                        Browse →
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-app-muted">Depth 3:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-app-text">{treeStats.defended_by_depth['3'] ?? 0}</span>
+                      <button
+                        onClick={() => onBrowseDepth?.('depth_3')}
+                        className="text-trading-blue hover:underline text-[10px]"
+                      >
+                        Browse →
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-app-muted">Deeper:</span>
+                    <span className="font-mono text-app-text">{treeStats.defended_by_depth['deeper'] ?? 0}</span>
+                  </div>
+                </div>
+
+                {/* Recently invalidated */}
+                {treeStats.recently_invalidated > 0 && (
+                  <div className="mt-2 pt-2 border-t border-app-border/30">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-trading-orange">Last 10 bars invalidated:</span>
+                      <span className="font-mono text-trading-orange">{treeStats.recently_invalidated}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-app-muted">No tree statistics available</div>
+            )}
           </div>
 
-          {/* Column 3: Scale Thresholds */}
+          {/* Column 3: Range Distribution + Validation */}
           <div className="p-4 flex flex-col justify-center">
-            <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-3">
-              Scale Thresholds
-            </span>
-            <div className="space-y-2">
-              {scaleOrder.map(scale => {
-                const threshold = thresholds[scale];
-                const isEnabled = displayConfig?.enabledScales.has(scale) ?? (scale !== 'S');
-                return (
-                  <div
-                    key={scale}
-                    className={`flex items-center justify-between ${!isEnabled ? 'opacity-40' : ''}`}
-                  >
-                    <Badge variant="neutral" className="min-w-[2rem] justify-center text-xs">{scale}</Badge>
-                    <span className="font-mono text-app-text text-xs">
-                      {threshold === 0 ? 'All sizes' : `≥ ${threshold} pts`}
-                    </span>
+            {treeStats ? (
+              <>
+                <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-3">
+                  Range Distribution
+                </span>
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-app-muted">Largest:</span>
+                    <span className="font-mono text-app-text">{formatPrice(treeStats.largest_range)} pts</span>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-app-muted">Median:</span>
+                    <span className="font-mono text-app-text">{formatPrice(treeStats.median_range)} pts</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-app-muted">Smallest:</span>
+                    <span className="font-mono text-app-text">{formatPrice(treeStats.smallest_range)} pts</span>
+                  </div>
+                </div>
+
+                <span className="text-xs text-app-muted font-medium uppercase tracking-wider block mb-2">
+                  Validation Quick-Check
+                </span>
+                <div className="space-y-1">
+                  <ValidationCheck
+                    label="Root swings have children"
+                    passed={treeStats.roots_have_children}
+                  />
+                  <ValidationCheck
+                    label="Sibling swings detected"
+                    passed={treeStats.siblings_detected}
+                  />
+                  <ValidationCheck
+                    label="No orphaned nodes"
+                    passed={treeStats.no_orphaned_nodes}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="text-xs text-app-muted">No validation data available</div>
+            )}
           </div>
 
           {/* Column 4: Active Swing Navigation + Start Button (CALIBRATED) or Status (PLAYING) */}
@@ -218,7 +391,9 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
                     </div>
                     {currentActiveSwing && (
                       <div className="flex gap-1 mt-0.5 justify-center">
-                        <Badge variant="neutral" className="text-[10px] px-1">{currentActiveSwing.scale}</Badge>
+                        <Badge variant="neutral" className="text-[10px] px-1">
+                          D{(currentActiveSwing as { depth?: number }).depth ?? 0}
+                        </Badge>
                         <Badge
                           variant={currentActiveSwing.direction === 'bull' ? 'bull' : 'bear'}
                           className="text-[10px] px-1"
@@ -249,7 +424,7 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
               </>
             ) : (
               <div className="text-center">
-                <p className="text-app-muted text-xs mb-3">No active swings for selected scales</p>
+                <p className="text-app-muted text-xs mb-3">No active swings for selected filters</p>
                 <button
                   onClick={onStartPlayback}
                   className="flex items-center gap-2 px-4 py-1.5 bg-trading-blue text-white font-semibold rounded hover:bg-blue-600 transition-colors text-sm"
@@ -274,6 +449,9 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
               </span>
               <span>
                 <span className="text-app-text">Size:</span> {formatPrice(currentActiveSwing.size)} pts
+              </span>
+              <span>
+                <span className="text-app-text">Depth:</span> {(currentActiveSwing as { depth?: number }).depth ?? 0}
               </span>
             </div>
           </div>

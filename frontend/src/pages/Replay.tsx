@@ -29,8 +29,15 @@ import {
   SwingScaleKey,
   DEFAULT_SWING_DISPLAY_CONFIG,
   SwingData,
+  // Hierarchical types (Issue #166)
+  HierarchicalDisplayConfig,
+  CalibrationDataHierarchical,
+  DEFAULT_HIERARCHICAL_DISPLAY_CONFIG,
+  DepthFilterKey,
+  SwingStatusKey,
+  SwingDirectionKey,
 } from '../types';
-import { useSwingDisplay } from '../hooks/useSwingDisplay';
+import { useSwingDisplay, useHierarchicalDisplay } from '../hooks/useSwingDisplay';
 
 /**
  * Convert a discretization swing to a DetectedSwing for chart overlay.
@@ -191,6 +198,14 @@ export const Replay: React.FC = () => {
     activeSwingCount: DEFAULT_SWING_DISPLAY_CONFIG.activeSwingCount,
   });
 
+  // Hierarchical display configuration (Issue #166)
+  const [hierarchicalConfig, setHierarchicalConfig] = useState<HierarchicalDisplayConfig>({
+    depthFilter: DEFAULT_HIERARCHICAL_DISPLAY_CONFIG.depthFilter,
+    enabledStatuses: new Set(DEFAULT_HIERARCHICAL_DISPLAY_CONFIG.enabledStatuses),
+    enabledDirections: new Set(DEFAULT_HIERARCHICAL_DISPLAY_CONFIG.enabledDirections),
+    activeSwingCount: DEFAULT_HIERARCHICAL_DISPLAY_CONFIG.activeSwingCount,
+  });
+
   // Show stats toggle (for displaying calibration stats during playback)
   const [showStats, setShowStats] = useState(false);
 
@@ -199,6 +214,14 @@ export const Replay: React.FC = () => {
   // allNavigableSwings includes all swings for enabled scales (for navigation)
   const { filteredActiveSwings: _filteredActiveSwings, allNavigableSwings, filteredStats } = useSwingDisplay(calibrationData, displayConfig);
   void _filteredActiveSwings; // Suppress unused warning - available for future chart display limiting
+
+  // Use hierarchical display hook for new tree-based filtering (Issue #166)
+  const hierarchicalData = calibrationData as CalibrationDataHierarchical | null;
+  const {
+    filteredActiveSwings: hierarchicalFilteredSwings,
+    allNavigableSwings: hierarchicalNavigableSwings,
+    statsByDepth,
+  } = useHierarchicalDisplay(hierarchicalData, hierarchicalConfig);
 
   // Chart refs for syncing
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -481,6 +504,58 @@ export const Replay: React.FC = () => {
   const handleSetActiveSwingCount = useCallback((count: number) => {
     setDisplayConfig(prev => ({ ...prev, activeSwingCount: count }));
     // Reset index when count changes
+    setCurrentActiveSwingIndex(0);
+  }, []);
+
+  // Hierarchical filter handlers (Issue #166)
+  const handleSetDepthFilter = useCallback((depth: DepthFilterKey) => {
+    setHierarchicalConfig(prev => ({ ...prev, depthFilter: depth }));
+    setCurrentActiveSwingIndex(0);
+  }, []);
+
+  const handleToggleStatus = useCallback((status: SwingStatusKey) => {
+    setHierarchicalConfig(prev => {
+      const newStatuses = new Set(prev.enabledStatuses);
+      if (newStatuses.has(status)) {
+        newStatuses.delete(status);
+      } else {
+        newStatuses.add(status);
+      }
+      return { ...prev, enabledStatuses: newStatuses };
+    });
+    setCurrentActiveSwingIndex(0);
+  }, []);
+
+  const handleToggleDirection = useCallback((direction: SwingDirectionKey) => {
+    setHierarchicalConfig(prev => {
+      const newDirections = new Set(prev.enabledDirections);
+      if (newDirections.has(direction)) {
+        newDirections.delete(direction);
+      } else {
+        newDirections.add(direction);
+      }
+      return { ...prev, enabledDirections: newDirections };
+    });
+    setCurrentActiveSwingIndex(0);
+  }, []);
+
+  const handleSetHierarchicalActiveSwingCount = useCallback((count: number) => {
+    setHierarchicalConfig(prev => ({ ...prev, activeSwingCount: count }));
+    setCurrentActiveSwingIndex(0);
+  }, []);
+
+  // Handler for browsing swings at a specific depth
+  const handleBrowseDepth = useCallback((depthKey: string) => {
+    // Set the depth filter to show only that level
+    if (depthKey === 'depth_1') {
+      setHierarchicalConfig(prev => ({ ...prev, depthFilter: 'root_only' }));
+    } else if (depthKey === 'depth_2') {
+      setHierarchicalConfig(prev => ({ ...prev, depthFilter: '2_levels' }));
+    } else if (depthKey === 'depth_3') {
+      setHierarchicalConfig(prev => ({ ...prev, depthFilter: '3_levels' }));
+    } else {
+      setHierarchicalConfig(prev => ({ ...prev, depthFilter: 'all' }));
+    }
     setCurrentActiveSwingIndex(0);
   }, []);
 
@@ -1140,10 +1215,19 @@ export const Replay: React.FC = () => {
               onNavigatePrev={navigatePrevActiveSwing}
               onNavigateNext={navigateNextActiveSwing}
               onStartPlayback={handleStartPlayback}
+              // Legacy display config
               displayConfig={displayConfig}
               filteredStats={filteredStats}
               onToggleScale={handleToggleScale}
               onSetActiveSwingCount={handleSetActiveSwingCount}
+              // Hierarchical display config (Issue #166)
+              hierarchicalConfig={hierarchicalConfig}
+              statsByDepth={statsByDepth}
+              onSetDepthFilter={handleSetDepthFilter}
+              onToggleStatus={handleToggleStatus}
+              onToggleDirection={handleToggleDirection}
+              onSetHierarchicalActiveSwingCount={handleSetHierarchicalActiveSwingCount}
+              onBrowseDepth={handleBrowseDepth}
               showStats={showStats}
             />
           </div>

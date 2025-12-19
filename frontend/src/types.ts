@@ -197,6 +197,7 @@ export enum CalibrationPhase {
 
 export type SwingScaleKey = 'XL' | 'L' | 'M' | 'S';
 
+// Legacy scale-based config (for backward compatibility)
 export interface SwingDisplayConfig {
   enabledScales: Set<SwingScaleKey>;
   activeSwingCount: number;  // 1-5, how many top swings to show per scale
@@ -208,6 +209,71 @@ export const DEFAULT_SWING_DISPLAY_CONFIG: SwingDisplayConfig = {
 };
 
 export const ACTIVE_SWING_COUNT_OPTIONS = [1, 2, 3, 4, 5] as const;
+
+// ============================================================================
+// Hierarchical Display Configuration (Issue #166 - Replaces Scale)
+// ============================================================================
+
+export type DepthFilterKey = 'root_only' | '2_levels' | '3_levels' | 'all';
+export type SwingStatusKey = 'defended' | 'completed' | 'invalidated';
+export type SwingDirectionKey = 'bull' | 'bear';
+
+export interface HierarchicalDisplayConfig {
+  depthFilter: DepthFilterKey;  // How many levels to show
+  enabledStatuses: Set<SwingStatusKey>;  // Which statuses to show
+  enabledDirections: Set<SwingDirectionKey>;  // Which directions to show
+  activeSwingCount: number;  // 1-5, how many largest defended swings to show
+}
+
+export const DEFAULT_HIERARCHICAL_DISPLAY_CONFIG: HierarchicalDisplayConfig = {
+  depthFilter: 'all',
+  enabledStatuses: new Set(['defended', 'completed']),  // invalidated off by default
+  enabledDirections: new Set(['bull', 'bear']),
+  activeSwingCount: 2,
+};
+
+export const DEPTH_FILTER_OPTIONS: { value: DepthFilterKey; label: string }[] = [
+  { value: 'root_only', label: 'Root only' },
+  { value: '2_levels', label: '2 levels' },
+  { value: '3_levels', label: '3 levels' },
+  { value: 'all', label: 'All' },
+];
+
+// ============================================================================
+// Tree Statistics (Issue #166)
+// ============================================================================
+
+export interface TreeStatistics {
+  root_swings: number;
+  root_bull: number;
+  root_bear: number;
+  total_nodes: number;
+  max_depth: number;
+  avg_children: number;
+  defended_by_depth: Record<string, number>;  // {"1": 12, "2": 38, ...}
+  largest_range: number;
+  largest_swing_id: string | null;
+  median_range: number;
+  smallest_range: number;
+  recently_invalidated: number;
+  roots_have_children: boolean;
+  siblings_detected: boolean;
+  no_orphaned_nodes: boolean;
+}
+
+export interface SwingsByDepth {
+  depth_1: CalibrationSwing[];  // Root swings (depth 0)
+  depth_2: CalibrationSwing[];  // Depth 1
+  depth_3: CalibrationSwing[];  // Depth 2
+  deeper: CalibrationSwing[];   // Depth 3+
+}
+
+// Extended CalibrationData with hierarchical info
+export interface CalibrationDataHierarchical extends CalibrationData {
+  tree_stats: TreeStatistics;
+  swings_by_depth: SwingsByDepth;
+  active_swings_by_depth: SwingsByDepth;
+}
 
 // Aggregation scale options (timeframes not S/M/L/XL)
 export const AGGREGATION_OPTIONS = [
