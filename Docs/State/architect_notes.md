@@ -10,82 +10,79 @@ Read in order:
 **Core architectural decisions:**
 - Hierarchical swing model (SwingNode DAG) — replaces S/M/L/XL buckets
 - Single incremental algorithm (HierarchicalDetector.process_bar())
-- Fibonacci-based structural analysis (not arbitrary thresholds)
+- Fibonacci-based structural analysis (0.382 formation/invalidation)
 - Resolution-agnostic (1m to 1mo)
 - SwingConfig centralizes all detection parameters
 - Compatibility layer (adapters.py) for gradual migration
 - Discretization: structural events, not per-bar tokens
 - Calibration-first playback for causal evaluation
 - Backend-controlled data boundary for replay (single source of truth)
+- **DAG/Reference separation:** Structural tracking vs semantic filtering
+- **Rules by construction:** Temporal ordering from bar relationships (Type 1/2/3)
 
 **Known debt:**
-- **HierarchicalDetector performance (#154)** — O(lookback²) per bar. Sub-issues #155 (quick wins) and #156 (algorithmic) created with prescriptive implementation.
-- **Legacy detectors still present** — `swing_detector.py`, `incremental_detector.py` to be deleted after migration complete
-- `detect_swings()` function (~400 LOC) — monolithic; will be replaced by HierarchicalDetector
-
-**Cleanup tasks (after performance fix):**
-- Delete `swing_detector.py` batch detection (keep ReferenceSwing for adapters)
-- Delete `incremental_detector.py`
-- Delete `scale_calibrator.py`
+- `MULTI_TF_LOOKBACKS` constants (12, 6, 5 bars) — documented but not derived from domain primitives. Consider making configurable via SwingConfig if tuning becomes necessary.
 
 ---
 
-## Current Phase: Performance Optimization
+## Current Phase: DAG Algorithm Rewrite
 
-### Active Issue
+### Performance Issue — NOT Resolved
 
-**#154 — HierarchicalDetector Performance**
-- **Status:** Blocked on implementation
-- **Sub-issues:** #155 (Quick wins), #156 (Algorithmic)
-- **Document:** `Docs/Working/swing_detection_rewrite_performance_plan.md`
+**#154 — HierarchicalDetector Performance** — Optimizations insufficient
 
-### Problem
+| Phase | Issue | Status | Result |
+|-------|-------|--------|--------|
+| Phase 1 | #155 — Quick wins (caching, inlining, lazy checks) | Closed | Minor improvement |
+| Phase 2 | #156 — Dominant extrema tracking | Closed (not needed) | Superseded by #157 |
+| Phase 3 | #157 — Multi-TF candidate generation | Closed | Candidate reduction, but core O(k³) remains |
 
-| Dataset | Target | Actual | Gap |
-|---------|--------|--------|-----|
-| 1K bars | <1s | 8.2s | ~10x |
-| 6M bars | <60s | N/A | ~1000x |
+**Actual state:** >80s for 10K bars. 100K window doesn't load in frontend. Core algorithm is O(n × k³) due to candidate pair generation and pre-formation checks. Multi-TF optimization reduced candidates but didn't address fundamental complexity.
 
-Root cause: O(lookback²) per bar with expensive inner operations.
+### Active Work: DAG-Based Algorithm
 
-### Solution Plan
+**#158 — Implement DAG-based swing detection algorithm**
 
-**Phase 1 (#155):** Quick wins — caching, inlining, lazy checks
-- Expected improvement: ~40%
+Replace O(n × k³) algorithm with O(n log k) DAG-based streaming approach.
 
-**Phase 2 (#156):** Algorithmic — dominant extrema tracking
-- Expected improvement: ~95% from baseline
+**Core insight:** Instead of generating O(k²) candidate pairs and filtering by rules, build a structure where rules are enforced by construction through temporal ordering.
+
+**Key elements:**
+- Bar type classification (Type 1/2-Bull/2-Bear/3)
+- Temporal ordering by construction (not H/L within single bar)
+- Simultaneous bull/bear leg tracking
+- 0.382 decisive invalidation + 2x staleness pruning
+- Parent-child by pivot derivation (not range containment)
+- DAG/Reference layer separation
+
+**Spec:** `Docs/Working/DAG_spec.md`
+**Target:** <5s for 10K bars, 100K window loads in frontend
 
 ---
 
-## Recently Reviewed (Dec 18)
+## Recently Reviewed (Dec 19)
 
-### Swing Detection Rewrite — ALL ACCEPTED
+### Performance + Cleanup — ALL ACCEPTED
 
 | Issue | Feature | Verdict |
 |-------|---------|---------|
-| #142 | SwingConfig dataclass | Accepted |
-| #143 | SwingNode dataclass | Accepted |
-| #144 | SwingEvent types | Accepted |
-| #145 | ReferenceFrame tolerance checks | Accepted |
-| #146 | Ground truth annotator removal | Accepted |
-| #147 | HierarchicalDetector core | Accepted |
-| #148 | Calibration helpers | Accepted |
-| #149 | ReferenceSwing compatibility adapter | Accepted |
-| #150 | Replay router update | Accepted |
-| #151 | Discretizer SwingNode support | Accepted |
+| #152 | V2 API schemas for hierarchical swings | Accepted |
+| #153 | Old swing detection code removal | Accepted |
+| #155 | Phase 1 performance: caching and inlining | Accepted |
+| #157 | Phase 3 performance: multi-TF candidate generation | Accepted |
+| #156 | Phase 2: Dominant extrema (not needed) | Closed — superseded by #157 |
 
 **Assessment:**
 
-✅ **Architecture:** Implementation follows spec. ReferenceFrame is now central. SwingConfig centralizes parameters. Hierarchical model correctly replaces S/M/L/XL.
+✅ **Architecture:** Multi-TF approach is cleaner than dominant extrema. Reuses existing BarAggregator. Hybrid fallback ensures correctness for short datasets.
 
-✅ **Code Quality:** Proper docstrings, type hints, examples throughout. Clean separation of concerns.
+✅ **Code Quality:** Symmetric bull/bear logic. ReferenceFrame for coordinate abstraction. Caching properly invalidated.
 
-✅ **Tests:** 691 tests pass. Coverage includes unit tests for all new components.
+✅ **Tests:** 551 tests pass. Performance tests verify targets (<5s for 1K bars).
 
-✅ **Compatibility:** Adapter layer allows gradual migration. Legacy detect_swings_compat() works.
+✅ **Cleanup Complete:** Legacy detectors deleted. ReferenceSwing preserved in adapters.py.
 
-⚠️ **Performance:** Algorithm is correct but O(lookback²) per bar. Issue #154 with prescriptive sub-issues created.
+⚠️ **Minor:** MULTI_TF_LOOKBACKS magic numbers documented but not configurable. Acceptable for now — tracked in Known debt.
 
 ---
 
@@ -93,28 +90,32 @@ Root cause: O(lookback²) per bar with expensive inner operations.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| HierarchicalDetector | Active (performance issue) | #155, #156 pending |
+| HierarchicalDetector | **Blocked** | O(n×k³) — >80s for 10K bars. #158 in progress |
 | SwingConfig | Complete | Centralizes all parameters |
 | SwingNode | Complete | DAG hierarchy model |
 | ReferenceFrame | Complete | Central coordinate abstraction |
 | Compatibility Adapter | Complete | SwingNode ↔ ReferenceSwing |
-| Replay View | Complete | Uses HierarchicalDetector |
+| Replay View | Blocked | Can't load 100K window due to detector performance |
 | Discretization | Complete | Accepts SwingNode via adapter |
-| Legacy Detectors | Deprecated | To be deleted after cleanup |
-| Test Suite | Healthy | 691 tests passing |
+| V2 API Schemas | Complete | HierarchicalSwingResponse, etc. |
+| Legacy Detectors | Deleted | #153 completed cleanup |
+| Test Suite | Healthy | 551 tests passing |
 | Documentation | Current | Both guides updated |
 
 ---
 
 ## Next Steps
 
-**Parallel Execution:** No (sequential required)
+**Active: #158 — DAG-based swing detection**
 
-1. As Engineer, implement #155 (quick wins) — prescriptive tasks in issue
-2. Benchmark and verify ~40% improvement
-3. As Engineer, implement #156 (algorithmic) — prescriptive tasks in issue
-4. Benchmark and verify target met (1K bars < 1s)
-5. After performance target met, proceed with legacy cleanup
+1. Implement DAG algorithm as drop-in replacement for HierarchicalDetector
+2. Benchmark on 10K+ bar datasets (target: <5s)
+3. Validate output correctness through manual inspection
+4. Refine pruning rules based on empirical results
+
+**After #158:**
+- End-to-end validation against real trading decisions
+- GAN training data generation using discretization logs
 
 ---
 
@@ -122,10 +123,9 @@ Root cause: O(lookback²) per bar with expensive inner operations.
 
 | Document | Status | Action Needed |
 |----------|--------|---------------|
-| `developer_guide.md` | Current | Hierarchy model documented |
-| `user_guide.md` | Current | Replay View uses HierarchicalDetector |
+| `developer_guide.md` | Current | Multi-TF optimization documented |
+| `user_guide.md` | Current | Replay View using hierarchical detector |
 | `CLAUDE.md` | Current | - |
-| `swing_detection_rewrite_performance_plan.md` | Current | Pushed to GitHub |
 
 ---
 
@@ -135,9 +135,11 @@ Root cause: O(lookback²) per bar with expensive inner operations.
 - **Single algorithm:** process_bar() for both calibration and playback
 - **Fibonacci levels:** Extended grid for discretization (16 levels)
 - **Resolution-agnostic:** 1m to 1mo source data supported
-- **Performance target:** <60s for 6M bars (currently blocked)
+- **Performance target:** <5s for 10K bars, <60s for 6M bars (NOT YET MET)
 - **Lean codebase:** 4 modules (data, swing_analysis, discretization, ground_truth_annotator)
 - **Backend-controlled boundaries:** Backend owns data visibility
+- **DAG/Reference separation:** DAG tracks structural extremas; Reference layer defines "good reference" semantics
+- **Rules by construction:** Temporal ordering enforced by bar relationships, not post-hoc filtering
 
 ---
 
@@ -180,6 +182,8 @@ Root cause: O(lookback²) per bar with expensive inner operations.
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 19 | DAG-based algorithm spec review | Approved → #158 created |
+| Dec 19 | #152, #153, #155, #157 — Performance optimization + cleanup | All Accepted (but performance still unworkable) |
 | Dec 18 | #142-#151 — Swing Detection Rewrite (10 issues) | All Accepted; #154 performance issue identified |
 | Dec 18 | Swing Detection Rewrite Spec | Approved; implementation plan created |
 | Dec 18 | #138, #140 (Phase 1) — Endpoint optimization, pre-formation protection | All Accepted |
