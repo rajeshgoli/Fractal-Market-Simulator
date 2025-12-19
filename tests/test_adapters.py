@@ -22,7 +22,7 @@ from src.swing_analysis.adapters import (
     convert_swings_to_legacy_dict,
 )
 from src.swing_analysis.swing_node import SwingNode
-from src.swing_analysis.swing_detector import ReferenceSwing
+from src.swing_analysis.adapters import ReferenceSwing
 
 
 class TestSwingNodeToReferenceSwing:

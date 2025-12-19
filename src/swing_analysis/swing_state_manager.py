@@ -24,11 +24,34 @@ from typing import Dict, List, Optional, Set, Tuple
 import pandas as pd
 
 from .types import Bar
-from .swing_detector import detect_swings
+from .adapters import detect_swings_compat as detect_swings
 from .level_calculator import calculate_levels
-from .scale_calibrator import ScaleConfig
 from .bar_aggregator import BarAggregator
 from .event_detector import EventDetector, EventType, StructuralEvent, ActiveSwing
+
+
+@dataclass
+class ScaleConfig:
+    """Configuration for structural scale boundaries and aggregation settings.
+
+    Legacy dataclass from the deprecated scale_calibrator.py module.
+    Preserved for backward compatibility with SwingStateManager.
+    """
+    boundaries: Dict[str, Tuple[float, float]]  # {"S": (0, 15), "M": (15, 40), ...}
+    aggregations: Dict[str, int]  # {"S": 1, "M": 15, "L": 60, "XL": 240} (minutes)
+    swing_count: int  # Number of swings found in reference window
+    used_defaults: bool  # True if instrument defaults were used
+    median_durations: Dict[str, int]  # {"S": 18, "M": 45, ...} bars per swing
+
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for JSON serialization"""
+        return {
+            'boundaries': {k: list(v) for k, v in self.boundaries.items()},
+            'aggregations': self.aggregations,
+            'swing_count': self.swing_count,
+            'used_defaults': self.used_defaults,
+            'median_durations': self.median_durations
+        }
 
 
 @dataclass

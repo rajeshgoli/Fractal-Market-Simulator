@@ -7,15 +7,18 @@ consumers to the new system.
 
 The adapter layer allows existing code that expects ReferenceSwing and
 detect_swings() to continue working while components are updated one by one.
+
+This module also contains the legacy ReferenceSwing and SeparationDetails
+dataclasses, moved from swing_detector.py after that module was deprecated.
 """
 
-from typing import Dict, List, Optional
+from dataclasses import dataclass, asdict
+from typing import Dict, List, Optional, Any, Literal
 from decimal import Decimal
 
 import pandas as pd
 
 from .swing_node import SwingNode
-from .swing_detector import ReferenceSwing
 from .hierarchical_detector import (
     HierarchicalDetector,
     calibrate,
@@ -23,6 +26,78 @@ from .hierarchical_detector import (
     dataframe_to_bars,
 )
 from .swing_config import SwingConfig
+
+
+@dataclass
+class SeparationDetails:
+    """Details about structural separation between swings.
+
+    Legacy dataclass from the deprecated swing_detector.py module.
+    Preserved for backward compatibility with existing code.
+    """
+    is_separated: bool
+    is_anchor: bool  # True if first swing (no previous to compare)
+    containing_swing_id: Optional[str] = None
+    from_swing_id: Optional[str] = None  # The swing we measured separation from
+    distance_fib: Optional[float] = None  # Actual distance in FIB terms
+    minimum_fib: Optional[float] = None   # Threshold used (0.236)
+
+
+@dataclass
+class ReferenceSwing:
+    """
+    A detected reference swing with all computed properties.
+
+    Reference swings are high-low pairs used to calculate Fibonacci levels.
+    - Bull Reference: High BEFORE Low (downswing completed, now bullish)
+    - Bear Reference: Low BEFORE High (upswing completed, now bearish)
+
+    Legacy dataclass from the deprecated swing_detector.py module.
+    Preserved for backward compatibility with existing code.
+    For new code, use SwingNode from the hierarchical detector.
+    """
+    # Required fields
+    high_price: float
+    high_bar_index: int
+    low_price: float
+    low_bar_index: int
+    size: float
+    direction: Literal["bull", "bear"]
+
+    # Level calculations (FIB levels)
+    level_0382: float = 0.0
+    level_2x: float = 0.0
+
+    # Ranking (computed during filtering)
+    rank: int = 0
+    impulse: float = 0.0
+    size_rank: Optional[int] = None
+    impulse_rank: Optional[int] = None
+    combined_score: Optional[float] = None
+
+    # Structural properties (computed during Phase 3 filtering)
+    structurally_separated: bool = False
+    containing_swing_id: Optional[str] = None
+    fib_confluence_score: float = 0.0
+
+    # Separation details (for explanation in SWING_FORMED events)
+    separation_is_anchor: bool = False  # True if first swing (no previous to compare)
+    separation_distance_fib: Optional[float] = None  # Actual distance in fib terms
+    separation_minimum_fib: Optional[float] = None   # Threshold used (0.236)
+    separation_from_swing_id: Optional[str] = None   # Swing we measured from
+
+    @property
+    def span(self) -> int:
+        """Number of bars in the swing."""
+        return abs(self.high_bar_index - self.low_bar_index) + 1
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for backward compatibility."""
+        result = asdict(self)
+        # Remove direction from dict output for backward compatibility
+        # (existing code doesn't expect direction field in the dict)
+        del result['direction']
+        return result
 
 
 def swing_node_to_reference_swing(node: SwingNode) -> ReferenceSwing:

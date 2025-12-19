@@ -4,7 +4,7 @@ import pytest
 from decimal import Decimal
 
 from src.swing_analysis.reference_frame import ReferenceFrame
-from src.swing_analysis.swing_detector import ReferenceSwing
+from src.swing_analysis.adapters import ReferenceSwing
 
 
 class TestReferenceFrameBasics:

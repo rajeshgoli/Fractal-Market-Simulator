@@ -23,7 +23,7 @@ from src.discretization import (
     validate_log,
 )
 from src.discretization.discretizer import _get_band, _levels_between
-from src.swing_analysis.swing_detector import ReferenceSwing
+from src.swing_analysis.adapters import ReferenceSwing
 
 
 # =============================================================================

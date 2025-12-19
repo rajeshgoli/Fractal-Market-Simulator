@@ -24,20 +24,17 @@ src/
 │   └── ohlc_loader.py              # CSV loading (TradingView + semicolon formats)
 ├── swing_analysis/
 │   ├── types.py                    # Bar, BullReferenceSwing, BearReferenceSwing
-│   ├── swing_config.py             # SwingConfig, DirectionConfig (rewrite Phase 1)
-│   ├── swing_node.py               # SwingNode hierarchical structure (rewrite Phase 1)
-│   ├── events.py                   # SwingEvent types (rewrite Phase 1)
-│   ├── hierarchical_detector.py    # Incremental detector with process_bar() (rewrite Phase 2)
-│   ├── adapters.py                 # Legacy compatibility: SwingNode ↔ ReferenceSwing (rewrite Phase 3)
-│   ├── swing_detector.py           # Main detection: detect_swings() (legacy)
-│   ├── incremental_detector.py     # O(active) per-bar detection for replay (legacy)
+│   ├── swing_config.py             # SwingConfig, DirectionConfig
+│   ├── swing_node.py               # SwingNode hierarchical structure
+│   ├── events.py                   # SwingEvent types
+│   ├── hierarchical_detector.py    # Incremental detector with process_bar()
+│   ├── adapters.py                 # Legacy compatibility: SwingNode ↔ ReferenceSwing, detect_swings_compat
 │   ├── level_calculator.py         # Fibonacci level computation
 │   ├── reference_frame.py          # Oriented coordinate system for ratios
 │   ├── bar_aggregator.py           # Multi-timeframe OHLC aggregation
-│   ├── scale_calibrator.py         # Auto-calibrate S/M/L/XL boundaries (legacy)
 │   ├── constants.py                # Fibonacci level sets
-│   ├── swing_state_manager.py      # Live swing tracking (legacy)
-│   └── event_detector.py           # Live event detection (legacy)
+│   ├── swing_state_manager.py      # Live swing tracking, ScaleConfig
+│   └── event_detector.py           # Live event detection
 └── discretization/
     ├── schema.py                   # DiscretizationEvent, SwingEntry, etc.
     ├── discretizer.py              # Batch OHLC → event log processor
@@ -81,15 +78,17 @@ scripts/                            # Dev utilities
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           SWING ANALYSIS                                     │
 │                                                                              │
-│   swing_detector.py ◄─────────────────────────────────────────────────────┐ │
-│   └── detect_swings() ──► {swing_highs, swing_lows, bull_refs, bear_refs} │ │
-│            │                                                               │ │
-│            │ uses                                                          │ │
-│            ▼                                                               │ │
-│   level_calculator.py ──► Fibonacci levels                                 │ │
-│   reference_frame.py ───► Price ↔ ratio conversion                         │ │
-│   bar_aggregator.py ────► Multi-timeframe OHLC                             │ │
-│   constants.py ─────────► DISCRETIZATION_LEVELS (16 Fib ratios)            │ │
+│   hierarchical_detector.py ─────────────────────────────────────────────┐   │
+│   └── HierarchicalDetector.process_bar() ──► SwingNode + SwingEvent     │   │
+│   └── calibrate() ─────────────────────────► (detector, events)         │   │
+│            │                                                             │   │
+│            │ uses                                                        │   │
+│            ▼                                                             │   │
+│   adapters.py ─────────► detect_swings_compat(), ReferenceSwing          │   │
+│   level_calculator.py ──► Fibonacci levels                               │   │
+│   reference_frame.py ───► Price ↔ ratio conversion                       │   │
+│   bar_aggregator.py ────► Multi-timeframe OHLC                           │   │
+│   constants.py ─────────► DISCRETIZATION_LEVELS (16 Fib ratios)          │   │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
                                        │
@@ -240,113 +239,6 @@ metrics = get_file_metrics("data.csv")
 ---
 
 ### Swing Detection
-
-**File:** `src/swing_analysis/swing_detector.py`
-
-The primary detection interface. Returns swing points and reference swings.
-
-```python
-from src.swing_analysis.swing_detector import detect_swings
-import pandas as pd
-
-df = pd.DataFrame({...})  # columns: open, high, low, close
-
-result = detect_swings(
-    df,
-    lookback=5,                     # Bars before/after for swing point detection
-    filter_redundant=True,          # Apply Fib-band redundancy filter
-    protection_tolerance=0.1,       # 10% violation tolerance
-    min_candle_ratio=None,          # Size filter: multiple of median candle
-    min_range_pct=None,             # Size filter: % of window range
-    min_prominence=None,            # Prominence filter: multiple of median candle
-    adjust_extrema=True,            # Snap endpoints to best extrema
-    quota=None,                     # Max swings per direction
-    larger_swings=None,             # Context from larger scale (for separation gate)
-    current_bar_index=None,         # Price reference bar (None = last bar)
-)
-
-# Returns:
-# {
-#     "current_price": float,
-#     "swing_highs": [{"price": float, "bar_index": int}, ...],
-#     "swing_lows": [{"price": float, "bar_index": int}, ...],
-#     "bull_references": [dict, ...],  # High BEFORE Low (downswing)
-#     "bear_references": [dict, ...],  # Low BEFORE High (upswing)
-# }
-```
-
-**Reference swing dict fields:**
-- `high_price`, `low_price`, `high_bar_index`, `low_bar_index`
-- `size` (high - low)
-- `level_0382`, `level_2x` (Fib levels)
-- `rank` (by size or combined score)
-- `impulse`, `size_rank`, `impulse_rank`, `combined_score` (if quota set)
-- `structurally_separated`, `containing_swing_id` (if larger_swings provided)
-- `is_candidate` (True if pending 0.236 validation, False if fully valid)
-- `pending_level` (0.236 if candidate, None if valid)
-- `current_retracement` (retracement ratio, only on candidates)
-
-**Multi-scale detection pattern:**
-
-```python
-# Detect XL first, pass results to L, and so on
-xl_result = detect_swings(df, lookback=10, quota=4)
-xl_swings = xl_result["bull_references"] + xl_result["bear_references"]
-
-l_result = detect_swings(df, lookback=8, quota=6, larger_swings=xl_swings)
-# L swings now have structural separation context from XL
-```
-
----
-
-### Incremental Swing Detection
-
-**File:** `src/swing_analysis/incremental_detector.py`
-
-O(active_swings) per-bar detection for replay playback, replacing O(N log N) full detection.
-
-```python
-from src.swing_analysis.incremental_detector import (
-    IncrementalSwingState,
-    advance_bar_incremental,
-    initialize_from_calibration,
-)
-
-# Initialize from calibration results
-state = initialize_from_calibration(
-    calibration_swings=active_swings_by_scale,  # Dict of scale -> swing list
-    source_bars=source_bars,
-    calibration_bar_count=10000,
-    scale_thresholds={"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
-    current_price=current_price,
-    lookback=5,
-    protection_tolerance=0.1,
-)
-
-# Advance one bar incrementally
-events = advance_bar_incremental(
-    bar_high=bar.high,
-    bar_low=bar.low,
-    bar_close=bar.close,
-    state=state
-)
-
-# Events are: SWING_FORMED, SWING_INVALIDATED, LEVEL_CROSS, SWING_COMPLETED
-for event in events:
-    print(f"{event.event_type}: {event.swing_id} at bar {event.bar_index}")
-```
-
-**Key characteristics:**
-- Statistics (median_candle, price_range) frozen at calibration
-- Swing point detection deferred by lookback (confirmed at N - lookback)
-- No retroactive promotion of redundancy/quota-filtered swings
-- Simulates live trading behavior (decisions made with available information)
-
-**Performance:** ~2,500x improvement (from ~1.6M ops to ~630 ops per 12-bar tick)
-
----
-
-### Hierarchical Swing Detection (Rewrite Phase 2)
 
 **File:** `src/swing_analysis/hierarchical_detector.py`
 
@@ -617,10 +509,10 @@ cd frontend && npm run build  # Output: frontend/dist/
 python -m pytest tests/ -v
 
 # Specific module
-python -m pytest tests/test_swing_detector.py -v
+python -m pytest tests/test_hierarchical_detector.py -v
 
 # Single test
-python -m pytest tests/test_swing_detector.py::TestQuotaFilter -v
+python -m pytest tests/test_hierarchical_detector.py::TestCalibrateFromDataframe -v
 
 # With coverage
 python -m pytest tests/ --cov=src --cov-report=html
@@ -630,13 +522,12 @@ python -m pytest tests/ --cov=src --cov-report=html
 
 | File | Tests |
 |------|-------|
-| `test_swing_detector.py` | Detection, filters, ranking |
+| `test_hierarchical_detector.py` | Hierarchical detector algorithm |
 | `test_discretizer.py` | Event generation, side-channels |
 | `test_reference_frame.py` | ReferenceFrame coordinate system |
 | `test_swing_config.py` | SwingConfig dataclass |
 | `test_swing_node.py` | SwingNode hierarchical structure |
 | `test_swing_events.py` | Event types |
-| `test_hierarchical_detector.py` | Hierarchical detector algorithm |
 | `test_adapters.py` | Legacy compatibility adapters |
 
 ---

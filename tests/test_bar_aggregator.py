@@ -361,35 +361,7 @@ class TestBarAggregator:
 # Additional integration tests
 class TestBarAggregatorIntegration:
     """Integration tests with other system components."""
-    
-    def test_integration_with_scale_calibrator(self):
-        """Test integration with ScaleCalibrator aggregation settings."""
-        # Create test bars
-        bars = []
-        start_timestamp = 1640995200
-        for i in range(100):
-            bars.append(Bar(
-                index=i,
-                timestamp=start_timestamp + i * 60,
-                open=100 + i * 0.1,
-                high=100 + i * 0.1 + 0.5,
-                low=100 + i * 0.1 - 0.3,
-                close=100 + i * 0.1 + 0.2
-            ))
-        
-        # Test that BarAggregator works with ScaleCalibrator's standard timeframes
-        from src.swing_analysis.scale_calibrator import ScaleCalibrator
-        
-        calibrator = ScaleCalibrator()
-        config = calibrator.calibrate(bars)
-        aggregator = BarAggregator(bars)
-        
-        # Verify we can get bars for each scale's aggregation setting
-        for scale, timeframe in config.aggregations.items():
-            if timeframe in BarAggregator.STANDARD_TIMEFRAMES:
-                scale_bars = aggregator.get_bars(timeframe)
-                assert len(scale_bars) > 0, f"No bars for scale {scale} timeframe {timeframe}"
-    
+
     def test_debug_aggregation_info(self):
         """Test the debug aggregation info method."""
         bars = []

@@ -14,8 +14,7 @@ from unittest.mock import Mock, patch
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.swing_analysis.swing_state_manager import SwingStateManager, SwingUpdateResult
-from src.swing_analysis.scale_calibrator import ScaleConfig
+from src.swing_analysis.swing_state_manager import SwingStateManager, SwingUpdateResult, ScaleConfig
 from src.swing_analysis.event_detector import EventType, EventSeverity, StructuralEvent, ActiveSwing
 from src.swing_analysis.types import Bar
 

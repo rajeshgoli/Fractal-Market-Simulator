@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .swing_detector import ReferenceSwing
+    from .adapters import ReferenceSwing
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,7 @@ class ReferenceFrame:
         - Bear: anchor0 = high (defended), anchor1 = low (origin)
 
         Args:
-            swing: A ReferenceSwing from swing_detector
+            swing: A ReferenceSwing from the adapters module
 
         Returns:
             A ReferenceFrame with properly oriented anchors

@@ -33,19 +33,19 @@ For detailed technical architecture, see `Docs/State/architect_notes.md`.
 
 | Module | Purpose |
 |--------|---------|
-| `src/swing_analysis/` | Core detection: SwingDetector, SwingNode, ReferenceFrame, BarAggregator |
+| `src/swing_analysis/` | Core detection: HierarchicalDetector, SwingNode, ReferenceFrame, BarAggregator |
 | `src/discretization/` | OHLC → structural event log conversion |
 | `src/data/` | OHLC data loading and gap detection |
 
 ### Key Components
 
-- **SwingDetector** (`swing_analysis/swing_detector.py`) - O(N log N) vectorized swing detection
+- **HierarchicalDetector** (`swing_analysis/hierarchical_detector.py`) - Incremental swing detection with hierarchical model
 - **BarAggregator** (`swing_analysis/bar_aggregator.py`) - Multi-timeframe OHLC aggregation
-- **ScaleCalibrator** (`swing_analysis/scale_calibrator.py`) - Quartile-based S/M/L/XL boundaries
+- **SwingNode** (`swing_analysis/swing_node.py`) - Hierarchical swing data structure
 
 ### Design Principles
 
-- **Multi-scale**: Four simultaneous scales (S, M, L, XL) with independent processing
+- **Hierarchical**: Tree-structured swings with parent-child relationships
 - **Fibonacci levels**: 0.382, 0.5, 0.618, 1.0, 1.382, 1.5, 1.618, 2.0 ratios
 - **Resolution-agnostic**: Supports 1m, 5m, 15m, 30m, 1h, 4h, 1d source data
 - **Performance**: <60s for 6M bars

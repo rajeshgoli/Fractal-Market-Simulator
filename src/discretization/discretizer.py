@@ -43,9 +43,8 @@ from ..swing_analysis.constants import (
     DISCRETIZATION_LEVEL_SET_VERSION,
 )
 from ..swing_analysis.reference_frame import ReferenceFrame
-from ..swing_analysis.swing_detector import ReferenceSwing
 from ..swing_analysis.swing_node import SwingNode
-from ..swing_analysis.adapters import swing_node_to_reference_swing
+from ..swing_analysis.adapters import ReferenceSwing, swing_node_to_reference_swing
 
 
 # Type alias for transition period: accept both old and new swing formats
