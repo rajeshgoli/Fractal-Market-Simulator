@@ -3,6 +3,10 @@ Tests for ReferenceLayer
 
 Tests the reference layer filtering and invalidation rules.
 See Docs/Reference/valid_swings.md for the canonical rules.
+
+Big vs Small (hierarchy-based definition):
+- Big swing = len(swing.parents) == 0 (root level)
+- Small swing = len(swing.parents) > 0 (has parent)
 """
 
 import pytest
@@ -13,6 +17,7 @@ from src.swing_analysis.reference_layer import (
     ReferenceLayer,
     ReferenceSwingInfo,
     InvalidationResult,
+    CompletionResult,
 )
 from src.swing_analysis.swing_config import SwingConfig, DirectionConfig
 from src.swing_analysis.swing_node import SwingNode
@@ -77,94 +82,82 @@ class TestReferenceLayerInitialization:
         assert layer.config.bull.big_swing_threshold == 0.20
 
 
-class TestBigSwingClassification:
-    """Test big swing classification (top 10% by range)."""
+class TestHierarchyBasedBigSwing:
+    """Test big swing detection based on hierarchy (no parents = big)."""
 
-    def test_single_swing_is_big(self):
-        """Single swing is always big (top 100%)."""
+    def test_swing_without_parent_is_big(self):
+        """Swing without parents is big."""
         layer = ReferenceLayer()
-        swings = [make_swing("s1", 110.0, 100.0)]
+        swing = make_swing("s1", 110.0, 100.0)  # No parents
 
-        result = layer.classify_swings(swings)
+        result = layer.get_reference_swings([swing])
 
         assert len(result) == 1
-        assert result["s1"].is_big is True
+        assert result[0].is_big() is True
 
-    def test_top_10_percent_are_big(self):
-        """Only top 10% of swings by range are big."""
+    def test_swing_with_parent_is_small(self):
+        """Swing with parent is small."""
         layer = ReferenceLayer()
-        # Create 10 swings with ranges 10, 20, 30, ..., 100
-        swings = []
-        for i in range(10):
-            range_size = (i + 1) * 10
-            swing = make_swing(
-                f"s{i}",
-                high_price=100.0 + range_size,
-                low_price=100.0,
-            )
-            swings.append(swing)
+        parent = make_swing("parent", 200.0, 100.0)
+        child = make_swing("child", 170.0, 130.0)
+        child.add_parent(parent)
 
-        result = layer.classify_swings(swings)
+        result = layer.get_reference_swings([parent, child])
 
-        # Top 10% = 1 swing (range 100)
-        big_count = sum(1 for info in result.values() if info.is_big)
-        assert big_count == 1
-        assert result["s9"].is_big is True  # Range 100
-        assert result["s0"].is_big is False  # Range 10
+        parent_info = next((r for r in result if r.swing.swing_id == "parent"), None)
+        child_info = next((r for r in result if r.swing.swing_id == "child"), None)
+        assert parent_info.is_big() is True
+        assert child_info.is_big() is False
 
-    def test_get_big_swings(self):
-        """get_big_swings returns only big swings."""
+    def test_get_big_swings_returns_root_level_only(self):
+        """get_big_swings returns only swings without parents."""
         layer = ReferenceLayer()
-        swings = [
-            make_swing("s1", 200.0, 100.0),  # Range 100 - big
-            make_swing("s2", 120.0, 100.0),  # Range 20 - small
-            make_swing("s3", 110.0, 100.0),  # Range 10 - small
-        ]
+        parent = make_swing("parent", 200.0, 100.0)
+        child = make_swing("child", 170.0, 130.0)
+        child.add_parent(parent)
 
-        big_swings = layer.get_big_swings(swings)
+        big_swings = layer.get_big_swings([parent, child])
 
         assert len(big_swings) == 1
-        assert big_swings[0].swing_id == "s1"
+        assert big_swings[0].swing_id == "parent"
+
+    def test_all_root_swings_are_big(self):
+        """Multiple swings without parents are all big."""
+        layer = ReferenceLayer()
+        # Two unrelated root-level swings
+        swing1 = make_swing("s1", 200.0, 100.0)
+        swing2 = make_swing("s2", 150.0, 120.0)
+
+        result = layer.get_reference_swings([swing1, swing2])
+
+        assert all(info.is_big() for info in result)
 
 
-class TestBigSwingTolerances:
-    """Test invalidation tolerances based on swing size."""
+class TestHierarchyBasedTolerances:
+    """Test invalidation tolerances based on hierarchy."""
 
     def test_big_swing_has_tolerance(self):
-        """Big swings have non-zero tolerance."""
+        """Big swings (no parents) have non-zero tolerance."""
         layer = ReferenceLayer()
-        swings = [make_swing("s1", 110.0, 100.0)]  # Only swing, so it's big
+        swing = make_swing("s1", 110.0, 100.0)  # No parents = big
 
-        result = layer.classify_swings(swings)
+        result = layer.get_reference_swings([swing])
 
-        assert result["s1"].touch_tolerance == 0.15  # Default
-        assert result["s1"].close_tolerance == 0.10  # Default
+        assert result[0].touch_tolerance == 0.15
+        assert result[0].close_tolerance == 0.10
 
     def test_small_swing_no_tolerance(self):
-        """Small swings have zero tolerance."""
+        """Small swings (with parent) have zero tolerance."""
         layer = ReferenceLayer()
-        big_swing = make_swing("big", 200.0, 100.0)  # Range 100
-        small_swing = make_swing("small", 110.0, 100.0)  # Range 10
-        swings = [big_swing, small_swing]
+        parent = make_swing("parent", 200.0, 100.0)
+        child = make_swing("child", 170.0, 130.0)
+        child.add_parent(parent)
 
-        result = layer.classify_swings(swings)
+        result = layer.get_reference_swings([parent, child])
 
-        assert result["small"].touch_tolerance == 0.0
-        assert result["small"].close_tolerance == 0.0
-
-    def test_child_of_big_swing_has_reduced_tolerance(self):
-        """Children of big swings have reduced tolerance."""
-        layer = ReferenceLayer()
-        big_swing = make_swing("big", 200.0, 100.0)  # Range 100
-        small_swing = make_swing("small", 150.0, 140.0)  # Range 10
-        small_swing.add_parent(big_swing)
-        swings = [big_swing, small_swing]
-
-        result = layer.classify_swings(swings)
-
-        # Child of big gets child_swing_tolerance (0.10 by default)
-        assert result["small"].touch_tolerance == 0.10
-        assert result["small"].close_tolerance == 0.10
+        child_info = next((r for r in result if r.swing.swing_id == "child"), None)
+        assert child_info.touch_tolerance == 0.0
+        assert child_info.close_tolerance == 0.0
 
 
 class TestTouchInvalidation:
@@ -173,9 +166,8 @@ class TestTouchInvalidation:
     def test_big_swing_touch_tolerance(self):
         """Big swing tolerates touch within 0.15 × range."""
         layer = ReferenceLayer()
-        swing = make_swing("s1", 110.0, 100.0)  # Range 10
-        swings = [swing]
-        layer.classify_swings(swings)
+        swing = make_swing("s1", 110.0, 100.0)  # No parents = big, range 10
+        layer.get_reference_swings([swing])
 
         # Touch 0.1 below pivot (1% of range) - should NOT invalidate
         # Tolerance is 0.15 = 1.5 points for this swing
@@ -188,9 +180,8 @@ class TestTouchInvalidation:
     def test_big_swing_touch_excess_invalidates(self):
         """Big swing invalidated when touch exceeds 0.15 × range."""
         layer = ReferenceLayer()
-        swing = make_swing("s1", 110.0, 100.0)  # Range 10
-        swings = [swing]
-        layer.classify_swings(swings)
+        swing = make_swing("s1", 110.0, 100.0)  # No parents = big, range 10
+        layer.get_reference_swings([swing])
 
         # Touch 2 points below pivot (20% of range) - should invalidate
         bar = make_bar(20, 100.0, 101.0, 98.0, 100.0)  # Low=98
@@ -203,15 +194,15 @@ class TestTouchInvalidation:
     def test_small_swing_no_touch_tolerance(self):
         """Small swing invalidated by any touch below pivot."""
         layer = ReferenceLayer()
-        big_swing = make_swing("big", 200.0, 100.0)  # Range 100 - big
-        small_swing = make_swing("small", 110.0, 100.0)  # Range 10 - small
-        swings = [big_swing, small_swing]
-        layer.classify_swings(swings)
+        parent = make_swing("parent", 200.0, 100.0)
+        child = make_swing("child", 150.0, 140.0)  # Range 10
+        child.add_parent(parent)
+        layer.get_reference_swings([parent, child])
 
         # Any touch below pivot should invalidate small swing
-        bar = make_bar(20, 100.0, 101.0, 99.9, 100.0)  # Low=99.9
+        bar = make_bar(20, 140.0, 141.0, 139.9, 140.0)  # Low=139.9
 
-        result = layer.check_invalidation(small_swing, bar)
+        result = layer.check_invalidation(child, bar)
 
         assert result.is_invalidated is True
 
@@ -222,9 +213,8 @@ class TestCloseInvalidation:
     def test_big_swing_close_tolerance(self):
         """Big swing tolerates close within 0.10 × range."""
         layer = ReferenceLayer()
-        swing = make_swing("s1", 110.0, 100.0)  # Range 10
-        swings = [swing]
-        layer.classify_swings(swings)
+        swing = make_swing("s1", 110.0, 100.0)  # No parents = big, range 10
+        layer.get_reference_swings([swing])
 
         # Close 0.05 below pivot - should NOT invalidate (tolerance is 0.10)
         bar = make_bar(20, 100.0, 101.0, 99.5, 99.5)  # Close=99.5
@@ -236,9 +226,8 @@ class TestCloseInvalidation:
     def test_big_swing_close_excess_invalidates(self):
         """Big swing invalidated when close exceeds 0.10 × range."""
         layer = ReferenceLayer()
-        swing = make_swing("s1", 110.0, 100.0)  # Range 10
-        swings = [swing]
-        layer.classify_swings(swings)
+        swing = make_swing("s1", 110.0, 100.0)  # No parents = big, range 10
+        layer.get_reference_swings([swing])
 
         # Close 1.5 points below pivot (15% of range) - should invalidate
         bar = make_bar(20, 100.0, 101.0, 99.5, 98.5)  # Close=98.5
@@ -251,9 +240,8 @@ class TestCloseInvalidation:
     def test_touch_without_close_check(self):
         """Can disable close-based invalidation."""
         layer = ReferenceLayer()
-        swing = make_swing("s1", 110.0, 100.0)  # Range 10
-        swings = [swing]
-        layer.classify_swings(swings)
+        swing = make_swing("s1", 110.0, 100.0)  # No parents = big, range 10
+        layer.get_reference_swings([swing])
 
         # Touch is valid, close is not - but close check is disabled
         bar = make_bar(20, 100.0, 101.0, 99.5, 98.5)  # Low=99.5 OK, Close=98.5 BAD
@@ -272,8 +260,7 @@ class TestBearSwingInvalidation:
         layer = ReferenceLayer()
         # Bear swing: defending high at 110, origin at low 100
         swing = make_swing("s1", 110.0, 100.0, direction="bear")
-        swings = [swing]
-        layer.classify_swings(swings)
+        layer.get_reference_swings([swing])
 
         # High exceeds defended pivot - should invalidate
         bar = make_bar(20, 109.0, 112.0, 108.0, 109.0)  # High=112
@@ -286,9 +273,8 @@ class TestBearSwingInvalidation:
     def test_bear_swing_within_tolerance(self):
         """Bear swing tolerates touch within tolerance."""
         layer = ReferenceLayer()
-        swing = make_swing("s1", 110.0, 100.0, direction="bear")  # Range 10
-        swings = [swing]
-        layer.classify_swings(swings)
+        swing = make_swing("s1", 110.0, 100.0, direction="bear")  # No parents, range 10
+        layer.get_reference_swings([swing])
 
         # High 1 point above pivot (10% of range) - within 0.15 tolerance
         bar = make_bar(20, 109.0, 111.0, 108.0, 109.0)  # High=111
@@ -298,11 +284,79 @@ class TestBearSwingInvalidation:
         assert result.is_invalidated is False
 
 
+class TestCompletion:
+    """Test completion rules based on hierarchy."""
+
+    def test_small_swing_completes_at_2x(self):
+        """Small swing (has parent) completes at 2× extension."""
+        layer = ReferenceLayer()
+        parent = make_swing("parent", 200.0, 100.0)
+        # Child bull swing: pivot=140, origin=150, range=10
+        # 2× target = pivot + 2*(origin - pivot) = 140 + 2*10 = 160
+        child = make_swing("child", 150.0, 140.0)
+        child.add_parent(parent)
+        layer.get_reference_swings([parent, child])
+
+        # Bar that hits 2× target
+        bar = make_bar(20, 158.0, 161.0, 157.0, 160.0)  # High=161 > 160
+
+        result = layer.check_completion(child, bar)
+
+        assert result.is_completed is True
+        assert result.reason == "reached_2x_extension"
+
+    def test_small_swing_not_completed_before_2x(self):
+        """Small swing does not complete before reaching 2× extension."""
+        layer = ReferenceLayer()
+        parent = make_swing("parent", 200.0, 100.0)
+        child = make_swing("child", 150.0, 140.0)  # 2× target = 160
+        child.add_parent(parent)
+        layer.get_reference_swings([parent, child])
+
+        # Bar below 2× target
+        bar = make_bar(20, 155.0, 158.0, 154.0, 157.0)  # High=158 < 160
+
+        result = layer.check_completion(child, bar)
+
+        assert result.is_completed is False
+
+    def test_big_swing_never_completes(self):
+        """Big swing (no parent) never completes."""
+        layer = ReferenceLayer()
+        # Bull swing: pivot=100, origin=110, range=10, 2× target = 120
+        swing = make_swing("s1", 110.0, 100.0)  # No parents = big
+        layer.get_reference_swings([swing])
+
+        # Bar that would normally trigger 2× completion
+        bar = make_bar(20, 118.0, 125.0, 117.0, 122.0)  # High=125 > 120
+
+        result = layer.check_completion(swing, bar)
+
+        assert result.is_completed is False
+
+    def test_bear_small_swing_completes_at_2x(self):
+        """Bear small swing completes at 2× extension (going down)."""
+        layer = ReferenceLayer()
+        parent = make_swing("parent", 200.0, 100.0)
+        # Bear child: pivot=160 (high), origin=150 (low), range=10
+        # 2× target = pivot - 2*(pivot - origin) = 160 - 2*10 = 140
+        child = make_swing("child", 160.0, 150.0, direction="bear")
+        child.add_parent(parent)
+        layer.get_reference_swings([parent, child])
+
+        # Bar that hits 2× target (going down)
+        bar = make_bar(20, 142.0, 143.0, 138.0, 141.0)  # Low=138 < 140
+
+        result = layer.check_completion(child, bar)
+
+        assert result.is_completed is True
+
+
 class TestGetReferenceSwings:
     """Test the main entry point for getting reference swings."""
 
-    def test_get_reference_swings_returns_classified(self):
-        """get_reference_swings returns classified swings."""
+    def test_get_reference_swings_returns_all(self):
+        """get_reference_swings returns all swings with annotations."""
         layer = ReferenceLayer()
         parent = make_swing("parent", 200.0, 100.0)
         child = make_swing("child", 170.0, 130.0)
@@ -325,20 +379,20 @@ class TestUpdateInvalidationOnBar:
     def test_returns_invalidated_swings(self):
         """update_invalidation_on_bar returns only invalidated swings."""
         layer = ReferenceLayer()
-        swing1 = make_swing("s1", 110.0, 100.0)  # Bull, range 10
-        swing2 = make_swing("s2", 120.0, 115.0)  # Bull, range 5
-        # Make swing1 the big one
-        swings = [swing1, swing2]
-        layer.classify_swings(swings)
+        parent = make_swing("parent", 200.0, 100.0)  # Big, has tolerance
+        child = make_swing("child", 110.0, 100.0)  # Small after adding parent
+        child.add_parent(parent)
+        swings = [parent, child]
 
-        # Bar that invalidates swing2 (small) but not swing1 (big)
-        bar = make_bar(20, 100.0, 101.0, 99.5, 100.0)  # Low=99.5
+        # Bar that invalidates child (small, no tolerance) but not parent (big)
+        # Child pivot = 100, any violation invalidates
+        bar = make_bar(20, 100.0, 101.0, 99.5, 100.0)  # Low=99.5 < pivot
 
         result = layer.update_invalidation_on_bar(swings, bar)
 
-        # swing2 should be invalidated (no tolerance, low < pivot)
+        # child should be invalidated (no tolerance, low < pivot)
         invalidated_ids = [s.swing_id for s, _ in result]
-        assert "s2" in invalidated_ids
+        assert "child" in invalidated_ids
 
     def test_skips_inactive_swings(self):
         """update_invalidation_on_bar skips non-active swings."""
@@ -346,7 +400,6 @@ class TestUpdateInvalidationOnBar:
         active_swing = make_swing("active", 110.0, 100.0)
         inactive_swing = make_swing("inactive", 110.0, 100.0, status="invalidated")
         swings = [active_swing, inactive_swing]
-        layer.classify_swings(swings)
 
         bar = make_bar(20, 100.0, 101.0, 98.0, 100.0)  # Violates both
 
@@ -358,14 +411,55 @@ class TestUpdateInvalidationOnBar:
         assert "inactive" not in invalidated_ids
 
 
+class TestUpdateCompletionOnBar:
+    """Test batch completion checking."""
+
+    def test_returns_completed_swings(self):
+        """update_completion_on_bar returns only completed swings."""
+        layer = ReferenceLayer()
+        parent = make_swing("parent", 200.0, 100.0)  # Big, never completes
+        # Child: pivot=140, origin=150, range=10, 2× target=160
+        child = make_swing("child", 150.0, 140.0)
+        child.add_parent(parent)
+        swings = [parent, child]
+
+        # Bar that reaches 2× for child
+        bar = make_bar(20, 158.0, 162.0, 157.0, 161.0)  # High=162 > 160
+
+        result = layer.update_completion_on_bar(swings, bar)
+
+        # Only child should complete
+        completed_ids = [s.swing_id for s, _ in result]
+        assert "child" in completed_ids
+        assert "parent" not in completed_ids
+
+    def test_skips_inactive_swings(self):
+        """update_completion_on_bar skips non-active swings."""
+        layer = ReferenceLayer()
+        parent = make_swing("parent", 200.0, 100.0)
+        active_child = make_swing("active", 150.0, 140.0)
+        active_child.add_parent(parent)
+        inactive_child = make_swing("inactive", 150.0, 140.0, status="completed")
+        inactive_child.add_parent(parent)
+        swings = [parent, active_child, inactive_child]
+
+        bar = make_bar(20, 158.0, 165.0, 157.0, 163.0)  # High=165 > 160
+
+        result = layer.update_completion_on_bar(swings, bar)
+
+        completed_ids = [s.swing_id for s, _ in result]
+        assert "active" in completed_ids
+        assert "inactive" not in completed_ids
+
+
 class TestGetSwingInfo:
     """Test retrieving swing info by ID."""
 
     def test_get_existing_swing_info(self):
-        """get_swing_info returns info for classified swing."""
+        """get_swing_info returns info for processed swing."""
         layer = ReferenceLayer()
         swing = make_swing("s1", 110.0, 100.0)
-        layer.classify_swings([swing])
+        layer.get_reference_swings([swing])
 
         info = layer.get_swing_info("s1")
 
@@ -384,18 +478,18 @@ class TestGetSwingInfo:
 class TestEmptyInput:
     """Test edge cases with empty input."""
 
-    def test_classify_empty_list(self):
-        """classify_swings handles empty list."""
-        layer = ReferenceLayer()
-
-        result = layer.classify_swings([])
-
-        assert result == {}
-
     def test_get_reference_swings_empty(self):
         """get_reference_swings handles empty list."""
         layer = ReferenceLayer()
 
         result = layer.get_reference_swings([])
+
+        assert result == []
+
+    def test_get_big_swings_empty(self):
+        """get_big_swings handles empty list."""
+        layer = ReferenceLayer()
+
+        result = layer.get_big_swings([])
 
         assert result == []

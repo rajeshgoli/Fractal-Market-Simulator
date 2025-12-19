@@ -346,11 +346,18 @@ Orphaned origins are pruned each bar using the 10% rule: if any two origins are 
 
 Post-processes DAG output to produce trading references. Applies semantic filtering rules from `Docs/Reference/valid_swings.md`.
 
+**Big vs Small (hierarchy-based definition):**
+- **Big swing** = `len(swing.parents) == 0` (root level, no parents)
+- **Small swing** = `len(swing.parents) > 0` (has parent)
+
+This is determined by hierarchy, not range percentile.
+
 ```python
 from src.swing_analysis.reference_layer import (
     ReferenceLayer,
     ReferenceSwingInfo,
     InvalidationResult,
+    CompletionResult,
 )
 from src.swing_analysis.hierarchical_detector import calibrate
 from src.swing_analysis.swing_config import SwingConfig
@@ -370,39 +377,57 @@ for info in reference_swings:
     if result.is_invalidated:
         print(f"{info.swing.swing_id} invalidated: {result.reason}")
 
-# Get only big swings (top 10% by range)
+# Check completion on new bar
+for info in reference_swings:
+    result = ref_layer.check_completion(info.swing, bar)
+    if result.is_completed:
+        print(f"{info.swing.swing_id} completed")
+
+# Get only big swings (root level, no parents)
 big_swings = ref_layer.get_big_swings(swings)
 
 # Batch invalidation check
 invalidated = ref_layer.update_invalidation_on_bar(swings, bar)
 for swing, result in invalidated:
     swing.invalidate()
+
+# Batch completion check
+completed = ref_layer.update_completion_on_bar(swings, bar)
+for swing, result in completed:
+    swing.complete()
 ```
 
 **Key operations:**
 | Method | Purpose |
 |--------|---------|
-| `classify_swings(swings)` | Compute big/small classification, set tolerances |
+| `get_reference_swings(swings)` | Get all swings with tolerances computed |
 | `check_invalidation(swing, bar)` | Apply Rule 2.2 with touch/close thresholds |
-| `get_reference_swings(swings)` | Get all swings that pass filters |
-| `get_big_swings(swings)` | Get only big swings (top 10%) |
+| `check_completion(swing, bar)` | Check if swing should be marked complete |
+| `get_big_swings(swings)` | Get only big swings (root level, no parents) |
+| `update_invalidation_on_bar(swings, bar)` | Batch invalidation check |
+| `update_completion_on_bar(swings, bar)` | Batch completion check |
 
 *Note: Separation filtering (Rules 4.1, 4.2) has been removed (#164). The DAG handles separation at formation time via 10% pruning of orphaned origins.*
 
 **Invalidation thresholds (Rule 2.2):**
 | Swing Size | Touch Tolerance | Close Tolerance |
 |------------|-----------------|-----------------|
-| Big (top 10%) | 0.15 × range | 0.10 × range |
-| Child of big | 0.10 × range | 0.10 × range |
-| Small | 0 (absolute) | 0 (absolute) |
+| Big (no parent) | 0.15 × range | 0.10 × range |
+| Small (has parent) | 0 (absolute) | 0 (absolute) |
+
+**Completion rules:**
+| Swing Size | Completion Rule |
+|------------|-----------------|
+| Big (no parent) | Never complete — keep active indefinitely |
+| Small (has parent) | Complete at 2× extension |
 
 **ReferenceSwingInfo fields:**
 - `swing`: The underlying SwingNode
-- `is_big`: Whether this is a big swing (top 10%)
 - `touch_tolerance`: Tolerance for wick violations
 - `close_tolerance`: Tolerance for close violations
 - `is_reference`: Whether swing passes all filters
 - `filter_reason`: Why filtered (if not reference)
+- `is_big()`: Method to check if swing is big (no parents)
 
 ---
 

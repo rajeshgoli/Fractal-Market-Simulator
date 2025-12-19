@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2025-12-19
 
@@ -13,6 +13,7 @@
 - **#160** — Wire ReferenceLayer into API pipeline (filtering was missing)
 - **#163** — Sibling swing detection with orphaned origins and 10% pruning
 - **#164** — Remove legacy candidate lists and redundant separation filtering
+- **#165** — Simplify Reference Layer: hierarchy-based big/small, completion rules
 
 ---
 
