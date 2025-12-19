@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock, ChevronDown, ChevronLeft, ChevronRight, X, Timer, TimerOff } from 'lucide-react';
 import { PLAYBACK_SPEEDS } from '../constants';
 import { PlaybackState, AggregationScale } from '../types';
 
@@ -43,6 +43,9 @@ interface PlaybackControlsProps {
   onNavigatePrev?: () => void;
   onNavigateNext?: () => void;
   onDismissLinger?: () => void;
+  // Linger toggle
+  lingerEnabled?: boolean;
+  onToggleLinger?: () => void;
 }
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
@@ -76,6 +79,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onNavigatePrev,
   onNavigateNext,
   onDismissLinger,
+  lingerEnabled = true,
+  onToggleLinger,
 }) => {
   const isPlaying = playbackState === PlaybackState.PLAYING;
 
@@ -247,6 +252,23 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
           <span>bar</span>
         </div>
+
+        {/* Linger Toggle */}
+        {onToggleLinger && (
+          <button
+            onClick={onToggleLinger}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-colors ${
+              lingerEnabled
+                ? 'bg-trading-orange/10 border-trading-orange/30 text-trading-orange hover:bg-trading-orange/20'
+                : 'bg-app-bg border-app-border text-app-muted hover:text-white hover:bg-app-card'
+            }`}
+            title={lingerEnabled ? "Linger ON: Pause on events" : "Linger OFF: Continuous playback"}
+            aria-label={lingerEnabled ? "Disable linger (pause on events)" : "Enable linger (pause on events)"}
+          >
+            {lingerEnabled ? <Timer size={14} /> : <TimerOff size={14} />}
+            <span className="text-xs font-medium">Linger</span>
+          </button>
+        )}
       </div>
 
       {/* Center: Linger Status */}

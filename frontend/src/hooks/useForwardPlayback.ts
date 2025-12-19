@@ -10,6 +10,7 @@ interface UseForwardPlaybackOptions {
   barsPerAdvance: number;  // How many source bars to advance per tick (aggregation factor)
   filters: FilterState[];  // Event type filters
   enabledScales: Set<SwingScaleKey>;  // Scale filters
+  lingerEnabled?: boolean;  // Whether to pause on events (default: true)
   onNewBars?: (bars: BarData[]) => void;
   onSwingStateChange?: (state: ReplaySwingState) => void;
   onRefreshAggregatedBars?: () => void;  // Called after advance to refresh chart bars
@@ -55,6 +56,7 @@ export function useForwardPlayback({
   barsPerAdvance,
   filters,
   enabledScales,
+  lingerEnabled = true,
   onNewBars,
   onSwingStateChange,
   onRefreshAggregatedBars,
@@ -278,8 +280,8 @@ export function useForwardPlayback({
 
       // Filter events for linger based on event type and scale filters
       const filteredEvents = filterEvents(response.events);
-      if (filteredEvents.length > 0) {
-        // Trigger linger only for filtered events
+      if (filteredEvents.length > 0 && lingerEnabled) {
+        // Trigger linger only for filtered events when linger is enabled
         enterLinger(filteredEvents);
       }
     } catch (err) {
@@ -289,7 +291,7 @@ export function useForwardPlayback({
     } finally {
       advancePendingRef.current = false;
     }
-  }, [calibrationBarCount, currentPosition, barsPerAdvance, endOfData, clearTimers, enterLinger, filterEvents, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
+  }, [calibrationBarCount, currentPosition, barsPerAdvance, endOfData, clearTimers, enterLinger, filterEvents, lingerEnabled, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
 
   // Ref to hold the latest advanceBar function
   const advanceBarRef = useRef<() => Promise<void>>(async () => {});
@@ -641,7 +643,9 @@ export function useForwardPlayback({
         // Check for filtered events (only linger on events matching filters)
         const filteredEvents = filterEvents(response.events);
         if (filteredEvents.length > 0) {
-          enterLinger(filteredEvents);
+          if (lingerEnabled) {
+            enterLinger(filteredEvents);
+          }
           foundEvent = true;
         }
       } catch (err) {
@@ -651,7 +655,7 @@ export function useForwardPlayback({
     }
 
     advancePendingRef.current = false;
-  }, [endOfData, playbackState, exitLinger, clearTimers, calibrationBarCount, currentPosition, enterLinger, filterEvents, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
+  }, [endOfData, playbackState, exitLinger, clearTimers, calibrationBarCount, currentPosition, enterLinger, filterEvents, lingerEnabled, onNewBars, onSwingStateChange, onRefreshAggregatedBars]);
 
   // Cleanup on unmount
   useEffect(() => {

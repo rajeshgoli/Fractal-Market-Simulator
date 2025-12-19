@@ -209,6 +209,9 @@ export const Replay: React.FC = () => {
   // Show stats toggle (for displaying calibration stats during playback)
   const [showStats, setShowStats] = useState(false);
 
+  // Linger toggle (pause on events)
+  const [lingerEnabled, setLingerEnabled] = useState(true);
+
   // Use hook to filter and rank swings based on display config
   // filteredActiveSwings is limited by activeSwingCount (for chart display)
   // allNavigableSwings includes all swings for enabled scales (for navigation)
@@ -311,6 +314,7 @@ export const Replay: React.FC = () => {
     barsPerAdvance,  // How many source bars to skip per tick (aggregation factor)
     filters,
     enabledScales: displayConfig.enabledScales,
+    lingerEnabled,  // Whether to pause on events
     onNewBars: useCallback((newBars: BarData[]) => {
       // Append new bars to source bars for chart display
       setSourceBars(prev => [...prev, ...newBars]);
@@ -1202,6 +1206,8 @@ export const Replay: React.FC = () => {
               onNavigatePrev={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.navigatePrevEvent : playback.navigatePrevEvent}
               onNavigateNext={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.navigateNextEvent : playback.navigateNextEvent}
               onDismissLinger={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.dismissLinger : playback.dismissLinger}
+              lingerEnabled={lingerEnabled}
+              onToggleLinger={calibrationPhase === CalibrationPhase.PLAYING ? () => setLingerEnabled(prev => !prev) : undefined}
             />
           </div>
 
