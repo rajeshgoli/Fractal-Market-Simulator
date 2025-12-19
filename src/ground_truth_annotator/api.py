@@ -86,15 +86,6 @@ def get_state() -> AppState:
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Redirect to Replay View."""
-    return HTMLResponse(
-        content='<html><head><meta http-equiv="refresh" content="0; url=/replay" /></head></html>',
-        status_code=200
-    )
-
-
-@app.get("/replay", response_class=HTMLResponse)
-async def replay_page():
     """Serve the Replay View UI - React frontend."""
     project_root = Path(__file__).parent.parent.parent
     react_index = project_root / "frontend" / "dist" / "index.html"
@@ -105,6 +96,15 @@ async def replay_page():
 
     return HTMLResponse(
         content="<h1>Replay View</h1><p>React build not found. Run 'npm run build' in frontend/</p>",
+        status_code=200
+    )
+
+
+@app.get("/replay", response_class=HTMLResponse)
+async def replay_redirect():
+    """Redirect /replay to / for backwards compatibility."""
+    return HTMLResponse(
+        content='<html><head><meta http-equiv="refresh" content="0; url=/" /></head></html>',
         status_code=200
     )
 

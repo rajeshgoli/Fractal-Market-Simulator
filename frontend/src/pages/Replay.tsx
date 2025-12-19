@@ -8,7 +8,7 @@ import { ExplanationPanel } from '../components/ExplanationPanel';
 import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
-import { fetchBars, fetchDiscretizationState, runDiscretization, fetchDiscretizationEvents, fetchDiscretizationSwings, fetchSession, fetchDetectedSwings, fetchCalibration, ReplayEvent } from '../lib/api';
+import { fetchBars, fetchSession, fetchDetectedSwings, fetchCalibration, ReplayEvent } from '../lib/api';
 import { INITIAL_FILTERS, LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
@@ -167,8 +167,9 @@ export const Replay: React.FC = () => {
   const [calibrationBars, setCalibrationBars] = useState<BarData[]>([]); // Bars at calibration end
   const [chart1Bars, setChart1Bars] = useState<BarData[]>([]);
   const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
-  const [events, setEvents] = useState<DiscretizationEvent[]>([]);
-  const [swings, setSwings] = useState<Record<string, DiscretizationSwing>>({});
+  // Legacy playback state - kept for usePlayback hook compatibility
+  const [events] = useState<DiscretizationEvent[]>([]);
+  const [swings] = useState<Record<string, DiscretizationSwing>>({});
   const [detectedSwings, setDetectedSwings] = useState<DetectedSwing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -520,26 +521,6 @@ export const Replay: React.FC = () => {
         ]);
         setChart1Bars(bars1);
         setChart2Bars(bars2);
-
-        // Run discretization if needed
-        const state = await fetchDiscretizationState();
-        if (!state.has_log) {
-          await runDiscretization();
-        }
-
-        // Load events and swings
-        const [eventData, swingData] = await Promise.all([
-          fetchDiscretizationEvents(),
-          fetchDiscretizationSwings(),
-        ]);
-        setEvents(eventData);
-
-        // Index swings by ID
-        const swingMap: Record<string, DiscretizationSwing> = {};
-        for (const swing of swingData) {
-          swingMap[swing.swing_id] = swing;
-        }
-        setSwings(swingMap);
 
         // Run calibration - this sets playback_index on the backend
         setCalibrationPhase(CalibrationPhase.CALIBRATING);
