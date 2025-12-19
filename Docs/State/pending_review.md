@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-18
 
@@ -12,6 +12,7 @@
 - **#143** — SwingNode dataclass: hierarchical swing structure with DAG parent/child linking
 - **#144** — SwingEvent types: formed/invalidated/completed/level_cross for hierarchical detector
 - **#145** — ReferenceFrame tolerance checks: is_violated, is_formed, is_completed, get_fib_price
+- **#146** — Ground truth annotator removal: archived and deleted per swing detection rewrite spec
 
 ---
 
