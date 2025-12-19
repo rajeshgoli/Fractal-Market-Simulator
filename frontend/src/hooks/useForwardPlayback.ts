@@ -195,6 +195,7 @@ export function useForwardPlayback({
 
   // Enter linger state with events
   const enterLinger = useCallback((events: ReplayEvent[]) => {
+    console.log('[useForwardPlayback] enterLinger: setting isPlayingRef to false');
     isPlayingRef.current = false;
     clearTimers();
     setPlaybackState(PlaybackState.LINGERING);
@@ -233,14 +234,28 @@ export function useForwardPlayback({
 
   // Advance bars (call API with barsPerAdvance)
   const advanceBar = useCallback(async () => {
-    if (endOfData || advancePendingRef.current) return;
+    if (endOfData || advancePendingRef.current) {
+      console.warn('[useForwardPlayback] advanceBar returning early:', {
+        endOfData,
+        advancePending: advancePendingRef.current,
+      });
+      return;
+    }
 
     advancePendingRef.current = true;
     try {
       const response = await advanceReplay(calibrationBarCount, currentPosition, barsPerAdvance);
 
+      console.log('[useForwardPlayback] advance response:', {
+        newBarsCount: response.new_bars.length,
+        endOfData: response.end_of_data,
+        currentBarIndex: response.current_bar_index,
+        eventsCount: response.events.length,
+      });
+
       // Update end of data
       if (response.end_of_data) {
+        console.warn('[useForwardPlayback] end of data reached at bar', response.current_bar_index);
         setEndOfData(true);
         clearTimers();
         setPlaybackState(PlaybackState.STOPPED);
@@ -281,6 +296,7 @@ export function useForwardPlayback({
       // Filter events for linger based on event type and scale filters
       const filteredEvents = filterEvents(response.events);
       if (filteredEvents.length > 0 && lingerEnabled) {
+        console.log('[useForwardPlayback] entering linger with', filteredEvents.length, 'events');
         // Trigger linger only for filtered events when linger is enabled
         enterLinger(filteredEvents);
       }
@@ -303,11 +319,18 @@ export function useForwardPlayback({
 
   // Start playback
   const startPlayback = useCallback(() => {
+    console.log('[useForwardPlayback] startPlayback called:', {
+      playbackState,
+      endOfData,
+      currentPosition,
+    });
+
     if (playbackState === PlaybackState.LINGERING) {
       exitLinger();
     }
 
     if (endOfData) {
+      console.warn('[useForwardPlayback] startPlayback: endOfData is true, returning early');
       return;
     }
 
@@ -316,14 +339,25 @@ export function useForwardPlayback({
 
     // Use setTimeout chain instead of setInterval for async operations
     const scheduleNext = () => {
-      if (!isPlayingRef.current) return;
+      if (!isPlayingRef.current) {
+        console.warn('[useForwardPlayback] scheduleNext: isPlayingRef is false, not scheduling');
+        return;
+      }
 
       playbackIntervalRef.current = window.setTimeout(async () => {
-        if (!isPlayingRef.current) return;
+        if (!isPlayingRef.current) {
+          console.warn('[useForwardPlayback] timeout callback: isPlayingRef is false, returning');
+          return;
+        }
         await advanceBarRef.current();
         // Only schedule next if still playing (not in linger)
         if (isPlayingRef.current && !advancePendingRef.current) {
           scheduleNext();
+        } else {
+          console.warn('[useForwardPlayback] not scheduling next:', {
+            isPlaying: isPlayingRef.current,
+            advancePending: advancePendingRef.current,
+          });
         }
       }, playbackIntervalMs);
     };
@@ -357,6 +391,12 @@ export function useForwardPlayback({
 
   // Step forward (single bar)
   const stepForward = useCallback(async () => {
+    console.log('[useForwardPlayback] stepForward called:', {
+      playbackState,
+      endOfData,
+      advancePending: advancePendingRef.current,
+      currentPosition,
+    });
     if (playbackState === PlaybackState.LINGERING) {
       exitLinger();
     }
@@ -366,7 +406,7 @@ export function useForwardPlayback({
     }
     setPlaybackState(PlaybackState.PAUSED);
     await advanceBar();
-  }, [playbackState, clearTimers, exitLinger, advanceBar]);
+  }, [playbackState, clearTimers, exitLinger, advanceBar, currentPosition, endOfData]);
 
   // Step back (not supported in forward-only mode - just pause)
   const stepBack = useCallback(() => {
