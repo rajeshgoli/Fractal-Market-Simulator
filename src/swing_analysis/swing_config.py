@@ -55,6 +55,9 @@ class SwingConfig:
         bull: Configuration for bull swing detection.
         bear: Configuration for bear swing detection.
         lookback_bars: Number of bars to look back for candidate extrema.
+        staleness_threshold: Multiplier for staleness pruning (default 2.0).
+            A swing is pruned as stale when price moves N × its range
+            without the swing changing. Higher values = more conservative pruning.
 
     Example:
         >>> config = SwingConfig.default()
@@ -68,6 +71,7 @@ class SwingConfig:
     bull: DirectionConfig = field(default_factory=DirectionConfig)
     bear: DirectionConfig = field(default_factory=DirectionConfig)
     lookback_bars: int = 50
+    staleness_threshold: float = 2.0
 
     @classmethod
     def default(cls) -> "SwingConfig":
@@ -80,6 +84,7 @@ class SwingConfig:
             "bull": asdict(self.bull),
             "bear": asdict(self.bear),
             "lookback_bars": self.lookback_bars,
+            "staleness_threshold": self.staleness_threshold,
         }
 
     def to_json(self) -> str:
@@ -95,6 +100,7 @@ class SwingConfig:
             bull=DirectionConfig(**bull_data) if bull_data else DirectionConfig(),
             bear=DirectionConfig(**bear_data) if bear_data else DirectionConfig(),
             lookback_bars=data.get("lookback_bars", 50),
+            staleness_threshold=data.get("staleness_threshold", 2.0),
         )
 
     @classmethod
@@ -121,6 +127,7 @@ class SwingConfig:
             bull=DirectionConfig(**bull_dict),
             bear=self.bear,
             lookback_bars=self.lookback_bars,
+            staleness_threshold=self.staleness_threshold,
         )
 
     def with_bear(self, **kwargs: Any) -> "SwingConfig":
@@ -135,6 +142,7 @@ class SwingConfig:
             bull=self.bull,
             bear=DirectionConfig(**bear_dict),
             lookback_bars=self.lookback_bars,
+            staleness_threshold=self.staleness_threshold,
         )
 
     def with_lookback(self, lookback_bars: int) -> "SwingConfig":
@@ -147,4 +155,18 @@ class SwingConfig:
             bull=self.bull,
             bear=self.bear,
             lookback_bars=lookback_bars,
+            staleness_threshold=self.staleness_threshold,
+        )
+
+    def with_staleness(self, staleness_threshold: float) -> "SwingConfig":
+        """
+        Create a new config with modified staleness threshold.
+
+        Since SwingConfig is frozen, this creates a new instance.
+        """
+        return SwingConfig(
+            bull=self.bull,
+            bear=self.bear,
+            lookback_bars=self.lookback_bars,
+            staleness_threshold=staleness_threshold,
         )

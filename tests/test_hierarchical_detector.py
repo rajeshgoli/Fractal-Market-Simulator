@@ -236,7 +236,13 @@ class TestSwingFormation:
         assert found_expected, "Expected bull swing 5100->5000 not found"
 
     def test_bear_swing_forms(self):
-        """Bear swing forms when price falls from high to formation threshold."""
+        """Bear swing forms when price falls from high to formation threshold.
+
+        Note: With DAG-based algorithm, swings form more aggressively using
+        bar H/L when temporal ordering is known (inside bars). The swing may
+        form at bar 1 when bar.low crosses the formation threshold, rather
+        than waiting for close at bar 2.
+        """
         config = SwingConfig(
             bull=DirectionConfig(formation_fib=0.287, self_separation=0.10),
             bear=DirectionConfig(formation_fib=0.287, self_separation=0.10),
@@ -256,8 +262,9 @@ class TestSwingFormation:
         bar2 = make_bar(2, 5080.0, 5085.0, 5060.0, 5065.0)
         events2 = detector.process_bar(bar2)
 
-        formed_events = [e for e in events2 if isinstance(e, SwingFormedEvent)]
-        assert len(formed_events) >= 1
+        # Check that formed events occurred at some point (bar 1 or 2)
+        all_formed = [e for e in events0 + events1 + events2 if isinstance(e, SwingFormedEvent)]
+        assert len(all_formed) >= 1
 
         bear_swings = [s for s in detector.get_active_swings() if s.direction == "bear"]
         assert len(bear_swings) >= 1
@@ -314,7 +321,12 @@ class TestInvalidation:
     """Test swing invalidation logic."""
 
     def test_bull_swing_invalidates_on_low_violation(self):
-        """Bull swing invalidates when price goes below defended low."""
+        """Bull swing invalidates when price goes below defended low.
+
+        Note: With default config, swings get tolerance (15% for big swings).
+        The violation price must exceed the tolerance to trigger invalidation.
+        For a 100-point swing, tolerance = 15, so invalidation occurs below 4985.
+        """
         config = SwingConfig(lookback_bars=50)
         detector = HierarchicalDetector(config)
 
@@ -330,13 +342,13 @@ class TestInvalidation:
         if initial_swings == 0:
             pytest.skip("No swing formed to test invalidation")
 
-        # Violate the low at 5000
-        bar3 = make_bar(3, 5020.0, 5030.0, 4990.0, 4995.0)
+        # Violate the low at 5000 (must exceed tolerance: 5000 - 15 = 4985)
+        bar3 = make_bar(3, 5020.0, 5030.0, 4980.0, 4982.0)
         events3 = detector.process_bar(bar3)
 
         invalidated = [e for e in events3 if isinstance(e, SwingInvalidatedEvent)]
         assert len(invalidated) >= 1
-        assert invalidated[0].violation_price == Decimal("4990")
+        assert invalidated[0].violation_price == Decimal("4980")
 
     def test_tolerance_for_big_swings(self):
         """Big swings have tolerance before invalidation."""
