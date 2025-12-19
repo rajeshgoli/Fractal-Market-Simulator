@@ -4,6 +4,49 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 19, 2025 - DAG Visualization Mode Doesn't Work
+
+**Context:** User tested DAG visualization mode (#167). All implementation issues (#168-#172) were marked complete, but the tool is not usable.
+
+### What User Expected (from spec)
+
+1. **Incremental build from bar 0** — Watch the DAG construct bar by bar
+2. **Working playback** — Play/step controls advance bars one at a time
+3. **Legs as connecting lines** — Lines from origin to pivot on the chart
+4. **Linger toggle** — Pause on leg lifecycle events
+
+### What Was Delivered
+
+1. **Pre-calibrates entire window** — Shows static result, not incremental build
+2. **Playback controls non-functional** — Play, prev, fwd, first, last buttons do nothing
+3. **Horizontal pivot price lines** — Not leg connections
+4. **Linger toggle not visible** — Tied to broken playback
+
+### User Feedback
+
+> "This isn't really usable in its current state. First, it runs the entire calibration window. For DAG I thought the idea was to see it build incrementally, not see it fully built out."
+
+> "If I start with a much smaller window, it doesn't play forward. Play, prev, fwd, first, last — none of those buttons do anything."
+
+> "It displays horizontal bars for pivots which are far too many. What I want to see is legs grow, branch, get pruned and so on."
+
+### User Decision
+
+When asked about leg visualization:
+- **Lines connecting pivots from beginning to end** — Simple lines on the price chart
+- **Build from first bar** — As spec describes, not pre-calibrated
+
+### Handoff
+
+- **#179** — DAG visualization doesn't match spec (rework required)
+- Product direction updated: P0 status changed from "Ready for engineering" to "BLOCKED"
+
+### Key Insight
+
+The spec was clear. Implementation missed the core value prop: watching the algorithm "think" bar by bar. This is a "fix to spec" situation, not a rethink.
+
+---
+
 ## December 18, 2025 - Stats Panel Visibility and Continuity
 
 **Context:** User feedback on calibration/stats panel UX during annotation workflow.
