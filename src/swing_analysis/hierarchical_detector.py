@@ -61,6 +61,9 @@ class DetectorState:
         fib_levels_crossed: Map of swing_id -> last Fib level for cross tracking.
         all_swing_ranges: List of all swing ranges seen, for big swing calculation.
         seen_tf_bars: Map of timeframe -> set of aggregated bar indices already processed.
+        _cached_big_threshold_bull: Cached big swing threshold for bull swings.
+        _cached_big_threshold_bear: Cached big swing threshold for bear swings.
+        _threshold_valid: Whether the cached thresholds are valid.
     """
 
     active_swings: List[SwingNode] = field(default_factory=list)
@@ -70,6 +73,10 @@ class DetectorState:
     fib_levels_crossed: Dict[str, float] = field(default_factory=dict)
     all_swing_ranges: List[Decimal] = field(default_factory=list)
     seen_tf_bars: Dict[int, Set[int]] = field(default_factory=lambda: {60: set(), 240: set(), 1440: set()})
+    # Cached big swing thresholds (performance optimization #155)
+    _cached_big_threshold_bull: Optional[Decimal] = None
+    _cached_big_threshold_bear: Optional[Decimal] = None
+    _threshold_valid: bool = False
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization."""
@@ -96,6 +103,10 @@ class DetectorState:
             "fib_levels_crossed": self.fib_levels_crossed,
             "all_swing_ranges": [str(r) for r in self.all_swing_ranges],
             "seen_tf_bars": {str(tf): list(bars) for tf, bars in self.seen_tf_bars.items()},
+            # Cache fields (will be recomputed on restore, but included for completeness)
+            "_cached_big_threshold_bull": str(self._cached_big_threshold_bull) if self._cached_big_threshold_bull is not None else None,
+            "_cached_big_threshold_bear": str(self._cached_big_threshold_bear) if self._cached_big_threshold_bear is not None else None,
+            "_threshold_valid": self._threshold_valid,
         }
 
     @classmethod
@@ -134,6 +145,10 @@ class DetectorState:
             if tf in seen_tf_bars:
                 seen_tf_bars[tf] = set(bars_list)
 
+        # Restore cache fields if present (they'll be recomputed on first use anyway)
+        cached_bull = data.get("_cached_big_threshold_bull")
+        cached_bear = data.get("_cached_big_threshold_bear")
+
         return cls(
             active_swings=list(swing_map.values()),
             candidate_highs=[
@@ -149,6 +164,9 @@ class DetectorState:
                 Decimal(r) for r in data.get("all_swing_ranges", [])
             ],
             seen_tf_bars=seen_tf_bars,
+            _cached_big_threshold_bull=Decimal(cached_bull) if cached_bull is not None else None,
+            _cached_big_threshold_bear=Decimal(cached_bear) if cached_bear is not None else None,
+            _threshold_valid=data.get("_threshold_valid", False),
         )
 
 
@@ -259,6 +277,8 @@ class HierarchicalDetector:
         Check each active swing for defended pivot violation.
 
         Uses tolerance based on distance to big swing per Rule 2.2.
+        Includes quick rejection to avoid creating ReferenceFrame for
+        swings that can't possibly be invalidated by this bar.
 
         Args:
             bar: Current bar being processed.
@@ -268,20 +288,38 @@ class HierarchicalDetector:
             List of SwingInvalidatedEvent for any invalidated swings.
         """
         events = []
+        # Pre-convert bar prices once
+        bar_low = Decimal(str(bar.low))
+        bar_high = Decimal(str(bar.high))
+
         for swing in self.state.active_swings:
             if swing.status != "active":
                 continue
 
+            # Quick rejection: can this swing possibly be invalidated?
+            # Avoid expensive tolerance lookup and ReferenceFrame creation
+            # if the bar's price can't possibly violate the defended pivot.
+            if swing.is_bull:
+                # Bull swing: invalidated if bar.low violates defended low
+                # Quick check: if bar.low >= defended_pivot, can't be invalidated
+                if bar_low >= swing.defended_pivot:
+                    continue
+            else:
+                # Bear swing: invalidated if bar.high violates defended high
+                # Quick check: if bar.high <= defended_pivot, can't be invalidated
+                if bar_high <= swing.defended_pivot:
+                    continue
+
+            # Passed quick check - now do full invalidation check
+            check_price = bar_low if swing.is_bull else bar_high
+            tolerance = self._get_tolerance(swing)
+
+            # Full check with tolerance using ReferenceFrame
             frame = ReferenceFrame(
                 anchor0=swing.defended_pivot,
                 anchor1=swing.origin,
                 direction="BULL" if swing.is_bull else "BEAR",
             )
-
-            # Check price to use: low for bull (checking if defended low is violated)
-            # high for bear (checking if defended high is violated)
-            check_price = Decimal(str(bar.low if swing.is_bull else bar.high))
-            tolerance = self._get_tolerance(swing)
 
             if frame.is_violated(check_price, tolerance):
                 swing.invalidate()
@@ -669,6 +707,8 @@ class HierarchicalDetector:
             pivots = self.state.candidate_highs
 
         # Find best candidate pairs
+        formation_threshold = Decimal(str(config.formation_fib))
+
         for origin_idx, origin_price in origins:
             for pivot_idx, pivot_price in pivots:
                 # Origin must come before pivot
@@ -680,22 +720,14 @@ class HierarchicalDetector:
                 if swing_range == 0:
                     continue
 
-                # Create reference frame to check formation
+                # Inline formation check (avoids creating ReferenceFrame for rejected pairs)
+                # For bull: ratio = (close - pivot) / range, check >= formation_fib
+                # For bear: ratio = (pivot - close) / range, check >= formation_fib
                 if direction == "bull":
-                    frame = ReferenceFrame(
-                        anchor0=pivot_price,  # Low is defended
-                        anchor1=origin_price,  # High is origin
-                        direction="BULL",
-                    )
+                    ratio = (close_price - pivot_price) / swing_range
                 else:
-                    frame = ReferenceFrame(
-                        anchor0=pivot_price,  # High is defended
-                        anchor1=origin_price,  # Low is origin
-                        direction="BEAR",
-                    )
-
-                # Check formation trigger (price must breach formation_fib)
-                if not frame.is_formed(close_price, config.formation_fib):
+                    ratio = (pivot_price - close_price) / swing_range
+                if ratio < formation_threshold:
                     continue
 
                 # Check pre-formation protection (ABSOLUTE, no tolerance - Rule 2.1)
@@ -741,12 +773,13 @@ class HierarchicalDetector:
 
                 # Track swing range for big swing calculations
                 self.state.all_swing_ranges.append(swing.range)
+                # Invalidate threshold cache since swing ranges changed
+                self.state._threshold_valid = False
                 self.state.active_swings.append(swing)
 
-                # Initialize level tracking
-                current_ratio = float(frame.ratio(close_price))
+                # Initialize level tracking (reuse already-computed ratio)
                 self.state.fib_levels_crossed[swing.swing_id] = self._find_level_band(
-                    current_ratio
+                    float(ratio)
                 )
 
                 events.append(
@@ -981,12 +1014,40 @@ class HierarchicalDetector:
 
         return 999
 
+    def _update_big_threshold_cache(self) -> None:
+        """
+        Recompute cached big swing thresholds.
+
+        This is called when the cache is invalidated (after a new swing forms).
+        Sorting all_swing_ranges once and caching the thresholds avoids
+        repeated O(n log n) sorts in _is_big_swing().
+        """
+        if not self.state.all_swing_ranges:
+            self.state._cached_big_threshold_bull = Decimal("0")
+            self.state._cached_big_threshold_bear = Decimal("0")
+        else:
+            sorted_ranges = sorted(self.state.all_swing_ranges, reverse=True)
+
+            # Bull threshold
+            bull_idx = int(len(sorted_ranges) * self.config.bull.big_swing_threshold)
+            bull_idx = max(0, min(bull_idx, len(sorted_ranges) - 1))
+            self.state._cached_big_threshold_bull = sorted_ranges[bull_idx]
+
+            # Bear threshold
+            bear_idx = int(len(sorted_ranges) * self.config.bear.big_swing_threshold)
+            bear_idx = max(0, min(bear_idx, len(sorted_ranges) - 1))
+            self.state._cached_big_threshold_bear = sorted_ranges[bear_idx]
+
+        self.state._threshold_valid = True
+
     def _is_big_swing(self, swing: SwingNode, config: DirectionConfig) -> bool:
         """
         Check if swing is a "big swing" (top percentile by range).
 
         Big swings are those whose range is in the top X% of all swings,
         where X is determined by config.big_swing_threshold.
+
+        Uses cached thresholds to avoid O(n log n) sort on every call.
 
         Args:
             swing: The swing to check.
@@ -998,12 +1059,18 @@ class HierarchicalDetector:
         if not self.state.all_swing_ranges:
             return False
 
-        sorted_ranges = sorted(self.state.all_swing_ranges, reverse=True)
-        threshold_idx = int(len(sorted_ranges) * config.big_swing_threshold)
-        threshold_idx = max(0, min(threshold_idx, len(sorted_ranges) - 1))
-        threshold_range = sorted_ranges[threshold_idx]
+        # Recompute cache if invalidated
+        if not self.state._threshold_valid:
+            self._update_big_threshold_cache()
 
-        return swing.range >= threshold_range
+        # Use cached threshold based on swing direction
+        threshold = (
+            self.state._cached_big_threshold_bull
+            if swing.is_bull
+            else self.state._cached_big_threshold_bear
+        )
+
+        return swing.range >= threshold
 
     def get_active_swings(self) -> List[SwingNode]:
         """
