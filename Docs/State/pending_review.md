@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2025-12-19
 
@@ -8,15 +8,7 @@
 
 ## Pending Changes
 
-- **#158** — DAG-based swing detection algorithm (O(n log k) streaming replacement)
-- **#159** — Reference layer for swing filtering and invalidation rules
-- **#160** — Wire ReferenceLayer into API pipeline (filtering was missing)
-- **#163** — Sibling swing detection with orphaned origins and 10% pruning
-- **#164** — Remove legacy candidate lists and redundant separation filtering
-- **#165** — Simplify Reference Layer: hierarchy-based big/small, completion rules
-- **#166** — Redesign calibration UI: tree navigation filters, structure summary, validation quick-checks
-- **#174** — Propagate leg invalidation to swing invalidation (O(n²) performance fix)
-- **#175** — Wire Reference layer invalidation/completion into calibrate() and advance()
+*No pending changes.*
 
 ---
 
@@ -24,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 19 | #158-#175 — DAG algorithm rewrite + Reference layer (9 issues) | All Accepted |
 | Dec 19 | #152, #153, #155, #157 — Performance optimization + cleanup (4 issues) | All Accepted |
 | Dec 18 | #142-#151 — Swing Detection Rewrite (10 issues) | All Accepted; #154 performance issue identified with prescriptive sub-issues #155, #156 |
 | Dec 18 | Swing Detection Rewrite Spec | Approved; all clarifications resolved — ready for implementation |

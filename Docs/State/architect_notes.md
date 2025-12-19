@@ -19,70 +19,49 @@ Read in order:
 - Backend-controlled data boundary for replay (single source of truth)
 - **DAG/Reference separation:** Structural tracking vs semantic filtering
 - **Rules by construction:** Temporal ordering from bar relationships (Type 1/2/3)
+- **Sibling detection:** Orphaned origins with 10% pruning
 
 **Known debt:**
-- `MULTI_TF_LOOKBACKS` constants (12, 6, 5 bars) — documented but not derived from domain primitives. Consider making configurable via SwingConfig if tuning becomes necessary.
+- `MULTI_TF_LOOKBACKS` constants (12, 6, 5 bars) — documented but not derived from domain primitives
+- #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
+- #177 — Minor: missing `invalidated_at_bar` field, AppState/cache duplication
 
 ---
 
-## Current Phase: DAG Algorithm Rewrite
+## Current Phase: DAG Visualization + Validation
 
-### Performance Issue — NOT Resolved
+### DAG Algorithm — COMPLETE
 
-**#154 — HierarchicalDetector Performance** — Optimizations insufficient
+**Performance target achieved:** 4.06s for 10K bars (target was <5s)
 
-| Phase | Issue | Status | Result |
-|-------|-------|--------|--------|
-| Phase 1 | #155 — Quick wins (caching, inlining, lazy checks) | Closed | Minor improvement |
-| Phase 2 | #156 — Dominant extrema tracking | Closed (not needed) | Superseded by #157 |
-| Phase 3 | #157 — Multi-TF candidate generation | Closed | Candidate reduction, but core O(k³) remains |
+| Issue | Feature | Status |
+|-------|---------|--------|
+| #158 | DAG-based swing detection (O(n log k)) | ✅ Complete |
+| #159 | Reference layer for filtering/invalidation | ✅ Complete |
+| #160 | Wire ReferenceLayer into API pipeline | ✅ Complete |
+| #163 | Sibling swing detection (orphaned origins) | ✅ Complete |
+| #164 | Remove legacy candidate lists | ✅ Complete |
+| #165 | Simplify Reference Layer | ✅ Complete |
+| #166 | Redesign calibration UI (tree navigation) | ✅ Complete |
+| #174 | Leg→swing invalidation propagation | ✅ Complete |
+| #175 | Wire Reference layer into calibrate()/advance() | ✅ Complete |
 
-**Actual state:** >80s for 10K bars. 100K window doesn't load in frontend. Core algorithm is O(n × k³) due to candidate pair generation and pre-formation checks. Multi-TF optimization reduced candidates but didn't address fundamental complexity.
+### Next: DAG Visualization Mode
 
-### Active Work: DAG-Based Algorithm
+**Epic #167 — Visual validation tool for DAG algorithm**
 
-**#158 — Implement DAG-based swing detection algorithm**
+Watch the algorithm "think" in real-time to validate detection behavior before proceeding with further development.
 
-Replace O(n × k³) algorithm with O(n log k) DAG-based streaming approach.
+| Issue | Feature | Status |
+|-------|---------|--------|
+| #168 | Add leg lifecycle events to HierarchicalDetector | Open |
+| #169 | Add DAG state API endpoint | Open |
+| #170 | Add linger toggle to playback controls | Open |
+| #171 | Create DAG state panel | Open |
+| #172 | Add leg visualization on charts | Open |
 
-**Core insight:** Instead of generating O(k²) candidate pairs and filtering by rules, build a structure where rules are enforced by construction through temporal ordering.
-
-**Key elements:**
-- Bar type classification (Type 1/2-Bull/2-Bear/3)
-- Temporal ordering by construction (not H/L within single bar)
-- Simultaneous bull/bear leg tracking
-- 0.382 decisive invalidation + 2x staleness pruning
-- Parent-child by pivot derivation (not range containment)
-- DAG/Reference layer separation
-
-**Spec:** `Docs/Working/DAG_spec.md`
-**Target:** <5s for 10K bars, 100K window loads in frontend
-
----
-
-## Recently Reviewed (Dec 19)
-
-### Performance + Cleanup — ALL ACCEPTED
-
-| Issue | Feature | Verdict |
-|-------|---------|---------|
-| #152 | V2 API schemas for hierarchical swings | Accepted |
-| #153 | Old swing detection code removal | Accepted |
-| #155 | Phase 1 performance: caching and inlining | Accepted |
-| #157 | Phase 3 performance: multi-TF candidate generation | Accepted |
-| #156 | Phase 2: Dominant extrema (not needed) | Closed — superseded by #157 |
-
-**Assessment:**
-
-✅ **Architecture:** Multi-TF approach is cleaner than dominant extrema. Reuses existing BarAggregator. Hybrid fallback ensures correctness for short datasets.
-
-✅ **Code Quality:** Symmetric bull/bear logic. ReferenceFrame for coordinate abstraction. Caching properly invalidated.
-
-✅ **Tests:** 551 tests pass. Performance tests verify targets (<5s for 1K bars).
-
-✅ **Cleanup Complete:** Legacy detectors deleted. ReferenceSwing preserved in adapters.py.
-
-⚠️ **Minor:** MULTI_TF_LOOKBACKS magic numbers documented but not configurable. Acceptable for now — tracked in Known debt.
+**Spec:** `Docs/Working/DAG_visualization_spec.md`
+**Estimate:** 3-5 days MVP
 
 ---
 
@@ -90,32 +69,29 @@ Replace O(n × k³) algorithm with O(n log k) DAG-based streaming approach.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| HierarchicalDetector | **Blocked** | O(n×k³) — >80s for 10K bars. #158 in progress |
+| HierarchicalDetector | **Complete** | O(n log k), 4.06s for 10K bars |
 | SwingConfig | Complete | Centralizes all parameters |
 | SwingNode | Complete | DAG hierarchy model |
 | ReferenceFrame | Complete | Central coordinate abstraction |
+| ReferenceLayer | Complete | Tolerance/completion rules |
+| Sibling Detection | Complete | Orphaned origins + 10% pruning |
 | Compatibility Adapter | Complete | SwingNode ↔ ReferenceSwing |
-| Replay View | Blocked | Can't load 100K window due to detector performance |
+| Replay View | Complete | Tree-based UI, forward playback |
 | Discretization | Complete | Accepts SwingNode via adapter |
 | V2 API Schemas | Complete | HierarchicalSwingResponse, etc. |
 | Legacy Detectors | Deleted | #153 completed cleanup |
-| Test Suite | Healthy | 551 tests passing |
+| Test Suite | Healthy | 587 tests passing |
 | Documentation | Current | Both guides updated |
 
 ---
 
-## Next Steps
+## Pending Validation
 
-**Active: #158 — DAG-based swing detection**
+Before proceeding with new features:
 
-1. Implement DAG algorithm as drop-in replacement for HierarchicalDetector
-2. Benchmark on 10K+ bar datasets (target: <5s)
-3. Validate output correctness through manual inspection
-4. Refine pruning rules based on empirical results
-
-**After #158:**
-- End-to-end validation against real trading decisions
-- GAN training data generation using discretization logs
+1. **Manual validation** — Use Replay View on real data to verify swing detection quality
+2. **Compare L1-L7** — Validate against `Docs/Reference/valid_swings.md` examples
+3. **Fix #176** — After validation, wire Reference layer into `get_windowed_swings`
 
 ---
 
@@ -123,8 +99,8 @@ Replace O(n × k³) algorithm with O(n log k) DAG-based streaming approach.
 
 | Document | Status | Action Needed |
 |----------|--------|---------------|
-| `developer_guide.md` | Current | Multi-TF optimization documented |
-| `user_guide.md` | Current | Replay View using hierarchical detector |
+| `developer_guide.md` | Current | Reference layer, sibling detection documented |
+| `user_guide.md` | Current | Tree-based UI, calibration report documented |
 | `CLAUDE.md` | Current | - |
 
 ---
@@ -135,7 +111,7 @@ Replace O(n × k³) algorithm with O(n log k) DAG-based streaming approach.
 - **Single algorithm:** process_bar() for both calibration and playback
 - **Fibonacci levels:** Extended grid for discretization (16 levels)
 - **Resolution-agnostic:** 1m to 1mo source data supported
-- **Performance target:** <5s for 10K bars, <60s for 6M bars (NOT YET MET)
+- **Performance target:** <5s for 10K bars ✅ ACHIEVED (4.06s)
 - **Lean codebase:** 4 modules (data, swing_analysis, discretization, ground_truth_annotator)
 - **Backend-controlled boundaries:** Backend owns data visibility
 - **DAG/Reference separation:** DAG tracks structural extremas; Reference layer defines "good reference" semantics
@@ -182,8 +158,8 @@ Replace O(n × k³) algorithm with O(n log k) DAG-based streaming approach.
 
 | Date | Changes | Outcome |
 |------|---------|---------|
-| Dec 19 | DAG-based algorithm spec review | Approved → #158 created |
-| Dec 19 | #152, #153, #155, #157 — Performance optimization + cleanup | All Accepted (but performance still unworkable) |
+| Dec 19 | #158-#175 — DAG algorithm rewrite + Reference layer (9 issues) | All Accepted |
+| Dec 19 | #152, #153, #155, #157 — Performance optimization + cleanup | All Accepted |
 | Dec 18 | #142-#151 — Swing Detection Rewrite (10 issues) | All Accepted; #154 performance issue identified |
 | Dec 18 | Swing Detection Rewrite Spec | Approved; implementation plan created |
 | Dec 18 | #138, #140 (Phase 1) — Endpoint optimization, pre-formation protection | All Accepted |
