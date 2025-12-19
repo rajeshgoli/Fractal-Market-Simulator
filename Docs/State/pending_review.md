@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-19
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(None)
+- **#158** — DAG-based swing detection algorithm (O(n log k) streaming replacement)
 
 ---
 
