@@ -232,7 +232,7 @@ When a retracement drops below the defended pivot (decisively), you prune. This 
 
 ---
 
-## Remaining Issue: Sibling Swing Detection (#161, #162)
+## Remaining Issue: Sibling Swing Detection (#163)
 
 **Problem discovered during validation:** The algorithm fails to detect sibling swings that share the same 0 but have different 1s.
 
@@ -264,9 +264,8 @@ See `Docs/Working/DAG_spec.md` for full specification.
 1. ~~Validate spec against current test suite~~ Done
 2. ~~Implement DAG algorithm~~ Done (#158)
 3. ~~Benchmark performance~~ Achieved: 4.06s for 10K
-4. Implement orphaned origins (#161)
-5. Remove redundant separation check (#162)
-6. Validate L1-L7 from valid_swings.md
+4. Implement sibling swing detection (#163)
+5. Validate L1-L7 from valid_swings.md
 
 ---
 

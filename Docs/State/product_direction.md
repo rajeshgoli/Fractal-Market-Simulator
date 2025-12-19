@@ -13,7 +13,7 @@ Performance target achieved (#158). Reference layer complete (#159). Now blocked
 
 ---
 
-## P0: Orphaned Origins + Remove Separation Check (#161, #162)
+## P0: Sibling Swing Detection (#163)
 
 **Status:** Spec approved. Ready for engineering.
 
@@ -78,7 +78,7 @@ Replaced O(n × k³) algorithm with O(n log k) DAG-based streaming approach. Per
 
 Implemented separation filtering and size-differentiated invalidation thresholds per Rule 2.2.
 
-**Issue discovered during validation:** Current separation check applies to BOTH 0 and 1, but Rule 4.1 only requires 1 separation. Further refinement (#162): separation check can be removed entirely since DAG pruning already ensures 10% separation.
+**Issue discovered during validation:** Current separation check applies to BOTH 0 and 1, but Rule 4.1 only requires 1 separation. Further refinement: separation check can be removed entirely since DAG pruning already ensures 10% separation. See #163.
 
 ---
 
@@ -86,8 +86,8 @@ Implemented separation filtering and size-differentiated invalidation thresholds
 
 From `Docs/Reference/valid_swings.md` — ES as of Dec 18, 2025:
 
-| Label | Structure | Current Status | After #161/#162 |
-|-------|-----------|----------------|-----------------|
+| Label | Structure | Current Status | After #163 |
+|-------|-----------|----------------|------------|
 | **L1** | 1=6166, 0=4832 | Detected | Detected |
 | **L2** | 1=5837, 0=4832 | **Missing** (1 pruned) | Detected |
 | **L3** | 1=6955, 0=6524 | Detected | Detected |
@@ -104,9 +104,9 @@ From `Docs/Reference/valid_swings.md` — ES as of Dec 18, 2025:
 |-----------|--------|
 | <5s for 10K bars | **Done** (#158) |
 | 100K window loads in frontend | **Done** (#158) |
-| Valid swings (L1-L7) detected | Pending #161, #162 |
-| Sibling swings with same 0 detected | Pending #161, #162 |
-| Separation check removed (DAG prunes) | Pending #162 |
+| Valid swings (L1-L7) detected | Pending #163 |
+| Sibling swings with same 0 detected | Pending #163 |
+| Separation check removed (DAG prunes) | Pending #163 |
 | Parent-child relationships correct | **Done** (#158) |
 
 ---
@@ -114,7 +114,7 @@ From `Docs/Reference/valid_swings.md` — ES as of Dec 18, 2025:
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- #161/#162 complete — validate L1-L7 all detected
+- #163 complete — validate L1-L7 all detected
 - Run detection on ES data and verify sibling swings appear
 - Unexpected detection behavior observed in Replay View
 

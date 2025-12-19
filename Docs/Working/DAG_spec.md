@@ -493,7 +493,7 @@ Reference answers: "Which swings are useful?" (semantic/trading logic)
 
 ---
 
-## Sibling Swing Detection (#161, #162)
+## Sibling Swing Detection (#163)
 
 **Problem discovered during validation (Dec 19):** The current implementation fails to detect sibling swings that share the same 0 (defended pivot) but have different 1s (origins).
 
@@ -549,10 +549,10 @@ The original `_check_separation_for_leg` checks both origin AND pivot separation
 
 ## Next Steps
 
-**Status:** Core algorithm implemented (#158). Sibling detection pending (#161, #162).
+**Status:** Core algorithm implemented (#158). Sibling detection pending (#163).
 
 1. ~~Implement DAG-based algorithm as drop-in replacement for HierarchicalDetector~~ Done
 2. ~~Benchmark performance on 10K+ bar datasets (target: <5s for 10K)~~ Achieved: 4.06s
-3. Implement orphaned origins mechanism (#161)
-4. Remove redundant separation check (#162)
+3. Implement orphaned origins with 10% pruning (#163)
+4. Remove redundant separation check (#163)
 5. Validate L1-L7 from valid_swings.md all detected
