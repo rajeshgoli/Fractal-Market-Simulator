@@ -346,7 +346,7 @@ The feedback input is always visible during playback (not just during linger eve
 
 ## DAG Build Mode
 
-DAG Build Mode provides a specialized view for observing how the hierarchical detector creates and manages candidate legs before they form into swings.
+DAG Build Mode provides a specialized view for observing how the hierarchical detector creates and manages candidate legs before they form into swings. Unlike Calibration mode, DAG Build starts with zero bars and builds incrementally as you watch.
 
 ### Quick Start
 
@@ -360,15 +360,25 @@ python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10
 
 DAG Build Mode has a simplified layout compared to Calibration mode:
 
-- **Header**: Timestamp display, calibration status badge
-- **Top Chart**: Overview chart with leg overlays
-- **Bottom Chart**: Detail chart with leg overlays
-- **Playback Controls**: Transport buttons (no event navigation)
+- **Header**: Timestamp display, bar count indicator
+- **Top Chart**: Overview chart (macro) with leg overlays
+- **Bottom Chart**: Detail chart (micro) with leg overlays
+- **Playback Controls**: Transport buttons, speed control, linger toggle
 - **DAG State Panel**: Always-visible internal state display
+
+### Incremental Build (Fixes #179)
+
+DAG Build Mode now starts with **zero bars processed** and builds the structure incrementally:
+
+1. **Press Play** to start processing bars from bar 0
+2. **Watch legs form** as each bar is processed through the detector
+3. **See the DAG grow** as legs appear, get pruned, and eventually form swings
+
+This matches the spec requirement: "Watch the structure build in real-time as bars load."
 
 ### Leg Visualization
 
-Active legs are drawn as horizontal price lines on both charts:
+Active legs are drawn as **diagonal lines** connecting origin to pivot on both charts:
 
 | Leg Status | Appearance |
 |------------|------------|
@@ -376,9 +386,9 @@ Active legs are drawn as horizontal price lines on both charts:
 | Stale | Dashed line, yellow, 50% opacity |
 | Invalidated | Not shown (removed immediately) |
 
-Each leg shows two price lines:
-- **Pivot line**: The defended pivot price (labeled with direction arrow)
-- **Origin line**: The swing origin extremum
+Each leg shows a single line connecting:
+- **Origin point**: The swing origin extremum (where the move started)
+- **Pivot point**: The defended pivot price (where the retracement reversed)
 
 ### DAG State Panel
 
@@ -399,13 +409,30 @@ The DAG State Panel is always visible in this mode (no toggle needed). It shows:
 | LEG_PRUNED | Leg removed due to staleness (superseded by better candidate) |
 | LEG_INVALIDATED | Leg fell below 0.382 threshold (decisive invalidation) |
 
+### Playback Controls
+
+In DAG Build mode, all playback controls are functional:
+
+| Control | Icon | Description |
+|---------|------|-------------|
+| Play/Pause | ▶/⏸ | Start/stop incremental bar processing |
+| Step Forward | ▶ | Process one bar (when paused) |
+| Step Back | ◀ | Not functional (forward-only) |
+| Jump to Start | \|◀ | Reset to bar 0 (restart incremental build) |
+| Speed | dropdown | 1x, 2x, 5x, 10x, 20x playback speed |
+| Linger | toggle | Toggle pause-on-event behavior (OFF by default in DAG mode) |
+
+**Linger Toggle:** In DAG mode, linger is OFF by default for continuous observation. Enable it to pause and examine events as they occur.
+
 ### Differences from Calibration Mode
 
 | Feature | Calibration Mode | DAG Build Mode |
 |---------|------------------|----------------|
+| Initial state | Pre-calibrated (10K bars) | Empty (0 bars) |
+| Build process | Instant (pre-computed) | Incremental (watch it build) |
 | Sidebar | Event filters, feedback | Hidden |
-| Swing overlay | Fib levels for formed swings | Leg lines for candidates |
-| Linger on events | Configurable (ON/OFF) | Disabled |
+| Swing overlay | Fib levels for formed swings | Diagonal leg lines for candidates |
+| Linger default | ON | OFF (continuous observation) |
 | Event navigation | Jump between swing events | Not available |
 | DAG State Panel | Toggle (Swings/DAG tabs) | Always visible |
 

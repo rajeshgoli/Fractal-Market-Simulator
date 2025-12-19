@@ -176,6 +176,10 @@ async def get_bars(
             effective_limit = playback_limit
     limit = effective_limit
 
+    # DAG mode: If limit is 0 (no bars processed), return empty list (#179)
+    if limit is not None and limit <= 0:
+        return []
+
     # Scale target bar counts
     scale_targets = {"XL": 50, "L": 200, "M": 800, "S": None}
 

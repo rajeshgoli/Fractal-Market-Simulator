@@ -733,6 +733,9 @@ async def calibrate_replay(
     Processes the first N bars and returns detected swings grouped by hierarchy
     depth with tree statistics. Also maintains legacy scale-based grouping for
     backward compatibility.
+
+    For DAG visualization mode (bar_count=0), initializes detector without
+    processing any bars, allowing incremental build via /api/replay/advance.
     """
     import time
     start_time = time.time()
@@ -744,10 +747,62 @@ async def calibrate_replay(
     s = get_state()
 
     actual_bar_count = min(bar_count, len(s.source_bars))
+
+    # DAG mode: Allow bar_count=0 for incremental build from scratch (#179)
+    if actual_bar_count == 0:
+        logger.info("DAG mode: initializing detector with 0 bars for incremental build")
+        config = SwingConfig.default()
+        ref_layer = ReferenceLayer(config)
+        detector = HierarchicalDetector(config)
+
+        # Initialize cache for incremental advance
+        _replay_cache["detector"] = detector
+        _replay_cache["last_bar_index"] = -1  # No bars processed yet
+        _replay_cache["calibration_bar_count"] = 0
+        _replay_cache["calibration_events"] = []
+        _replay_cache["scale_thresholds"] = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
+        _replay_cache["reference_layer"] = ref_layer
+
+        # Update app state
+        s.playback_index = -1
+        s.calibration_bar_count = 0
+        s.hierarchical_detector = detector
+
+        # Return empty calibration response
+        empty_swings_by_scale: Dict[str, List[CalibrationSwingResponse]] = {
+            "XL": [], "L": [], "M": [], "S": []
+        }
+        empty_stats = {
+            scale: CalibrationScaleStats(total_swings=0, active_swings=0)
+            for scale in ["XL", "L", "M", "S"]
+        }
+        empty_tree_stats = TreeStatistics(
+            root_swings=0, root_bull=0, root_bear=0, total_nodes=0,
+            max_depth=0, avg_children=0.0,
+            defended_by_depth={"1": 0, "2": 0, "3": 0, "deeper": 0},
+            largest_range=0.0, largest_swing_id=None, median_range=0.0,
+            smallest_range=0.0, recently_invalidated=0,
+            roots_have_children=True, siblings_detected=False, no_orphaned_nodes=True,
+        )
+        empty_swings_by_depth = SwingsByDepth()
+
+        logger.info("DAG mode: detector initialized, ready for incremental advance")
+        return CalibrationResponseHierarchical(
+            calibration_bar_count=0,
+            current_price=s.source_bars[0].open if s.source_bars else 0.0,
+            tree_stats=empty_tree_stats,
+            swings_by_depth=empty_swings_by_depth,
+            active_swings_by_depth=empty_swings_by_depth,
+            swings_by_scale=empty_swings_by_scale,
+            active_swings_by_scale=empty_swings_by_scale,
+            scale_thresholds=_replay_cache["scale_thresholds"],
+            stats_by_scale=empty_stats,
+        )
+
     if actual_bar_count < 10:
         raise HTTPException(
             status_code=400,
-            detail="Need at least 10 bars for calibration"
+            detail="Need at least 10 bars for calibration (use bar_count=0 for DAG mode)"
         )
 
     logger.info(f"Running calibration on {actual_bar_count} bars...")

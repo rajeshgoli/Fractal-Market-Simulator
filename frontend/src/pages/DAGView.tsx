@@ -91,6 +91,9 @@ export const DAGView: React.FC = () => {
   const [recentLegEvents, setRecentLegEvents] = useState<LegEvent[]>([]);
   const [isDagLoading, setIsDagLoading] = useState(false);
 
+  // Linger toggle state (for DAG mode, default OFF for continuous observation)
+  const [lingerEnabled, setLingerEnabled] = useState(false);
+
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
   const chart2Ref = useRef<IChartApi | null>(null);
@@ -146,14 +149,15 @@ export const DAGView: React.FC = () => {
   }, [chart1Aggregation, chart2Aggregation]);
 
   // Forward playback hook
+  // For DAG mode with bar_count=0 calibration, we start from position -1 (before first bar)
   const forwardPlayback = useForwardPlayback({
-    calibrationBarCount: calibrationData?.calibration_bar_count || 10000,
+    calibrationBarCount: calibrationData?.calibration_bar_count ?? 0,
     calibrationBars,
     playbackIntervalMs: effectivePlaybackIntervalMs,
     barsPerAdvance,
     filters,
     enabledScales: new Set(['XL', 'L', 'M']),
-    lingerEnabled: false, // Disable linger in DAG mode for continuous observation
+    lingerEnabled, // Use lingerEnabled state for toggle
     onNewBars: useCallback((newBars: BarData[]) => {
       setSourceBars(prev => [...prev, ...newBars]);
       if (newBars.length > 0) {
@@ -189,6 +193,7 @@ export const DAGView: React.FC = () => {
   }, [calibrationPhase, forwardPlayback]);
 
   // Load initial data
+  // DAG mode: Initialize with bar_count=0 for incremental build from bar 0 (#179)
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
@@ -203,11 +208,20 @@ export const DAGView: React.FC = () => {
           totalSourceBars: session.total_source_bars,
         });
 
-        // Load source bars
+        // Load source bars (need these for total count display, but won't show initially)
         const source = await fetchBars('S');
-        setSourceBars(source);
 
-        // Load chart bars
+        // DAG mode: Initialize with bar_count=0 for incremental build
+        // This creates an empty detector ready to process bars one by one
+        setCalibrationPhase(CalibrationPhase.CALIBRATING);
+        const calibration = await fetchCalibration(0);
+        setCalibrationData(calibration);
+
+        // Initially no bars visible - they will be added as playback advances
+        setSourceBars([]);
+        setCalibrationBars([]);
+
+        // Load empty chart bars (backend returns empty when no bars processed)
         const [bars1, bars2] = await Promise.all([
           fetchBars(chart1Aggregation),
           fetchBars(chart2Aggregation),
@@ -215,30 +229,18 @@ export const DAGView: React.FC = () => {
         setChart1Bars(bars1);
         setChart2Bars(bars2);
 
-        // Run calibration
-        setCalibrationPhase(CalibrationPhase.CALIBRATING);
-        const calibration = await fetchCalibration(Math.min(10000, source.length));
-        setCalibrationData(calibration);
-
-        // Re-fetch chart bars
-        const [newBars1, newBars2, newSourceBars] = await Promise.all([
-          fetchBars(chart1Aggregation),
-          fetchBars(chart2Aggregation),
-          fetchBars('S'),
-        ]);
-        setChart1Bars(newBars1);
-        setChart2Bars(newBars2);
-        setSourceBars(newSourceBars);
-
-        // Store calibration bars
-        const calBars = newSourceBars.slice(0, calibration.calibration_bar_count);
-        setCalibrationBars(calBars);
-
-        // Fetch initial DAG state
+        // Fetch initial DAG state (should be empty)
         const initialDagState = await fetchDagState();
         setDagState(initialDagState);
 
+        // Ready to play - user presses play to start incremental build
         setCalibrationPhase(CalibrationPhase.CALIBRATED);
+
+        // Store total bar count for display
+        setSessionInfo(prev => prev ? {
+          ...prev,
+          totalSourceBars: source.length,
+        } : { windowOffset: session.window_offset, totalSourceBars: source.length });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
@@ -483,53 +485,71 @@ export const DAGView: React.FC = () => {
             onChart2Ready={handleChart2Ready}
           />
 
-          {/* Leg Overlays - render leg price lines on charts */}
+          {/* Leg Overlays - render diagonal leg lines on charts */}
           <LegOverlay
+            chart={chart1Ref.current}
             series={series1Ref.current}
             legs={activeLegs}
+            bars={chart1Bars}
             currentPosition={currentPlaybackPosition}
           />
           <LegOverlay
+            chart={chart2Ref.current}
             series={series2Ref.current}
             legs={activeLegs}
+            bars={chart2Bars}
             currentPosition={currentPlaybackPosition}
           />
 
           {/* Playback Controls */}
           <div className="shrink-0 z-10">
             <PlaybackControls
-              playbackState={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.playbackState : PlaybackState.STOPPED}
-              onPlayPause={calibrationPhase === CalibrationPhase.CALIBRATED ? handleStartPlayback : forwardPlayback.togglePlayPause}
-              onStepBack={calibrationPhase === CalibrationPhase.CALIBRATED ? (() => {}) : forwardPlayback.stepBack}
-              onStepForward={calibrationPhase === CalibrationPhase.CALIBRATED ? handleStartPlayback : forwardPlayback.stepForward}
-              onJumpToStart={calibrationPhase === CalibrationPhase.CALIBRATED ? (() => {}) : forwardPlayback.jumpToStart}
+              playbackState={
+                calibrationPhase === CalibrationPhase.PLAYING
+                  ? forwardPlayback.playbackState
+                  : calibrationPhase === CalibrationPhase.CALIBRATED
+                  ? PlaybackState.STOPPED
+                  : PlaybackState.STOPPED
+              }
+              onPlayPause={
+                calibrationPhase === CalibrationPhase.CALIBRATED
+                  ? handleStartPlayback
+                  : forwardPlayback.togglePlayPause
+              }
+              onStepBack={forwardPlayback.stepBack}
+              onStepForward={
+                calibrationPhase === CalibrationPhase.CALIBRATED
+                  ? handleStartPlayback
+                  : forwardPlayback.stepForward
+              }
+              onJumpToStart={forwardPlayback.jumpToStart}
               onJumpToEnd={undefined}
               onJumpToPreviousEvent={undefined}
               onJumpToNextEvent={undefined}
               hasPreviousEvent={false}
-              hasNextEvent={false}
-              currentEventIndex={-1}
-              totalEvents={0}
-              currentBar={currentPlaybackPosition}
-              totalBars={sourceBars.length}
-              calibrationBarCount={calibrationPhase === CalibrationPhase.PLAYING ? calibrationData?.calibration_bar_count : undefined}
-              windowOffset={calibrationPhase === CalibrationPhase.PLAYING ? sessionInfo?.windowOffset : undefined}
-              totalSourceBars={calibrationPhase === CalibrationPhase.PLAYING ? sessionInfo?.totalSourceBars : undefined}
+              hasNextEvent={!forwardPlayback.endOfData}
+              currentEventIndex={forwardPlayback.currentEventIndex}
+              totalEvents={forwardPlayback.allEvents.length}
+              currentBar={Math.max(0, currentPlaybackPosition + 1)}
+              totalBars={sessionInfo?.totalSourceBars || 0}
+              calibrationBarCount={0}
+              windowOffset={sessionInfo?.windowOffset}
+              totalSourceBars={sessionInfo?.totalSourceBars}
               speedMultiplier={speedMultiplier}
               onSpeedMultiplierChange={setSpeedMultiplier}
               speedAggregation={speedAggregation}
               onSpeedAggregationChange={setSpeedAggregation}
               availableSpeedAggregations={availableSpeedAggregations}
-              isLingering={false}
-              lingerTimeLeft={0}
+              isLingering={forwardPlayback.isLingering}
+              lingerTimeLeft={forwardPlayback.lingerTimeLeft}
               lingerTotalTime={LINGER_DURATION_MS / 1000}
-              lingerEventType={undefined}
-              lingerQueuePosition={undefined}
-              onNavigatePrev={() => {}}
-              onNavigateNext={() => {}}
-              onDismissLinger={() => {}}
-              lingerEnabled={false}
-              onToggleLinger={undefined}
+              lingerEventType={forwardPlayback.lingerEvent?.type}
+              lingerQueuePosition={forwardPlayback.lingerQueuePosition}
+              onNavigatePrev={forwardPlayback.navigatePrevEvent}
+              onNavigateNext={forwardPlayback.navigateNextEvent}
+              onDismissLinger={forwardPlayback.dismissLinger}
+              lingerEnabled={lingerEnabled}
+              onToggleLinger={() => setLingerEnabled(prev => !prev)}
             />
           </div>
 

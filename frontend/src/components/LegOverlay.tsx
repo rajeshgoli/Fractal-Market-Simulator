@@ -1,21 +1,31 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { ISeriesApi, IPriceLine, LineStyle } from 'lightweight-charts';
-import { ActiveLeg, LegStatus, LEG_STATUS_STYLES } from '../types';
+import { IChartApi, ISeriesApi, LineStyle, Time, LineData, LineSeries } from 'lightweight-charts';
+import { ActiveLeg, BarData, LEG_STATUS_STYLES } from '../types';
 
 interface LegOverlayProps {
+  chart: IChartApi | null;
   series: ISeriesApi<'Candlestick'> | null;
   legs: ActiveLeg[];
+  bars: BarData[];
   currentPosition: number;
 }
 
 /**
- * Get the line style enum value for a leg status.
+ * Get color with opacity applied (hex to rgba).
  */
-function getLineStyle(status: LegStatus): LineStyle {
+function getColorWithOpacity(hexColor: string, opacity: number): string {
+  const r = parseInt(hexColor.slice(1, 3), 16);
+  const g = parseInt(hexColor.slice(3, 5), 16);
+  const b = parseInt(hexColor.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
+/**
+ * Get line style for LineSeries based on leg status.
+ */
+function getLineStyleValue(status: 'active' | 'stale' | 'invalidated'): LineStyle {
   const style = LEG_STATUS_STYLES[status];
   switch (style.lineStyle) {
-    case 'solid':
-      return LineStyle.Solid;
     case 'dashed':
       return LineStyle.Dashed;
     case 'dotted':
@@ -26,130 +36,150 @@ function getLineStyle(status: LegStatus): LineStyle {
 }
 
 /**
- * Get color with opacity applied (hex to rgba).
- */
-function getColorWithOpacity(hexColor: string, opacity: number): string {
-  // Parse hex color
-  const r = parseInt(hexColor.slice(1, 3), 16);
-  const g = parseInt(hexColor.slice(3, 5), 16);
-  const b = parseInt(hexColor.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-}
-
-/**
- * LegOverlay renders active legs as horizontal price lines on a chart.
+ * LegOverlay renders active legs as diagonal lines connecting origin to pivot.
  *
- * For each leg, it shows:
- * - Pivot price line (the defended pivot)
- * - Origin price line (the swing origin)
+ * For each leg, it draws:
+ * - A line from (origin_index, origin_price) to (pivot_index, pivot_price)
  *
  * Visual treatment:
  * - Active legs: Solid lines, blue (bull) / red (bear), 70% opacity
  * - Stale legs: Dashed lines, yellow, 50% opacity
- * - Invalidated legs: Dotted lines, gray, 30% opacity (briefly shown)
+ * - Invalidated legs: Not shown (pruned from display)
  */
 export const LegOverlay: React.FC<LegOverlayProps> = ({
+  chart,
   series,
   legs,
+  bars,
   currentPosition,
 }) => {
-  // Track created price lines so we can remove them on update
-  const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+  // Track created line series so we can remove them on update
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lineSeriesRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
 
-  // Clear all existing price lines
-  const clearPriceLines = useCallback(() => {
-    if (!series) return;
+  // Clear all existing line series
+  const clearLineSeries = useCallback(() => {
+    if (!chart) return;
 
-    for (const [, line] of priceLinesRef.current) {
+    for (const [, lineSeries] of lineSeriesRef.current) {
       try {
-        series.removePriceLine(line);
+        chart.removeSeries(lineSeries);
       } catch {
-        // Line may already be removed
+        // Series may already be removed
       }
     }
-    priceLinesRef.current.clear();
-  }, [series]);
+    lineSeriesRef.current.clear();
+  }, [chart]);
 
-  // Create price lines for a single leg
-  const createLegLines = useCallback((
-    leg: ActiveLeg,
-  ): Map<string, IPriceLine> => {
-    if (!series) return new Map();
+  // Find bar timestamp by index
+  const getTimestampForIndex = useCallback((barIndex: number): number | null => {
+    // Find bar with matching source index range
+    for (const bar of bars) {
+      if (bar.source_start_index !== undefined && bar.source_end_index !== undefined) {
+        if (barIndex >= bar.source_start_index && barIndex <= bar.source_end_index) {
+          return bar.timestamp;
+        }
+      }
+      // Fallback: match by exact index
+      if (bar.index === barIndex) {
+        return bar.timestamp;
+      }
+    }
+    // If not found, try to estimate from bar index
+    if (bars.length > 0) {
+      const firstBar = bars[0];
+      const lastBar = bars[bars.length - 1];
+      if (bars.length >= 2) {
+        // Estimate timestamp based on linear interpolation
+        const barDuration = (lastBar.timestamp - firstBar.timestamp) / (bars.length - 1);
+        return firstBar.timestamp + barIndex * barDuration;
+      }
+    }
+    return null;
+  }, [bars]);
 
-    const lines = new Map<string, IPriceLine>();
+  // Create line series for a leg
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const createLegLine = useCallback((leg: ActiveLeg): ISeriesApi<any> | null => {
+    if (!chart || !series) return null;
+
     const style = LEG_STATUS_STYLES[leg.status];
-    const lineStyle = getLineStyle(leg.status);
     const color = getColorWithOpacity(
       style.color[leg.direction],
       style.opacity
     );
+    const lineStyle = getLineStyleValue(leg.status);
 
-    // Create pivot price line
+    // Get timestamps for origin and pivot
+    const originTime = getTimestampForIndex(leg.origin_index);
+    const pivotTime = getTimestampForIndex(leg.pivot_index);
+
+    if (originTime === null || pivotTime === null) {
+      return null;
+    }
+
     try {
-      const pivotLine = series.createPriceLine({
-        price: leg.pivot_price,
+      // Create line series for this leg using v5 API
+      const lineSeries = chart.addSeries(LineSeries, {
         color,
         lineWidth: 2,
         lineStyle,
-        axisLabelVisible: true,
-        title: `${leg.direction === 'bull' ? '▲' : '▼'} Pivot`,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
       });
-      lines.set(`${leg.leg_id}-pivot`, pivotLine);
-    } catch {
-      // Handle any errors creating lines
+
+      // Set data: line from origin to pivot
+      const data: LineData<Time>[] = [
+        { time: originTime as Time, value: leg.origin_price },
+        { time: pivotTime as Time, value: leg.pivot_price },
+      ];
+
+      // Sort by time (required by lightweight-charts)
+      data.sort((a, b) => (a.time as number) - (b.time as number));
+
+      lineSeries.setData(data);
+
+      return lineSeries;
+    } catch (error) {
+      console.error('Failed to create leg line:', error);
+      return null;
     }
+  }, [chart, series, getTimestampForIndex]);
 
-    // Create origin price line
-    try {
-      const originLine = series.createPriceLine({
-        price: leg.origin_price,
-        color,
-        lineWidth: 1,
-        lineStyle,
-        axisLabelVisible: false,
-        title: `Origin`,
-      });
-      lines.set(`${leg.leg_id}-origin`, originLine);
-    } catch {
-      // Handle any errors creating lines
-    }
-
-    return lines;
-  }, [series]);
-
-  // Update price lines when legs change
+  // Update line series when legs or bars change
   useEffect(() => {
-    if (!series) return;
+    if (!chart || !series || bars.length === 0) return;
 
     // Clear existing lines
-    clearPriceLines();
+    clearLineSeries();
 
     // Filter legs to only show those visible up to current position
-    // and exclude invalidated legs after a brief display
+    // and exclude invalidated legs
     const visibleLegs = legs.filter(leg => {
-      // Skip invalidated legs (they should be removed after brief display)
+      // Skip invalidated legs (they should not be shown)
       if (leg.status === 'invalidated') {
         return false;
       }
-      // Only show legs where pivot is before current position
+      // Only show legs where pivot is at or before current position
       return leg.pivot_index <= currentPosition;
     });
 
-    // Create lines for each visible leg
+    // Create line series for each visible leg
     for (const leg of visibleLegs) {
-      const newLines = createLegLines(leg);
-      for (const [key, line] of newLines) {
-        priceLinesRef.current.set(key, line);
+      const lineSeries = createLegLine(leg);
+      if (lineSeries) {
+        lineSeriesRef.current.set(leg.leg_id, lineSeries);
       }
     }
 
     // Cleanup on unmount
     return () => {
-      clearPriceLines();
+      clearLineSeries();
     };
-  }, [series, legs, currentPosition, clearPriceLines, createLegLines]);
+  }, [chart, series, legs, bars, currentPosition, clearLineSeries, createLegLine]);
 
   // This component doesn't render any DOM elements
-  // It only manages price lines on the chart via side effects
+  // It only manages line series on the chart via side effects
   return null;
 };
