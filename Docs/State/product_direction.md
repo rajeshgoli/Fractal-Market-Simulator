@@ -9,70 +9,76 @@
 
 **Ship reliable, performant swing detection that correctly identifies the valid swings defined in `Docs/Reference/valid_swings.md`.**
 
-The system is blocked on performance — current algorithm takes >80s for 10K bars, making 100K window datasets unusable in the frontend. A fundamental algorithm rewrite is in progress.
+Performance target achieved (#158). Reference layer complete (#159). Now blocked on **sibling swing detection** — swings with same 0 but different 1s are not being captured.
 
 ---
 
-## P0: DAG-Based Swing Detection (#158)
+## P0: Invalidated Origin Preservation (#161)
 
 **Status:** Spec approved. Ready for engineering.
 
 ### Problem
 
-Current `HierarchicalDetector` is O(n × k³):
-- >80s for 10K bars
-- 100K window doesn't load in frontend
-- 6M bar datasets unworkable
+The DAG algorithm prunes legs when invalidated, losing their 1 as a candidate for larger swings. This prevents detection of sibling swings that share a defended 0.
+
+**Example (L1/L2):**
+- Bull leg forms: 0=5525, 1=5837
+- Price drops below 5525 - 0.382×312 ≈ 5406
+- Leg is **invalidated and pruned** — 1=5837 is lost
+- Price continues to 4832, reverses
+- L2 (1=5837, 0=4832) **cannot form** because 5837 isn't tracked
+
+**Swings affected:**
+- L2 (1=5837, 0=4832) — shares 0 with L1
+- L4, L5 (1=6896/6790, 0=6524) — share 0 with L3
+- L7 (1=6882, 0=6770) — 0 is 1 point from L6's 0
 
 ### Solution
 
-Replace with DAG-based streaming algorithm:
-- O(n log k) complexity
-- Rules enforced by construction (temporal ordering from bar relationships)
-- Target: <5s for 10K bars
+Preserve invalidated 1s as orphaned candidates. Prune aggressively at each bar using **10% rule**:
+
+1. On each bar, current low is working 0
+2. For all invalidated 1s: if two are within 10% of the larger range, prune the smaller
+3. As 0 extends, threshold grows, naturally eliminating noise
+4. Only scale-appropriate structure survives
+
+**Trace through L2:**
+
+| Working 0 | Range (from 5837) | 10% threshold | 5763 survives? |
+|-----------|-------------------|---------------|----------------|
+| 5500 | 337 | 33.7 | Yes (74 > 33.7) |
+| 5000 | 837 | 83.7 | No (74 < 83.7) — pruned |
+| 4832 | 1005 | — | Only 5837 remains |
+
+**Recursive property:** Small bull legs can preserve their noise (10% of small range is small). When invalidated, their nested 1s join the larger pool and get pruned by the larger threshold. Fractal structure emerges naturally.
 
 ### Key Design Elements
 
 | Element | Approach |
 |---------|----------|
-| Bar classification | Type 1 (inside), Type 2-Bull/Bear, Type 3 (outside) |
-| Temporal ordering | By construction from bar relationships |
-| Formation | 38.2% retracement threshold |
-| Invalidation | 0.382 × range beyond defended pivot |
-| Staleness | 2x range movement without change |
-| Parent-child | By pivot derivation, not range containment |
-
-### Spec
-
-- `Docs/Working/DAG_spec.md`
-- `Docs/Working/Performance_question.md`
+| Orphaned origins | Flat list per direction, not hierarchical |
+| Pruning trigger | Every bar, relative to current working 0 |
+| Threshold | 10% of range from 1 to working 0 |
+| Separation | Origin (1) only — NOT pivot (0) |
+| Complexity | O(invalidated origins) per bar, stays sparse |
 
 ---
 
-## P1: Reference Layer (#159)
+## Completed: DAG-Based Swing Detection (#158)
 
-**Status:** Issue filed. Depends on #158.
+**Status:** Complete. 4.06s for 10K bars.
 
-### Problem
+Replaced O(n × k³) algorithm with O(n log k) DAG-based streaming approach. Performance target met.
 
-DAG tracks ALL structural extremas with uniform 0.382 invalidation. But valid trading references require:
-- Separation filtering (not every extrema is useful)
-- Differentiated invalidation (big swings get tolerance, small swings don't)
+---
 
-### Rules to Implement
+## Completed: Reference Layer (#159)
 
-From `Docs/Reference/valid_swings.md`:
+**Status:** Complete. 580 tests passing.
 
-**Separation (Rule 4):**
-- Self-separation: Origin only valid if no better candidate within 0.1 × range
-- Parent-child: Child's extrema must be 0.1 × parent range from parent/sibling extrema
+Implemented separation filtering and size-differentiated invalidation thresholds per Rule 2.2.
 
-**Invalidation (Rule 2.2):**
-
-| Swing Size | Touch | Close |
-|------------|-------|-------|
-| Big (top 10% by range) | 0.15 × range | 0.10 × range |
-| Small | 0 tolerance | 0 tolerance |
+**Issue discovered during validation:** Current separation check applies to BOTH 0 and 1, but Rule 4.1 only requires 1 separation. This blocks sibling swings. Fix included in #160.
 
 ---
 
@@ -80,32 +86,15 @@ From `Docs/Reference/valid_swings.md`:
 
 From `Docs/Reference/valid_swings.md` — ES as of Dec 18, 2025:
 
-| Label | Structure | Description |
-|-------|-----------|-------------|
-| **L1** | 6166 → 4832 | Monthly/yearly swing (Jan-Apr 2025) |
-| **L2** | 5837 → 4832 | Nested impulsive swing (April) |
-| **L3** | 6955 → 6524 | Oct-Nov swing from ATH |
-| **L4** | 6896 → 6524 | Mid-Nov high, same defended pivot as L5 |
-| **L5** | 6790 → 6524 | Nov 17/20 high, sibling of L4 |
-| **L6** | 6929 → 6771 | Current weekly swing (Dec) |
-| **L7** | 6882 → 6770 | Daily swing |
-| **Bear ref** | 6815 → 6828 | Active bear reference |
-
-**Validation:** After #158 and #159, run detection on ES data and verify all these swings appear with correct parent-child relationships.
-
----
-
-## Why This Is Highest Leverage
-
-Performance blocks everything:
-- Can't validate detection quality if frontend won't load
-- Can't iterate on Reference layer rules without seeing results
-- Can't use Replay View for observation sessions
-
-Once #158 ships:
-- Frontend loads 100K windows
-- Detection output visible for validation
-- #159 can refine filtering/invalidation semantics
+| Label | Structure | Current Status | After #160 |
+|-------|-----------|----------------|------------|
+| **L1** | 1=6166, 0=4832 | Detected | Detected |
+| **L2** | 1=5837, 0=4832 | **Missing** (1 pruned) | Detected |
+| **L3** | 1=6955, 0=6524 | Detected | Detected |
+| **L4** | 1=6896, 0=6524 | **Missing** (0 separation) | Detected |
+| **L5** | 1=6790, 0=6524 | **Missing** (0 separation) | Detected |
+| **L6** | 1=6929, 0=6771 | Detected | Detected |
+| **L7** | 1=6882, 0=6770 | **Missing** (0 separation) | Detected |
 
 ---
 
@@ -113,29 +102,26 @@ Once #158 ships:
 
 | Criterion | Status |
 |-----------|--------|
-| <5s for 10K bars | Pending #158 |
-| 100K window loads in frontend | Pending #158 |
-| Valid swings (L1-L7) detected | Pending #158 |
-| Separation filtering applied | Pending #159 |
-| Invalidation rules per swing size | Pending #159 |
-| Parent-child relationships correct | Pending #158 |
+| <5s for 10K bars | **Done** (#158) |
+| 100K window loads in frontend | **Done** (#158) |
+| Valid swings (L1-L7) detected | Pending #161 |
+| Sibling swings with same 0 detected | Pending #161 |
+| Separation on 1 only (not 0) | Pending #161 |
+| Parent-child relationships correct | **Done** (#158) |
 
 ---
 
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- #158 complete — validate detection output against valid_swings.md
-- Performance targets met or blocked
-- #159 ready for validation — verify separation/invalidation behavior
+- #161 complete — validate L1-L7 all detected
+- Run detection on ES data and verify sibling swings appear
 - Unexpected detection behavior observed in Replay View
 
 ---
 
 ## Previous Phase (Archived)
 
-Ground truth annotator workflow and annotation sessions (Dec 15-17) superseded by hierarchical swing detection rewrite. Legacy swing detector code deleted (#153).
-
-Historical context preserved in:
-- `Docs/Archive/` — Previous product direction versions
-- `Docs/Reference/interview_notes.md` — User feedback from annotation sessions
+- #158 DAG-based swing detection — Complete
+- #159 Reference layer — Complete
+- Ground truth annotator workflow (Dec 15-17) — Superseded
