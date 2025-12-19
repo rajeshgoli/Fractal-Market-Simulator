@@ -344,6 +344,62 @@ for event in events:
 
 ---
 
+### Hierarchical Swing Detection (Rewrite Phase 2)
+
+**File:** `src/swing_analysis/hierarchical_detector.py`
+
+Incremental swing detector with hierarchical model. Replaces both batch and incremental detectors with a single `process_bar()` entry point. Calibration is just a loop calling `process_bar()` — no special batch logic.
+
+```python
+from src.swing_analysis.hierarchical_detector import (
+    HierarchicalDetector,
+    DetectorState,
+    calibrate,
+)
+from src.swing_analysis.swing_config import SwingConfig
+
+# Option 1: Calibrate on historical data
+bars = [...]  # List[Bar]
+detector, events = calibrate(bars)
+active_swings = detector.get_active_swings()
+
+# Option 2: Process bars incrementally
+config = SwingConfig.default()
+detector = HierarchicalDetector(config)
+for bar in bars:
+    events = detector.process_bar(bar)
+    for event in events:
+        print(f"{event.event_type}: {event.swing_id}")
+
+# Save and restore state
+state = detector.get_state()
+state_dict = state.to_dict()  # JSON-serializable
+
+restored_state = DetectorState.from_dict(state_dict)
+detector2 = HierarchicalDetector.from_state(restored_state, config)
+```
+
+**Key design principles:**
+- **No lookahead** — Algorithm only sees current and past bars
+- **Single code path** — Calibration calls `process_bar()` in a loop
+- **Independent invalidation** — Each swing checks its own defended pivot (no cascade)
+- **DAG hierarchy** — Swings can have multiple parents for structural context
+
+**Event types:**
+| Event | When emitted |
+|-------|--------------|
+| `SwingFormedEvent` | Price breaches formation threshold from candidate pair |
+| `SwingInvalidatedEvent` | Defended pivot violated beyond tolerance |
+| `SwingCompletedEvent` | Price reaches 2.0 extension target |
+| `LevelCrossEvent` | Price crosses Fib level boundary |
+
+**Tolerance rules (Rule 2.2):**
+- Big swings (top 10% by range): full tolerance (0.15)
+- Children of big swings: basic tolerance (0.10)
+- Others: no tolerance (absolute)
+
+---
+
 ### Reference Frame
 
 **File:** `src/swing_analysis/reference_frame.py`
@@ -555,6 +611,7 @@ python -m pytest tests/ --cov=src --cov-report=html
 | `test_swing_config.py` | SwingConfig dataclass |
 | `test_swing_node.py` | SwingNode hierarchical structure |
 | `test_swing_events.py` | Event types |
+| `test_hierarchical_detector.py` | Hierarchical detector algorithm |
 
 ---
 
