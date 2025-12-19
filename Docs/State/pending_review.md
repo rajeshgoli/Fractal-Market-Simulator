@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-18
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-_None — all changes reviewed._
+- **#152** — Added V2 API schemas for hierarchical swings (HierarchicalSwingResponse, SwingEventResponse, CalibrationSwingResponseV2, CalibrationResponseV2) with test coverage
 
 ---
 

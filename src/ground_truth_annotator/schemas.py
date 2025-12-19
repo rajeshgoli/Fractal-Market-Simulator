@@ -6,7 +6,7 @@ All request/response schemas for replay endpoints.
 
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 # ============================================================================
@@ -269,3 +269,115 @@ class PlaybackFeedbackResponse(BaseModel):
     success: bool
     observation_id: str
     message: str
+
+
+# ============================================================================
+# Hierarchical Swing Models (V2 - Rewrite Phase 3)
+# ============================================================================
+
+
+class HierarchicalSwingResponse(BaseModel):
+    """Response schema for a swing in the hierarchical model.
+
+    Replaces scale-based classification with tree hierarchy.
+    """
+    swing_id: str
+    high_bar_index: int
+    high_price: float
+    low_bar_index: int
+    low_price: float
+    direction: str  # "bull" or "bear"
+    status: str  # "forming", "active", "invalidated", "completed"
+    formed_at_bar: int
+
+    # Hierarchy info (replaces scale)
+    parent_ids: List[str]
+    child_ids: List[str]
+    depth: int  # Hierarchy depth (0 = root)
+
+    # Fib levels (computed)
+    fib_0: float  # Defended pivot
+    fib_0382: float
+    fib_0618: float
+    fib_1: float  # Origin
+    fib_2: float  # Target
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "swing_id": "abc123",
+                "high_bar_index": 100,
+                "high_price": 6166.0,
+                "low_bar_index": 200,
+                "low_price": 4832.0,
+                "direction": "bull",
+                "status": "active",
+                "formed_at_bar": 210,
+                "parent_ids": [],
+                "child_ids": ["def456", "ghi789"],
+                "depth": 0,
+                "fib_0": 4832.0,
+                "fib_0382": 5341.98,
+                "fib_0618": 5657.02,
+                "fib_1": 6166.0,
+                "fib_2": 7500.0,
+            }
+        }
+    )
+
+
+class SwingEventResponse(BaseModel):
+    """Response schema for swing events in hierarchical model."""
+    event_type: str  # SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED, LEVEL_CROSS
+    bar_index: int
+    timestamp: Optional[str] = None
+    swing_id: str
+    explanation: str  # Human-readable trigger explanation
+
+    # Event-specific fields (optional based on type)
+    parent_ids: Optional[List[str]] = None  # For SWING_FORMED
+    violation_price: Optional[float] = None  # For SWING_INVALIDATED
+    excess_amount: Optional[float] = None  # For SWING_INVALIDATED
+    level: Optional[float] = None  # For LEVEL_CROSS
+    previous_level: Optional[float] = None  # For LEVEL_CROSS
+
+
+class CalibrationSwingResponseV2(BaseModel):
+    """Updated calibration swing response with hierarchy info.
+
+    V2 schema removes scale dependency and uses hierarchy depth.
+    """
+    swing_id: str
+    high_bar_index: int
+    high_price: float
+    low_bar_index: int
+    low_price: float
+    direction: str
+    status: str
+
+    # Hierarchy (replaces scale)
+    depth: int
+    parent_ids: List[str]
+
+    # Fib levels
+    fib_0: float
+    fib_0382: float
+    fib_1: float
+    fib_2: float
+
+    # Activity status
+    is_active: bool
+
+
+class CalibrationResponseV2(BaseModel):
+    """Updated calibration response for hierarchical model.
+
+    V2 schema groups swings by hierarchy depth instead of scale.
+    """
+    swings: List[CalibrationSwingResponseV2]
+    total_bars: int
+    calibration_bars: int
+
+    # Hierarchy stats (replaces per-scale stats)
+    max_depth: int
+    swing_count_by_depth: Dict[str, int]  # {"0": 2, "1": 5, "2": 12, ...}
