@@ -244,3 +244,114 @@ class LevelCrossEvent(SwingEvent):
             f"{self.previous_level:.3f} to {self.level:.3f}\n"
             f"Moved from {from_side} to {to_side} {self.level:.3f} level"
         )
+
+
+@dataclass
+class LegCreatedEvent(SwingEvent):
+    """
+    Emitted when a new candidate leg is formed.
+
+    A leg is a directional price movement that may eventually form into a swing
+    if it reaches the formation threshold (0.382). Legs are the pre-formation
+    stage of swings.
+
+    Attributes:
+        event_type: Always "LEG_CREATED".
+        leg_id: Unique identifier for this leg.
+        direction: "bull" or "bear".
+        pivot_price: The defended pivot price (must hold).
+        pivot_index: Bar index where pivot was established.
+        origin_price: Current origin price.
+        origin_index: Bar index of origin.
+
+    Example:
+        >>> from datetime import datetime
+        >>> from decimal import Decimal
+        >>> event = LegCreatedEvent(
+        ...     bar_index=50,
+        ...     timestamp=datetime.now(),
+        ...     swing_id="",  # Leg doesn't have swing_id yet
+        ...     leg_id="leg_abc123",
+        ...     direction="bull",
+        ...     pivot_price=Decimal("5000.00"),
+        ...     pivot_index=40,
+        ...     origin_price=Decimal("5100.00"),
+        ...     origin_index=50,
+        ... )
+        >>> event.event_type
+        'LEG_CREATED'
+    """
+
+    event_type: Literal["LEG_CREATED"] = field(default="LEG_CREATED", init=False)
+    leg_id: str = ""
+    direction: str = ""  # 'bull' or 'bear'
+    pivot_price: Decimal = field(default_factory=lambda: Decimal("0"))
+    pivot_index: int = 0
+    origin_price: Decimal = field(default_factory=lambda: Decimal("0"))
+    origin_index: int = 0
+
+
+@dataclass
+class LegPrunedEvent(SwingEvent):
+    """
+    Emitted when a leg is removed due to staleness or dominance.
+
+    Legs are pruned when they become stale (price has moved 2x the leg's range
+    without the leg changing) or when a dominant leg makes them redundant.
+
+    Attributes:
+        event_type: Always "LEG_PRUNED".
+        leg_id: Unique identifier for the pruned leg.
+        reason: Why pruned ("staleness" or "dominance").
+
+    Example:
+        >>> from datetime import datetime
+        >>> event = LegPrunedEvent(
+        ...     bar_index=100,
+        ...     timestamp=datetime.now(),
+        ...     swing_id="",
+        ...     leg_id="leg_abc123",
+        ...     reason="staleness",
+        ... )
+        >>> event.event_type
+        'LEG_PRUNED'
+    """
+
+    event_type: Literal["LEG_PRUNED"] = field(default="LEG_PRUNED", init=False)
+    leg_id: str = ""
+    reason: str = ""  # 'staleness', 'dominance'
+
+
+@dataclass
+class LegInvalidatedEvent(SwingEvent):
+    """
+    Emitted when a leg falls below 0.382 threshold (decisive invalidation).
+
+    A leg is invalidated when price moves 38.2% of the leg's range beyond the
+    defended pivot. When a leg is invalidated, its origin is preserved as an
+    orphaned origin for potential sibling swing formation.
+
+    Attributes:
+        event_type: Always "LEG_INVALIDATED".
+        leg_id: Unique identifier for the invalidated leg.
+        invalidation_price: Price at which invalidation occurred.
+
+    Example:
+        >>> from datetime import datetime
+        >>> from decimal import Decimal
+        >>> event = LegInvalidatedEvent(
+        ...     bar_index=75,
+        ...     timestamp=datetime.now(),
+        ...     swing_id="",
+        ...     leg_id="leg_abc123",
+        ...     invalidation_price=Decimal("4961.80"),
+        ... )
+        >>> event.event_type
+        'LEG_INVALIDATED'
+    """
+
+    event_type: Literal["LEG_INVALIDATED"] = field(
+        default="LEG_INVALIDATED", init=False
+    )
+    leg_id: str = ""
+    invalidation_price: Decimal = field(default_factory=lambda: Decimal("0"))

@@ -327,6 +327,9 @@ The pipeline order per bar:
 | `SwingInvalidatedEvent` | Defended pivot violated beyond tolerance |
 | `SwingCompletedEvent` | Price reaches 2.0 extension target |
 | `LevelCrossEvent` | Price crosses Fib level boundary |
+| `LegCreatedEvent` | New candidate leg is created (pre-formation) |
+| `LegPrunedEvent` | Leg is removed due to staleness |
+| `LegInvalidatedEvent` | Leg falls below 0.382 threshold (decisive invalidation) |
 
 **Tolerance rules (Rule 2.2):**
 - Big swings (top 10% by range): full tolerance (0.15)

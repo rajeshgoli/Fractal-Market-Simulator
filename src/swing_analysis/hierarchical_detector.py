@@ -40,6 +40,9 @@ from .events import (
     SwingInvalidatedEvent,
     SwingCompletedEvent,
     LevelCrossEvent,
+    LegCreatedEvent,
+    LegPrunedEvent,
+    LegInvalidatedEvent,
 )
 from .reference_frame import ReferenceFrame
 from .types import Bar
@@ -513,8 +516,9 @@ class HierarchicalDetector:
             if leg.status == 'active':
                 leg.bar_count += 1
 
-        # Check staleness and prune
-        self._check_staleness(bar)
+        # Check staleness and prune (#168: now emits LegPrunedEvent)
+        staleness_events = self._check_staleness(bar, timestamp)
+        events.extend(staleness_events)
 
         # Prune orphaned origins (#163)
         self._prune_orphaned_origins(bar)
@@ -552,7 +556,7 @@ class HierarchicalDetector:
         self, bar: Bar, timestamp: datetime,
         bar_high: Decimal, bar_low: Decimal, bar_close: Decimal,
         prev_high: Decimal, prev_low: Decimal
-    ) -> List[SwingFormedEvent]:
+    ) -> List[SwingEvent]:
         """
         Process Type 2-Bull bar (HH, HL - trending up).
 
@@ -561,7 +565,7 @@ class HierarchicalDetector:
 
         Also extends any existing bull legs (tracking upward movement).
         """
-        events = []
+        events: List[SwingEvent] = []
 
         # Extend existing bull legs (tracking upward movement from defended lows)
         for leg in self.state.active_legs:
@@ -614,6 +618,18 @@ class HierarchicalDetector:
                     last_modified_bar=bar.index,
                 )
                 self.state.active_legs.append(new_leg)
+                # Emit LegCreatedEvent (#168)
+                events.append(LegCreatedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id="",  # Leg doesn't have swing_id yet
+                    leg_id=new_leg.leg_id,
+                    direction=new_leg.direction,
+                    pivot_price=new_leg.pivot_price,
+                    pivot_index=new_leg.pivot_index,
+                    origin_price=new_leg.origin_price,
+                    origin_index=new_leg.origin_index,
+                ))
 
         # Update pending pivots
         # New high could be a defended pivot for future bear swings
@@ -637,7 +653,7 @@ class HierarchicalDetector:
         self, bar: Bar, timestamp: datetime,
         bar_high: Decimal, bar_low: Decimal, bar_close: Decimal,
         prev_high: Decimal, prev_low: Decimal
-    ) -> List[SwingFormedEvent]:
+    ) -> List[SwingEvent]:
         """
         Process Type 2-Bear bar (LH, LL - trending down).
 
@@ -647,7 +663,7 @@ class HierarchicalDetector:
 
         Also extends any existing bear legs (tracking downward movement).
         """
-        events = []
+        events: List[SwingEvent] = []
 
         # Extend existing bear legs (tracking downward movement from defended highs)
         for leg in self.state.active_legs:
@@ -688,6 +704,18 @@ class HierarchicalDetector:
                     last_modified_bar=bar.index,
                 )
                 self.state.active_legs.append(new_leg)
+                # Emit LegCreatedEvent (#168)
+                events.append(LegCreatedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id="",
+                    leg_id=new_leg.leg_id,
+                    direction=new_leg.direction,
+                    pivot_price=new_leg.pivot_price,
+                    pivot_index=new_leg.pivot_index,
+                    origin_price=new_leg.origin_price,
+                    origin_index=new_leg.origin_index,
+                ))
 
         # Also start new bear leg for potential bear swing
         # (tracking downward movement for possible bear retracement later)
@@ -718,6 +746,18 @@ class HierarchicalDetector:
                     last_modified_bar=bar.index,
                 )
                 self.state.active_legs.append(new_bear_leg)
+                # Emit LegCreatedEvent (#168)
+                events.append(LegCreatedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id="",
+                    leg_id=new_bear_leg.leg_id,
+                    direction=new_bear_leg.direction,
+                    pivot_price=new_bear_leg.pivot_price,
+                    pivot_index=new_bear_leg.pivot_index,
+                    origin_price=new_bear_leg.origin_price,
+                    origin_index=new_bear_leg.origin_index,
+                ))
 
         # Update pending pivots
         # New low could be a defended pivot for future bull swings
@@ -740,7 +780,7 @@ class HierarchicalDetector:
     def _process_type1(
         self, bar: Bar, timestamp: datetime,
         bar_high: Decimal, bar_low: Decimal, bar_close: Decimal
-    ) -> List[SwingFormedEvent]:
+    ) -> List[SwingEvent]:
         """
         Process Type 1 bar (inside bar - LH, HL) or bars with equal H/L.
 
@@ -750,7 +790,7 @@ class HierarchicalDetector:
 
         We should create legs from pending pivots if they haven't been consumed yet.
         """
-        events = []
+        events: List[SwingEvent] = []
         prev_bar = self.state.prev_bar
         if prev_bar:
             pending_bear = self.state.pending_pivots.get('bear')  # High pivot
@@ -772,6 +812,18 @@ class HierarchicalDetector:
                         last_modified_bar=bar.index,
                     )
                     self.state.active_legs.append(new_bull_leg)
+                    # Emit LegCreatedEvent (#168)
+                    events.append(LegCreatedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id="",
+                        leg_id=new_bull_leg.leg_id,
+                        direction=new_bull_leg.direction,
+                        pivot_price=new_bull_leg.pivot_price,
+                        pivot_index=new_bull_leg.pivot_index,
+                        origin_price=new_bull_leg.origin_price,
+                        origin_index=new_bull_leg.origin_index,
+                    ))
 
             # Create bear leg if we have both low origin and high pivot
             # Bear swing: origin=LOW, pivot=HIGH (defended)
@@ -788,6 +840,18 @@ class HierarchicalDetector:
                         last_modified_bar=bar.index,
                     )
                     self.state.active_legs.append(new_bear_leg)
+                    # Emit LegCreatedEvent (#168)
+                    events.append(LegCreatedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id="",
+                        leg_id=new_bear_leg.leg_id,
+                        direction=new_bear_leg.direction,
+                        pivot_price=new_bear_leg.pivot_price,
+                        pivot_index=new_bear_leg.pivot_index,
+                        origin_price=new_bear_leg.origin_price,
+                        origin_index=new_bear_leg.origin_index,
+                    ))
 
             # Update pending pivots to current bar's extremes (for next iteration)
             self.state.pending_pivots['bear'] = PendingPivot(
@@ -823,14 +887,14 @@ class HierarchicalDetector:
         self, bar: Bar, timestamp: datetime,
         bar_high: Decimal, bar_low: Decimal, bar_close: Decimal,
         prev_high: Decimal, prev_low: Decimal
-    ) -> List[SwingFormedEvent]:
+    ) -> List[SwingEvent]:
         """
         Process Type 3 bar (outside bar - HH, LL).
 
         High volatility decision point. Both directions extended.
         Keep both branches until decisive resolution.
         """
-        events = []
+        events: List[SwingEvent] = []
 
         # Extend bull legs (new high)
         for leg in self.state.active_legs:
@@ -1157,11 +1221,13 @@ class HierarchicalDetector:
         - If the leg formed into a swing, that swing is also invalidated (#174)
 
         Returns:
-            List of SwingInvalidatedEvent for any swings invalidated due to leg invalidation.
+            List of LegInvalidatedEvent and SwingInvalidatedEvent for any
+            legs/swings invalidated.
         """
         events: List[SwingEvent] = []
         invalidation_threshold = Decimal("0.382")
         invalidated_legs: List[Leg] = []
+        invalidation_prices: Dict[str, Decimal] = {}  # leg_id -> price at invalidation
 
         for leg in self.state.active_legs:
             if leg.status != 'active':
@@ -1177,11 +1243,13 @@ class HierarchicalDetector:
                 if bar_low < invalidation_price:
                     leg.status = 'invalidated'
                     invalidated_legs.append(leg)
+                    invalidation_prices[leg.leg_id] = bar_low
             else:  # bear
                 invalidation_price = leg.pivot_price + threshold_amount
                 if bar_high > invalidation_price:
                     leg.status = 'invalidated'
                     invalidated_legs.append(leg)
+                    invalidation_prices[leg.leg_id] = bar_high
 
         # Preserve origins from invalidated legs (#163)
         # These can form sibling swings with the same defended pivot later
@@ -1190,6 +1258,15 @@ class HierarchicalDetector:
             # Add to orphaned origins if not already present
             if origin_tuple not in self.state.orphaned_origins[leg.direction]:
                 self.state.orphaned_origins[leg.direction].append(origin_tuple)
+
+            # Emit LegInvalidatedEvent (#168)
+            events.append(LegInvalidatedEvent(
+                bar_index=bar.index,
+                timestamp=timestamp,
+                swing_id=leg.swing_id or "",
+                leg_id=leg.leg_id,
+                invalidation_price=invalidation_prices.get(leg.leg_id, Decimal("0")),
+            ))
 
             # Propagate invalidation to swing if leg formed into one (#174)
             if leg.swing_id:
@@ -1209,14 +1286,19 @@ class HierarchicalDetector:
 
         return events
 
-    def _check_staleness(self, bar: Bar) -> None:
+    def _check_staleness(self, bar: Bar, timestamp: datetime) -> List[LegPrunedEvent]:
         """
         Apply staleness pruning (2x rule).
 
         A leg is stale when price has moved 2x the leg's range without
         the leg changing.
+
+        Returns:
+            List of LegPrunedEvent for any legs pruned due to staleness.
         """
+        events: List[LegPrunedEvent] = []
         staleness_threshold = Decimal(str(self.config.staleness_threshold))
+        stale_legs: List[Leg] = []
 
         for leg in self.state.active_legs:
             if leg.status != 'active':
@@ -1243,9 +1325,22 @@ class HierarchicalDetector:
             if price_move > staleness_threshold * leg.range:
                 if leg.last_modified_bar < bar.index - 10:  # Haven't changed in 10 bars
                     leg.status = 'stale'
+                    stale_legs.append(leg)
+
+        # Emit LegPrunedEvent for each stale leg (#168)
+        for leg in stale_legs:
+            events.append(LegPrunedEvent(
+                bar_index=bar.index,
+                timestamp=timestamp,
+                swing_id="",
+                leg_id=leg.leg_id,
+                reason="staleness",
+            ))
 
         # Remove stale legs
         self.state.active_legs = [leg for leg in self.state.active_legs if leg.status != 'stale']
+
+        return events
 
     def _prune_orphaned_origins(self, bar: Bar) -> None:
         """

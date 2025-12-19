@@ -17,6 +17,9 @@ from src.swing_analysis.events import (
     SwingInvalidatedEvent,
     SwingCompletedEvent,
     LevelCrossEvent,
+    LegCreatedEvent,
+    LegPrunedEvent,
+    LegInvalidatedEvent,
 )
 
 
@@ -460,3 +463,332 @@ class TestEventDefaults:
         assert event.level == 0.0
         assert event.previous_level == 0.0
         assert event.price == Decimal("0")
+
+
+class TestLegCreatedEvent:
+    """Test LegCreatedEvent creation and fields."""
+
+    def test_leg_created_event_type(self):
+        """LegCreatedEvent has correct event_type."""
+        event = LegCreatedEvent(
+            bar_index=50,
+            timestamp=datetime.now(),
+            swing_id="",
+            leg_id="leg_abc123",
+            direction="bull",
+            pivot_price=Decimal("5000.00"),
+            pivot_index=40,
+            origin_price=Decimal("5100.00"),
+            origin_index=50,
+        )
+        assert event.event_type == "LEG_CREATED"
+
+    def test_bull_leg_creation(self):
+        """Create a bull leg created event."""
+        event = LegCreatedEvent(
+            bar_index=50,
+            timestamp=datetime(2025, 1, 15, 10, 30, 0),
+            swing_id="",
+            leg_id="leg_bull001",
+            direction="bull",
+            pivot_price=Decimal("5000.00"),
+            pivot_index=40,
+            origin_price=Decimal("5100.00"),
+            origin_index=50,
+        )
+
+        assert event.leg_id == "leg_bull001"
+        assert event.direction == "bull"
+        assert event.pivot_price == Decimal("5000.00")
+        assert event.origin_price == Decimal("5100.00")
+        assert event.pivot_index == 40
+        assert event.origin_index == 50
+
+    def test_bear_leg_creation(self):
+        """Create a bear leg created event."""
+        event = LegCreatedEvent(
+            bar_index=60,
+            timestamp=datetime(2025, 1, 15, 10, 30, 0),
+            swing_id="",
+            leg_id="leg_bear001",
+            direction="bear",
+            pivot_price=Decimal("5200.00"),
+            pivot_index=50,
+            origin_price=Decimal("5000.00"),
+            origin_index=60,
+        )
+
+        assert event.leg_id == "leg_bear001"
+        assert event.direction == "bear"
+        assert event.pivot_price == Decimal("5200.00")
+        assert event.origin_price == Decimal("5000.00")
+
+    def test_leg_created_defaults(self):
+        """LegCreatedEvent has correct defaults."""
+        event = LegCreatedEvent(
+            bar_index=100,
+            timestamp=datetime.now(),
+            swing_id="",
+        )
+
+        assert event.leg_id == ""
+        assert event.direction == ""
+        assert event.pivot_price == Decimal("0")
+        assert event.pivot_index == 0
+        assert event.origin_price == Decimal("0")
+        assert event.origin_index == 0
+
+
+class TestLegPrunedEvent:
+    """Test LegPrunedEvent creation and fields."""
+
+    def test_leg_pruned_event_type(self):
+        """LegPrunedEvent has correct event_type."""
+        event = LegPrunedEvent(
+            bar_index=100,
+            timestamp=datetime.now(),
+            swing_id="",
+            leg_id="leg_abc123",
+            reason="staleness",
+        )
+        assert event.event_type == "LEG_PRUNED"
+
+    def test_staleness_pruning(self):
+        """Create a leg pruned event due to staleness."""
+        event = LegPrunedEvent(
+            bar_index=100,
+            timestamp=datetime(2025, 1, 15, 10, 30, 0),
+            swing_id="",
+            leg_id="leg_stale001",
+            reason="staleness",
+        )
+
+        assert event.leg_id == "leg_stale001"
+        assert event.reason == "staleness"
+
+    def test_dominance_pruning(self):
+        """Create a leg pruned event due to dominance."""
+        event = LegPrunedEvent(
+            bar_index=100,
+            timestamp=datetime(2025, 1, 15, 10, 30, 0),
+            swing_id="",
+            leg_id="leg_dom001",
+            reason="dominance",
+        )
+
+        assert event.leg_id == "leg_dom001"
+        assert event.reason == "dominance"
+
+    def test_leg_pruned_defaults(self):
+        """LegPrunedEvent has correct defaults."""
+        event = LegPrunedEvent(
+            bar_index=100,
+            timestamp=datetime.now(),
+            swing_id="",
+        )
+
+        assert event.leg_id == ""
+        assert event.reason == ""
+
+
+class TestLegInvalidatedEvent:
+    """Test LegInvalidatedEvent creation and fields."""
+
+    def test_leg_invalidated_event_type(self):
+        """LegInvalidatedEvent has correct event_type."""
+        event = LegInvalidatedEvent(
+            bar_index=75,
+            timestamp=datetime.now(),
+            swing_id="",
+            leg_id="leg_abc123",
+            invalidation_price=Decimal("4961.80"),
+        )
+        assert event.event_type == "LEG_INVALIDATED"
+
+    def test_bull_leg_invalidation(self):
+        """Create a bull leg invalidated event."""
+        event = LegInvalidatedEvent(
+            bar_index=75,
+            timestamp=datetime(2025, 1, 15, 10, 30, 0),
+            swing_id="",
+            leg_id="leg_bull001",
+            invalidation_price=Decimal("4961.80"),
+        )
+
+        assert event.leg_id == "leg_bull001"
+        assert event.invalidation_price == Decimal("4961.80")
+
+    def test_leg_with_formed_swing(self):
+        """LegInvalidatedEvent can reference a formed swing."""
+        event = LegInvalidatedEvent(
+            bar_index=75,
+            timestamp=datetime(2025, 1, 15, 10, 30, 0),
+            swing_id="swing_abc123",  # Leg had formed into a swing
+            leg_id="leg_bull001",
+            invalidation_price=Decimal("4961.80"),
+        )
+
+        assert event.swing_id == "swing_abc123"
+        assert event.leg_id == "leg_bull001"
+
+    def test_leg_invalidated_defaults(self):
+        """LegInvalidatedEvent has correct defaults."""
+        event = LegInvalidatedEvent(
+            bar_index=100,
+            timestamp=datetime.now(),
+            swing_id="",
+        )
+
+        assert event.leg_id == ""
+        assert event.invalidation_price == Decimal("0")
+
+
+class TestLegEventTypeDiscrimination:
+    """Test that leg event types can be filtered and discriminated."""
+
+    def test_filter_leg_events_by_type(self):
+        """Can filter a list of events by leg event type."""
+        now = datetime.now()
+        events = [
+            LegCreatedEvent(bar_index=50, timestamp=now, swing_id="", leg_id="l1", direction="bull"),
+            LegCreatedEvent(bar_index=60, timestamp=now, swing_id="", leg_id="l2", direction="bear"),
+            LegPrunedEvent(bar_index=100, timestamp=now, swing_id="", leg_id="l1", reason="staleness"),
+            LegInvalidatedEvent(bar_index=75, timestamp=now, swing_id="", leg_id="l3"),
+            SwingFormedEvent(bar_index=80, timestamp=now, swing_id="s1"),  # Regular swing event
+        ]
+
+        leg_created = [e for e in events if e.event_type == "LEG_CREATED"]
+        assert len(leg_created) == 2
+
+        leg_pruned = [e for e in events if e.event_type == "LEG_PRUNED"]
+        assert len(leg_pruned) == 1
+
+        leg_invalidated = [e for e in events if e.event_type == "LEG_INVALIDATED"]
+        assert len(leg_invalidated) == 1
+
+    def test_all_leg_event_types_distinct(self):
+        """Each leg event type has a distinct event_type string."""
+        now = datetime.now()
+
+        created = LegCreatedEvent(bar_index=50, timestamp=now, swing_id="")
+        pruned = LegPrunedEvent(bar_index=100, timestamp=now, swing_id="")
+        invalidated = LegInvalidatedEvent(bar_index=75, timestamp=now, swing_id="")
+
+        event_types = {created.event_type, pruned.event_type, invalidated.event_type}
+        assert len(event_types) == 3
+        assert event_types == {"LEG_CREATED", "LEG_PRUNED", "LEG_INVALIDATED"}
+
+
+class TestLegEventSerialization:
+    """Test that leg events can be serialized to JSON-compatible dicts."""
+
+    def test_leg_created_serialization(self):
+        """LegCreatedEvent can be serialized to dict."""
+        ts = datetime(2025, 1, 15, 10, 30, 0)
+        event = LegCreatedEvent(
+            bar_index=50,
+            timestamp=ts,
+            swing_id="",
+            leg_id="leg_001",
+            direction="bull",
+            pivot_price=Decimal("5000.00"),
+            pivot_index=40,
+            origin_price=Decimal("5100.00"),
+            origin_index=50,
+        )
+
+        data = {
+            "event_type": event.event_type,
+            "bar_index": event.bar_index,
+            "timestamp": event.timestamp.isoformat(),
+            "swing_id": event.swing_id,
+            "leg_id": event.leg_id,
+            "direction": event.direction,
+            "pivot_price": str(event.pivot_price),
+            "pivot_index": event.pivot_index,
+            "origin_price": str(event.origin_price),
+            "origin_index": event.origin_index,
+        }
+
+        json_str = json.dumps(data)
+        parsed = json.loads(json_str)
+
+        assert parsed["event_type"] == "LEG_CREATED"
+        assert parsed["leg_id"] == "leg_001"
+        assert parsed["direction"] == "bull"
+        assert parsed["pivot_price"] == "5000.00"
+
+    def test_leg_pruned_serialization(self):
+        """LegPrunedEvent can be serialized to dict."""
+        ts = datetime(2025, 1, 15, 10, 30, 0)
+        event = LegPrunedEvent(
+            bar_index=100,
+            timestamp=ts,
+            swing_id="",
+            leg_id="leg_002",
+            reason="staleness",
+        )
+
+        data = {
+            "event_type": event.event_type,
+            "bar_index": event.bar_index,
+            "timestamp": event.timestamp.isoformat(),
+            "swing_id": event.swing_id,
+            "leg_id": event.leg_id,
+            "reason": event.reason,
+        }
+
+        json_str = json.dumps(data)
+        parsed = json.loads(json_str)
+
+        assert parsed["event_type"] == "LEG_PRUNED"
+        assert parsed["leg_id"] == "leg_002"
+        assert parsed["reason"] == "staleness"
+
+    def test_leg_invalidated_serialization(self):
+        """LegInvalidatedEvent can be serialized to dict."""
+        ts = datetime(2025, 1, 15, 10, 30, 0)
+        event = LegInvalidatedEvent(
+            bar_index=75,
+            timestamp=ts,
+            swing_id="swing_001",
+            leg_id="leg_003",
+            invalidation_price=Decimal("4961.80"),
+        )
+
+        data = {
+            "event_type": event.event_type,
+            "bar_index": event.bar_index,
+            "timestamp": event.timestamp.isoformat(),
+            "swing_id": event.swing_id,
+            "leg_id": event.leg_id,
+            "invalidation_price": str(event.invalidation_price),
+        }
+
+        json_str = json.dumps(data)
+        parsed = json.loads(json_str)
+
+        assert parsed["event_type"] == "LEG_INVALIDATED"
+        assert parsed["leg_id"] == "leg_003"
+        assert parsed["invalidation_price"] == "4961.80"
+
+    def test_all_leg_events_json_serializable(self):
+        """All leg event types can be converted to JSON."""
+        ts = datetime(2025, 1, 15, 10, 30, 0)
+
+        events = [
+            LegCreatedEvent(bar_index=50, timestamp=ts, swing_id="", leg_id="l1", direction="bull"),
+            LegPrunedEvent(bar_index=100, timestamp=ts, swing_id="", leg_id="l2", reason="staleness"),
+            LegInvalidatedEvent(bar_index=75, timestamp=ts, swing_id="", leg_id="l3"),
+        ]
+
+        for event in events:
+            data = {
+                "event_type": event.event_type,
+                "bar_index": event.bar_index,
+                "timestamp": event.timestamp.isoformat(),
+                "swing_id": event.swing_id,
+            }
+            json_str = json.dumps(data)
+            parsed = json.loads(json_str)
+            assert parsed["event_type"] == event.event_type
