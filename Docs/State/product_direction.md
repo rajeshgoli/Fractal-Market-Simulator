@@ -13,9 +13,32 @@ Performance target achieved (#158). Reference layer complete (#159). Now blocked
 
 ---
 
-## P0: Sibling Swing Detection (#163)
+## P0: DAG Visualization Mode (NEW)
 
-**Status:** Spec approved. Ready for engineering.
+**Status:** Requirements captured. Awaiting Architect feasibility assessment.
+
+### Why This First
+
+User insight: "Easier to iterate visually than abstractly." Before implementing #163 (sibling detection), we need confidence that the current DAG behavior is correct. Watching it build in real-time surfaces subtle bugs and validates structural decisions faster than inferring from final output.
+
+### Scope
+
+Temporary validation tool — remove once algorithm is rock solid.
+
+- Two charts (macro + micro zoom)
+- State panel showing DAG internals (orphaned 1s, active legs)
+- Linger events: Leg created, Leg pruned, Leg invalidated
+- Reuse existing Replay View infrastructure
+
+### Next Step
+
+Architect answers feasibility questions in `Docs/Comms/questions.md`, then Engineering implements.
+
+---
+
+## P1: Sibling Swing Detection (#163)
+
+**Status:** Spec approved. Ready for engineering after DAG visualization enables validation.
 
 ### Problem
 
@@ -114,9 +137,9 @@ From `Docs/Reference/valid_swings.md` — ES as of Dec 18, 2025:
 ## Checkpoint Trigger
 
 **Invoke Product when:**
+- DAG Visualization complete — ready to validate algorithm behavior
 - #163 complete — validate L1-L7 all detected
-- Run detection on ES data and verify sibling swings appear
-- Unexpected detection behavior observed in Replay View
+- Unexpected detection behavior observed during visual validation
 
 ---
 
