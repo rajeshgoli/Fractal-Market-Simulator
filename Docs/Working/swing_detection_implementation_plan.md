@@ -14,13 +14,13 @@ This plan decomposes the swing detection rewrite into minimal, testable issues. 
 
 ## Current State Analysis
 
-### Files to Replace
+### Files to Delete
 
-| File | Lines | Purpose | Consumers |
-|------|-------|---------|-----------|
-| `swing_detector.py` | 1549 | Batch detection, ReferenceSwing | 7 modules |
-| `incremental_detector.py` | 725 | Bar-by-bar detection | replay.py only |
-| `scale_calibrator.py` | ~300 | S/M/L/XL quartile calculation | 2 modules |
+| File | Lines | Purpose | Notes |
+|------|-------|---------|-------|
+| `swing_detector.py` | 1549 | Batch detection, ReferenceSwing | Replaced by HierarchicalDetector |
+| `incremental_detector.py` | 725 | Bar-by-bar detection | Replaced by process_bar() |
+| `scale_calibrator.py` | ~300 | S/M/L/XL quartile calculation | **Obsolete** — entire S/M/L/XL model removed |
 
 ### Files to Keep/Extend
 
@@ -40,10 +40,10 @@ routers/discretization.py ──> detect_swings() ──> ReferenceSwing
 
 discretizer.py ──> ReferenceSwing (type only)
 
-scale_calibrator.py ──> detect_swings()
-
 swing_state_manager.py ──> detect_swings()
 ```
+
+**Note:** `scale_calibrator.py` is NOT an integration point — it's part of the S/M/L/XL model being deleted entirely.
 
 ### Test Files Affected
 
