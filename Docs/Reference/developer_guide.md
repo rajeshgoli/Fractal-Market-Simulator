@@ -270,7 +270,14 @@ def on_progress(current: int, total: int):
 
 detector, events = calibrate(bars, progress_callback=on_progress)
 
-# Option 4: Process bars incrementally
+# Option 4: Calibrate with Reference layer for tolerance-based invalidation
+from src.swing_analysis.reference_layer import ReferenceLayer
+config = SwingConfig.default()
+ref_layer = ReferenceLayer(config)
+detector, events = calibrate(bars, config, ref_layer=ref_layer)
+# Events now include Reference layer invalidation/completion events
+
+# Option 5: Process bars incrementally
 config = SwingConfig.default()
 detector = HierarchicalDetector(config)
 for bar in bars:
@@ -292,9 +299,18 @@ detector2 = HierarchicalDetector.from_state(restored_state, config)
 **Calibration functions:**
 | Function | Purpose |
 |----------|---------|
-| `calibrate(bars, config, progress_callback)` | Run detection on Bar list |
-| `calibrate_from_dataframe(df, config, progress_callback)` | Convenience wrapper for DataFrame input |
+| `calibrate(bars, config, progress_callback, ref_layer)` | Run detection on Bar list |
+| `calibrate_from_dataframe(df, config, progress_callback, ref_layer)` | Convenience wrapper for DataFrame input |
 | `dataframe_to_bars(df)` | Convert DataFrame with OHLC columns to Bar list |
+
+**Pipeline integration (ref_layer parameter):**
+
+When a `ReferenceLayer` is passed to `calibrate()`, tolerance-based invalidation and completion are applied during calibration, not just at response time. This ensures accurate swing counts throughout the replay.
+
+The pipeline order per bar:
+1. `detector.process_bar(bar)` — DAG events (formation, structural invalidation, level cross)
+2. `ref_layer.update_invalidation_on_bar(swings, bar)` — Tolerance-based invalidation
+3. `ref_layer.update_completion_on_bar(swings, bar)` — Completion (2× for small swings)
 
 **Key design principles:**
 - **No lookahead** — Algorithm only sees current and past bars

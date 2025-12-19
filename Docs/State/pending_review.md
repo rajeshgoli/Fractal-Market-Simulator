@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 8
+**Unreviewed Change Count:** 9
 
 **Last Review:** 2025-12-19
 
@@ -16,6 +16,7 @@
 - **#165** — Simplify Reference Layer: hierarchy-based big/small, completion rules
 - **#166** — Redesign calibration UI: tree navigation filters, structure summary, validation quick-checks
 - **#174** — Propagate leg invalidation to swing invalidation (O(n²) performance fix)
+- **#175** — Wire Reference layer invalidation/completion into calibrate() and advance()
 
 ---
 

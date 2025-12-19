@@ -747,9 +747,13 @@ async def calibrate_replay(
     logger.info(f"Running calibration on {actual_bar_count} bars...")
     calibrate_start = time.time()
 
-    # Run calibration using HierarchicalDetector
+    # Run calibration using HierarchicalDetector with Reference layer (#175)
+    # This ensures tolerance-based invalidation and completion are applied
+    # during calibration, not just at response time.
     calibration_bars = s.source_bars[:actual_bar_count]
-    detector, events = calibrate(calibration_bars)
+    config = SwingConfig.default()
+    ref_layer = ReferenceLayer(config)
+    detector, events = calibrate(calibration_bars, config, ref_layer=ref_layer)
 
     logger.info(f"Calibration processing took {time.time() - calibrate_start:.2f}s")
 
@@ -760,8 +764,8 @@ async def calibrate_replay(
     active_dag_swings = detector.get_active_swings()
 
     # Apply Reference layer filtering (fixes #160)
-    config = SwingConfig.default()
-    ref_layer = ReferenceLayer(config)
+    # Note: ref_layer was created above and passed to calibrate() for
+    # tolerance-based invalidation/completion during calibration (#175)
     reference_swing_infos = ref_layer.get_reference_swings(active_dag_swings)
 
     # Extract the filtered SwingNode objects
@@ -898,11 +902,42 @@ async def advance_replay(request: ReplayAdvanceRequest):
     all_events: List[ReplayEventResponse] = []
     scale_thresholds = _replay_cache.get("scale_thresholds", {})
 
+    # Get Reference layer from cache for tolerance-based checks (#175)
+    ref_layer = _replay_cache.get("reference_layer")
+
     for idx in range(start_idx, end_idx):
         bar = s.source_bars[idx]
 
-        # Process bar with detector
+        # 1. Process bar with detector (DAG events)
         events = detector.process_bar(bar)
+
+        # 2. Apply Reference layer invalidation/completion (#175)
+        if ref_layer is not None:
+            from datetime import datetime
+            timestamp = datetime.fromtimestamp(bar.timestamp) if bar.timestamp else datetime.now()
+            active_swings = detector.get_active_swings()
+
+            # Check invalidation (tolerance-based rules)
+            invalidated = ref_layer.update_invalidation_on_bar(active_swings, bar)
+            for swing, result in invalidated:
+                swing.invalidate()
+                events.append(SwingInvalidatedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=swing.swing_id,
+                    reason=f"reference_layer:{result.reason}",
+                ))
+
+            # Check completion (2× for small swings, big swings never complete)
+            completed = ref_layer.update_completion_on_bar(active_swings, bar)
+            for swing, result in completed:
+                swing.complete()
+                events.append(SwingCompletedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=swing.swing_id,
+                    completion_price=result.completion_price,
+                ))
 
         # Add bar to response
         new_bars.append(ReplayBarResponse(

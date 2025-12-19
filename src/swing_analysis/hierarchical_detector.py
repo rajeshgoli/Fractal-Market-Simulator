@@ -44,6 +44,11 @@ from .events import (
 from .reference_frame import ReferenceFrame
 from .types import Bar
 
+# Import ReferenceLayer for type hints (avoid circular import)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .reference_layer import ReferenceLayer
+
 
 # Fibonacci levels to track for level cross events
 FIB_LEVELS = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.382, 1.5, 1.618, 2.0]
@@ -1481,6 +1486,7 @@ def calibrate(
     bars: List[Bar],
     config: SwingConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    ref_layer: Optional["ReferenceLayer"] = None,
 ) -> Tuple["HierarchicalDetector", List[SwingEvent]]:
     """
     Run detection on historical bars.
@@ -1488,10 +1494,18 @@ def calibrate(
     This is process_bar() in a loop — guarantees identical behavior
     to incremental playback.
 
+    When a ReferenceLayer is provided, invalidation and completion checks
+    are applied after each bar according to the Reference layer rules
+    (tolerance-based invalidation for big swings, 2× completion for small swings).
+    See Docs/Working/DAG_spec.md for the pipeline integration spec.
+
     Args:
         bars: Historical bars to process.
         config: Detection configuration (defaults to SwingConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
+        ref_layer: Optional ReferenceLayer for tolerance-based invalidation and
+            completion. If provided, swings are pruned according to Reference
+            layer rules during calibration (not just at response time).
 
     Returns:
         Tuple of (detector with state, all events generated).
@@ -1507,6 +1521,11 @@ def calibrate(
         >>> def on_progress(current, total):
         ...     print(f"Processing bar {current}/{total}")
         >>> detector, events = calibrate(bars, progress_callback=on_progress)
+
+        >>> # With Reference layer for tolerance-based invalidation
+        >>> from swing_analysis.reference_layer import ReferenceLayer
+        >>> ref_layer = ReferenceLayer(config)
+        >>> detector, events = calibrate(bars, ref_layer=ref_layer)
     """
     config = config or SwingConfig.default()
 
@@ -1515,8 +1534,38 @@ def calibrate(
     total = len(bars)
 
     for i, bar in enumerate(bars):
+        # Create timestamp for events
+        timestamp = datetime.fromtimestamp(bar.timestamp) if bar.timestamp else datetime.now()
+
+        # 1. Process bar for DAG events (formation, structural invalidation, level cross)
         events = detector.process_bar(bar)
         all_events.extend(events)
+
+        # 2. Apply Reference layer invalidation/completion if provided (#175)
+        if ref_layer is not None:
+            active_swings = detector.get_active_swings()
+
+            # Check invalidation (tolerance-based rules)
+            invalidated = ref_layer.update_invalidation_on_bar(active_swings, bar)
+            for swing, result in invalidated:
+                swing.invalidate()
+                all_events.append(SwingInvalidatedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=swing.swing_id,
+                    reason=f"reference_layer:{result.reason}",
+                ))
+
+            # Check completion (2× for small swings, big swings never complete)
+            completed = ref_layer.update_completion_on_bar(active_swings, bar)
+            for swing, result in completed:
+                swing.complete()
+                all_events.append(SwingCompletedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=swing.swing_id,
+                    completion_price=result.completion_price,
+                ))
 
         if progress_callback:
             progress_callback(i + 1, total)
@@ -1589,6 +1638,7 @@ def calibrate_from_dataframe(
     df: pd.DataFrame,
     config: SwingConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    ref_layer: Optional["ReferenceLayer"] = None,
 ) -> Tuple["HierarchicalDetector", List[SwingEvent]]:
     """
     Convenience wrapper for DataFrame input.
@@ -1599,6 +1649,9 @@ def calibrate_from_dataframe(
         df: DataFrame with OHLC columns (open, high, low, close).
         config: Detection configuration (defaults to SwingConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
+        ref_layer: Optional ReferenceLayer for tolerance-based invalidation and
+            completion. If provided, swings are pruned according to Reference
+            layer rules during calibration (not just at response time).
 
     Returns:
         Tuple of (detector with state, all events generated).
@@ -1608,6 +1661,11 @@ def calibrate_from_dataframe(
         >>> df = pd.read_csv("ES-5m.csv")
         >>> detector, events = calibrate_from_dataframe(df)
         >>> print(f"Detected {len(detector.get_active_swings())} active swings")
+
+        >>> # With Reference layer for tolerance-based invalidation
+        >>> from swing_analysis.reference_layer import ReferenceLayer
+        >>> ref_layer = ReferenceLayer()
+        >>> detector, events = calibrate_from_dataframe(df, ref_layer=ref_layer)
     """
     bars = dataframe_to_bars(df)
-    return calibrate(bars, config, progress_callback)
+    return calibrate(bars, config, progress_callback, ref_layer)
