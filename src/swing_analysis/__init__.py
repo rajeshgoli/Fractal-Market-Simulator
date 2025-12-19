@@ -14,6 +14,9 @@ from .hierarchical_detector import HierarchicalDetector, calibrate
 from .swing_node import SwingNode
 from .swing_config import SwingConfig
 
+# Reference layer (post-DAG filtering)
+from .reference_layer import ReferenceLayer, ReferenceSwingInfo, InvalidationResult
+
 # Backward compatibility adapters
 from .adapters import (
     ReferenceSwing,

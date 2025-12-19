@@ -325,6 +325,71 @@ detector2 = HierarchicalDetector.from_state(restored_state, config)
 
 ---
 
+### Reference Layer
+
+**File:** `src/swing_analysis/reference_layer.py`
+
+Post-processes DAG output to produce trading references. Applies semantic filtering rules from `Docs/Reference/valid_swings.md`.
+
+```python
+from src.swing_analysis.reference_layer import (
+    ReferenceLayer,
+    ReferenceSwingInfo,
+    InvalidationResult,
+)
+from src.swing_analysis.hierarchical_detector import calibrate
+from src.swing_analysis.swing_config import SwingConfig
+
+# Get swings from DAG
+detector, events = calibrate(bars)
+swings = detector.get_active_swings()
+
+# Apply reference layer filters
+config = SwingConfig.default()
+ref_layer = ReferenceLayer(config)
+reference_swings = ref_layer.get_reference_swings(swings)
+
+# Check invalidation on new bar with touch/close thresholds
+for info in reference_swings:
+    result = ref_layer.check_invalidation(info.swing, bar)
+    if result.is_invalidated:
+        print(f"{info.swing.swing_id} invalidated: {result.reason}")
+
+# Get only big swings (top 10% by range)
+big_swings = ref_layer.get_big_swings(swings)
+
+# Batch invalidation check
+invalidated = ref_layer.update_invalidation_on_bar(swings, bar)
+for swing, result in invalidated:
+    swing.invalidate()
+```
+
+**Key operations:**
+| Method | Purpose |
+|--------|---------|
+| `classify_swings(swings)` | Compute big/small classification, set tolerances |
+| `filter_by_separation(swings)` | Apply Rules 4.1 (self) and 4.2 (parent-child) |
+| `check_invalidation(swing, bar)` | Apply Rule 2.2 with touch/close thresholds |
+| `get_reference_swings(swings)` | Get all swings that pass filters |
+| `get_big_swings(swings)` | Get only big swings (top 10%) |
+
+**Invalidation thresholds (Rule 2.2):**
+| Swing Size | Touch Tolerance | Close Tolerance |
+|------------|-----------------|-----------------|
+| Big (top 10%) | 0.15 × range | 0.10 × range |
+| Child of big | 0.10 × range | 0.10 × range |
+| Small | 0 (absolute) | 0 (absolute) |
+
+**ReferenceSwingInfo fields:**
+- `swing`: The underlying SwingNode
+- `is_big`: Whether this is a big swing (top 10%)
+- `touch_tolerance`: Tolerance for wick violations
+- `close_tolerance`: Tolerance for close violations
+- `is_reference`: Whether swing passes all filters
+- `filter_reason`: Why filtered (if not reference)
+
+---
+
 ### Reference Frame
 
 **File:** `src/swing_analysis/reference_frame.py`
