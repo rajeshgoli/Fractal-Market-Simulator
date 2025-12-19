@@ -181,6 +181,13 @@ def main():
         default=None,
         help="Filter data to start at this date. Formats: 2020-Jan-01, 2020-01-01. Overrides --offset."
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["calibration", "dag"],
+        default="calibration",
+        help="Visualization mode: 'calibration' (default) for swing calibration, 'dag' for DAG build visualization"
+    )
 
     args = parser.parse_args()
 
@@ -193,7 +200,8 @@ def main():
 
     # Print startup info
     print(f"\n{'='*60}")
-    print("Replay View Server (HierarchicalDetector)")
+    mode_label = "DAG Build" if args.mode == "dag" else "Calibration"
+    print(f"Replay View Server — {mode_label} Mode")
     print(f"{'='*60}")
 
     offset = 0
@@ -239,7 +247,8 @@ def main():
             resolution_minutes=resolution_minutes,
             window_size=args.window,
             target_bars=args.target_bars,
-            window_offset=offset
+            window_offset=offset,
+            mode=args.mode
         )
         init_time = time.time() - start_time
     except FileNotFoundError as e:

@@ -2,6 +2,19 @@ import { BarData, AggregationScale, DetectedSwing, CalibrationData } from '../ty
 
 const API_BASE = '/api';
 
+// App configuration (mode, etc.)
+export interface AppConfig {
+  mode: 'calibration' | 'dag';
+}
+
+export async function fetchConfig(): Promise<AppConfig> {
+  const response = await fetch(`${API_BASE}/config`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch config: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 export interface SessionInfo {
   session_id: string;
   data_file: string;
@@ -71,7 +84,7 @@ export interface ReplayBarData {
 }
 
 export interface ReplayEvent {
-  type: 'SWING_FORMED' | 'SWING_INVALIDATED' | 'SWING_COMPLETED' | 'LEVEL_CROSS';
+  type: 'SWING_FORMED' | 'SWING_INVALIDATED' | 'SWING_COMPLETED' | 'LEVEL_CROSS' | 'LEG_CREATED' | 'LEG_PRUNED' | 'LEG_INVALIDATED';
   bar_index: number;
   scale: string;
   direction: string;

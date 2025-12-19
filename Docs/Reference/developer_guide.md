@@ -42,10 +42,14 @@ src/
 
 frontend/                           # React + Vite Replay View
 ├── src/
-│   ├── pages/Replay.tsx            # Main replay page
+│   ├── pages/
+│   │   ├── Replay.tsx              # Main replay page (calibration mode)
+│   │   └── DAGView.tsx             # DAG visualization page (dag mode)
 │   ├── components/
 │   │   ├── ChartArea.tsx           # Dual lightweight-charts
 │   │   ├── SwingOverlay.tsx        # Fib level rendering
+│   │   ├── LegOverlay.tsx          # Leg visualization (DAG mode)
+│   │   ├── DAGStatePanel.tsx       # DAG internal state display
 │   │   ├── PlaybackControls.tsx    # Transport controls
 │   │   └── ExplanationPanel.tsx    # Swing detail display
 │   └── hooks/
@@ -585,9 +589,11 @@ cd frontend && npm run build  # Output: frontend/dist/
 
 | Component | Purpose |
 |-----------|---------|
-| `Replay.tsx` | Main page, state coordination |
+| `Replay.tsx` | Main page for calibration mode |
+| `DAGView.tsx` | Page for DAG build visualization mode |
 | `ChartArea.tsx` | Two stacked lightweight-charts |
 | `SwingOverlay.tsx` | Fib level rendering on charts |
+| `LegOverlay.tsx` | Leg visualization for DAG mode |
 | `PlaybackControls.tsx` | Play/pause/step transport |
 | `ExplanationPanel.tsx` | Calibration report and swing details |
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots) |
@@ -685,6 +691,10 @@ python -m src.ground_truth_annotator.main --data test.csv --port 8001
 The replay view backend (`src/ground_truth_annotator/`) uses HierarchicalDetector for incremental swing detection with Reference layer filtering:
 
 ```python
+# Config: GET /api/config
+# Returns application configuration including visualization mode
+# {mode: "calibration" | "dag"}
+
 # Calibration: GET /api/replay/calibrate?bar_count=10000
 # Returns swings grouped by scale with hierarchy info (depth, parent_ids)
 

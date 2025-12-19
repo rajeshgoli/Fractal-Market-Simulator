@@ -39,7 +39,20 @@ python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10
 #   --window 50000      Calibration window size (default: 50000)
 #   --offset random     Random window offset (default: 0)
 #   --start-date 2020-Jan-01  Start at specific date
+#   --mode calibration  Visualization mode (default: calibration)
+#   --mode dag          DAG Build mode for leg visualization
 ```
+
+### Visualization Modes
+
+The server supports two visualization modes:
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| Calibration | `--mode calibration` | Default mode for swing calibration and review |
+| DAG Build | `--mode dag` | Watch the DAG build in real-time with leg visualization |
+
+**DAG Build Mode** is useful for observing how the hierarchical detector creates and manages candidate legs before they form into swings. See [DAG Build Mode](#dag-build-mode) for details.
 
 ### Layout
 
@@ -328,3 +341,76 @@ The feedback input is always visible during playback (not just during linger eve
 | `←` | Linger (multi-event) | Previous event in queue |
 | `→` | Linger (multi-event) | Next event in queue |
 | `Escape` | Linger | Dismiss linger and resume playback |
+
+---
+
+## DAG Build Mode
+
+DAG Build Mode provides a specialized view for observing how the hierarchical detector creates and manages candidate legs before they form into swings.
+
+### Quick Start
+
+```bash
+# Launch in DAG Build mode
+source venv/bin/activate
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000 --mode dag
+```
+
+### Layout
+
+DAG Build Mode has a simplified layout compared to Calibration mode:
+
+- **Header**: Timestamp display, calibration status badge
+- **Top Chart**: Overview chart with leg overlays
+- **Bottom Chart**: Detail chart with leg overlays
+- **Playback Controls**: Transport buttons (no event navigation)
+- **DAG State Panel**: Always-visible internal state display
+
+### Leg Visualization
+
+Active legs are drawn as horizontal price lines on both charts:
+
+| Leg Status | Appearance |
+|------------|------------|
+| Active | Solid line, blue (bull) / red (bear), 70% opacity |
+| Stale | Dashed line, yellow, 50% opacity |
+| Invalidated | Not shown (removed immediately) |
+
+Each leg shows two price lines:
+- **Pivot line**: The defended pivot price (labeled with direction arrow)
+- **Origin line**: The swing origin extremum
+
+### DAG State Panel
+
+The DAG State Panel is always visible in this mode (no toggle needed). It shows:
+
+| Column | Description |
+|--------|-------------|
+| Active Legs | Currently tracked pre-formation candidates with pivot/origin prices, retracement %, bar count |
+| Orphaned Origins | Preserved origins from invalidated legs awaiting sibling swing formation |
+| Pending Pivots | Potential pivots awaiting confirmation for bull and bear directions |
+| Recent Events | Log of leg lifecycle events (LEG_CREATED, LEG_PRUNED, LEG_INVALIDATED) |
+
+### Leg Event Types
+
+| Event | Description |
+|-------|-------------|
+| LEG_CREATED | New candidate leg created from pivot + origin pair |
+| LEG_PRUNED | Leg removed due to staleness (superseded by better candidate) |
+| LEG_INVALIDATED | Leg fell below 0.382 threshold (decisive invalidation) |
+
+### Differences from Calibration Mode
+
+| Feature | Calibration Mode | DAG Build Mode |
+|---------|------------------|----------------|
+| Sidebar | Event filters, feedback | Hidden |
+| Swing overlay | Fib levels for formed swings | Leg lines for candidates |
+| Linger on events | Configurable (ON/OFF) | Disabled |
+| Event navigation | Jump between swing events | Not available |
+| DAG State Panel | Toggle (Swings/DAG tabs) | Always visible |
+
+### Use Cases
+
+- **Algorithm debugging**: Watch how legs form, get pruned, and eventually become swings
+- **Understanding swing formation**: See why certain price patterns form swings and others don't
+- **Orphaned origins**: Observe how preserved origins from invalidated legs enable sibling swing detection

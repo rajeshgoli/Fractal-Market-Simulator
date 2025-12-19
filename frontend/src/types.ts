@@ -288,6 +288,48 @@ export interface LegEvent {
   timestamp?: number;  // For display ordering
 }
 
+// ============================================================================
+// Leg Visualization Types (Issue #172 - DAG View)
+// ============================================================================
+
+export type LegStatus = 'active' | 'stale' | 'invalidated';
+
+export interface ActiveLeg {
+  leg_id: string;
+  direction: 'bull' | 'bear';
+  pivot_price: number;
+  pivot_index: number;
+  origin_price: number;
+  origin_index: number;
+  retracement_pct: number;
+  formed: boolean;
+  status: LegStatus;
+  bar_count: number;
+}
+
+// Leg visual style configuration
+export const LEG_STATUS_STYLES: Record<LegStatus, {
+  lineStyle: 'solid' | 'dashed' | 'dotted';
+  opacity: number;
+  color: { bull: string; bear: string };
+}> = {
+  active: {
+    lineStyle: 'solid',
+    opacity: 0.7,
+    color: { bull: '#3B82F6', bear: '#EF4444' },  // Blue / Red
+  },
+  stale: {
+    lineStyle: 'dashed',
+    opacity: 0.5,
+    color: { bull: '#F59E0B', bear: '#F59E0B' },  // Yellow for both
+  },
+  invalidated: {
+    lineStyle: 'dotted',
+    opacity: 0.3,
+    color: { bull: '#6B7280', bear: '#6B7280' },  // Gray for both
+  },
+};
+
 // Aggregation scale options (timeframes not S/M/L/XL)
 export const AGGREGATION_OPTIONS = [
   { value: 'S', label: '5m', minutes: 5 },

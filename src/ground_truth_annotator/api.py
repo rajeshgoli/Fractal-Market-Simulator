@@ -48,6 +48,8 @@ class AppState:
     playback_feedback_storage: Optional[PlaybackFeedbackStorage] = None
     # Hierarchical detector for incremental processing
     hierarchical_detector: Optional[HierarchicalDetector] = None
+    # Visualization mode: 'calibration' or 'dag'
+    mode: str = "calibration"
 
 
 # Global state
@@ -121,6 +123,15 @@ async def health():
         "status": "ok",
         "initialized": state is not None,
         "version": "0.2.0",  # HierarchicalDetector version
+    }
+
+
+@app.get("/api/config")
+async def get_config():
+    """Get application configuration including mode."""
+    s = get_state()
+    return {
+        "mode": s.mode,
     }
 
 
@@ -244,7 +255,8 @@ def init_app(
     window_size: int = 50000,
     target_bars: int = 200,
     window_offset: int = 0,
-    cached_df: Optional[pd.DataFrame] = None
+    cached_df: Optional[pd.DataFrame] = None,
+    mode: str = "calibration"
 ):
     """
     Initialize the application with data file.
@@ -256,6 +268,7 @@ def init_app(
         target_bars: Target number of bars to display
         window_offset: Offset into source data
         cached_df: Optional cached DataFrame
+        mode: Visualization mode ('calibration' or 'dag')
     """
     global state
 
@@ -328,6 +341,7 @@ def init_app(
         window_offset=window_offset,
         cached_dataframe=full_df,
         playback_feedback_storage=playback_storage,
+        mode=mode,
     )
 
     logger.info(f"Initialized Replay View with {len(source_bars)} bars")
