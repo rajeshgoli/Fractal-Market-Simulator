@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2025-12-19
 
@@ -14,6 +14,7 @@
 - **#163** — Sibling swing detection with orphaned origins and 10% pruning
 - **#164** — Remove legacy candidate lists and redundant separation filtering
 - **#165** — Simplify Reference Layer: hierarchy-based big/small, completion rules
+- **#166** — Redesign calibration UI: tree navigation filters, structure summary, validation quick-checks
 
 ---
 
