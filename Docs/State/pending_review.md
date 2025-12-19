@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-19
 
@@ -10,6 +10,7 @@
 
 - **#158** — DAG-based swing detection algorithm (O(n log k) streaming replacement)
 - **#159** — Reference layer for swing filtering and invalidation rules
+- **#160** — Wire ReferenceLayer into API pipeline (filtering was missing)
 
 ---
 
