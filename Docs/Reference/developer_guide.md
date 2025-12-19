@@ -309,6 +309,7 @@ detector2 = HierarchicalDetector.from_state(restored_state, config)
 - **Independent invalidation** — Each swing checks its own defended pivot (no cascade)
 - **DAG hierarchy** — Swings can have multiple parents for structural context
 - **Multi-TF optimization** — Uses higher-timeframe bars (1h, 4h, 1d) as candidates for O(1) candidate pairs vs O(lookback²)
+- **Sibling swing detection** — Orphaned origins from invalidated legs are preserved and can form sibling swings sharing the same defended pivot (#163)
 
 **Event types:**
 | Event | When emitted |
@@ -322,6 +323,27 @@ detector2 = HierarchicalDetector.from_state(restored_state, config)
 - Big swings (top 10% by range): full tolerance (0.15)
 - Children of big swings: basic tolerance (0.10)
 - Others: no tolerance (absolute)
+
+**Sibling swing detection (orphaned origins):**
+
+When a leg is invalidated, its origin is preserved as an "orphaned origin" for potential sibling swing formation. This enables detection of swings like L2, L4, L5, L7 from `valid_swings.md` that share the same defended pivot but have different origins.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Orphaned Origins Flow                         │
+│                                                                  │
+│  1. Leg forms: origin=5837, pivot=5525                          │
+│  2. Price drops below invalidation threshold                    │
+│  3. Leg invalidated → origin 5837 preserved as orphaned         │
+│  4. Price continues to 4832, reverses                           │
+│  5. New leg forms: origin=6166, pivot=4832                      │
+│  6. At formation: also check orphaned origins                   │
+│     → Sibling swing (5837→4832) forms alongside (6166→4832)     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Orphaned origins are pruned each bar using the 10% rule: if any two origins are within 10% of the larger range (measured from origin to current working pivot), the smaller is pruned. This keeps the list sparse while preserving structurally significant origins.
 
 ---
 
