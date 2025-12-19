@@ -182,6 +182,7 @@ Both charts stay time-synchronized:
 | Next Event | ▶▶ | Jump to next event |
 | Jump to End | ▶\| | Go to last bar |
 | Speed | dropdown | 1x, 2x, 5x, 10x, 20x playback speed |
+| Linger | toggle | Toggle pause-on-event behavior (ON/OFF) |
 
 **Event Navigation:**
 - The ◀◀ and ▶▶ buttons navigate by **event**, not bar
@@ -213,6 +214,12 @@ When significant events occur during playback, the view auto-pauses:
 - When timer completes, playback auto-resumes
 - Press **Escape** or click X to dismiss and resume immediately
 - Click Pause to freeze the timer
+
+**Linger Toggle:**
+The "Linger" button next to speed controls toggles pause-on-event behavior:
+- **ON (default, orange):** Events trigger auto-pause with timer wheel
+- **OFF (gray):** Events are processed and logged but playback continues without pause
+Use OFF mode for continuous observation without interruptions. Events are still accumulated for navigation even when linger is disabled.
 
 **Event Filters (Sidebar):**
 
