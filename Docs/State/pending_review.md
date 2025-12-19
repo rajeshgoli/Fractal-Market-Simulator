@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 9
 
 **Last Review:** 2025-12-18
 
@@ -15,6 +15,8 @@
 - **#146** — Ground truth annotator removal: archived and deleted per swing detection rewrite spec
 - **#147** — HierarchicalDetector: core incremental swing detection with process_bar() entry point
 - **#148** — Calibration as loop: calibrate(), calibrate_from_dataframe(), dataframe_to_bars() helpers
+- **#149** — ReferenceSwing compatibility adapter: swing_node_to_reference_swing, detect_swings_compat
+- **#150** — Replay router update: uses HierarchicalDetector, adds hierarchy info (depth, parent_ids)
 
 ---
 

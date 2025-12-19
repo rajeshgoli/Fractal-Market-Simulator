@@ -30,8 +30,15 @@ The Replay View provides a split-chart interface for temporal debugging. Compare
 # Build the React frontend (one-time or after changes)
 cd frontend && npm run build && cd ..
 
-# Start the server (uses hierarchical detector - coming soon)
-# See swing detection rewrite spec for current status
+# Start the replay server (uses HierarchicalDetector)
+source venv/bin/activate
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000
+
+# Options:
+#   --port 8000         Server port (default: 8000)
+#   --window 50000      Calibration window size (default: 50000)
+#   --offset random     Random window offset (default: 0)
+#   --start-date 2020-Jan-01  Start at specific date
 ```
 
 ### Layout

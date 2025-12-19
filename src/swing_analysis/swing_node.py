@@ -192,6 +192,20 @@ class SwingNode:
         """
         self.status = "completed"
 
+    def get_depth(self) -> int:
+        """
+        Calculate hierarchy depth from root.
+
+        Returns 0 if this swing has no parents (is a root).
+        Returns 1 + max(parent depths) otherwise.
+
+        Returns:
+            Integer depth in the hierarchy.
+        """
+        if not self.parents:
+            return 0
+        return 1 + max(p.get_depth() for p in self.parents)
+
     def __repr__(self) -> str:
         return (
             f"SwingNode({self.swing_id}, {self.direction}, "

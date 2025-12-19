@@ -26,13 +26,15 @@ src/
 │   ├── types.py                    # Bar, BullReferenceSwing, BearReferenceSwing
 │   ├── swing_config.py             # SwingConfig, DirectionConfig (rewrite Phase 1)
 │   ├── swing_node.py               # SwingNode hierarchical structure (rewrite Phase 1)
-│   ├── events.py                   # SwingEvent types: formed/invalidated/completed/level_cross (rewrite Phase 1)
-│   ├── swing_detector.py           # Main detection: detect_swings()
-│   ├── incremental_detector.py     # O(active) per-bar detection for replay
+│   ├── events.py                   # SwingEvent types (rewrite Phase 1)
+│   ├── hierarchical_detector.py    # Incremental detector with process_bar() (rewrite Phase 2)
+│   ├── adapters.py                 # Legacy compatibility: SwingNode ↔ ReferenceSwing (rewrite Phase 3)
+│   ├── swing_detector.py           # Main detection: detect_swings() (legacy)
+│   ├── incremental_detector.py     # O(active) per-bar detection for replay (legacy)
 │   ├── level_calculator.py         # Fibonacci level computation
 │   ├── reference_frame.py          # Oriented coordinate system for ratios
 │   ├── bar_aggregator.py           # Multi-timeframe OHLC aggregation
-│   ├── scale_calibrator.py         # Auto-calibrate S/M/L/XL boundaries
+│   ├── scale_calibrator.py         # Auto-calibrate S/M/L/XL boundaries (legacy)
 │   ├── constants.py                # Fibonacci level sets
 │   ├── swing_state_manager.py      # Live swing tracking (legacy)
 │   └── event_detector.py           # Live event detection (legacy)
@@ -635,6 +637,7 @@ python -m pytest tests/ --cov=src --cov-report=html
 | `test_swing_node.py` | SwingNode hierarchical structure |
 | `test_swing_events.py` | Event types |
 | `test_hierarchical_detector.py` | Hierarchical detector algorithm |
+| `test_adapters.py` | Legacy compatibility adapters |
 
 ---
 
@@ -650,6 +653,19 @@ pip install -r requirements.txt
 ### Port conflict
 ```bash
 python -m src.ground_truth_annotator.main --data test.csv --port 8001
+```
+
+### Replay View API
+
+The replay view backend (`src/ground_truth_annotator/`) uses HierarchicalDetector for incremental swing detection:
+
+```python
+# Calibration: GET /api/replay/calibrate?bar_count=10000
+# Returns swings grouped by scale with hierarchy info (depth, parent_ids)
+
+# Advance: POST /api/replay/advance
+# {calibration_bar_count, current_bar_index, advance_by}
+# Processes bars using detector.process_bar() and returns events
 ```
 
 ### Debug logging
