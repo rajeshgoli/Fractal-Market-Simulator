@@ -27,6 +27,7 @@ src/
 │   └── ohlc_loader.py              # CSV loading (TradingView + semicolon formats)
 ├── swing_analysis/
 │   ├── types.py                    # Bar, BullReferenceSwing, BearReferenceSwing
+│   ├── swing_config.py             # SwingConfig, DirectionConfig (rewrite Phase 1)
 │   ├── swing_detector.py           # Main detection: detect_swings()
 │   ├── incremental_detector.py     # O(active) per-bar detection for replay
 │   ├── level_calculator.py         # Fibonacci level computation
@@ -71,7 +72,7 @@ frontend/                           # React + Vite Replay View
 │       └── useForwardPlayback.ts   # Forward-only playback (after calibration)
 └── package.json
 
-tests/                              # 860+ tests
+tests/                              # 900+ tests
 scripts/                            # Dev utilities
 ```
 
