@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a **Market Simulator** project that implements technical analysis algorithms for detecting market structure and generating realistic OHLC price data.
 
-**Current phase:** Ground truth annotation for swing detection validation.
+**Current phase:** Swing detection rewrite with hierarchical model.
 
 For detailed architecture and current status, see `Docs/State/architect_notes.md`.
 
@@ -18,15 +18,6 @@ For detailed architecture and current status, see `Docs/State/architect_notes.md
 This project uses a Python virtual environment located in `venv/`. Always activate it before working:
 ```bash
 source venv/bin/activate
-```
-
-### Ground Truth Annotator
-```bash
-# Annotate swings on test data
-python -m src.ground_truth_annotator.main --data test_data/test.csv --scale S
-
-# Annotate with custom settings
-python -m src.ground_truth_annotator.main --data es-5m.csv --resolution 5m --scale L --target-bars 300
 ```
 
 ### Testing
@@ -42,8 +33,8 @@ For detailed technical architecture, see `Docs/State/architect_notes.md`.
 
 | Module | Purpose |
 |--------|---------|
-| `src/swing_analysis/` | Core detection: SwingDetector, ScaleCalibrator, BarAggregator |
-| `src/ground_truth_annotator/` | Web-based two-click annotation tool |
+| `src/swing_analysis/` | Core detection: SwingDetector, SwingNode, ReferenceFrame, BarAggregator |
+| `src/discretization/` | OHLC → structural event log conversion |
 | `src/data/` | OHLC data loading and gap detection |
 
 ### Key Components
@@ -64,7 +55,7 @@ For detailed technical architecture, see `Docs/State/architect_notes.md`.
 ```
 src/
 ├── swing_analysis/            # Core detection algorithms
-├── ground_truth_annotator/    # Two-click annotation tool
+├── discretization/            # Event log conversion
 └── data/                      # OHLC loading
 
 Docs/
@@ -75,7 +66,7 @@ Docs/
 ├── Prompts/    # Agent prompt templates (reusable)
 └── Archive/    # Historical content by topic
 
-tests/          # 560+ tests
+tests/          # 600+ tests
 ```
 
 ## Development Guidelines
@@ -189,9 +180,6 @@ See `Docs/Reference/user_guide.md` for detailed usage instructions.
 
 ### Quick Start
 ```bash
-# Ground truth annotation
-python -m src.ground_truth_annotator.main --data test_data/test.csv --scale S
-
 # Run tests
 source venv/bin/activate && python -m pytest tests/ -v
 ```
@@ -203,11 +191,11 @@ source venv/bin/activate && python -m pytest tests/ -v
 
 ## Current Development Phase
 
-**Current:** Ground truth annotation tool for capturing false negatives in swing detection.
+**Current:** Swing detection rewrite — replacing S/M/L/XL model with hierarchical tree structure.
 
 See `Docs/State/architect_notes.md` for detailed status and `Docs/State/product_direction.md` for requirements.
 
-**Active issues:** #26 (epic), #27-#30 (implementation tasks)
+**Active issues:** #141 (epic), #142-#146 (foundation tasks)
 
 ## Role-Based Workflows
 

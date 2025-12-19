@@ -12,9 +12,6 @@ source venv/bin/activate
 
 # Run tests
 python -m pytest tests/ -v
-
-# Start annotator
-python -m src.ground_truth_annotator.main --data test_data/test.csv --scale S
 ```
 
 ---
@@ -39,27 +36,10 @@ src/
 │   ├── constants.py                # Fibonacci level sets
 │   ├── swing_state_manager.py      # Live swing tracking (legacy)
 │   └── event_detector.py           # Live event detection (legacy)
-├── discretization/
-│   ├── schema.py                   # DiscretizationEvent, SwingEntry, etc.
-│   ├── discretizer.py              # Batch OHLC → event log processor
-│   └── io.py                       # JSON read/write for logs
-└── ground_truth_annotator/
-    ├── main.py                     # CLI entry point
-    ├── api.py                      # FastAPI app factory + core routes (~550 lines)
-    ├── schemas.py                  # Pydantic request/response models
-    ├── routers/                    # Domain-specific API routers
-    │   ├── annotations.py          # CRUD for swing annotations
-    │   ├── session.py              # Session state management
-    │   ├── cascade.py              # XL→L→M→S workflow endpoints
-    │   ├── comparison.py           # User vs system comparison
-    │   ├── review.py               # Match/FP/FN review phases
-    │   ├── discretization.py       # Event log generation
-    │   └── replay.py               # Replay View playback + detection
-    ├── models.py                   # SwingAnnotation, AnnotationSession, ReviewSession
-    ├── storage.py                  # JSON persistence
-    ├── comparison_analyzer.py      # FN/FP detection vs annotations
-    ├── cascade_controller.py       # XL→L→M→S workflow logic
-    └── review_controller.py        # Match/FP/FN review logic
+└── discretization/
+    ├── schema.py                   # DiscretizationEvent, SwingEntry, etc.
+    ├── discretizer.py              # Batch OHLC → event log processor
+    └── io.py                       # JSON read/write for logs
 
 frontend/                           # React + Vite Replay View
 ├── src/
@@ -74,7 +54,7 @@ frontend/                           # React + Vite Replay View
 │       └── useForwardPlayback.ts   # Forward-only playback (after calibration)
 └── package.json
 
-tests/                              # 900+ tests
+tests/                              # 600+ tests
 scripts/                            # Dev utilities
 ```
 
@@ -127,23 +107,6 @@ scripts/                            # Dev utilities
                                        │
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                       GROUND TRUTH ANNOTATOR                                 │
-│                                                                              │
-│   api.py ◄───────────────────────────────────────────────────────────────┐  │
-│   └── FastAPI endpoints                                                  │  │
-│            │                                                             │  │
-│            │ uses                                                        │  │
-│            ▼                                                             │  │
-│   models.py ────────────► SwingAnnotation, AnnotationSession, ReviewSession │
-│   storage.py ───────────► JSON persistence (ground_truth.json)           │  │
-│   comparison_analyzer.py ► FN/FP detection                               │  │
-│   cascade_controller.py ─► XL→L→M→S workflow                             │  │
-│   review_controller.py ──► Match/FP/FN review phases                     │  │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
 │                         FRONTEND (React)                                     │
 │                                                                              │
 │   frontend/src/                                                             │
@@ -173,28 +136,6 @@ scripts/                            # Dev utilities
    log.events → filter, aggregate, visualize
 ```
 
-**Ground truth annotation:**
-
-```
-1. CLI starts server
-   main.py --data file.csv --scale S
-
-2. Server loads data
-   load_ohlc() → source_bars
-   BarAggregator(source_bars) → aggregated_bars for UI
-
-3. User annotates
-   POST /api/annotations → SwingAnnotation stored in session
-
-4. Comparison
-   POST /api/compare → detect_swings() vs annotations → FN/FP lists
-
-5. Review
-   /api/review/* → phased feedback collection
-
-6. Finalize
-   POST /api/session/finalize → append to ground_truth.json
-```
 
 ### Filter Pipeline (detect_swings)
 
@@ -524,247 +465,6 @@ agg_bar = aggregator.get_bar_at_source_time(timeframe=5, source_bar_idx=100)
 
 ---
 
-## Ground Truth Annotator
-
-### CLI
-
-```bash
-python -m src.ground_truth_annotator.main \
-    --data test_data/test.csv \
-    --scale S \
-    --resolution 1m \
-    --window 50000 \
-    --target-bars 200 \
-    --offset 0           # or 'random'
-    --start-date 2020-Jan-01  # overrides --offset
-    --port 8000
-```
-
-### REST API
-
-**Core endpoints:**
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Annotation UI |
-| `/replay` | GET | Replay View UI |
-| `/api/bars` | GET | Aggregated bars for chart |
-| `/api/annotations` | GET/POST/DELETE | CRUD annotations |
-| `/api/session` | GET | Session state |
-| `/api/cascade/state` | GET | Cascade workflow state |
-| `/api/cascade/advance` | POST | Advance to next scale |
-| `/api/compare` | POST | Run comparison |
-| `/api/review/*` | * | Review mode endpoints |
-| `/api/discretization/*` | * | Discretization endpoints |
-
-**Discretization API:**
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/discretization/state` | GET | Check if discretization exists |
-| `/api/discretization/run` | POST | Run discretization on window |
-| `/api/discretization/events` | GET | Get events (with filters) |
-| `/api/discretization/swings` | GET | Get swing entries |
-
-**Event filters (query params):**
-- `scale`: XL, L, M, S
-- `event_type`: LEVEL_CROSS, COMPLETION, etc.
-- `shock_threshold`: minimum range_multiple
-- `levels_jumped_min`: minimum levels jumped
-- `is_gap`: true/false
-- `bar_start`, `bar_end`: bar range
-
-**Replay Calibration API:**
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/replay/calibrate` | GET | Run calibration on first N bars |
-| `/api/replay/advance` | POST | Advance playback beyond calibration window |
-
-**GET /api/replay/calibrate:**
-
-Query params:
-- `bar_count`: Number of bars for calibration window (default: 10000)
-
-Returns:
-- `calibration_bar_count`: Actual bars used
-- `current_price`: Price at end of calibration window
-- `swings_by_scale`: Dict of scale → list of swings
-- `active_swings_by_scale`: Dict of scale → list of active swings
-- `scale_thresholds`: Dict of scale → size threshold
-- `stats_by_scale`: Dict of scale → {total_swings, active_swings}
-
-**POST /api/replay/advance:**
-
-Request body:
-```json
-{
-  "calibration_bar_count": 10000,
-  "current_bar_index": 9999,
-  "advance_by": 1
-}
-```
-
-Returns:
-- `new_bars`: List of new OHLC bars to append
-- `events`: List of events that occurred (SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED, LEVEL_CROSS)
-- `swing_state`: Current swing state by scale (XL, L, M, S)
-- `current_bar_index`: New position after advance
-- `current_price`: Price at new position
-- `end_of_data`: Boolean indicating if end of data reached
-
-Event diffing logic compares previous vs new swing state to detect:
-- New swings appearing (SWING_FORMED)
-- Swings disappearing due to pivot violation (SWING_INVALIDATED)
-- Swings reaching 2.0 extension (SWING_COMPLETED)
-- Price crossing significant Fib levels (LEVEL_CROSS)
-
-**Playback Feedback API:**
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/playback/feedback` | POST | Submit observation with rich context snapshot |
-
-**POST /api/playback/feedback:**
-
-Request body:
-```json
-{
-  "text": "Observation text here",
-  "playback_bar": 10500,
-  "snapshot": {
-    "state": "playing",
-    "window_offset": 0,
-    "bars_since_calibration": 500,
-    "current_bar_index": 10500,
-    "calibration_bar_count": 10000,
-    "swings_found": {
-      "XL": 2,
-      "L": 5,
-      "M": 12,
-      "S": 28
-    },
-    "swings_invalidated": 3,
-    "swings_completed": 1,
-    "event_context": {
-      "event_type": "SWING_FORMED",
-      "scale": "M",
-      "swing": {
-        "high_bar_index": 10480,
-        "low_bar_index": 10495,
-        "high_price": "5125.50",
-        "low_price": "5098.25",
-        "direction": "bull"
-      },
-      "detection_bar_index": 10500
-    }
-  }
-}
-```
-
-Snapshot fields:
-- `state`: Current playback state (calibrating, calibration_complete, playing, paused)
-- `window_offset`: Offset into source data for this session
-- `bars_since_calibration`: Bars advanced beyond calibration window
-- `current_bar_index`: Current position in source data
-- `calibration_bar_count`: Size of calibration window
-- `swings_found`: Active swing counts by scale
-- `swings_invalidated`: Count of swings invalidated during playback
-- `swings_completed`: Count of swings that reached 2.0 extension
-- `event_context`: Optional context if submitting during a linger event
-
-Returns:
-```json
-{
-  "success": true,
-  "observation_id": "uuid-string",
-  "message": "Observation saved successfully"
-}
-```
-
-Storage: Observations persist to `ground_truth/playback_feedback.json` grouped by playback session.
-
----
-
-## Data Models
-
-### SwingAnnotation
-
-```python
-@dataclass
-class SwingAnnotation:
-    annotation_id: str          # UUID
-    scale: str                  # S, M, L, XL
-    direction: str              # "bull" or "bear"
-    start_bar_index: int        # Aggregated view index
-    end_bar_index: int
-    start_source_index: int     # Source data index
-    end_source_index: int
-    start_price: Decimal
-    end_price: Decimal
-    created_at: datetime
-    window_id: str
-```
-
-### AnnotationSession
-
-```python
-@dataclass
-class AnnotationSession:
-    session_id: str
-    data_file: str
-    resolution: str             # "1m", "5m", etc.
-    window_size: int
-    window_offset: int
-    created_at: datetime
-    annotations: List[SwingAnnotation]
-    completed_scales: List[str]
-    skipped_scales: List[str]
-    status: str                 # "in_progress" | "keep" | "discard"
-    version: int                # Schema version (4)
-```
-
-### ReviewSession
-
-```python
-@dataclass
-class ReviewSession:
-    review_id: str
-    session_id: str
-    phase: str                  # "matches" | "fp_sample" | "fn_feedback" | "complete"
-    match_feedback: List[SwingFeedback]
-    fp_feedback: List[SwingFeedback]
-    fn_feedback: List[SwingFeedback]
-    fp_sample_indices: List[int]
-    started_at: datetime
-    completed_at: Optional[datetime]
-    difficulty: Optional[int]   # 1-5
-    regime: Optional[str]       # "bull" | "bear" | "chop"
-```
-
----
-
-## Storage
-
-**Directory structure:**
-
-```
-ground_truth/
-├── ground_truth.json              # All finalized sessions (version-controlled)
-└── sessions/                      # In-progress only (gitignored)
-    └── inprogress-{timestamp}.json
-```
-
-**Session lifecycle:**
-1. Start → create `sessions/inprogress-{timestamp}.json`
-2. Work → update working file
-3. Finalize "keep" → append to `ground_truth.json`, delete working files
-4. Finalize "discard" → delete working files
-
-**Single-user assumption:** No file locking. Concurrent use would cause data loss.
-
----
-
 ## Frontend (Replay View)
 
 ```bash
@@ -851,10 +551,10 @@ python -m pytest tests/ --cov=src --cov-report=html
 |------|-------|
 | `test_swing_detector.py` | Detection, filters, ranking |
 | `test_discretizer.py` | Event generation, side-channels |
-| `test_ground_truth_annotator_api.py` | REST API endpoints |
-| `test_ground_truth_foundation.py` | Models, storage |
-| `test_comparison_analyzer.py` | FN/FP detection |
-| `test_review_controller.py` | Review workflow |
+| `test_reference_frame.py` | ReferenceFrame coordinate system |
+| `test_swing_config.py` | SwingConfig dataclass |
+| `test_swing_node.py` | SwingNode hierarchical structure |
+| `test_swing_events.py` | Event types |
 
 ---
 
