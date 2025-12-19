@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-19
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - **#168** — Add leg lifecycle events to HierarchicalDetector (LegCreatedEvent, LegPrunedEvent, LegInvalidatedEvent)
+- **#169** — Add DAG state API endpoint (`/api/dag/state`) for visualization
 
 ---
 

@@ -203,3 +203,54 @@ export async function submitPlaybackFeedback(
   }
   return response.json();
 }
+
+// Types for DAG state (Issue #169)
+export interface DagLeg {
+  leg_id: string;
+  direction: 'bull' | 'bear';
+  pivot_price: number;
+  pivot_index: number;
+  origin_price: number;
+  origin_index: number;
+  retracement_pct: number;
+  formed: boolean;
+  status: 'active' | 'stale' | 'invalidated';
+  bar_count: number;
+}
+
+export interface DagOrphanedOrigin {
+  price: number;
+  bar_index: number;
+}
+
+export interface DagPendingPivot {
+  price: number;
+  bar_index: number;
+  direction: 'bull' | 'bear';
+  source: 'high' | 'low' | 'open' | 'close';
+}
+
+export interface DagStateResponse {
+  active_legs: DagLeg[];
+  orphaned_origins: {
+    bull: DagOrphanedOrigin[];
+    bear: DagOrphanedOrigin[];
+  };
+  pending_pivots: {
+    bull: DagPendingPivot | null;
+    bear: DagPendingPivot | null;
+  };
+  leg_counts: {
+    bull: number;
+    bear: number;
+  };
+}
+
+export async function fetchDagState(): Promise<DagStateResponse> {
+  const response = await fetch(`${API_BASE}/dag/state`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch DAG state: ${response.statusText}`);
+  }
+  return response.json();
+}

@@ -54,6 +54,12 @@ from ..schemas import (
     TreeStatistics,
     SwingsByDepth,
     CalibrationResponseHierarchical,
+    # DAG state models (Issue #169)
+    DagLegResponse,
+    DagOrphanedOrigin,
+    DagPendingPivot,
+    DagLegCounts,
+    DagStateResponse,
 )
 
 if TYPE_CHECKING:
@@ -1066,4 +1072,77 @@ async def submit_feedback(request: PlaybackFeedbackRequest):
         success=True,
         observation_id=observation.observation_id,
         message=f"Feedback recorded at bar {request.playback_bar}",
+    )
+
+
+@router.get("/api/dag/state", response_model=DagStateResponse)
+async def get_dag_state():
+    """
+    Get current DAG internal state for visualization.
+
+    Exposes leg-level state from the detector for debugging and DAG visualization:
+    - active_legs: Currently tracked legs (pre-formation candidate swings)
+    - orphaned_origins: Preserved origins from invalidated legs for sibling detection
+    - pending_pivots: Potential pivots awaiting temporal confirmation
+    - leg_counts: Count of legs by direction
+    """
+    global _replay_cache
+
+    detector = _replay_cache.get("detector")
+    if detector is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Must calibrate first. Call /api/replay/calibrate."
+        )
+
+    state = detector.state
+
+    # Convert active legs to response
+    active_legs = [
+        DagLegResponse(
+            leg_id=leg.leg_id,
+            direction=leg.direction,
+            pivot_price=float(leg.pivot_price),
+            pivot_index=leg.pivot_index,
+            origin_price=float(leg.origin_price),
+            origin_index=leg.origin_index,
+            retracement_pct=float(leg.retracement_pct),
+            formed=leg.formed,
+            status=leg.status,
+            bar_count=leg.bar_count,
+        )
+        for leg in state.active_legs
+    ]
+
+    # Convert orphaned origins
+    orphaned_origins = {
+        direction: [
+            DagOrphanedOrigin(price=float(price), bar_index=idx)
+            for price, idx in origins
+        ]
+        for direction, origins in state.orphaned_origins.items()
+    }
+
+    # Convert pending pivots
+    pending_pivots = {
+        direction: DagPendingPivot(
+            price=float(pivot.price),
+            bar_index=pivot.bar_index,
+            direction=pivot.direction,
+            source=pivot.source,
+        ) if pivot else None
+        for direction, pivot in state.pending_pivots.items()
+    }
+
+    # Compute leg counts
+    leg_counts = DagLegCounts(
+        bull=sum(1 for leg in state.active_legs if leg.direction == 'bull'),
+        bear=sum(1 for leg in state.active_legs if leg.direction == 'bear'),
+    )
+
+    return DagStateResponse(
+        active_legs=active_legs,
+        orphaned_origins=orphaned_origins,
+        pending_pivots=pending_pivots,
+        leg_counts=leg_counts,
     )

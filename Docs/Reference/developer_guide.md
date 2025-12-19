@@ -690,6 +690,13 @@ The replay view backend (`src/ground_truth_annotator/`) uses HierarchicalDetecto
 # Advance: POST /api/replay/advance
 # {calibration_bar_count, current_bar_index, advance_by}
 # Processes bars using detector.process_bar() and returns events
+
+# DAG State: GET /api/dag/state
+# Returns internal leg-level state for DAG visualization:
+# - active_legs: currently tracked legs (pre-formation candidates)
+# - orphaned_origins: preserved origins for sibling swing detection
+# - pending_pivots: potential pivots awaiting confirmation
+# - leg_counts: count by direction (bull/bear)
 ```
 
 **Reference Layer Integration:**

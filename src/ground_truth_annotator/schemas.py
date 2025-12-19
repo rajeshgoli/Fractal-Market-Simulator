@@ -447,3 +447,53 @@ class CalibrationResponseHierarchical(BaseModel):
     active_swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
     scale_thresholds: Dict[str, float]
     stats_by_scale: Dict[str, CalibrationScaleStats]
+
+
+# ============================================================================
+# DAG State Models (Issue #169 - DAG Visualization)
+# ============================================================================
+
+
+class DagLegResponse(BaseModel):
+    """A leg in the DAG (pre-formation candidate swing)."""
+    leg_id: str
+    direction: str  # "bull" or "bear"
+    pivot_price: float
+    pivot_index: int
+    origin_price: float
+    origin_index: int
+    retracement_pct: float
+    formed: bool
+    status: str  # "active", "stale", or "invalidated"
+    bar_count: int
+
+
+class DagOrphanedOrigin(BaseModel):
+    """An orphaned origin preserved for sibling swing detection."""
+    price: float
+    bar_index: int
+
+
+class DagPendingPivot(BaseModel):
+    """A potential defended pivot awaiting temporal confirmation."""
+    price: float
+    bar_index: int
+    direction: str  # "bull" or "bear"
+    source: str  # "high", "low", "open", "close"
+
+
+class DagLegCounts(BaseModel):
+    """Leg counts by direction."""
+    bull: int
+    bear: int
+
+
+class DagStateResponse(BaseModel):
+    """Response from DAG state endpoint for visualization.
+
+    Exposes internal detector state for debugging and visualization.
+    """
+    active_legs: List[DagLegResponse]
+    orphaned_origins: Dict[str, List[DagOrphanedOrigin]]
+    pending_pivots: Dict[str, Optional[DagPendingPivot]]
+    leg_counts: DagLegCounts
