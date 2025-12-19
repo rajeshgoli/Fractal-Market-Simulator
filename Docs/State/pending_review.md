@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-18
 
@@ -10,6 +10,8 @@
 
 - **#142** — SwingConfig dataclass: centralized configuration for all swing detection parameters
 - **#143** — SwingNode dataclass: hierarchical swing structure with DAG parent/child linking
+- **#144** — SwingEvent types: formed/invalidated/completed/level_cross for hierarchical detector
+- **#145** — ReferenceFrame tolerance checks: is_violated, is_formed, is_completed, get_fib_price
 
 ---
 
