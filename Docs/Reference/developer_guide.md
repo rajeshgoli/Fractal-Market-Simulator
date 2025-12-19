@@ -28,6 +28,7 @@ src/
 ├── swing_analysis/
 │   ├── types.py                    # Bar, BullReferenceSwing, BearReferenceSwing
 │   ├── swing_config.py             # SwingConfig, DirectionConfig (rewrite Phase 1)
+│   ├── swing_node.py               # SwingNode hierarchical structure (rewrite Phase 1)
 │   ├── swing_detector.py           # Main detection: detect_swings()
 │   ├── incremental_detector.py     # O(active) per-bar detection for replay
 │   ├── level_calculator.py         # Fibonacci level computation

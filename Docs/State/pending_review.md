@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-18
 
@@ -8,7 +8,8 @@
 
 ## Pending Changes
 
-(None)
+- **#142** — SwingConfig dataclass: centralized configuration for all swing detection parameters
+- **#143** — SwingNode dataclass: hierarchical swing structure with DAG parent/child linking
 
 ---
 
