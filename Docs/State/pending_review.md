@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-19
 
@@ -12,6 +12,7 @@
 - **#159** — Reference layer for swing filtering and invalidation rules
 - **#160** — Wire ReferenceLayer into API pipeline (filtering was missing)
 - **#163** — Sibling swing detection with orphaned origins and 10% pruning
+- **#164** — Remove legacy candidate lists and redundant separation filtering
 
 ---
 

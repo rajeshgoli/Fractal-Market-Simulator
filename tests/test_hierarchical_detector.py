@@ -61,23 +61,6 @@ class TestDetectorStateSerializatio:
 
         assert restored.last_bar_index == -1
         assert len(restored.active_swings) == 0
-        assert len(restored.candidate_highs) == 0
-        assert len(restored.candidate_lows) == 0
-
-    def test_state_with_candidates_roundtrip(self):
-        """State with candidates serializes correctly."""
-        state = DetectorState(
-            candidate_highs=[(0, Decimal("100.5")), (1, Decimal("101.0"))],
-            candidate_lows=[(0, Decimal("99.5")), (1, Decimal("99.0"))],
-            last_bar_index=10,
-        )
-        data = state.to_dict()
-        restored = DetectorState.from_dict(data)
-
-        assert restored.last_bar_index == 10
-        assert len(restored.candidate_highs) == 2
-        assert len(restored.candidate_lows) == 2
-        assert restored.candidate_highs[0] == (0, Decimal("100.5"))
 
     def test_state_with_swings_roundtrip(self):
         """State with active swings serializes and preserves hierarchy."""
@@ -146,17 +129,13 @@ class TestSingleBarProcessing:
     """Test process_bar() with single bars."""
 
     def test_first_bar_updates_state(self):
-        """First bar updates last_bar_index and candidates."""
+        """First bar updates last_bar_index."""
         detector = HierarchicalDetector()
         bar = make_bar(0, 100.0, 105.0, 95.0, 102.0)
 
         events = detector.process_bar(bar)
 
         assert detector.state.last_bar_index == 0
-        assert len(detector.state.candidate_highs) == 1
-        assert len(detector.state.candidate_lows) == 1
-        assert detector.state.candidate_highs[0] == (0, Decimal("105"))
-        assert detector.state.candidate_lows[0] == (0, Decimal("95"))
 
     def test_single_bar_no_swing(self):
         """Single bar cannot form a swing (needs origin before pivot)."""
@@ -167,37 +146,6 @@ class TestSingleBarProcessing:
 
         assert len([e for e in events if isinstance(e, SwingFormedEvent)]) == 0
         assert len(detector.get_active_swings()) == 0
-
-
-class TestCandidateTracking:
-    """Test sliding window candidate tracking."""
-
-    def test_candidates_accumulate(self):
-        """Candidates accumulate within lookback window."""
-        config = SwingConfig.default().with_lookback(10)
-        detector = HierarchicalDetector(config)
-
-        for i in range(5):
-            bar = make_bar(i, 100.0 + i, 105.0 + i, 95.0 + i, 102.0 + i)
-            detector.process_bar(bar)
-
-        assert len(detector.state.candidate_highs) == 5
-        assert len(detector.state.candidate_lows) == 5
-
-    def test_candidates_expire(self):
-        """Old candidates are removed after lookback window."""
-        config = SwingConfig.default().with_lookback(5)
-        detector = HierarchicalDetector(config)
-
-        for i in range(10):
-            bar = make_bar(i, 100.0 + i, 105.0 + i, 95.0 + i, 102.0 + i)
-            detector.process_bar(bar)
-
-        # Should only have last 5 bars
-        assert len(detector.state.candidate_highs) == 5
-        assert len(detector.state.candidate_lows) == 5
-        # Oldest should be bar 5
-        assert detector.state.candidate_highs[0][0] == 5
 
 
 class TestSwingFormation:
@@ -483,88 +431,23 @@ class TestParentAssignment:
         detector.state.all_swing_ranges.append(parent.range)
         detector.state.last_bar_index = 10
 
-        # Add candidates for a child swing
-        detector.state.candidate_highs = [(15, Decimal("5080"))]
-        detector.state.candidate_lows = [(20, Decimal("5030"))]
+        # Process bars to form a child swing using DAG-based algorithm
+        # Bar with Type 2-Bull establishing trend
+        bar1 = make_bar(15, 5040.0, 5080.0, 5030.0, 5070.0)
+        detector.process_bar(bar1)
 
-        # Form child swing with close above formation (5030 + 50 * 0.287 = 5044.35)
-        bar = make_bar(21, 5040.0, 5055.0, 5035.0, 5050.0)
-        events = detector.process_bar(bar)
+        # Bar with low at defended pivot
+        bar2 = make_bar(20, 5050.0, 5060.0, 5030.0, 5040.0)
+        detector.process_bar(bar2)
+
+        # Form child swing with close above formation threshold
+        bar3 = make_bar(21, 5040.0, 5055.0, 5035.0, 5050.0)
+        events = detector.process_bar(bar3)
 
         formed_events = [e for e in events if isinstance(e, SwingFormedEvent)]
         if formed_events:
-            assert parent.swing_id in formed_events[0].parent_ids
-
-
-class TestPreFormationProtection:
-    """Test Rule 2.1: Pre-formation protection is absolute."""
-
-    def test_violation_between_origin_and_pivot_rejects(self):
-        """Swing is rejected if origin was exceeded between origin and pivot."""
-        config = SwingConfig(lookback_bars=50)
-        detector = HierarchicalDetector(config)
-
-        # Set up candidates where a higher high exists between origin and pivot
-        detector.state.candidate_highs = [
-            (0, Decimal("5100")),  # Origin
-            (5, Decimal("5110")),  # Higher high in between
-        ]
-        detector.state.candidate_lows = [
-            (10, Decimal("5000")),  # Pivot
-        ]
-        detector.state.last_bar_index = 10
-
-        # Try to form swing with close above formation threshold
-        bar = make_bar(11, 5020.0, 5050.0, 5015.0, 5040.0)
-        events = detector.process_bar(bar)
-
-        # The swing from (0, 5100) to (10, 5000) should be rejected
-        # because 5110 at bar 5 exceeds the origin at 5100
-        formed_events = [e for e in events if isinstance(e, SwingFormedEvent)]
-        for event in formed_events:
-            # If any swing formed, it should not have origin at bar 0
-            assert event.high_bar_index != 0 or event.high_price != Decimal("5100")
-
-
-class TestSeparation:
-    """Test Rule 4: Structural separation."""
-
-    def test_too_close_swings_rejected(self):
-        """Swings too close to existing swings are rejected."""
-        config = SwingConfig(
-            bull=DirectionConfig(self_separation=0.10),
-            lookback_bars=50,
-        )
-        detector = HierarchicalDetector(config)
-
-        # Create an existing swing
-        existing = SwingNode(
-            swing_id="exist001",
-            high_bar_index=0,
-            high_price=Decimal("5100"),
-            low_bar_index=10,
-            low_price=Decimal("5000"),
-            direction="bull",
-            status="active",
-            formed_at_bar=10,
-        )
-        detector.state.active_swings.append(existing)
-        detector.state.all_swing_ranges.append(existing.range)
-
-        # Set up candidates for a swing very close to existing
-        # Origin at 5105 is only 5 points from 5100 (< 10% of 50 = 5)
-        detector.state.candidate_highs = [(15, Decimal("5105"))]
-        detector.state.candidate_lows = [(20, Decimal("5055"))]
-        detector.state.last_bar_index = 20
-
-        # Try to form swing
-        bar = make_bar(21, 5060.0, 5075.0, 5055.0, 5070.0)
-        events = detector.process_bar(bar)
-
-        # Should not form due to separation rule
-        formed_events = [e for e in events if isinstance(e, SwingFormedEvent)]
-        # May or may not form depending on separation calculation
-        # The key is that the check is performed
+            # Check if parent was assigned
+            assert any(parent.swing_id in e.parent_ids for e in formed_events)
 
 
 class TestNoLookahead:
@@ -579,17 +462,15 @@ class TestNoLookahead:
         bars = [make_bar(i, 100.0 + i, 105.0 + i, 95.0 + i, 102.0 + i) for i in range(20)]
 
         for i, bar in enumerate(bars):
-            # Before processing, state should only contain data from past bars
-            for candidate_idx, _ in detector.state.candidate_highs:
-                assert candidate_idx < bar.index, f"Candidate at {candidate_idx} found before bar {bar.index}"
-
-            for candidate_idx, _ in detector.state.candidate_lows:
-                assert candidate_idx < bar.index, f"Candidate at {candidate_idx} found before bar {bar.index}"
-
             detector.process_bar(bar)
 
             # After processing, last_bar_index should be current
             assert detector.state.last_bar_index == bar.index
+
+            # Verify any active legs only reference bars <= current
+            for leg in detector.state.active_legs:
+                assert leg.origin_index <= bar.index
+                assert leg.pivot_index <= bar.index
 
 
 class TestCalibrateFunction:
@@ -609,12 +490,11 @@ class TestCalibrateFunction:
         bars = [make_bar(i, 100.0 + i % 10, 105.0 + i % 10, 95.0 + i % 10, 102.0 + i % 10) for i in range(50)]
         config = SwingConfig.default()
 
-        # Calibrate (uses multi-TF optimization when source_bars provided)
+        # Calibrate
         detector1, events1 = calibrate(bars, config)
 
-        # Manual loop with same multi-TF setup for apples-to-apples comparison
-        # Pass source_bars to get the same behavior as calibrate()
-        detector2 = HierarchicalDetector(config, source_bars=bars)
+        # Manual loop
+        detector2 = HierarchicalDetector(config)
         events2 = []
         for bar in bars:
             events2.extend(detector2.process_bar(bar))
@@ -1018,163 +898,6 @@ class TestCalibrationPerformance:
         assert detector.state.last_bar_index == 99
         # Should detect some swings in this pattern
         assert isinstance(events, list)
-
-
-class TestMultiTimeframeCandidates:
-    """Tests for multi-timeframe candidate generation (Phase 3 optimization)."""
-
-    def test_multi_tf_enabled_with_source_bars(self):
-        """Multi-TF mode is enabled when source_bars are provided."""
-        bars = [make_bar(i, 100.0 + i, 105.0 + i, 95.0 + i, 102.0 + i) for i in range(100)]
-        config = SwingConfig.default()
-
-        # With source_bars
-        detector = HierarchicalDetector(config, source_bars=bars)
-        assert detector._use_multi_tf is True
-        assert detector.aggregator is not None
-
-        # Without source_bars
-        detector2 = HierarchicalDetector(config)
-        assert detector2._use_multi_tf is False
-        assert detector2.aggregator is None
-
-    def test_multi_tf_fallback_for_short_datasets(self):
-        """Multi-TF falls back to source bar tracking for short datasets."""
-        # Short dataset with only a few bars (won't have any completed 1h bars)
-        bars = [make_bar(i, 100.0 + i, 105.0 + i, 95.0 + i, 102.0 + i) for i in range(20)]
-        config = SwingConfig.default()
-
-        detector = HierarchicalDetector(config, source_bars=bars)
-        for bar in bars:
-            detector.process_bar(bar)
-
-        # Should still have candidates despite no TF bars completing
-        assert len(detector.state.candidate_highs) > 0
-        assert len(detector.state.candidate_lows) > 0
-
-    def test_no_lookahead_multi_tf(self):
-        """Verify multi-TF candidates only come from completed TF bars (no lookahead)."""
-        # Create 1000 bars with proper 5m timestamps spanning multiple hours
-        base_ts = 1700000000  # Nov 14, 2023
-        bars = []
-        for i in range(1000):
-            ts = base_ts + i * 300  # 5-minute bars (300 seconds)
-            bars.append(make_bar(i, 5000.0 + (i % 50), 5010.0 + (i % 50),
-                                 4990.0 + (i % 50), 5005.0 + (i % 50), timestamp=ts))
-
-        config = SwingConfig.default()
-        detector = HierarchicalDetector(config, source_bars=bars)
-
-        for i, bar in enumerate(bars):
-            # Before processing this bar, all candidates should have index < current
-            for cand_idx, _ in detector.state.candidate_highs:
-                assert cand_idx <= bar.index, f"Lookahead! Candidate at {cand_idx} before bar {bar.index}"
-
-            for cand_idx, _ in detector.state.candidate_lows:
-                assert cand_idx <= bar.index, f"Lookahead! Candidate at {cand_idx} before bar {bar.index}"
-
-            detector.process_bar(bar)
-
-    def test_seen_tf_bars_tracking(self):
-        """Verify TF bars are only processed once via seen_tf_bars tracking."""
-        # Create bars spanning several hours
-        base_ts = 1700000000
-        bars = []
-        for i in range(200):  # ~16 hours of 5m data
-            ts = base_ts + i * 300
-            bars.append(make_bar(i, 5000.0, 5010.0, 4990.0, 5005.0, timestamp=ts))
-
-        config = SwingConfig.default()
-        detector = HierarchicalDetector(config, source_bars=bars)
-
-        for bar in bars:
-            detector.process_bar(bar)
-
-        # After processing, seen_tf_bars should contain the TF bars we've seen
-        # With 200 5m bars (~16.7 hours), we should have ~16 1h bars
-        total_seen = sum(len(bars) for bars in detector.state.seen_tf_bars.values())
-        assert total_seen > 0, "Should have seen some TF bars"
-
-    def test_calibrate_uses_multi_tf(self):
-        """calibrate() enables multi-TF mode automatically."""
-        bars = [make_bar(i, 100.0 + i, 105.0 + i, 95.0 + i, 102.0 + i) for i in range(100)]
-        config = SwingConfig.default()
-
-        detector, events = calibrate(bars, config)
-
-        # Detector should have multi-TF enabled
-        assert detector._use_multi_tf is True
-        assert detector.aggregator is not None
-
-    def test_state_serialization_with_seen_tf_bars(self):
-        """State serialization preserves seen_tf_bars."""
-        base_ts = 1700000000
-        bars = []
-        for i in range(100):
-            ts = base_ts + i * 300
-            bars.append(make_bar(i, 5000.0, 5010.0, 4990.0, 5005.0, timestamp=ts))
-
-        config = SwingConfig.default()
-        detector = HierarchicalDetector(config, source_bars=bars)
-
-        for bar in bars:
-            detector.process_bar(bar)
-
-        # Serialize and deserialize state
-        state_dict = detector.get_state().to_dict()
-        restored_state = DetectorState.from_dict(state_dict)
-
-        # Verify seen_tf_bars preserved
-        for tf in [60, 240, 1440]:
-            assert detector.state.seen_tf_bars[tf] == restored_state.seen_tf_bars[tf]
-
-
-class TestMultiTimeframePerformance:
-    """Performance tests for multi-timeframe optimization."""
-
-    def test_candidate_count_bounded(self):
-        """Verify candidate count is bounded with multi-TF mode."""
-        # Create a larger dataset
-        base_ts = 1700000000
-        bars = []
-        for i in range(500):
-            ts = base_ts + i * 300  # 5-minute bars
-            bars.append(make_bar(i, 5000.0 + (i % 100), 5050.0 + (i % 100),
-                                 4950.0 + (i % 100), 5025.0 + (i % 100), timestamp=ts))
-
-        config = SwingConfig.default()
-        detector = HierarchicalDetector(config, source_bars=bars)
-
-        for bar in bars:
-            detector.process_bar(bar)
-
-        # With multi-TF, candidates should be bounded
-        # The pruning logic keeps at most 50 candidates per side
-        assert len(detector.state.candidate_highs) <= 100, \
-            f"Too many high candidates: {len(detector.state.candidate_highs)}"
-        assert len(detector.state.candidate_lows) <= 100, \
-            f"Too many low candidates: {len(detector.state.candidate_lows)}"
-
-    def test_performance_1k_bars_multi_tf(self):
-        """Performance test: 1K bars should complete in reasonable time."""
-        import time
-
-        # Create 1K bars with proper timestamps
-        base_ts = 1700000000
-        bars = []
-        for i in range(1000):
-            ts = base_ts + i * 300
-            bars.append(make_bar(i, 5000.0 + (i % 100), 5050.0 + (i % 100),
-                                 4950.0 + (i % 100), 5025.0 + (i % 100), timestamp=ts))
-
-        start = time.time()
-        detector, events = calibrate(bars)
-        elapsed = time.time() - start
-
-        # Should complete in under 10 seconds (provides margin for CI variance)
-        # Phase 3 target is <1s but with hybrid fallback in effect, allow more
-        assert elapsed < 10.0, f"1K bars took {elapsed:.2f}s, should be <10s"
-        assert detector.state.last_bar_index == 999
 
 
 class TestPhase1Optimizations:

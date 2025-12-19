@@ -167,79 +167,6 @@ class TestBigSwingTolerances:
         assert result["small"].close_tolerance == 0.10
 
 
-class TestParentChildSeparation:
-    """Test parent-child separation filtering (Rule 4.2)."""
-
-    def test_well_separated_child_passes(self):
-        """Child with good separation from parent passes filter."""
-        layer = ReferenceLayer()
-        parent = make_swing("parent", 200.0, 100.0)  # Range 100
-        # Child endpoints are well separated from parent endpoints
-        child = make_swing("child", 170.0, 130.0)  # Origin=170, Pivot=130
-        child.add_parent(parent)
-        swings = [parent, child]
-
-        result = layer.filter_by_separation(swings)
-
-        # Find child in result
-        child_info = next((r for r in result if r.swing.swing_id == "child"), None)
-        assert child_info is not None
-        assert child_info.is_reference is True
-
-    def test_too_close_to_parent_origin_fails(self):
-        """Child with origin too close to parent's origin fails filter."""
-        layer = ReferenceLayer()
-        parent = make_swing("parent", 200.0, 100.0)  # Range 100, Origin=200
-        # Child origin (198) is within 0.1 * 100 = 10 of parent origin (200)
-        child = make_swing("child", 198.0, 150.0)
-        child.add_parent(parent)
-        swings = [parent, child]
-
-        layer.classify_swings(swings)
-        result = layer.filter_by_separation(swings)
-
-        child_infos = [r for r in result if r.swing.swing_id == "child"]
-        if child_infos:
-            assert child_infos[0].is_reference is False
-
-    def test_too_close_to_parent_pivot_fails(self):
-        """Child with pivot too close to parent's pivot fails filter."""
-        layer = ReferenceLayer()
-        parent = make_swing("parent", 200.0, 100.0)  # Range 100, Pivot=100
-        # Child pivot (105) is within 0.1 * 100 = 10 of parent pivot (100)
-        child = make_swing("child", 170.0, 105.0)
-        child.add_parent(parent)
-        swings = [parent, child]
-
-        layer.classify_swings(swings)
-        result = layer.filter_by_separation(swings)
-
-        child_infos = [r for r in result if r.swing.swing_id == "child"]
-        if child_infos:
-            assert child_infos[0].is_reference is False
-
-    def test_sibling_separation(self):
-        """Siblings too close to each other fail filter."""
-        layer = ReferenceLayer()
-        parent = make_swing("parent", 200.0, 100.0)  # Range 100
-        child1 = make_swing("child1", 170.0, 140.0)
-        child2 = make_swing("child2", 172.0, 142.0)  # Too close to child1
-        child1.add_parent(parent)
-        child2.add_parent(parent)
-        swings = [parent, child1, child2]
-
-        layer.classify_swings(swings)
-        result = layer.filter_by_separation(swings)
-
-        # At least one sibling should be filtered out
-        reference_children = [
-            r for r in result
-            if r.swing.swing_id in ["child1", "child2"] and r.is_reference
-        ]
-        # Both might still pass if they're processed independently
-        # The filter checks each against existing siblings
-
-
 class TestTouchInvalidation:
     """Test touch (wick) invalidation (Rule 2.2)."""
 
@@ -374,34 +301,22 @@ class TestBearSwingInvalidation:
 class TestGetReferenceSwings:
     """Test the main entry point for getting reference swings."""
 
-    def test_all_swings_with_separation(self):
-        """get_reference_swings applies both classification and separation."""
+    def test_get_reference_swings_returns_classified(self):
+        """get_reference_swings returns classified swings."""
         layer = ReferenceLayer()
         parent = make_swing("parent", 200.0, 100.0)
         child = make_swing("child", 170.0, 130.0)
         child.add_parent(parent)
         swings = [parent, child]
 
-        result = layer.get_reference_swings(swings, apply_separation=True)
+        result = layer.get_reference_swings(swings)
 
-        # Both should be references (well separated)
-        assert len(result) >= 1  # At least parent
+        # Both should be returned as references
+        assert len(result) == 2
         parent_info = next((r for r in result if r.swing.swing_id == "parent"), None)
         assert parent_info is not None
-
-    def test_skip_separation_filter(self):
-        """get_reference_swings can skip separation filter."""
-        layer = ReferenceLayer()
-        parent = make_swing("parent", 200.0, 100.0)
-        # Child very close to parent
-        child = make_swing("child", 199.0, 101.0)
-        child.add_parent(parent)
-        swings = [parent, child]
-
-        result = layer.get_reference_swings(swings, apply_separation=False)
-
-        # Both should be returned (no separation filter)
-        assert len(result) == 2
+        child_info = next((r for r in result if r.swing.swing_id == "child"), None)
+        assert child_info is not None
 
 
 class TestUpdateInvalidationOnBar:
@@ -476,14 +391,6 @@ class TestEmptyInput:
         result = layer.classify_swings([])
 
         assert result == {}
-
-    def test_filter_empty_list(self):
-        """filter_by_separation handles empty list."""
-        layer = ReferenceLayer()
-
-        result = layer.filter_by_separation([])
-
-        assert result == []
 
     def test_get_reference_swings_empty(self):
         """get_reference_swings handles empty list."""

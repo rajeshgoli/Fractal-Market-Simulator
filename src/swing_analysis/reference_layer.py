@@ -78,9 +78,12 @@ class ReferenceLayer:
 
     Key operations:
     1. classify_swings(): Compute big/small classification, set tolerances
-    2. filter_by_separation(): Apply Rules 4.1 and 4.2
-    3. check_invalidation(): Apply Rule 2.2 with touch/close thresholds
-    4. get_reference_swings(): Get all swings that pass filters
+    2. check_invalidation(): Apply Rule 2.2 with touch/close thresholds
+    3. get_reference_swings(): Get all swings that pass filters
+
+    Note: Separation filtering (Rules 4.1, 4.2) has been removed (#164).
+    The DAG already handles separation at formation time via 10% pruning
+    of orphaned origins.
 
     Example:
         >>> from swing_analysis.reference_layer import ReferenceLayer
@@ -212,100 +215,6 @@ class ReferenceLayer:
                     return True
         return False
 
-    def filter_by_separation(
-        self,
-        swings: List[SwingNode],
-        parent_separation_fib: float = 0.1,
-    ) -> List[ReferenceSwingInfo]:
-        """
-        Apply separation filtering (Rules 4.1 and 4.2).
-
-        Rule 4.1 (Self-separation): Origin must be at least 0.1 × range
-        away from other candidate origins.
-
-        Rule 4.2 (Parent-child separation): Child's endpoints must be
-        at least 0.1 × parent range away from:
-        - Parent's 0 and 1
-        - Any sibling's 0 and 1
-
-        Args:
-            swings: List of SwingNode from the DAG.
-            parent_separation_fib: Minimum separation as fraction of parent range.
-                Default 0.1 per valid_swings.md Rule 4.2.
-
-        Returns:
-            List of ReferenceSwingInfo that pass separation filters.
-        """
-        # First classify if not already done
-        if not self._classified_swings:
-            self.classify_swings(swings)
-
-        filtered = []
-        for swing in swings:
-            info = self._classified_swings.get(swing.swing_id)
-            if info is None:
-                continue
-
-            # Check parent-child separation (Rule 4.2)
-            passes_separation = self._check_parent_child_separation(
-                swing, parent_separation_fib
-            )
-
-            if not passes_separation:
-                info.is_reference = False
-                info.filter_reason = "parent_child_separation"
-            else:
-                filtered.append(info)
-
-        return filtered
-
-    def _check_parent_child_separation(
-        self,
-        swing: SwingNode,
-        min_fib: float = 0.1,
-    ) -> bool:
-        """
-        Check Rule 4.2: Parent-child separation.
-
-        Child swing's 0 or 1 must be at least min_fib × parent range away from:
-        - Parent's 0 and 1
-        - Any sibling swing's 0 and 1
-
-        Args:
-            swing: The child swing to check.
-            min_fib: Minimum separation as fraction of parent range.
-
-        Returns:
-            True if separation is sufficient, False otherwise.
-        """
-        for parent in swing.parents:
-            parent_range = parent.range
-            min_separation = Decimal(str(min_fib)) * parent_range
-
-            # Check separation from parent's endpoints
-            child_points = [swing.defended_pivot, swing.origin]
-            parent_points = [parent.defended_pivot, parent.origin]
-
-            for child_pt in child_points:
-                for parent_pt in parent_points:
-                    if abs(child_pt - parent_pt) < min_separation:
-                        return False
-
-            # Check separation from siblings
-            for sibling in parent.children:
-                if sibling.swing_id == swing.swing_id:
-                    continue
-                if sibling.direction != swing.direction:
-                    continue
-
-                sibling_points = [sibling.defended_pivot, sibling.origin]
-                for child_pt in child_points:
-                    for sib_pt in sibling_points:
-                        if abs(child_pt - sib_pt) < min_separation:
-                            return False
-
-        return True
-
     def check_invalidation(
         self,
         swing: SwingNode,
@@ -377,17 +286,19 @@ class ReferenceLayer:
     def get_reference_swings(
         self,
         swings: List[SwingNode],
-        apply_separation: bool = True,
     ) -> List[ReferenceSwingInfo]:
         """
         Get all swings that pass reference layer filters.
 
         This is the main entry point for filtering DAG output.
-        Applies classification and optionally separation filtering.
+        Applies classification (big/small, tolerances).
+
+        Note: Separation filtering has been removed (#164). The DAG
+        already handles separation at formation time via 10% pruning
+        of orphaned origins.
 
         Args:
             swings: List of SwingNode from the DAG.
-            apply_separation: Whether to apply parent-child separation filter.
 
         Returns:
             List of ReferenceSwingInfo that pass all filters.
@@ -395,14 +306,11 @@ class ReferenceLayer:
         # Classify all swings
         self.classify_swings(swings)
 
-        if apply_separation:
-            return self.filter_by_separation(swings)
-        else:
-            # Return all classified swings marked as reference
-            return [
-                info for info in self._classified_swings.values()
-                if info.is_reference
-            ]
+        # Return all classified swings marked as reference
+        return [
+            info for info in self._classified_swings.values()
+            if info.is_reference
+        ]
 
     def get_swing_info(self, swing_id: str) -> Optional[ReferenceSwingInfo]:
         """

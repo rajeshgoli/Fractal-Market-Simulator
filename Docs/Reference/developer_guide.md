@@ -270,20 +270,13 @@ def on_progress(current: int, total: int):
 
 detector, events = calibrate(bars, progress_callback=on_progress)
 
-# Option 4: Process bars incrementally with multi-TF optimization
-# Pass source_bars to enable multi-timeframe candidate generation
+# Option 4: Process bars incrementally
 config = SwingConfig.default()
-detector = HierarchicalDetector(config, source_bars=bars)
+detector = HierarchicalDetector(config)
 for bar in bars:
     events = detector.process_bar(bar)
     for event in events:
         print(f"{event.event_type}: {event.swing_id}")
-
-# Option 5: Process bars incrementally without multi-TF (legacy mode)
-# Omit source_bars to use original O(lookback²) candidate tracking
-detector = HierarchicalDetector(config)  # No source_bars
-for bar in bars:
-    events = detector.process_bar(bar)
 
 # Convert DataFrame to Bar list manually
 bars = dataframe_to_bars(df)  # Handles various column naming conventions
@@ -299,8 +292,8 @@ detector2 = HierarchicalDetector.from_state(restored_state, config)
 **Calibration functions:**
 | Function | Purpose |
 |----------|---------|
-| `calibrate(bars, config, progress_callback, source_resolution_minutes=5)` | Run detection on Bar list |
-| `calibrate_from_dataframe(df, config, progress_callback, source_resolution_minutes=5)` | Convenience wrapper for DataFrame input |
+| `calibrate(bars, config, progress_callback)` | Run detection on Bar list |
+| `calibrate_from_dataframe(df, config, progress_callback)` | Convenience wrapper for DataFrame input |
 | `dataframe_to_bars(df)` | Convert DataFrame with OHLC columns to Bar list |
 
 **Key design principles:**
@@ -390,10 +383,11 @@ for swing, result in invalidated:
 | Method | Purpose |
 |--------|---------|
 | `classify_swings(swings)` | Compute big/small classification, set tolerances |
-| `filter_by_separation(swings)` | Apply Rules 4.1 (self) and 4.2 (parent-child) |
 | `check_invalidation(swing, bar)` | Apply Rule 2.2 with touch/close thresholds |
 | `get_reference_swings(swings)` | Get all swings that pass filters |
 | `get_big_swings(swings)` | Get only big swings (top 10%) |
+
+*Note: Separation filtering (Rules 4.1, 4.2) has been removed (#164). The DAG handles separation at formation time via 10% pruning of orphaned origins.*
 
 **Invalidation thresholds (Rule 2.2):**
 | Swing Size | Touch Tolerance | Close Tolerance |
@@ -670,7 +664,6 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
 │                              ▼                                   │
 │  3. ReferenceLayer.get_reference_swings() ──► Filtered swings   │
 │        • classify_swings() - big/small classification           │
-│        • filter_by_separation() - Rules 4.1, 4.2                │
 │                              │                                   │
 │                              ▼                                   │
 │  4. Return filtered reference swings to client                  │

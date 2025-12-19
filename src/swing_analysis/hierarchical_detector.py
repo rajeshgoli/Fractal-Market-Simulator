@@ -32,21 +32,10 @@ from .events import (
 )
 from .reference_frame import ReferenceFrame
 from .types import Bar
-from .bar_aggregator import BarAggregator
 
 
 # Fibonacci levels to track for level cross events
 FIB_LEVELS = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.382, 1.5, 1.618, 2.0]
-
-# Higher timeframes for multi-TF candidate generation (in minutes)
-MULTI_TF_TIMEFRAMES = [60, 240, 1440]  # 1h, 4h, 1d
-
-# Lookback limits for each timeframe (how many TF bars to keep as candidates)
-MULTI_TF_LOOKBACKS = {
-    60: 12,   # Last 12 1h bars = 12 hours
-    240: 6,   # Last 6 4h bars = 24 hours
-    1440: 5,  # Last 5 daily bars = 5 days
-}
 
 
 class BarType(Enum):
@@ -138,12 +127,9 @@ class DetectorState:
 
     Attributes:
         active_swings: List of currently active swing nodes.
-        candidate_highs: Sliding window of (bar_index, price) for potential origins.
-        candidate_lows: Sliding window of (bar_index, price) for potential pivots.
         last_bar_index: Most recent bar index processed.
         fib_levels_crossed: Map of swing_id -> last Fib level for cross tracking.
         all_swing_ranges: List of all swing ranges seen, for big swing calculation.
-        seen_tf_bars: Map of timeframe -> set of aggregated bar indices already processed.
         _cached_big_threshold_bull: Cached big swing threshold for bull swings.
         _cached_big_threshold_bear: Cached big swing threshold for bear swings.
         _threshold_valid: Whether the cached thresholds are valid.
@@ -157,12 +143,9 @@ class DetectorState:
     """
 
     active_swings: List[SwingNode] = field(default_factory=list)
-    candidate_highs: List[Tuple[int, Decimal]] = field(default_factory=list)
-    candidate_lows: List[Tuple[int, Decimal]] = field(default_factory=list)
     last_bar_index: int = -1
     fib_levels_crossed: Dict[str, float] = field(default_factory=dict)
     all_swing_ranges: List[Decimal] = field(default_factory=list)
-    seen_tf_bars: Dict[int, Set[int]] = field(default_factory=lambda: {60: set(), 240: set(), 1440: set()})
     # Cached big swing thresholds (performance optimization #155)
     _cached_big_threshold_bull: Optional[Decimal] = None
     _cached_big_threshold_bear: Optional[Decimal] = None
@@ -247,14 +230,9 @@ class DetectorState:
                 }
                 for s in self.active_swings
             ],
-            "candidate_highs": [
-                (idx, str(price)) for idx, price in self.candidate_highs
-            ],
-            "candidate_lows": [(idx, str(price)) for idx, price in self.candidate_lows],
             "last_bar_index": self.last_bar_index,
             "fib_levels_crossed": self.fib_levels_crossed,
             "all_swing_ranges": [str(r) for r in self.all_swing_ranges],
-            "seen_tf_bars": {str(tf): list(bars) for tf, bars in self.seen_tf_bars.items()},
             # Cache fields (will be recomputed on restore, but included for completeness)
             "_cached_big_threshold_bull": str(self._cached_big_threshold_bull) if self._cached_big_threshold_bull is not None else None,
             "_cached_big_threshold_bear": str(self._cached_big_threshold_bear) if self._cached_big_threshold_bear is not None else None,
@@ -299,14 +277,6 @@ class DetectorState:
             for parent_id in parent_ids:
                 if parent_id in swing_map:
                     swing.add_parent(swing_map[parent_id])
-
-        # Deserialize seen_tf_bars
-        seen_tf_bars_raw = data.get("seen_tf_bars", {})
-        seen_tf_bars = {60: set(), 240: set(), 1440: set()}
-        for tf_str, bars_list in seen_tf_bars_raw.items():
-            tf = int(tf_str)
-            if tf in seen_tf_bars:
-                seen_tf_bars[tf] = set(bars_list)
 
         # Restore cache fields if present (they'll be recomputed on first use anyway)
         cached_bull = data.get("_cached_big_threshold_bull")
@@ -374,19 +344,11 @@ class DetectorState:
 
         return cls(
             active_swings=list(swing_map.values()),
-            candidate_highs=[
-                (idx, Decimal(price))
-                for idx, price in data.get("candidate_highs", [])
-            ],
-            candidate_lows=[
-                (idx, Decimal(price)) for idx, price in data.get("candidate_lows", [])
-            ],
             last_bar_index=data.get("last_bar_index", -1),
             fib_levels_crossed=data.get("fib_levels_crossed", {}),
             all_swing_ranges=[
                 Decimal(r) for r in data.get("all_swing_ranges", [])
             ],
-            seen_tf_bars=seen_tf_bars,
             _cached_big_threshold_bull=Decimal(cached_bull) if cached_bull is not None else None,
             _cached_big_threshold_bear=Decimal(cached_bear) if cached_bear is not None else None,
             _threshold_valid=data.get("_threshold_valid", False),
@@ -425,40 +387,16 @@ class HierarchicalDetector:
         >>> detector2 = HierarchicalDetector.from_state(state, config)
     """
 
-    def __init__(
-        self,
-        config: SwingConfig = None,
-        source_bars: Optional[List[Bar]] = None,
-        source_resolution_minutes: int = 5,
-    ):
+    def __init__(self, config: SwingConfig = None):
         """
         Initialize detector with configuration.
 
         Args:
             config: SwingConfig with detection parameters.
                    If None, uses SwingConfig.default().
-            source_bars: Optional list of source bars for multi-timeframe candidate
-                        generation. When provided, enables performance optimization
-                        that uses higher-timeframe bars (1h, 4h, 1d) as candidates
-                        instead of all source bars.
-            source_resolution_minutes: Resolution of source bars in minutes (default: 5).
-                        Used for BarAggregator initialization.
         """
         self.config = config or SwingConfig.default()
         self.state = DetectorState()
-
-        # Multi-timeframe candidate generation
-        self.aggregator: Optional[BarAggregator] = None
-        self._use_multi_tf = False
-
-        if source_bars and len(source_bars) > 0:
-            try:
-                self.aggregator = BarAggregator(source_bars, source_resolution_minutes)
-                self._use_multi_tf = True
-            except ValueError:
-                # Fall back to original behavior if aggregator can't be initialized
-                self.aggregator = None
-                self._use_multi_tf = False
 
     def _classify_bar_type(self, bar: Bar, prev_bar: Bar) -> BarType:
         """
@@ -1342,7 +1280,6 @@ class HierarchicalDetector:
         2. Check completions of formed swings
         3. Check level crosses for formed swings
         4. Update DAG state (leg tracking, formation, pruning)
-        5. Update candidate extrema (for backward compatibility)
 
         Args:
             bar: The bar to process (Bar dataclass from types.py)
@@ -1368,10 +1305,6 @@ class HierarchicalDetector:
         # 4. Update DAG state and form new swings (O(1) per bar)
         dag_events = self._update_dag_state(bar, timestamp)
         events.extend(dag_events)
-
-        # 5. Also maintain candidate lists for backward compatibility with tests
-        # (will be removed once all tests are migrated)
-        self._update_candidates(bar)
 
         return events
 
@@ -1553,467 +1486,6 @@ class HierarchicalDetector:
             else:
                 break
         return level
-
-    def _update_candidates(self, bar: Bar) -> None:
-        """
-        Update sliding window of candidate extrema.
-
-        Uses multi-timeframe candidate generation when aggregator is available
-        (source_bars provided at init). Falls back to original behavior otherwise.
-
-        Args:
-            bar: Current bar being processed.
-        """
-        if self._use_multi_tf:
-            self._update_candidates_multi_tf(bar)
-        else:
-            self._update_candidates_original(bar)
-
-    def _update_candidates_original(self, bar: Bar) -> None:
-        """
-        Original candidate tracking: all bars in lookback window.
-
-        Args:
-            bar: Current bar being processed.
-        """
-        lookback = self.config.lookback_bars
-        bar_high = Decimal(str(bar.high))
-        bar_low = Decimal(str(bar.low))
-
-        # Add current bar's extrema
-        self.state.candidate_highs.append((bar.index, bar_high))
-        self.state.candidate_lows.append((bar.index, bar_low))
-
-        # Remove old candidates outside lookback window
-        # Keep lookback_bars worth of history (current bar + lookback-1 previous)
-        cutoff = bar.index - lookback + 1
-        self.state.candidate_highs = [
-            (idx, price) for idx, price in self.state.candidate_highs if idx >= cutoff
-        ]
-        self.state.candidate_lows = [
-            (idx, price) for idx, price in self.state.candidate_lows if idx >= cutoff
-        ]
-
-    def _update_candidates_multi_tf(self, bar: Bar) -> None:
-        """
-        Multi-timeframe candidate tracking for performance optimization.
-
-        Instead of tracking all source bars, uses completed higher-timeframe
-        bars (1h, 4h, 1d) as candidates. A 1h bar's high/low is the true
-        maximum/minimum of 12 5m bars — a natural "dominant extremum".
-
-        Key insight: Valid swing origins must be local maxima. If a 5m high
-        is NOT a 1h high, it was exceeded within that hour, which means
-        any swing using it as origin would violate Rule 2.1 (pre-formation).
-
-        Causality: Only COMPLETED higher-TF bars are used. A 1h bar covering
-        10:00-10:59 is complete only after the 10:55 5m bar.
-
-        Hybrid approach: For short datasets or early bars before any higher-TF
-        bars complete, also track source bars to ensure swing formation can occur.
-
-        Args:
-            bar: Current bar being processed.
-        """
-        if not self.aggregator:
-            return self._update_candidates_original(bar)
-
-        tf_candidates_added = 0
-
-        # Check each higher timeframe for newly completed bars
-        for tf_minutes in MULTI_TF_TIMEFRAMES:
-            # Skip timeframes not available in aggregator
-            if tf_minutes not in self.aggregator.available_timeframes:
-                continue
-
-            # Get the most recently CLOSED bar at this timeframe
-            closed_bar = self.aggregator.get_closed_bar_at_source_time(
-                tf_minutes, bar.index
-            )
-
-            if closed_bar is None:
-                continue
-
-            # Check if we've already processed this TF bar
-            if closed_bar.index in self.state.seen_tf_bars[tf_minutes]:
-                continue
-
-            # Mark as seen
-            self.state.seen_tf_bars[tf_minutes].add(closed_bar.index)
-            tf_candidates_added += 1
-
-            # Get the last source bar index covered by this TF bar
-            # This preserves temporal ordering for swing formation
-            # Pass current bar.index for causality (no lookahead)
-            last_source_idx = self._get_last_source_idx_for_tf_bar(
-                closed_bar, tf_minutes, bar.index
-            )
-
-            # Add this bar's extrema as candidates
-            self.state.candidate_highs.append(
-                (last_source_idx, Decimal(str(closed_bar.high)))
-            )
-            self.state.candidate_lows.append(
-                (last_source_idx, Decimal(str(closed_bar.low)))
-            )
-
-        # Hybrid fallback: For short datasets or periods without TF bar completions,
-        # also track source bars to ensure swings can form. This maintains the
-        # performance benefit for large datasets while ensuring correctness for
-        # small datasets or early calibration.
-        # Keep a small window of recent source bars as candidates.
-        total_tf_bars_seen = sum(len(bars) for bars in self.state.seen_tf_bars.values())
-        if total_tf_bars_seen < 3:
-            # Not enough TF bars yet - use source bar tracking as fallback
-            bar_high = Decimal(str(bar.high))
-            bar_low = Decimal(str(bar.low))
-            self.state.candidate_highs.append((bar.index, bar_high))
-            self.state.candidate_lows.append((bar.index, bar_low))
-
-        # Prune old TF candidates based on per-TF lookback limits
-        self._prune_old_tf_candidates()
-
-    def _get_last_source_idx_for_tf_bar(
-        self, tf_bar: Bar, tf_minutes: int, current_bar_index: int
-    ) -> int:
-        """
-        Get the last source bar index covered by a timeframe bar.
-
-        This is needed for temporal ordering in swing formation — the candidate's
-        index must reflect when the extremum was "confirmed" (at the close of
-        the higher-TF bar).
-
-        IMPORTANT: To maintain causality (no lookahead), we limit the result to
-        be at most the current bar index. The aggregator mapping might contain
-        future information, but we only use what we've processed so far.
-
-        Args:
-            tf_bar: The timeframe bar.
-            tf_minutes: Timeframe in minutes.
-            current_bar_index: The current bar being processed (for causality).
-
-        Returns:
-            The last source bar index that maps to this TF bar, limited to
-            current_bar_index for causality.
-        """
-        if not self.aggregator:
-            return min(tf_bar.index, current_bar_index)
-
-        mapping = self.aggregator._source_to_agg_mapping.get(tf_minutes, {})
-
-        # Find max source index that maps to this TF bar, but limit to what
-        # we've processed so far to avoid lookahead
-        max_source_idx = 0
-        for source_idx, agg_idx in mapping.items():
-            if agg_idx == tf_bar.index and source_idx <= current_bar_index:
-                max_source_idx = max(max_source_idx, source_idx)
-
-        return max_source_idx
-
-    def _prune_old_tf_candidates(self) -> None:
-        """
-        Remove candidates from TF bars older than their respective lookbacks.
-
-        Each timeframe has its own lookback limit:
-        - 1h: 12 bars (12 hours of candidates)
-        - 4h: 6 bars (24 hours)
-        - 1d: 5 bars (5 days)
-
-        This naturally scales the candidate window with timeframe importance.
-        """
-        # Prune seen_tf_bars based on lookback limits
-        for tf_minutes, max_count in MULTI_TF_LOOKBACKS.items():
-            if len(self.state.seen_tf_bars[tf_minutes]) > max_count * 2:
-                # Remove oldest entries
-                sorted_bars = sorted(self.state.seen_tf_bars[tf_minutes])
-                to_remove = sorted_bars[:-max_count]
-                for bar_idx in to_remove:
-                    self.state.seen_tf_bars[tf_minutes].discard(bar_idx)
-
-        # Also limit total candidates to prevent unbounded growth
-        # Keep roughly 50 candidates per side (similar to original lookback)
-        max_candidates = 50
-        if len(self.state.candidate_highs) > max_candidates * 2:
-            # Keep the most recent candidates by source index
-            self.state.candidate_highs = sorted(
-                self.state.candidate_highs, key=lambda x: x[0]
-            )[-max_candidates:]
-        if len(self.state.candidate_lows) > max_candidates * 2:
-            self.state.candidate_lows = sorted(
-                self.state.candidate_lows, key=lambda x: x[0]
-            )[-max_candidates:]
-
-    def _try_form_swings(
-        self, bar: Bar, timestamp: datetime
-    ) -> List[SwingFormedEvent]:
-        """
-        Try to form new swings from candidate extrema.
-
-        For bull swings: high (origin) occurs before low (defended pivot)
-        For bear swings: low (origin) occurs before high (defended pivot)
-
-        Args:
-            bar: Current bar being processed.
-            timestamp: Timestamp for events.
-
-        Returns:
-            List of SwingFormedEvent for any newly formed swings.
-        """
-        events: List[SwingFormedEvent] = []
-        close_price = Decimal(str(bar.close))
-
-        # Try bull swings: high (origin) before low (defended pivot)
-        bull_events = self._try_form_direction_swings(
-            bar, timestamp, close_price, "bull"
-        )
-        events.extend(bull_events)
-
-        # Try bear swings: low (origin) before high (defended pivot)
-        bear_events = self._try_form_direction_swings(
-            bar, timestamp, close_price, "bear"
-        )
-        events.extend(bear_events)
-
-        return events
-
-    def _try_form_direction_swings(
-        self,
-        bar: Bar,
-        timestamp: datetime,
-        close_price: Decimal,
-        direction: str,
-    ) -> List[SwingFormedEvent]:
-        """
-        Try to form swings for one direction.
-
-        Args:
-            bar: Current bar.
-            timestamp: Event timestamp.
-            close_price: Current close price.
-            direction: "bull" or "bear".
-
-        Returns:
-            List of SwingFormedEvent for newly formed swings.
-        """
-        events = []
-        config = self.config.bull if direction == "bull" else self.config.bear
-
-        if direction == "bull":
-            # Bull: origin (high) before defended pivot (low)
-            origins = self.state.candidate_highs
-            pivots = self.state.candidate_lows
-        else:
-            # Bear: origin (low) before defended pivot (high)
-            origins = self.state.candidate_lows
-            pivots = self.state.candidate_highs
-
-        # Find best candidate pairs
-        formation_threshold = Decimal(str(config.formation_fib))
-
-        for origin_idx, origin_price in origins:
-            for pivot_idx, pivot_price in pivots:
-                # Origin must come before pivot
-                if origin_idx >= pivot_idx:
-                    continue
-
-                # Skip if range is effectively zero
-                swing_range = abs(origin_price - pivot_price)
-                if swing_range == 0:
-                    continue
-
-                # Inline formation check (avoids creating ReferenceFrame for rejected pairs)
-                # For bull: ratio = (close - pivot) / range, check >= formation_fib
-                # For bear: ratio = (pivot - close) / range, check >= formation_fib
-                if direction == "bull":
-                    ratio = (close_price - pivot_price) / swing_range
-                else:
-                    ratio = (pivot_price - close_price) / swing_range
-                if ratio < formation_threshold:
-                    continue
-
-                # Check pre-formation protection (ABSOLUTE, no tolerance - Rule 2.1)
-                if not self._check_pre_formation(bar, origin_idx, pivot_idx, origin_price, pivot_price, direction):
-                    continue
-
-                # Check separation from existing swings (Rule 4)
-                if not self._check_separation(origin_price, pivot_price, swing_range, direction, config):
-                    continue
-
-                # Check for duplicate - don't form same swing twice
-                if self._swing_exists(origin_idx, pivot_idx, direction):
-                    continue
-
-                # Form the swing
-                if direction == "bull":
-                    swing = SwingNode(
-                        swing_id=SwingNode.generate_id(),
-                        high_bar_index=origin_idx,
-                        high_price=origin_price,
-                        low_bar_index=pivot_idx,
-                        low_price=pivot_price,
-                        direction="bull",
-                        status="active",
-                        formed_at_bar=bar.index,
-                    )
-                else:
-                    swing = SwingNode(
-                        swing_id=SwingNode.generate_id(),
-                        high_bar_index=pivot_idx,
-                        high_price=pivot_price,
-                        low_bar_index=origin_idx,
-                        low_price=origin_price,
-                        direction="bear",
-                        status="active",
-                        formed_at_bar=bar.index,
-                    )
-
-                # Find parents (active swings where this fits in their 0-2 range)
-                parents = self._find_parents(swing)
-                for parent in parents:
-                    swing.add_parent(parent)
-
-                # Track swing range for big swing calculations
-                self.state.all_swing_ranges.append(swing.range)
-                # Invalidate threshold cache since swing ranges changed
-                self.state._threshold_valid = False
-                self.state.active_swings.append(swing)
-
-                # Initialize level tracking (reuse already-computed ratio)
-                self.state.fib_levels_crossed[swing.swing_id] = self._find_level_band(
-                    float(ratio)
-                )
-
-                events.append(
-                    SwingFormedEvent(
-                        bar_index=bar.index,
-                        timestamp=timestamp,
-                        swing_id=swing.swing_id,
-                        high_bar_index=swing.high_bar_index,
-                        high_price=swing.high_price,
-                        low_bar_index=swing.low_bar_index,
-                        low_price=swing.low_price,
-                        direction=swing.direction,
-                        parent_ids=[p.swing_id for p in parents],
-                    )
-                )
-
-        return events
-
-    def _check_pre_formation(
-        self,
-        bar: Bar,
-        origin_idx: int,
-        pivot_idx: int,
-        origin_price: Decimal,
-        pivot_price: Decimal,
-        direction: str,
-    ) -> bool:
-        """
-        Check pre-formation protection (Rule 2.1).
-
-        NO tolerance - any violation rejects candidate. For the bars between
-        origin and defended pivot, verify neither endpoint was exceeded.
-
-        Args:
-            bar: Current bar.
-            origin_idx: Bar index of origin.
-            pivot_idx: Bar index of defended pivot.
-            origin_price: Price of origin.
-            pivot_price: Price of defended pivot.
-            direction: "bull" or "bear".
-
-        Returns:
-            True if pre-formation check passes, False if violated.
-        """
-        if direction == "bull":
-            # Bull: origin is high, pivot is low
-            # Check no high in between exceeded origin
-            # Check no low in between undercut pivot
-            for idx, price in self.state.candidate_highs:
-                if origin_idx < idx < pivot_idx and price > origin_price:
-                    return False
-            for idx, price in self.state.candidate_lows:
-                if origin_idx < idx < pivot_idx and price < pivot_price:
-                    return False
-        else:
-            # Bear: origin is low, pivot is high
-            # Check no low in between undercut origin
-            # Check no high in between exceeded pivot
-            for idx, price in self.state.candidate_lows:
-                if origin_idx < idx < pivot_idx and price < origin_price:
-                    return False
-            for idx, price in self.state.candidate_highs:
-                if origin_idx < idx < pivot_idx and price > pivot_price:
-                    return False
-
-        return True
-
-    def _check_separation(
-        self,
-        origin_price: Decimal,
-        pivot_price: Decimal,
-        swing_range: Decimal,
-        direction: str,
-        config: DirectionConfig,
-    ) -> bool:
-        """
-        Check separation from existing swings (Rule 4).
-
-        Ensures the new swing's endpoints are sufficiently separated from
-        existing swings to be structurally meaningful.
-
-        Args:
-            origin_price: Price of the new swing's origin.
-            pivot_price: Price of the new swing's defended pivot.
-            swing_range: Range of the new swing.
-            direction: "bull" or "bear".
-            config: DirectionConfig with separation parameters.
-
-        Returns:
-            True if separation is sufficient, False otherwise.
-        """
-        min_separation = Decimal(str(config.self_separation)) * swing_range
-
-        for swing in self.state.active_swings:
-            if swing.status != "active":
-                continue
-            if swing.direction != direction:
-                continue
-
-            # Check origin separation
-            origin_distance = abs(origin_price - swing.origin)
-            if origin_distance < min_separation:
-                return False
-
-            # Check pivot separation
-            pivot_distance = abs(pivot_price - swing.defended_pivot)
-            if pivot_distance < min_separation:
-                return False
-
-        return True
-
-    def _swing_exists(self, origin_idx: int, pivot_idx: int, direction: str) -> bool:
-        """
-        Check if a swing with these endpoints already exists.
-
-        Args:
-            origin_idx: Bar index of origin.
-            pivot_idx: Bar index of defended pivot.
-            direction: "bull" or "bear".
-
-        Returns:
-            True if such a swing already exists in active_swings.
-        """
-        for swing in self.state.active_swings:
-            if swing.direction != direction:
-                continue
-            if direction == "bull":
-                if swing.high_bar_index == origin_idx and swing.low_bar_index == pivot_idx:
-                    return True
-            else:
-                if swing.low_bar_index == origin_idx and swing.high_bar_index == pivot_idx:
-                    return True
-        return False
 
     def _find_parents(self, new_swing: SwingNode) -> List[SwingNode]:
         """
@@ -2200,21 +1672,17 @@ def calibrate(
     bars: List[Bar],
     config: SwingConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
-    source_resolution_minutes: int = 5,
 ) -> Tuple["HierarchicalDetector", List[SwingEvent]]:
     """
     Run detection on historical bars.
 
     This is process_bar() in a loop — guarantees identical behavior
-    to incremental playback. When called with bars, enables multi-timeframe
-    candidate generation for improved performance.
+    to incremental playback.
 
     Args:
         bars: Historical bars to process.
         config: Detection configuration (defaults to SwingConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
-        source_resolution_minutes: Resolution of source bars in minutes (default: 5).
-            Used for multi-timeframe aggregation.
 
     Returns:
         Tuple of (detector with state, all events generated).
@@ -2233,10 +1701,7 @@ def calibrate(
     """
     config = config or SwingConfig.default()
 
-    # Initialize detector with source bars for multi-TF optimization
-    detector = HierarchicalDetector(
-        config, source_bars=bars, source_resolution_minutes=source_resolution_minutes
-    )
+    detector = HierarchicalDetector(config)
     all_events: List[SwingEvent] = []
     total = len(bars)
 
@@ -2315,7 +1780,6 @@ def calibrate_from_dataframe(
     df: pd.DataFrame,
     config: SwingConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
-    source_resolution_minutes: int = 5,
 ) -> Tuple["HierarchicalDetector", List[SwingEvent]]:
     """
     Convenience wrapper for DataFrame input.
@@ -2326,8 +1790,6 @@ def calibrate_from_dataframe(
         df: DataFrame with OHLC columns (open, high, low, close).
         config: Detection configuration (defaults to SwingConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
-        source_resolution_minutes: Resolution of source bars in minutes (default: 5).
-            Used for multi-timeframe aggregation.
 
     Returns:
         Tuple of (detector with state, all events generated).
@@ -2339,4 +1801,4 @@ def calibrate_from_dataframe(
         >>> print(f"Detected {len(detector.get_active_swings())} active swings")
     """
     bars = dataframe_to_bars(df)
-    return calibrate(bars, config, progress_callback, source_resolution_minutes)
+    return calibrate(bars, config, progress_callback)
