@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 10
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2025-12-18
 
@@ -8,16 +8,7 @@
 
 ## Pending Changes
 
-- **#142** — SwingConfig dataclass: centralized configuration for all swing detection parameters
-- **#143** — SwingNode dataclass: hierarchical swing structure with DAG parent/child linking
-- **#144** — SwingEvent types: formed/invalidated/completed/level_cross for hierarchical detector
-- **#145** — ReferenceFrame tolerance checks: is_violated, is_formed, is_completed, get_fib_price
-- **#146** — Ground truth annotator removal: archived and deleted per swing detection rewrite spec
-- **#147** — HierarchicalDetector: core incremental swing detection with process_bar() entry point
-- **#148** — Calibration as loop: calibrate(), calibrate_from_dataframe(), dataframe_to_bars() helpers
-- **#149** — ReferenceSwing compatibility adapter: swing_node_to_reference_swing, detect_swings_compat
-- **#150** — Replay router update: uses HierarchicalDetector, adds hierarchy info (depth, parent_ids)
-- **#151** — Discretizer SwingNode support: accepts both ReferenceSwing and SwingNode via adapter
+_None — all changes reviewed._
 
 ---
 
@@ -25,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 18 | #142-#151 — Swing Detection Rewrite (10 issues) | All Accepted; #154 performance issue identified with prescriptive sub-issues #155, #156 |
 | Dec 18 | Swing Detection Rewrite Spec | Approved; all clarifications resolved — ready for implementation |
 | Dec 18 | #138, #140 (Phase 1) — Endpoint optimization fix, symmetric pre-formation protection | All Accepted; #139 closed as resolved |
 | Dec 18 | #130/regression, #131 (+ 3 fixes), #133, #134, #136 — Navigation, stats toggle, XL separation, API modularization, endpoint selection | All Accepted |
