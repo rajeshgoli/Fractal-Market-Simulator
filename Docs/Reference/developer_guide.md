@@ -621,7 +621,7 @@ python -m src.ground_truth_annotator.main --data test.csv --port 8001
 
 ### Replay View API
 
-The replay view backend (`src/ground_truth_annotator/`) uses HierarchicalDetector for incremental swing detection:
+The replay view backend (`src/ground_truth_annotator/`) uses HierarchicalDetector for incremental swing detection with Reference layer filtering:
 
 ```python
 # Calibration: GET /api/replay/calibrate?bar_count=10000
@@ -631,6 +631,35 @@ The replay view backend (`src/ground_truth_annotator/`) uses HierarchicalDetecto
 # {calibration_bar_count, current_bar_index, advance_by}
 # Processes bars using detector.process_bar() and returns events
 ```
+
+**Reference Layer Integration:**
+
+The API pipeline applies Reference layer filtering to DAG output before returning swings:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     API Request Flow                             │
+│                                                                  │
+│  1. calibrate(bars) ─────► HierarchicalDetector                 │
+│                              │                                   │
+│                              ▼                                   │
+│  2. detector.get_active_swings() ────► Raw DAG swings           │
+│                              │                                   │
+│                              ▼                                   │
+│  3. ReferenceLayer.get_reference_swings() ──► Filtered swings   │
+│        • classify_swings() - big/small classification           │
+│        • filter_by_separation() - Rules 4.1, 4.2                │
+│                              │                                   │
+│                              ▼                                   │
+│  4. Return filtered reference swings to client                  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key files:**
+- `src/ground_truth_annotator/routers/replay.py` - API endpoints
+- `src/swing_analysis/reference_layer.py` - Filtering logic
+- `src/swing_analysis/hierarchical_detector.py` - DAG algorithm
 
 ### Debug logging
 ```python

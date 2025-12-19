@@ -36,6 +36,7 @@ from ...swing_analysis.adapters import (
 )
 from ...swing_analysis.types import Bar
 from ...swing_analysis.reference_frame import ReferenceFrame
+from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceSwingInfo
 from ..schemas import (
     DetectedSwingResponse,
     SwingsWindowedResponse,
@@ -65,6 +66,7 @@ _replay_cache: Dict[str, Any] = {
     "detector": None,  # HierarchicalDetector instance
     "calibration_bar_count": 0,
     "calibration_events": [],  # Events from calibration
+    "reference_layer": None,  # ReferenceLayer for filtering and invalidation
 }
 
 
@@ -440,8 +442,14 @@ async def get_windowed_swings(
     bars_to_process = s.source_bars[:bar_end]
     detector, _events = calibrate(bars_to_process)
 
-    # Get active swings
-    active_swings = detector.get_active_swings()
+    # Get active swings from DAG
+    active_dag_swings = detector.get_active_swings()
+
+    # Apply Reference layer filtering
+    config = SwingConfig.default()
+    ref_layer = ReferenceLayer(config)
+    ref_infos = ref_layer.get_reference_swings(active_dag_swings)
+    active_swings = [info.swing for info in ref_infos if info.is_reference]
 
     # Sort by size, take top N
     sorted_swings = sorted(
@@ -529,9 +537,25 @@ async def calibrate_replay(
 
     current_price = calibration_bars[-1].close
 
-    # Get all swings (active and inactive)
-    all_swings = detector.state.active_swings
-    active_swings = detector.get_active_swings()
+    # Get all swings from DAG
+    all_dag_swings = detector.state.active_swings
+    active_dag_swings = detector.get_active_swings()
+
+    # Apply Reference layer filtering (fixes #160)
+    config = SwingConfig.default()
+    ref_layer = ReferenceLayer(config)
+    reference_swing_infos = ref_layer.get_reference_swings(active_dag_swings)
+
+    # Extract the filtered SwingNode objects
+    active_swings = [info.swing for info in reference_swing_infos if info.is_reference]
+
+    # For "all swings" stat, use DAG output but note filtering
+    all_swings = all_dag_swings
+
+    logger.info(
+        f"Reference layer: {len(active_dag_swings)} DAG swings -> "
+        f"{len(active_swings)} reference swings"
+    )
 
     # Calculate scale thresholds based on swing sizes
     scale_thresholds = _calculate_scale_thresholds(all_swings)
@@ -560,6 +584,7 @@ async def calibrate_replay(
     _replay_cache["calibration_bar_count"] = actual_bar_count
     _replay_cache["calibration_events"] = events
     _replay_cache["scale_thresholds"] = scale_thresholds
+    _replay_cache["reference_layer"] = ref_layer
 
     total_time = time.time() - start_time
     logger.info(
@@ -611,8 +636,16 @@ async def advance_replay(request: ReplayAdvanceRequest):
     if start_idx >= len(s.source_bars):
         # End of data
         current_bar = s.source_bars[-1]
-        active_swings = detector.get_active_swings()
+        active_dag_swings = detector.get_active_swings()
         scale_thresholds = _replay_cache.get("scale_thresholds", {})
+
+        # Apply Reference layer filtering
+        ref_layer = _replay_cache.get("reference_layer")
+        if ref_layer:
+            ref_infos = ref_layer.get_reference_swings(active_dag_swings)
+            active_swings = [info.swing for info in ref_infos if info.is_reference]
+        else:
+            active_swings = active_dag_swings
 
         return ReplayAdvanceResponse(
             new_bars=[],
@@ -660,8 +693,15 @@ async def advance_replay(request: ReplayAdvanceRequest):
     _replay_cache["last_bar_index"] = end_idx - 1
     s.playback_index = end_idx - 1
 
-    # Build current swing state
-    active_swings = detector.get_active_swings()
+    # Build current swing state with Reference layer filtering
+    active_dag_swings = detector.get_active_swings()
+    ref_layer = _replay_cache.get("reference_layer")
+    if ref_layer:
+        ref_infos = ref_layer.get_reference_swings(active_dag_swings)
+        active_swings = [info.swing for info in ref_infos if info.is_reference]
+    else:
+        active_swings = active_dag_swings
+
     swing_state = _build_swing_state(active_swings, scale_thresholds)
 
     current_bar = s.source_bars[end_idx - 1]
