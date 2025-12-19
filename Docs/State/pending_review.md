@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2025-12-18
 
@@ -13,6 +13,7 @@
 - **#144** — SwingEvent types: formed/invalidated/completed/level_cross for hierarchical detector
 - **#145** — ReferenceFrame tolerance checks: is_violated, is_formed, is_completed, get_fib_price
 - **#146** — Ground truth annotator removal: archived and deleted per swing detection rewrite spec
+- **#147** — HierarchicalDetector: core incremental swing detection with process_bar() entry point
 
 ---
 
