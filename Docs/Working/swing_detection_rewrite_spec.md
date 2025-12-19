@@ -2,7 +2,7 @@
 
 **Author:** Product
 **Date:** 2025-12-18
-**Status:** Proposed - Awaiting Architect Review
+**Status:** Approved - Ready for Implementation (Dec 18)
 
 ## Why This Matters
 
@@ -172,14 +172,17 @@ class SwingNode:
 class SwingTree:
     roots: List[SwingNode]
 
-    def invalidate(self, node: SwingNode) -> List[SwingNode]:
-        """Invalidate node and all descendants. Returns invalidated nodes."""
+    def check_invalidations(self, price: Decimal) -> List[SwingNode]:
+        """Check all swings for invalidation. Returns newly invalidated nodes."""
         invalidated = []
-        # Cascade through children recursively
-        ...
+        for swing in self.all_active_swings():
+            if swing.reference_frame.is_violated(price, swing.tolerance):
+                swing.status = "invalidated"
+                invalidated.append(swing)
+        return invalidated
 ```
 
-**Cascading invalidation**: Invalidate parent → all children automatically invalidated.
+**Independent invalidation**: Each swing is invalidated only when its own defended pivot (0) is violated. No automatic cascade — children typically have higher defended pivots than parents, so they invalidate first. The only "cascade" is when multiple swings share the same defended pivot (e.g., L1 and L2 both defend 4832), which is simultaneous invalidation, not propagation.
 
 ## Rules Implementation
 
@@ -301,7 +304,7 @@ def check_separation(candidate: SwingNode, existing: List[SwingNode], config: Sw
 
 1. **No lookahead**: Algorithm only accesses current and past bars
 2. **Single code path**: Calibration and playback are identical
-3. **Cascading invalidation**: Parent invalidation propagates to children
+3. **Independent invalidation**: Each swing invalidated only when its own 0 is violated (no automatic cascade)
 4. **Rule compliance**: All `valid_swings.md` rules correctly enforced
 5. **Configurable parameters**: All magic numbers extracted to `SwingConfig`
 6. **Events < Bars**: Discretization reduces data, not increases it
@@ -365,12 +368,14 @@ InvalidationEvent(
 )
 ```
 
-## Open Questions for Architect
+## Resolved Questions (Dec 18)
 
-1. **Performance**: Incremental calibration over 10K+ bars - acceptable latency?
-2. **DAG complexity**: Multiple parents per swing - does this complicate invalidation?
-3. **State format**: JSON? Pickle? Custom serialization for detector state?
-4. **Migration**: How to handle existing ground truth annotations?
+| Question | Resolution |
+|----------|------------|
+| **Performance** | Acceptable. Incremental is O(active swings) per bar, not O(N). Should be faster than batch's O(N log N). |
+| **DAG complexity** | DAG confirmed. Multiple parents for context/tolerance. NO automatic cascade — each swing checks its own 0. Children invalidate before parents (higher defended pivots). |
+| **State format** | JSON recommended. Simple, portable, versionable. |
+| **Ground truth** | Archive in git, delete locally. Can recreate via replay sessions. |
 
 ## References
 

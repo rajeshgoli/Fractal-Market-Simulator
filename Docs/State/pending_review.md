@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2025-12-18
 
@@ -8,8 +8,7 @@
 
 ## Pending Changes
 
-- **#138** — Fixed inverted endpoint optimization: bull swings now find highest HIGH, bear swings find lowest LOW
-- **#140** — Fixed symmetric pre-formation protection: both detectors now check origin AND defended pivot
+(None)
 
 ---
 
@@ -17,6 +16,8 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 18 | Swing Detection Rewrite Spec | Approved; all clarifications resolved — ready for implementation |
+| Dec 18 | #138, #140 (Phase 1) — Endpoint optimization fix, symmetric pre-formation protection | All Accepted; #139 closed as resolved |
 | Dec 18 | #130/regression, #131 (+ 3 fixes), #133, #134, #136 — Navigation, stats toggle, XL separation, API modularization, endpoint selection | All Accepted |
 | Dec 17 | #122, #123, #126, #127, #128 — Trigger explanations, always-on feedback, level band fix, offset storage, deduplication | All Accepted |
 | Dec 17 | #116, #118, #119, #120, #121 — Feedback capture, collision fix, lazy sessions, incremental detection, stale filtering | All Accepted |

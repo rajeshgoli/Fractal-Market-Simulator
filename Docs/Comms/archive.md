@@ -2,6 +2,93 @@
 
 ---
 
+## Q-2025-12-18-1: DAG vs Tree — Multiple Parents (Swing Detection Rewrite)
+
+**From:** Architect
+**To:** Product
+**Date:** December 18, 2025
+**Status:** Resolved
+
+### Question
+
+Does a swing actually need multiple parents? The rewrite spec mentions both "tree" and "DAG" with `parents: List[SwingNode]`.
+
+### Resolution (Product)
+
+**Answer: YES, DAG with multiple parents. NO automatic cascade.**
+
+From `valid_swings.md` section 5:
+- L3 is a child of L1 AND L2
+- L6 is a child of L3, L4, AND L5
+
+**Key insight:** Children typically have HIGHER defended pivots than parents. In a falling market, children invalidate BEFORE parents. Automatic cascade is unnecessary and wrong.
+
+**Cascade only applies when swings share the same defended pivot:**
+- L1: 6166→4832
+- L2: 5837→4832 (same 0)
+
+Violating 4832 invalidates both simultaneously. This isn't cascade logic—it's multiple swings referencing the same pivot.
+
+**Invalidation model:**
+```
+for each swing:
+    if price violates swing.defended_pivot:
+        invalidate(swing)
+# No cascade traversal needed
+```
+
+**DAG is used for:**
+- Structural context (where does this swing sit?)
+- Tolerance calculation (distance to big swing ancestor)
+
+**DAG is NOT used for:**
+- Propagating invalidation
+
+---
+
+## Q-2025-12-18-2: Ground Truth Annotation Migration
+
+**From:** Architect
+**To:** Product
+**Date:** December 18, 2025
+**Status:** Resolved
+
+### Question
+
+What is the strategy for existing ground truth annotations and the annotator tool?
+
+### Resolution (Product)
+
+**Option 3: Archive in git, delete locally.**
+
+- Annotations can be recreated via 5-10 replay mode sessions
+- S/M/L/XL scale labels become obsolete with hierarchy model
+- Tool and data archived in git history for reference
+- Clean local codebase without deprecated components
+
+---
+
+## Q-2025-12-18-3: Golden Dataset for Regression Testing
+
+**From:** Architect
+**To:** Product
+**Date:** December 18, 2025
+**Status:** Resolved
+
+### Question
+
+Should Engineering capture current detector output as a baseline before rewrite?
+
+### Resolution (Product)
+
+**No golden dataset needed.** Current detection has known bugs; capturing output would encode those bugs as "correct."
+
+Validation approach:
+- User testing via replay mode on new implementation
+- Quality judged by domain expertise, not regression against buggy baseline
+
+---
+
 ## Q-2025-12-17-1: Replay View Feedback Capture Schema Design (Issue #115)
 
 **From:** Product

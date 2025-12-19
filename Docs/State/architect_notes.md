@@ -8,11 +8,11 @@ Read in order:
 3. **`Docs/Reference/developer_guide.md`** — Implementation details as needed
 
 **Core architectural decisions:**
-- Multi-scale (S/M/L/XL) with independent processing
+- Multi-scale (S/M/L/XL) with independent processing → **Under Review** (see Swing Detection Rewrite)
 - Fibonacci-based structural analysis (not arbitrary thresholds)
 - Resolution-agnostic (1m to 1mo)
 - Ground truth annotation as validation mechanism
-- Sequential XL→L→M→S detection with `larger_swings` context passing
+- Sequential XL→L→M→S detection with `larger_swings` context passing → **Under Review**
 - Discretization: structural events, not per-bar tokens
 - Calibration-first playback for causal evaluation
 - Backend-controlled data boundary for replay (single source of truth)
@@ -22,29 +22,85 @@ Read in order:
 
 **Known debt:**
 - `detect_swings()` function (~400 LOC) — monolithic; filter pipeline not extracted
-- **Bull/bear asymmetric branching (#140)** — 38+ instances of `if direction == 'bull'` that should use symmetric ReferenceFrame coordinates; same bug exists in both batch and incremental detectors
+- **Bull/bear asymmetric branching (#140 Phases 2-4)** — 38+ instances of `if direction == 'bull'` that should use symmetric ReferenceFrame coordinates. Critical bug fixed (Phase 1), but refactoring to use ReferenceFrame abstraction deferred.
 
 **Cleanup tasks (deferred):**
 - Delete `Docs/Archive/Proposals/Discretization/` once discretization pipeline is complete and documented in user_guide + developer_guide
 
 ---
 
-## Current Phase: User Testing — Active
+## Current Phase: Swing Detection Rewrite — Ready for Implementation
 
-### Status
+### Proposal
 
-**Replay View v2 is feature-complete.** Detection quality improvements deployed:
-- Self-referential separation for XL swings (17 → 5 in test case)
-- Recursive endpoint optimization for best "1" selection
-- Candidate swing tracking for pending 0.236 validation
-- Protection tolerance restricted to established anchors
-- API modularized into 7 domain-specific routers
+**Document:** `Docs/Working/swing_detection_rewrite_spec.md`
+**Status:** Approved — All clarifications resolved
 
-**Current milestone:** User testing to validate detection quality improvements.
+### Feasibility Assessment
+
+#### Problem Analysis: Valid
+
+The spec correctly identifies real issues:
+
+| Problem | Evidence | Severity |
+|---------|----------|----------|
+| Dual code paths | 2,274 LOC across two detectors; #139, #140 bugs | High |
+| Bull/bear asymmetry | 26+ direction-specific branches in swing_analysis | High |
+| S/M/L/XL mismatch | `valid_swings.md` describes 10-15 hierarchy levels | Medium |
+| Magic numbers | Formation fib scattered, tolerances inconsistent | Medium |
+| Events > Bars | Discretization produces more data than source | Blocking |
+
+The dual-path divergence bugs (#139, #140) are symptomatic of a structural problem. Fixing them individually accumulates debt; a unified algorithm eliminates the class of bugs.
+
+#### Solution Architecture: Sound
+
+**Strengths:**
+
+1. **Single incremental algorithm** — Eliminates lookahead bugs entirely. Calibration as `for bar in bars: process_bar(bar)` guarantees identical behavior to playback.
+
+2. **Leverages existing ReferenceFrame** — The 125-line `reference_frame.py` already implements symmetric 0/1/2 coordinates. It's underutilized; the rewrite would make it central.
+
+3. **SwingConfig centralizes parameters** — All magic numbers in one place. Testable. Auditable. Can be tuned without code changes.
+
+4. **Hierarchical model matches reality** — `valid_swings.md` explicitly states hierarchy can be 10-15 levels deep. S/M/L/XL buckets were always a simplification; now they're a liability.
+
+5. **Phased migration** — Not a big-bang rewrite. New core → Calibration loop → Integration → Cleanup.
+
+#### Clarifications Resolved (Dec 18)
+
+| Question | Resolution |
+|----------|------------|
+| **DAG vs Tree** | DAG confirmed. Multiple parents for structural context and tolerance calculation. NO automatic cascade — each swing invalidated only when its own 0 is violated. Children typically have higher defended pivots, so they invalidate before parents. |
+| **Invalidation semantics** | Independent per-swing. Cascade only when swings share same defended pivot (simultaneous invalidation, not propagation). |
+| **Golden dataset** | Not needed. Current detection has known bugs; user testing via replay mode validates new implementation. |
+| **Ground truth** | Archive in git, delete locally. Can recreate via 5-10 replay sessions. |
+
+#### Risk Assessment
+
+| Risk | Likelihood | Mitigation |
+|------|------------|------------|
+| Scope creep | Medium | Strict Phase 1 boundaries |
+| Regressions | Low | User testing via replay mode |
+| Performance miss | Low | Incremental is O(active), should be fast |
+| Extended timeline | Medium | User testing blocked until Phase 3 |
+
+#### Verdict
+
+**Approved for Implementation**
+
+All blocking questions resolved. Engineering can proceed with Phase 1.
 
 ---
 
-## Recently Completed (Dec 18 — Review 3)
+## Recently Completed (Dec 18 — Review 4)
+
+| Issue | Feature | Verdict |
+|-------|---------|---------|
+| #138 | Endpoint optimization: bull swings find highest HIGH, bear swings find lowest LOW | Accepted |
+| #140 (Phase 1) | Symmetric pre-formation protection in both detectors | Accepted |
+| #139 | Pre-violated lows bug | Closed as resolved by #140 |
+
+### Previous Review (Dec 18 — Review 3)
 
 | Issue | Feature | Verdict |
 |-------|---------|---------|
@@ -54,68 +110,65 @@ Read in order:
 | #134 | API modularization (3,514 → 550 lines in api.py) | Accepted |
 | #136 | Endpoint optimization, candidate swings, protection tolerance | Accepted |
 
-**Key improvements:**
-
-1. **Self-Referential Separation (#133):**
-   - XL swings now require both endpoints to be > 0.1 FIB from existing swings
-   - 17 redundant swings → 5 distinct swings in test case
-   - Same rally to ATH no longer generates 12+ nearly-identical references
-
-2. **Endpoint Selection (#136):**
-   - Recursive `_optimize_defended_pivot()` finds best "1" endpoint
-   - Stops when either well-separated (≥ 0.1 FIB) OR at absolute best extremum
-   - Candidate swings (`is_candidate=True`) track pending 0.236 validation
-   - Protection tolerance (0.1) only applies when larger_swings context exists
-
-3. **API Modularization (#134):**
-   - 7 routers: annotations, session, cascade, comparison, review, discretization, replay
-   - schemas.py with all Pydantic models
-   - api.py reduced to app factory and core routes
-
-4. **UX Fixes (#130, #131):**
-   - Navigation cycles through ALL swings (e.g., 1/17 to 17/17)
-   - Display count (dropdown) controls chart density, not navigation
-   - "Show Stats" toggle brings calibration panel back during playback
-   - Swing H/L markers visible during both calibration and playback
-
 ---
 
 ## System State
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Swing Detector | **Healthy** | Self-referential separation + endpoint optimization |
-| Incremental Detector | Healthy | Deduplication + frozen calibration stats |
-| Ground Truth Annotator | Healthy | Two-click annotation + Review Mode |
+| Swing Detector | **Under Review** | Rewrite proposed |
+| Incremental Detector | **Under Review** | Will be unified with batch |
+| Ground Truth Annotator | Healthy | May be archived post-rewrite |
 | Discretization Pipeline | Healthy | Core complete, visual overlay done |
-| Replay View | **Complete** | Full observation workflow with feedback capture |
-| API Layer | **Refactored** | 7 routers, clean separation |
+| Replay View | Complete | Full observation workflow with feedback capture |
+| API Layer | Refactored | 7 routers, clean separation |
 | Test Suite | Healthy | 865 tests passing |
-| Documentation | **Current** | Both guides updated Dec 18 |
+| Documentation | Current | Both guides updated Dec 18 |
 
 ---
 
 ## Next Steps
 
-### 1. User Testing (Active)
+**Implementation Plan:** `Docs/Working/swing_detection_implementation_plan.md`
 
-With detection improvements deployed, user can validate:
-- XL swing quality (fewer redundant swings)
-- Endpoint selection (best "1" found, not just any valid one)
-- Candidate swing behavior (pending 0.236 validation)
-- Protection tolerance behavior (strict at XL, tolerant with context)
+### Phase 1: Foundation (Parallel — 5 agents)
 
-**Observations to collect:**
-- Do the 5 XL swings (vs 17) feel right for the test window?
-- Are candidate swings being promoted at the right time?
-- Any remaining endpoint selection issues?
+| Issue | Scope | Files |
+|-------|-------|-------|
+| #A | SwingConfig dataclass | `swing_config.py` (new) |
+| #B | SwingNode dataclass | `swing_node.py` (new) |
+| #C | Event types | `events.py` (new) |
+| #D | ReferenceFrame tolerance checks | `reference_frame.py` |
+| #L | Ground truth removal | `ground_truth_annotator/` |
 
-### 2. Candidate Swing Promotion (Pending Data)
+### Phase 2: Algorithm (Sequential — 1 agent)
 
-The `is_candidate=True` swings need downstream handling:
-- Incremental detector should emit LEVEL_CROSS at 0.236 for promotion
-- Discretization module should track candidate → reference transitions
-- This can be implemented once user testing validates the candidate concept
+| Issue | Scope | Blocked By |
+|-------|-------|------------|
+| #E | Core incremental algorithm | #A, #B, #C, #D |
+| #F | Calibration as loop | #E |
+
+### Phase 3: Integration (Mixed — 2-3 agents)
+
+| Issue | Scope | Blocked By | Parallel |
+|-------|-------|------------|----------|
+| #G | ReferenceSwing adapter | #E, #F | No |
+| #H | Replay router update | #G | No |
+| #I | Discretization update | #G | Yes (with #J) |
+| #J | API schema updates | #G | Yes (with #I) |
+
+### Phase 4: Cleanup (Sequential)
+
+| Issue | Scope | Blocked By |
+|-------|-------|------------|
+| #K | Remove old detection code | #H, #I, #J |
+
+### User Testing
+
+After Phase 3:
+- User tests new detection via Replay Mode
+- Quality judged by domain expertise
+- Feedback drives iteration
 
 ---
 
@@ -123,15 +176,15 @@ The `is_candidate=True` swings need downstream handling:
 
 | Document | Status | Action Needed |
 |----------|--------|---------------|
-| `Docs/Reference/developer_guide.md` | **Current** | Updated Dec 18 with filter pipeline, routers |
-| `Docs/Reference/user_guide.md` | **Current** | Updated Dec 18 with Show Stats toggle |
+| `Docs/Reference/developer_guide.md` | Current | Will need update after rewrite |
+| `Docs/Reference/user_guide.md` | Current | Hierarchy model needs documenting |
 | `CLAUDE.md` | Current | - |
 
 ---
 
 ## Architecture Principles
 
-- **Multi-scale:** Four simultaneous scales (S/M/L/XL)
+- **Multi-scale:** Four simultaneous scales (S/M/L/XL) → **Transitioning to hierarchy**
 - **Fibonacci levels:** Extended grid for discretization (16 levels)
 - **Resolution-agnostic:** 1m to 1mo source data supported
 - **Performance:** <60s for 6M bars detection; O(active) per-bar for replay
@@ -146,6 +199,8 @@ The `is_candidate=True` swings need downstream handling:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 18 | Swing Detection Rewrite Spec | Approved; all clarifications resolved — ready for implementation |
+| Dec 18 | #138, #140 (Phase 1) — Endpoint optimization fix, symmetric pre-formation protection | All Accepted; #139 closed as resolved |
 | Dec 18 | #130/regression, #131 (+ 3 fixes), #133, #134, #136 — Navigation, stats toggle, XL separation, API modularization, endpoint selection | All Accepted |
 | Dec 17 | #122, #123, #126, #127, #128 — Trigger explanations, always-on feedback, level band fix, offset storage, deduplication | All Accepted |
 | Dec 17 | #116, #118, #119, #120, #121 — Feedback capture, collision fix, lazy sessions, incremental detection, stale filtering | All Accepted |
