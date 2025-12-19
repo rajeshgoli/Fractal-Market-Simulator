@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-19
 
@@ -10,6 +10,7 @@
 
 - **#168** — Add leg lifecycle events to HierarchicalDetector (LegCreatedEvent, LegPrunedEvent, LegInvalidatedEvent)
 - **#169** — Add DAG state API endpoint (`/api/dag/state`) for visualization
+- **#170** — Add linger toggle to playback controls (lingerEnabled option, toggle button)
 
 ---
 
