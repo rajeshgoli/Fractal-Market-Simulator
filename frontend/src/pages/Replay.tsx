@@ -218,10 +218,13 @@ export const Replay: React.FC = () => {
   // Use hierarchical display hook for new tree-based filtering (Issue #166)
   const hierarchicalData = calibrationData as CalibrationDataHierarchical | null;
   const {
-    filteredActiveSwings: hierarchicalFilteredSwings,
-    allNavigableSwings: hierarchicalNavigableSwings,
+    filteredActiveSwings: _hierarchicalFilteredSwings,
+    allNavigableSwings: _hierarchicalNavigableSwings,
     statsByDepth,
   } = useHierarchicalDisplay(hierarchicalData, hierarchicalConfig);
+  // These will be used for chart display when hierarchical filtering is fully wired
+  void _hierarchicalFilteredSwings;
+  void _hierarchicalNavigableSwings;
 
   // Chart refs for syncing
   const chart1Ref = useRef<IChartApi | null>(null);

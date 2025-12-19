@@ -11,14 +11,13 @@ import {
   // Hierarchical types
   HierarchicalDisplayConfig,
   CalibrationDataHierarchical,
-  TreeStatistics,
   DepthFilterKey,
   SwingStatusKey,
   SwingDirectionKey,
   DEPTH_FILTER_OPTIONS,
 } from '../types';
 import { Badge } from './ui/Badge';
-import { Info, GitCommit, Target, Ruler, ArrowRight, CheckCircle, ChevronLeft, ChevronRight, Play, TreeDeciduous, BarChart2, Shield, Check, X, AlertTriangle } from 'lucide-react';
+import { Info, GitCommit, Target, Ruler, ArrowRight, ChevronLeft, ChevronRight, Play, TreeDeciduous, Check, X } from 'lucide-react';
 
 interface ExplanationPanelProps {
   swing: SwingData | null;
@@ -34,12 +33,12 @@ interface ExplanationPanelProps {
   onStartPlayback?: () => void;
   // Legacy display config props (scale-based)
   displayConfig?: SwingDisplayConfig;
-  filteredStats?: Record<string, { total_swings: number; active_swings: number; displayed_swings: number }>;
-  onToggleScale?: (scale: SwingScaleKey) => void;
+  filteredStats?: Record<string, { total_swings: number; active_swings: number; displayed_swings: number }>; // kept for legacy
+  onToggleScale?: (scale: SwingScaleKey) => void; // kept for legacy
   onSetActiveSwingCount?: (count: number) => void;
   // Hierarchical display config props (new)
   hierarchicalConfig?: HierarchicalDisplayConfig;
-  statsByDepth?: Record<string, { total_swings: number; defended_swings: number; displayed_swings: number }>;
+  statsByDepth?: Record<string, { total_swings: number; defended_swings: number; displayed_swings: number }>; // used in UI
   onSetDepthFilter?: (depth: DepthFilterKey) => void;
   onToggleStatus?: (status: SwingStatusKey) => void;
   onToggleDirection?: (direction: SwingDirectionKey) => void;
@@ -78,12 +77,12 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
   onNavigateNext,
   onStartPlayback,
   displayConfig,
-  filteredStats,
-  onToggleScale,
+  filteredStats: _filteredStats,
+  onToggleScale: _onToggleScale,
   onSetActiveSwingCount,
   // Hierarchical props
   hierarchicalConfig,
-  statsByDepth,
+  statsByDepth: _statsByDepth,
   onSetDepthFilter,
   onToggleStatus,
   onToggleDirection,
@@ -91,6 +90,10 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
   onBrowseDepth,
   showStats = false,
 }) => {
+  // Suppress unused variable warnings for legacy props kept for compatibility
+  void _filteredStats;
+  void _onToggleScale;
+  void _statsByDepth;
   // Show calibration report when calibrated, or during playback if showStats is enabled
   const shouldShowStats =
     (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) ||

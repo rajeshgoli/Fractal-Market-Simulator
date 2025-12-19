@@ -115,7 +115,8 @@ export function useHierarchicalDisplay(
       };
     }
 
-    const { depthFilter, enabledStatuses, enabledDirections, activeSwingCount } = displayConfig;
+    const { depthFilter, enabledStatuses: _enabledStatuses, enabledDirections, activeSwingCount } = displayConfig;
+    void _enabledStatuses; // Status filtering will be used when completed/invalidated swings are included
     const depthOrder = ['depth_1', 'depth_2', 'depth_3', 'deeper'] as const;
 
     // Get max depth based on filter
