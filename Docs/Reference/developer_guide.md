@@ -355,21 +355,37 @@ from src.swing_analysis.hierarchical_detector import (
     HierarchicalDetector,
     DetectorState,
     calibrate,
+    calibrate_from_dataframe,
+    dataframe_to_bars,
 )
 from src.swing_analysis.swing_config import SwingConfig
 
-# Option 1: Calibrate on historical data
-bars = [...]  # List[Bar]
-detector, events = calibrate(bars)
+# Option 1: Calibrate from DataFrame (most common)
+import pandas as pd
+df = pd.read_csv("market_data.csv")
+detector, events = calibrate_from_dataframe(df)
 active_swings = detector.get_active_swings()
 
-# Option 2: Process bars incrementally
+# Option 2: Calibrate from Bar list
+bars = [...]  # List[Bar]
+detector, events = calibrate(bars)
+
+# Option 3: Calibrate with progress callback
+def on_progress(current: int, total: int):
+    print(f"Processing bar {current}/{total}")
+
+detector, events = calibrate(bars, progress_callback=on_progress)
+
+# Option 4: Process bars incrementally
 config = SwingConfig.default()
 detector = HierarchicalDetector(config)
 for bar in bars:
     events = detector.process_bar(bar)
     for event in events:
         print(f"{event.event_type}: {event.swing_id}")
+
+# Convert DataFrame to Bar list manually
+bars = dataframe_to_bars(df)  # Handles various column naming conventions
 
 # Save and restore state
 state = detector.get_state()
@@ -378,6 +394,13 @@ state_dict = state.to_dict()  # JSON-serializable
 restored_state = DetectorState.from_dict(state_dict)
 detector2 = HierarchicalDetector.from_state(restored_state, config)
 ```
+
+**Calibration functions:**
+| Function | Purpose |
+|----------|---------|
+| `calibrate(bars, config, progress_callback)` | Run detection on Bar list |
+| `calibrate_from_dataframe(df, config, progress_callback)` | Convenience wrapper for DataFrame input |
+| `dataframe_to_bars(df)` | Convert DataFrame with OHLC columns to Bar list |
 
 **Key design principles:**
 - **No lookahead** — Algorithm only sees current and past bars

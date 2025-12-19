@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2025-12-18
 
@@ -14,6 +14,7 @@
 - **#145** — ReferenceFrame tolerance checks: is_violated, is_formed, is_completed, get_fib_price
 - **#146** — Ground truth annotator removal: archived and deleted per swing detection rewrite spec
 - **#147** — HierarchicalDetector: core incremental swing detection with process_bar() entry point
+- **#148** — Calibration as loop: calibrate(), calibrate_from_dataframe(), dataframe_to_bars() helpers
 
 ---
 
