@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-18
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - **#152** — Added V2 API schemas for hierarchical swings (HierarchicalSwingResponse, SwingEventResponse, CalibrationSwingResponseV2, CalibrationResponseV2) with test coverage
+- **#153** — Removed old swing detection code (swing_detector.py, incremental_detector.py, scale_calibrator.py), moved ReferenceSwing to adapters.py, updated all imports and documentation
 
 ---
 
