@@ -186,6 +186,23 @@ export interface PlaybackFeedbackSnapshot {
   swings_completed: number;
   // Optional event context (if during linger)
   event_context?: PlaybackFeedbackEventContext;
+  // Mode (replay or dag)
+  mode?: 'replay' | 'dag';
+  // Replay-specific context
+  replay_context?: {
+    selected_swing?: {
+      id: string;
+      scale: string;
+      direction: string;
+    };
+    calibration_state: string;
+  };
+  // DAG-specific context
+  dag_context?: {
+    active_legs_count: number;
+    orphaned_origins_count: { bull: number; bear: number };
+    pending_pivots_count: number;
+  };
 }
 
 export interface PlaybackFeedbackResponse {

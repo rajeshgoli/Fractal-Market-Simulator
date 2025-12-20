@@ -1,8 +1,49 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { FilterState, EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2 } from 'lucide-react';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent } from '../lib/api';
+
+// Linger event configuration for mode-specific toggles
+export interface LingerEventConfig {
+  id: string;
+  label: string;
+  description: string;
+  isEnabled: boolean;
+}
+
+// Default linger events for Replay mode
+export const REPLAY_LINGER_EVENTS: LingerEventConfig[] = [
+  { id: 'SWING_FORMED', label: 'Swing Formed', description: 'Pause when swing is detected', isEnabled: true },
+  { id: 'SWING_COMPLETED', label: 'Swing Completed', description: 'Pause when swing reaches target', isEnabled: true },
+  { id: 'SWING_INVALIDATED', label: 'Swing Invalidated', description: 'Pause when swing is invalidated', isEnabled: true },
+  { id: 'LEVEL_CROSS', label: 'Level Crossed', description: 'Pause on Fib level cross', isEnabled: false },
+];
+
+// Default linger events for DAG mode
+export const DAG_LINGER_EVENTS: LingerEventConfig[] = [
+  { id: 'LEG_CREATED', label: 'Leg Created', description: 'Pause when new leg is created', isEnabled: true },
+  { id: 'LEG_PRUNED', label: 'Leg Pruned', description: 'Pause when leg is pruned', isEnabled: true },
+  { id: 'LEG_INVALIDATED', label: 'Leg Invalidated', description: 'Pause when leg is invalidated', isEnabled: true },
+  { id: 'SWING_FORMED', label: 'Swing Formed', description: 'Pause when swing is formed', isEnabled: true },
+];
+
+// Replay mode context (calibration-specific)
+export interface ReplayContext {
+  selectedSwing?: {
+    id: string;
+    scale: string;
+    direction: string;
+  };
+  calibrationState: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
+}
+
+// DAG mode context
+export interface DagContext {
+  activeLegsCount: number;
+  orphanedOriginsCount: { bull: number; bear: number };
+  pendingPivotsCount: number;
+}
 
 interface FeedbackContext {
   // Playback state information
@@ -25,18 +66,29 @@ interface FeedbackContext {
 }
 
 interface SidebarProps {
+  // Mode selection
+  mode: 'replay' | 'dag';
+
+  // Common props
   filters: FilterState[];
   onToggleFilter: (id: string) => void;
   onResetDefaults: () => void;
   className?: string;
+
   // Scale filter props (shown during playback)
   showScaleFilters?: boolean;
   displayConfig?: SwingDisplayConfig;
   onToggleScale?: (scale: SwingScaleKey) => void;
+
   // Stats panel toggle (shown during playback)
   showStatsToggle?: boolean;
   showStats?: boolean;
   onToggleShowStats?: () => void;
+
+  // Linger event toggles
+  lingerEvents?: LingerEventConfig[];
+  onToggleLingerEvent?: (eventId: string) => void;
+
   // Feedback props - now always visible during playback
   showFeedback?: boolean;
   isLingering?: boolean;
@@ -45,11 +97,17 @@ interface SidebarProps {
   feedbackContext?: FeedbackContext;
   onFeedbackFocus?: () => void;
   onFeedbackBlur?: () => void;
+
   // Pause playback on typing (for non-linger state)
   onPausePlayback?: () => void;
+
+  // Mode-specific context
+  replayContext?: ReplayContext;
+  dagContext?: DagContext;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
+  mode,
   filters,
   onToggleFilter,
   onResetDefaults,
@@ -60,6 +118,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   showStatsToggle = false,
   showStats = false,
   onToggleShowStats,
+  lingerEvents,
+  onToggleLingerEvent,
   showFeedback = false,
   isLingering = false,
   lingerEvent,
@@ -68,6 +128,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onFeedbackFocus,
   onFeedbackBlur,
   onPausePlayback,
+  replayContext,
+  dagContext,
 }) => {
   const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
   const [feedbackText, setFeedbackText] = useState('');
@@ -93,6 +155,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         swings_found: feedbackContext.swingsFoundByScale,
         swings_invalidated: feedbackContext.swingsInvalidated,
         swings_completed: feedbackContext.swingsCompleted,
+        // Add mode to context
+        mode,
       };
 
       // Add event context if we have a linger event
@@ -116,6 +180,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
         snapshot.event_context = eventContext;
       }
 
+      // Add mode-specific context
+      if (mode === 'replay' && replayContext) {
+        snapshot.replay_context = {
+          selected_swing: replayContext.selectedSwing,
+          calibration_state: replayContext.calibrationState,
+        };
+      } else if (mode === 'dag' && dagContext) {
+        snapshot.dag_context = {
+          active_legs_count: dagContext.activeLegsCount,
+          orphaned_origins_count: dagContext.orphanedOriginsCount,
+          pending_pivots_count: dagContext.pendingPivotsCount,
+        };
+      }
+
       await submitPlaybackFeedback(feedbackText, currentPlaybackBar, snapshot);
       setFeedbackText('');
       setSubmitStatus('success');
@@ -130,7 +208,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext]);
+  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext]);
 
   const handleInputFocus = useCallback(() => {
     // Pause linger timer if lingering
@@ -162,16 +240,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
       handleFeedbackSubmit();
     }
   }, [handleFeedbackSubmit]);
+
   const getIconForType = (type: string) => {
     switch (type) {
       case EventType.SWING_FORMED:
+      case 'SWING_FORMED':
         return <Activity size={16} className="text-trading-purple" />;
       case EventType.COMPLETION:
+      case 'SWING_COMPLETED':
         return <CheckCircle size={16} className="text-trading-bull" />;
       case EventType.INVALIDATION:
+      case 'SWING_INVALIDATED':
         return <XCircle size={16} className="text-trading-bear" />;
       case EventType.LEVEL_CROSS:
+      case 'LEVEL_CROSS':
         return <Eye size={16} className="text-trading-blue" />;
+      case 'LEG_CREATED':
+        return <GitBranch size={16} className="text-trading-blue" />;
+      case 'LEG_PRUNED':
+        return <Scissors size={16} className="text-trading-orange" />;
+      case 'LEG_INVALIDATED':
+        return <Ban size={16} className="text-trading-bear" />;
       default:
         return <AlertTriangle size={16} className="text-trading-orange" />;
     }
@@ -183,7 +272,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-4 border-b border-app-border">
         <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
           <Filter size={14} />
-          Linger Events
+          {mode === 'dag' ? 'DAG Events' : 'Linger Events'}
         </h2>
       </div>
 
@@ -223,6 +312,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
       </div>
 
+      {/* Linger Event Toggles (mode-specific) */}
+      {lingerEvents && lingerEvents.length > 0 && onToggleLingerEvent && (
+        <div className="p-4 border-t border-app-border">
+          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
+            <Pause size={14} />
+            Pause On
+          </h2>
+          <div className="space-y-1">
+            {lingerEvents.map((event) => (
+              <label
+                key={event.id}
+                className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                  event.isEnabled
+                    ? 'bg-app-card'
+                    : 'hover:bg-app-card/50 opacity-70'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={event.isEnabled}
+                  onChange={() => onToggleLingerEvent(event.id)}
+                  className="sr-only"
+                />
+                <span className={`w-3 h-3 rounded-sm border flex items-center justify-center ${
+                  event.isEnabled ? 'bg-trading-blue border-trading-blue' : 'border-app-muted'
+                }`}>
+                  {event.isEnabled && <span className="text-white text-[10px]">✓</span>}
+                </span>
+                <span className="flex-1 flex items-center gap-2">
+                  {getIconForType(event.id)}
+                  <span className={`text-xs ${event.isEnabled ? 'text-app-text' : 'text-app-muted'}`}>
+                    {event.label}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Scale Filters Section (shown during playback) */}
       {showScaleFilters && displayConfig && onToggleScale && (
         <div className="p-4 border-t border-app-border">
@@ -257,6 +386,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </label>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* DAG Context Display (DAG mode only) */}
+      {mode === 'dag' && dagContext && (
+        <div className="p-4 border-t border-app-border">
+          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
+            <GitBranch size={14} />
+            DAG State
+          </h2>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between">
+              <span className="text-app-muted">Active Legs</span>
+              <span className="text-app-text font-medium">{dagContext.activeLegsCount}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-app-muted">Orphaned Origins</span>
+              <span className="text-app-text font-medium">
+                <span className="text-trading-blue">{dagContext.orphanedOriginsCount.bull}</span>
+                {' / '}
+                <span className="text-trading-bear">{dagContext.orphanedOriginsCount.bear}</span>
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-app-muted">Pending Pivots</span>
+              <span className="text-app-text font-medium">{dagContext.pendingPivotsCount}</span>
+            </div>
           </div>
         </div>
       )}
@@ -318,7 +475,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onBlur={handleInputBlur}
               onKeyDown={handleKeyDown}
               placeholder="Type observation... (Ctrl+Enter to submit)"
-              className="w-full h-20 px-3 py-2 text-sm bg-app-card border border-app-border rounded resize-none focus:outline-none focus:border-trading-blue placeholder:text-app-muted"
+              className="w-full h-32 px-3 py-2 text-sm bg-app-card border border-app-border rounded resize-none focus:outline-none focus:border-trading-blue placeholder:text-app-muted"
               disabled={isSubmitting}
             />
             <div className="flex items-center justify-between">

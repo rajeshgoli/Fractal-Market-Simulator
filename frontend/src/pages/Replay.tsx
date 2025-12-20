@@ -1181,6 +1181,7 @@ export const Replay: React.FC = () => {
         {/* Sidebar */}
         <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden`}>
           <Sidebar
+            mode="replay"
             filters={filters}
             onToggleFilter={handleToggleFilter}
             onResetDefaults={handleResetFilters}
