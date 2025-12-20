@@ -74,14 +74,14 @@ export const OrphanedOriginsOverlay: React.FC<OrphanedOriginsOverlayProps> = ({
     const visibleBullOrigins = bullOrigins.filter(o => o.bar_index <= currentPosition);
     const visibleBearOrigins = bearOrigins.filter(o => o.bar_index <= currentPosition);
 
-    // Add bull origin markers (circle above bar)
+    // Add bull origin markers (circle below bar - bull origins are at LOWs)
     visibleBullOrigins.forEach((origin, idx) => {
       const timestamp = getTimestampForIndex(origin.bar_index);
       if (timestamp !== null) {
         const isHighlighted = highlightedOrigin?.direction === 'bull' && highlightedOrigin?.index === idx;
         markers.push({
           time: timestamp as Time,
-          position: 'aboveBar',
+          position: 'belowBar',
           color: isHighlighted ? BULL_MARKER_COLOR_HIGHLIGHTED : BULL_MARKER_COLOR,
           shape: 'circle',
           text: '',
@@ -90,14 +90,14 @@ export const OrphanedOriginsOverlay: React.FC<OrphanedOriginsOverlayProps> = ({
       }
     });
 
-    // Add bear origin markers (circle below bar)
+    // Add bear origin markers (circle above bar - bear origins are at HIGHs)
     visibleBearOrigins.forEach((origin, idx) => {
       const timestamp = getTimestampForIndex(origin.bar_index);
       if (timestamp !== null) {
         const isHighlighted = highlightedOrigin?.direction === 'bear' && highlightedOrigin?.index === idx;
         markers.push({
           time: timestamp as Time,
-          position: 'belowBar',
+          position: 'aboveBar',
           color: isHighlighted ? BEAR_MARKER_COLOR_HIGHLIGHTED : BEAR_MARKER_COLOR,
           shape: 'circle',
           text: '',
