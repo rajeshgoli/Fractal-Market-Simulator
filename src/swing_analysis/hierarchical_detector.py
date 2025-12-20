@@ -459,6 +459,39 @@ class HierarchicalDetector:
         else:  # lower_high and higher_low (inside bar)
             return BarType.TYPE_1
 
+    def _extend_leg_origins(self, bar: Bar, bar_high: Decimal, bar_low: Decimal) -> None:
+        """
+        Extend leg origins when price makes new extremes (#188).
+
+        This handles origin updates independently of bar type classification.
+        When price makes a new high, all bull leg origins are extended.
+        When price makes a new low, all bear leg origins are extended.
+
+        This fixes the bug where bars with HH+EL (higher high, equal low) or
+        EH+LL (equal high, lower low) were classified as Type 1 and didn't
+        extend origins, causing legs to show stale origin values.
+
+        Args:
+            bar: Current bar
+            bar_high: Current bar's high as Decimal
+            bar_low: Current bar's low as Decimal
+        """
+        # Extend bull leg origins on new highs
+        for leg in self.state.active_legs:
+            if leg.direction == 'bull' and leg.status == 'active':
+                if bar_high > leg.origin_price:
+                    leg.origin_price = bar_high
+                    leg.origin_index = bar.index
+                    leg.last_modified_bar = bar.index
+
+        # Extend bear leg origins on new lows
+        for leg in self.state.active_legs:
+            if leg.direction == 'bear' and leg.status == 'active':
+                if bar_low < leg.origin_price:
+                    leg.origin_price = bar_low
+                    leg.origin_index = bar.index
+                    leg.last_modified_bar = bar.index
+
     def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[SwingFormedEvent]:
         """
         Update DAG state with new bar using streaming leg tracking.
@@ -489,6 +522,11 @@ class HierarchicalDetector:
         # Update water marks
         self.state.price_high_water = max(self.state.price_high_water, bar_high)
         self.state.price_low_water = min(self.state.price_low_water, bar_low)
+
+        # Extend leg origins on new extremes (#188)
+        # This must happen BEFORE bar type classification because bars with
+        # HH+EL or EH+LL fall through to Type 1 which didn't extend origins
+        self._extend_leg_origins(bar, bar_high, bar_low)
 
         # First bar initialization
         if self.state.prev_bar is None:
@@ -571,13 +609,7 @@ class HierarchicalDetector:
         turn_prune_events = self._prune_legs_on_turn('bear', bar, timestamp)
         events.extend(turn_prune_events)
 
-        # Extend existing bull legs (tracking upward movement from defended lows)
-        for leg in self.state.active_legs:
-            if leg.direction == 'bull' and leg.status == 'active':
-                if bar_high > leg.origin_price:
-                    leg.origin_price = bar_high
-                    leg.origin_index = bar.index
-                    leg.last_modified_bar = bar.index
+        # Note: Bull leg origin extension now handled by _extend_leg_origins (#188)
 
         # Type 2-Bull confirms temporal order: prev_low → bar_high
         # This creates a BEAR swing structure (low origin → high pivot)
@@ -597,20 +629,13 @@ class HierarchicalDetector:
         if self.state.pending_pivots.get('bull'):
             pending = self.state.pending_pivots['bull']
             # Check if we already have a bull leg from this pivot
-            existing_bull_leg = None
-            for leg in self.state.active_legs:
-                if (leg.direction == 'bull' and leg.status == 'active'
-                    and leg.pivot_price == pending.price and leg.pivot_index == pending.bar_index):
-                    existing_bull_leg = leg
-                    break
-
-            if existing_bull_leg:
-                # Extend the existing leg if new origin is better
-                if bar_high > existing_bull_leg.origin_price:
-                    existing_bull_leg.origin_price = bar_high
-                    existing_bull_leg.origin_index = bar.index
-                    existing_bull_leg.last_modified_bar = bar.index
-            else:
+            existing_bull_leg = any(
+                leg.direction == 'bull' and leg.status == 'active'
+                and leg.pivot_price == pending.price and leg.pivot_index == pending.bar_index
+                for leg in self.state.active_legs
+            )
+            # Origin extension handled by _extend_leg_origins (#188)
+            if not existing_bull_leg:
                 # Create new bull leg: prev_low (defended pivot) → bar_high (origin)
                 new_leg = Leg(
                     direction='bull',
@@ -673,13 +698,7 @@ class HierarchicalDetector:
         turn_prune_events = self._prune_legs_on_turn('bull', bar, timestamp)
         events.extend(turn_prune_events)
 
-        # Extend existing bear legs (tracking downward movement from defended highs)
-        for leg in self.state.active_legs:
-            if leg.direction == 'bear' and leg.status == 'active':
-                if bar_low < leg.origin_price:
-                    leg.origin_price = bar_low
-                    leg.origin_index = bar.index
-                    leg.last_modified_bar = bar.index
+        # Note: Bear leg origin extension now handled by _extend_leg_origins (#188)
 
         # Type 2-Bear confirms temporal order: prev_high → bar_low
         # This creates a BULL swing structure: origin=prev_high, pivot=bar_low
@@ -730,20 +749,13 @@ class HierarchicalDetector:
         if self.state.pending_pivots.get('bear'):
             pending = self.state.pending_pivots['bear']
             # Only create if we don't already have a bear leg with this pivot
-            existing_bear_leg = None
-            for leg in self.state.active_legs:
-                if (leg.direction == 'bear' and leg.status == 'active'
-                    and leg.pivot_price == pending.price and leg.pivot_index == pending.bar_index):
-                    existing_bear_leg = leg
-                    break
-
-            if existing_bear_leg:
-                # Extend to lower origin if applicable
-                if bar_low < existing_bear_leg.origin_price:
-                    existing_bear_leg.origin_price = bar_low
-                    existing_bear_leg.origin_index = bar.index
-                    existing_bear_leg.last_modified_bar = bar.index
-            else:
+            existing_bear_leg = any(
+                leg.direction == 'bear' and leg.status == 'active'
+                and leg.pivot_price == pending.price and leg.pivot_index == pending.bar_index
+                for leg in self.state.active_legs
+            )
+            # Origin extension handled by _extend_leg_origins (#188)
+            if not existing_bear_leg:
                 new_bear_leg = Leg(
                     direction='bear',
                     pivot_price=pending.price,  # prev_high is defended
@@ -904,21 +916,7 @@ class HierarchicalDetector:
         """
         events: List[SwingEvent] = []
 
-        # Extend bull legs (new high)
-        for leg in self.state.active_legs:
-            if leg.direction == 'bull' and leg.status == 'active':
-                if bar_high > leg.origin_price:
-                    leg.origin_price = bar_high
-                    leg.origin_index = bar.index
-                    leg.last_modified_bar = bar.index
-
-        # Extend bear legs (new low)
-        for leg in self.state.active_legs:
-            if leg.direction == 'bear' and leg.status == 'active':
-                if bar_low < leg.origin_price:
-                    leg.origin_price = bar_low
-                    leg.origin_index = bar.index
-                    leg.last_modified_bar = bar.index
+        # Note: Leg origin extension now handled by _extend_leg_origins (#188)
 
         # Update pending pivots to new extremes
         self.state.pending_pivots['bull'] = PendingPivot(

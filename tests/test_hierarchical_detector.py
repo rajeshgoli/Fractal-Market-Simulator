@@ -1494,3 +1494,240 @@ class TestTurnPruning:
         assert len(events) == 0
         remaining = [leg for leg in detector.state.active_legs if leg.status == 'active']
         assert len(remaining) == 2
+
+
+class TestLegOriginExtension:
+    """
+    Tests for leg origin extension when price makes new extremes (#188).
+
+    Verifies that leg origins are updated when:
+    - Bar makes new high (extends bull leg origins)
+    - Bar makes new low (extends bear leg origins)
+
+    This is independent of bar type classification.
+    """
+
+    def test_bull_leg_origin_extended_on_higher_high_equal_low(self):
+        """
+        Bug fix for #188: Bull leg origins should update on HH+EL bar.
+
+        When bar has higher high but equal low, it's classified as Type 1
+        (inside bar), but bull leg origins should still extend.
+        """
+        from src.swing_analysis.hierarchical_detector import Leg
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Set up initial state with prev_bar
+        bar0 = make_bar(0, 100.0, 105.0, 95.0, 103.0)
+        detector.process_bar(bar0)
+
+        # Create a bull leg with origin at bar 1's high
+        bar1 = make_bar(1, 103.0, 110.0, 100.0, 108.0)
+        detector.process_bar(bar1)
+
+        # Add a bull leg manually with origin at 110.0
+        bull_leg = Leg(
+            direction='bull',
+            pivot_price=Decimal("100"),
+            pivot_index=1,
+            origin_price=Decimal("110"),
+            origin_index=1,
+            price_at_creation=Decimal("108"),
+            last_modified_bar=1,
+        )
+        detector.state.active_legs.append(bull_leg)
+
+        # Bar 2: Higher high (115) but EQUAL low (100) - should still extend origin
+        # This is the edge case from #188
+        bar2 = make_bar(2, 108.0, 115.0, 100.0, 113.0)
+        detector.process_bar(bar2)
+
+        # Verify origin was extended
+        assert bull_leg.origin_price == Decimal("115"), \
+            f"Expected origin_price 115, got {bull_leg.origin_price}"
+        assert bull_leg.origin_index == 2, \
+            f"Expected origin_index 2, got {bull_leg.origin_index}"
+
+    def test_bear_leg_origin_extended_on_lower_low_equal_high(self):
+        """
+        Bug fix for #188: Bear leg origins should update on EH+LL bar.
+
+        When bar has equal high but lower low, it's classified as Type 1
+        (inside bar), but bear leg origins should still extend.
+        """
+        from src.swing_analysis.hierarchical_detector import Leg
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Set up initial state with prev_bar
+        bar0 = make_bar(0, 100.0, 105.0, 95.0, 100.0)
+        detector.process_bar(bar0)
+
+        # Create prev_bar for classification
+        bar1 = make_bar(1, 100.0, 110.0, 90.0, 95.0)
+        detector.process_bar(bar1)
+
+        # Add a bear leg manually with origin at 90.0
+        bear_leg = Leg(
+            direction='bear',
+            pivot_price=Decimal("110"),
+            pivot_index=1,
+            origin_price=Decimal("90"),
+            origin_index=1,
+            price_at_creation=Decimal("95"),
+            last_modified_bar=1,
+        )
+        detector.state.active_legs.append(bear_leg)
+
+        # Bar 2: EQUAL high (110) but lower low (85) - should still extend origin
+        bar2 = make_bar(2, 95.0, 110.0, 85.0, 88.0)
+        detector.process_bar(bar2)
+
+        # Verify origin was extended
+        assert bear_leg.origin_price == Decimal("85"), \
+            f"Expected origin_price 85, got {bear_leg.origin_price}"
+        assert bear_leg.origin_index == 2, \
+            f"Expected origin_index 2, got {bear_leg.origin_index}"
+
+    def test_bull_leg_origin_extended_on_type2_bull(self):
+        """Bull leg origins extend on Type 2-Bull bars (HH+HL)."""
+        from src.swing_analysis.hierarchical_detector import Leg
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        bar0 = make_bar(0, 100.0, 105.0, 95.0, 103.0)
+        detector.process_bar(bar0)
+
+        bar1 = make_bar(1, 103.0, 110.0, 98.0, 108.0)
+        detector.process_bar(bar1)
+
+        # Add a bull leg
+        bull_leg = Leg(
+            direction='bull',
+            pivot_price=Decimal("98"),
+            pivot_index=1,
+            origin_price=Decimal("110"),
+            origin_index=1,
+            price_at_creation=Decimal("108"),
+            last_modified_bar=1,
+        )
+        detector.state.active_legs.append(bull_leg)
+
+        # Bar 2: Type 2-Bull (HH=115, HL=100)
+        bar2 = make_bar(2, 108.0, 115.0, 100.0, 113.0)
+        detector.process_bar(bar2)
+
+        assert bull_leg.origin_price == Decimal("115")
+        assert bull_leg.origin_index == 2
+
+    def test_bear_leg_origin_extended_on_type2_bear(self):
+        """Bear leg origins extend on Type 2-Bear bars (LH+LL)."""
+        from src.swing_analysis.hierarchical_detector import Leg
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        bar0 = make_bar(0, 100.0, 110.0, 95.0, 100.0)
+        detector.process_bar(bar0)
+
+        bar1 = make_bar(1, 100.0, 108.0, 90.0, 92.0)
+        detector.process_bar(bar1)
+
+        # Add a bear leg
+        bear_leg = Leg(
+            direction='bear',
+            pivot_price=Decimal("108"),
+            pivot_index=1,
+            origin_price=Decimal("90"),
+            origin_index=1,
+            price_at_creation=Decimal("92"),
+            last_modified_bar=1,
+        )
+        detector.state.active_legs.append(bear_leg)
+
+        # Bar 2: Type 2-Bear (LH=105, LL=85)
+        bar2 = make_bar(2, 92.0, 105.0, 85.0, 88.0)
+        detector.process_bar(bar2)
+
+        assert bear_leg.origin_price == Decimal("85")
+        assert bear_leg.origin_index == 2
+
+    def test_both_legs_extend_on_type3(self):
+        """Both bull and bear legs extend on Type 3 bars (HH+LL)."""
+        from src.swing_analysis.hierarchical_detector import Leg
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        bar0 = make_bar(0, 100.0, 105.0, 95.0, 100.0)
+        detector.process_bar(bar0)
+
+        bar1 = make_bar(1, 100.0, 110.0, 90.0, 100.0)
+        detector.process_bar(bar1)
+
+        # Add both bull and bear legs
+        bull_leg = Leg(
+            direction='bull',
+            pivot_price=Decimal("90"),
+            pivot_index=1,
+            origin_price=Decimal("110"),
+            origin_index=1,
+            price_at_creation=Decimal("100"),
+            last_modified_bar=1,
+        )
+        bear_leg = Leg(
+            direction='bear',
+            pivot_price=Decimal("110"),
+            pivot_index=1,
+            origin_price=Decimal("90"),
+            origin_index=1,
+            price_at_creation=Decimal("100"),
+            last_modified_bar=1,
+        )
+        detector.state.active_legs.extend([bull_leg, bear_leg])
+
+        # Bar 2: Type 3 (HH=115, LL=85)
+        bar2 = make_bar(2, 100.0, 115.0, 85.0, 100.0)
+        detector.process_bar(bar2)
+
+        assert bull_leg.origin_price == Decimal("115")
+        assert bull_leg.origin_index == 2
+        assert bear_leg.origin_price == Decimal("85")
+        assert bear_leg.origin_index == 2
+
+    def test_origin_not_extended_if_not_new_extreme(self):
+        """Origin should not change if bar doesn't make new extreme."""
+        from src.swing_analysis.hierarchical_detector import Leg
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        bar0 = make_bar(0, 100.0, 115.0, 85.0, 100.0)
+        detector.process_bar(bar0)
+
+        bar1 = make_bar(1, 100.0, 112.0, 88.0, 100.0)
+        detector.process_bar(bar1)
+
+        # Add a bull leg with origin at 115
+        bull_leg = Leg(
+            direction='bull',
+            pivot_price=Decimal("85"),
+            pivot_index=0,
+            origin_price=Decimal("115"),
+            origin_index=0,
+            price_at_creation=Decimal("100"),
+            last_modified_bar=0,
+        )
+        detector.state.active_legs.append(bull_leg)
+
+        # Bar 2: Inside bar, no new high (110 < 112)
+        bar2 = make_bar(2, 100.0, 110.0, 90.0, 100.0)
+        detector.process_bar(bar2)
+
+        # Origin should remain unchanged
+        assert bull_leg.origin_price == Decimal("115")
+        assert bull_leg.origin_index == 0
