@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-19
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#182** — Visualize orphaned origins on chart (markers for preserved pivots)
 - **#181** — Prune redundant legs on directional turn (turn_prune)
 - **#180** — Add diagnostic logging to forward playback hook to debug DAG playback freeze
 
