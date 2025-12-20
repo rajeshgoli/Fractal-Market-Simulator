@@ -821,7 +821,8 @@ class HierarchicalDetector:
             if pending_bear and pending_bull:
                 # We have pending high (origin) and pending low (pivot)
                 # Check if origin came before pivot temporally
-                if pending_bear.bar_index <= pending_bull.bar_index:
+                # Use strict inequality to prevent same-bar legs (temporal causality)
+                if pending_bear.bar_index < pending_bull.bar_index:
                     new_bull_leg = Leg(
                         direction='bull',
                         pivot_price=pending_bull.price,  # low as defended pivot
@@ -849,7 +850,8 @@ class HierarchicalDetector:
             # Bear swing: origin=LOW, pivot=HIGH (defended)
             if pending_bear and pending_bull:
                 # We have pending low (origin) and pending high (pivot)
-                if pending_bull.bar_index <= pending_bear.bar_index:
+                # Use strict inequality to prevent same-bar legs (temporal causality)
+                if pending_bull.bar_index < pending_bear.bar_index:
                     new_bear_leg = Leg(
                         direction='bear',
                         pivot_price=pending_bear.price,  # high as defended pivot

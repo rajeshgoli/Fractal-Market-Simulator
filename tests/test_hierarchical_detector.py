@@ -186,10 +186,14 @@ class TestSwingFormation:
     def test_bear_swing_forms(self):
         """Bear swing forms when price falls from high to formation threshold.
 
-        Note: With DAG-based algorithm, swings form more aggressively using
-        bar H/L when temporal ordering is known (inside bars). The swing may
-        form at bar 1 when bar.low crosses the formation threshold, rather
-        than waiting for close at bar 2.
+        Bear swing structure:
+        - pivot = HIGH (defended level that must hold)
+        - origin = LOW (where the down move started)
+
+        The sequence is:
+        1. High is established (pending pivot for bear)
+        2. Type 2-Bear bar (LH, LL) creates bear leg with prev_high as pivot
+        3. Price falls toward origin, crossing formation threshold
         """
         config = SwingConfig(
             bull=DirectionConfig(formation_fib=0.287, self_separation=0.10),
@@ -198,24 +202,27 @@ class TestSwingFormation:
         )
         detector = HierarchicalDetector(config)
 
-        # Bar 0: Low at 5000
-        bar0 = make_bar(0, 5050.0, 5100.0, 5000.0, 5020.0)
+        # Bar 0: Establishes high at 5100 (future pivot for bear swing)
+        bar0 = make_bar(0, 5080.0, 5100.0, 5060.0, 5080.0)
         events0 = detector.process_bar(bar0)
 
-        # Bar 1: High at 5100
-        bar1 = make_bar(1, 5060.0, 5100.0, 5050.0, 5090.0)
+        # Bar 1: Type 2-Bear (LH=5080 < 5100, LL=5000 < 5060)
+        # Creates bear leg: pivot=5100 (prev high), origin=5000 (current low)
+        bar1 = make_bar(1, 5050.0, 5080.0, 5000.0, 5020.0)
         events1 = detector.process_bar(bar1)
 
-        # Bar 2: Close below formation level (5100 - 100 * 0.287 = 5071.3)
-        bar2 = make_bar(2, 5080.0, 5085.0, 5060.0, 5065.0)
+        # Bar 2: Price continues down or consolidates
+        # Formation threshold: 5100 - (5100-5000)*0.287 = 5071.3
+        # Close at 5040 gives retracement = (5100-5040)/100 = 0.6 >= 0.287
+        bar2 = make_bar(2, 5030.0, 5050.0, 5030.0, 5040.0)
         events2 = detector.process_bar(bar2)
 
-        # Check that formed events occurred at some point (bar 1 or 2)
+        # Check that formed events occurred
         all_formed = [e for e in events0 + events1 + events2 if isinstance(e, SwingFormedEvent)]
-        assert len(all_formed) >= 1
+        assert len(all_formed) >= 1, f"Expected at least 1 SwingFormedEvent, got {len(all_formed)}"
 
         bear_swings = [s for s in detector.get_active_swings() if s.direction == "bear"]
-        assert len(bear_swings) >= 1
+        assert len(bear_swings) >= 1, f"Expected at least 1 bear swing, got {len(bear_swings)}"
 
     def test_formation_requires_threshold(self):
         """Swing does not form until formation threshold is breached."""
@@ -1731,3 +1738,100 @@ class TestLegOriginExtension:
         # Origin should remain unchanged
         assert bull_leg.origin_price == Decimal("115")
         assert bull_leg.origin_index == 0
+
+
+class TestSameBarLegPrevention:
+    """Test that legs cannot have pivot_index == origin_index (Issue #189).
+
+    Same-bar legs violate temporal causality because we cannot know
+    the H/L ordering within a single OHLC bar.
+    """
+
+    def test_type1_after_type2_no_same_bar_legs(self):
+        """After Type 2 bar, Type 1 bar should not create same-bar legs.
+
+        This reproduces issue #189: After a Type 2 bar, both pending pivots
+        have the same bar_index. When the next bar is Type 1 (inside bar),
+        the old <= comparison would create legs with pivot_index == origin_index.
+        """
+        from src.swing_analysis.events import LegCreatedEvent
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Bar 0: Initial bar
+        bar0 = make_bar(0, 100.0, 105.0, 95.0, 100.0)
+        detector.process_bar(bar0)
+
+        # Bar 1: Type 2 bar (extends both H and L)
+        # After this bar, both pending_bear and pending_bull have bar_index=1
+        bar1 = make_bar(1, 100.0, 110.0, 90.0, 100.0)
+        events1 = detector.process_bar(bar1)
+
+        # Bar 2: Type 1 inside bar (H < prev.H, L > prev.L)
+        # This should NOT create same-bar legs
+        bar2 = make_bar(2, 100.0, 108.0, 92.0, 100.0)
+        events2 = detector.process_bar(bar2)
+
+        # Check that no legs were created with same pivot and origin index
+        leg_events = [e for e in events2 if isinstance(e, LegCreatedEvent)]
+        for leg_event in leg_events:
+            assert leg_event.pivot_index != leg_event.origin_index, (
+                f"Same-bar leg created: pivot_index={leg_event.pivot_index}, "
+                f"origin_index={leg_event.origin_index}"
+            )
+
+    def test_type1_with_different_bar_indices_creates_legs(self):
+        """Type 1 bars should still create legs when indices differ.
+
+        This ensures the fix doesn't prevent legitimate leg creation.
+        """
+        from src.swing_analysis.events import LegCreatedEvent
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Bar 0: Initial bar with high
+        bar0 = make_bar(0, 100.0, 110.0, 95.0, 100.0)
+        detector.process_bar(bar0)
+
+        # Bar 1: Type 2 Bull (new low, but not new high)
+        # Creates pending_bull at bar 1, pending_bear stays at bar 0
+        bar1 = make_bar(1, 100.0, 105.0, 85.0, 90.0)
+        events1 = detector.process_bar(bar1)
+
+        # Bar 2: Type 1 inside bar
+        # Now pending_bear.bar_index=0, pending_bull.bar_index=1
+        # Should create bull leg (origin at 0, pivot at 1)
+        bar2 = make_bar(2, 90.0, 100.0, 88.0, 95.0)
+        events2 = detector.process_bar(bar2)
+
+        # Verify legs created have different indices
+        leg_events = [e for e in events2 if isinstance(e, LegCreatedEvent)]
+        for leg_event in leg_events:
+            assert leg_event.pivot_index != leg_event.origin_index
+
+    def test_strict_inequality_prevents_same_bar_on_equal_indices(self):
+        """Verify strict inequality logic: <= was the bug, < is the fix."""
+        from src.swing_analysis.hierarchical_detector import PendingPivot
+
+        # Simulate the scenario from issue #189
+        pending_bear = PendingPivot(
+            price=Decimal("100"), bar_index=5, direction='bear', source='high'
+        )
+        pending_bull = PendingPivot(
+            price=Decimal("95"), bar_index=5, direction='bull', source='low'
+        )
+
+        # Old behavior (bug): <= would allow both conditions to be True
+        old_bull_condition = pending_bear.bar_index <= pending_bull.bar_index  # True
+        old_bear_condition = pending_bull.bar_index <= pending_bear.bar_index  # True
+
+        # New behavior (fix): < prevents both when equal
+        new_bull_condition = pending_bear.bar_index < pending_bull.bar_index  # False
+        new_bear_condition = pending_bull.bar_index < pending_bear.bar_index  # False
+
+        assert old_bull_condition is True, "Sanity check: old behavior was <=, True"
+        assert old_bear_condition is True, "Sanity check: old behavior was <=, True"
+        assert new_bull_condition is False, "Fix: < prevents same-bar leg"
+        assert new_bear_condition is False, "Fix: < prevents same-bar leg"

@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 10
 
 **Last Review:** 2025-12-19
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- #189 — Fix same-bar legs violating temporal causality (strict inequality in _process_type1)
 - #188 — Fix leg origins not updating when price extends to new extreme
 - #187 — Feedback snapshot captures full leg/origin/pivot data (not just counts)
 - #183 — Sidebar Shared Infrastructure + DAG Integration
