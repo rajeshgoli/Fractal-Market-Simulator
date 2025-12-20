@@ -438,6 +438,7 @@ Hover over any item in the DAG State Panel to highlight it on the charts:
 |-----------|--------------|
 | Active Leg | Leg line becomes thicker (4px) with full opacity; panel item shows blue ring |
 | Orphaned Origin | Origin marker becomes larger (2x size) with full opacity; panel item shows colored ring |
+| Pending Pivot | Horizontal dashed price line appears at pivot price; panel item shows colored ring |
 
 This provides immediate visual feedback for reasoning about the algorithm's internal state.
 

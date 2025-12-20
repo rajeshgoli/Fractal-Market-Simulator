@@ -275,7 +275,15 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
             <div>
               <span className="text-[10px] text-trading-bull uppercase block mb-1">Bull</span>
               {pending_pivots.bull ? (
-                <div className="text-xs bg-trading-bull/10 rounded px-2 py-2 border border-trading-bull/20">
+                <div
+                  className={`text-xs bg-trading-bull/10 rounded px-2 py-2 border cursor-pointer transition-all duration-150 ${
+                    highlightedItem?.type === 'pending_pivot' && highlightedItem.id === 'bull'
+                      ? 'border-trading-bull ring-2 ring-trading-bull/50 scale-[1.02]'
+                      : 'border-trading-bull/20 hover:border-trading-bull/40'
+                  }`}
+                  onMouseEnter={() => onHoverItem?.({ type: 'pending_pivot', id: 'bull', direction: 'bull' })}
+                  onMouseLeave={() => onHoverItem?.(null)}
+                >
                   <div className="flex justify-between mb-1">
                     <span className="font-mono font-medium">{formatPrice(pending_pivots.bull.price)}</span>
                     <span className="text-app-muted">@{pending_pivots.bull.bar_index}</span>
@@ -292,7 +300,15 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
             <div>
               <span className="text-[10px] text-trading-bear uppercase block mb-1">Bear</span>
               {pending_pivots.bear ? (
-                <div className="text-xs bg-trading-bear/10 rounded px-2 py-2 border border-trading-bear/20">
+                <div
+                  className={`text-xs bg-trading-bear/10 rounded px-2 py-2 border cursor-pointer transition-all duration-150 ${
+                    highlightedItem?.type === 'pending_pivot' && highlightedItem.id === 'bear'
+                      ? 'border-trading-bear ring-2 ring-trading-bear/50 scale-[1.02]'
+                      : 'border-trading-bear/20 hover:border-trading-bear/40'
+                  }`}
+                  onMouseEnter={() => onHoverItem?.({ type: 'pending_pivot', id: 'bear', direction: 'bear' })}
+                  onMouseLeave={() => onHoverItem?.(null)}
+                >
                   <div className="flex justify-between mb-1">
                     <span className="font-mono font-medium">{formatPrice(pending_pivots.bear.price)}</span>
                     <span className="text-app-muted">@{pending_pivots.bear.bar_index}</span>

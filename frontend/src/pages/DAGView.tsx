@@ -7,6 +7,7 @@ import { PlaybackControls } from '../components/PlaybackControls';
 import { DAGStatePanel } from '../components/DAGStatePanel';
 import { LegOverlay } from '../components/LegOverlay';
 import { OrphanedOriginsOverlay } from '../components/OrphanedOriginsOverlay';
+import { PendingPivotsOverlay } from '../components/PendingPivotsOverlay';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import {
   fetchBars,
@@ -719,6 +720,30 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
               highlightedDagItem?.type === 'orphaned_origin'
                 ? { direction: highlightedDagItem.direction, index: parseInt(highlightedDagItem.id.split('-')[1]) }
                 : undefined
+            }
+          />
+
+          {/* Pending Pivots Overlays - render price lines for highlighted pending pivots */}
+          <PendingPivotsOverlay
+            chart={chart1Ref.current}
+            series={series1Ref.current}
+            bullPivot={dagState?.pending_pivots.bull ?? null}
+            bearPivot={dagState?.pending_pivots.bear ?? null}
+            highlightedPivot={
+              highlightedDagItem?.type === 'pending_pivot'
+                ? highlightedDagItem.direction
+                : null
+            }
+          />
+          <PendingPivotsOverlay
+            chart={chart2Ref.current}
+            series={series2Ref.current}
+            bullPivot={dagState?.pending_pivots.bull ?? null}
+            bearPivot={dagState?.pending_pivots.bear ?? null}
+            highlightedPivot={
+              highlightedDagItem?.type === 'pending_pivot'
+                ? highlightedDagItem.direction
+                : null
             }
           />
 
