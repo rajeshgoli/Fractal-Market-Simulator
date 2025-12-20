@@ -4,6 +4,60 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 19, 2025 - DAG Visualization Validation Session
+
+**Context:** User tested DAG visualization mode after #179 fix. First successful validation session.
+
+### What's Working
+
+> "Watch it play back is fascinating. It actually works. Great job team claude!"
+
+- Incremental playback from bar 0 works
+- Leg visualization (blue=bull, red=bear) appears on both charts
+- DAG State Panel shows active legs, orphaned origins, pending pivots
+- User can observe the algorithm "think" in real-time
+
+### Observations and Issues Identified
+
+**1. Liberal Origin Selection (#181)**
+
+User observation: "We are very liberal with choosing 1s. We literally pick all possible 1s, nearly 1 per candle going up. This seems wrong?"
+
+**Root cause identified:** Every Type 2 bar creates a new pending pivot, which can spawn a new leg on the next bar. During a 50-bar uptrend, this creates ~50 parallel legs with different pivots (0s) all converging to the same origin (1).
+
+**User-proposed solution:** Prune redundant legs on directional turn.
+
+> "What if at the time of retracement from 0 — when we have a bear leg (or in the case of existing subtree, a branch occurring), we prune the leg above to keep only the longest?"
+
+**Architect assessment:** Elegant solution. The turn itself is the signal that resolves which candidates matter. When a Type 2-Bear bar appears (for bull legs), prune to keep only the longest leg (lowest pivot).
+
+**2. Orphaned Origins Visualization (#182)**
+
+User observation: "I don't think reading a list of numbers below would work here, no? :)"
+
+Current display shows orphaned origins as price@bar_index in a panel. Hard to correlate with chart spatially.
+
+**Proposed solution:** Dimmed markers (circles) at orphaned origin prices on both charts. Bull origins: faded blue at highs. Bear origins: faded red at lows.
+
+### Terminology Clarification
+
+User prefers "symmetric reference frame" terminology:
+- **1 (origin)**: Where the move started (bottom for bull leg)
+- **0 (pivot)**: Where retracement reversed / defended level (top for bull leg)
+
+### Issues Filed
+
+- **#181** — Prune redundant legs on directional turn
+- **#182** — Visualize orphaned origins on chart
+
+### Key Insight
+
+> "Keeping the candidates makes sense because it's hard to know ahead of time which ones will be structurally important. However — what if at the time of retracement... we prune to keep only the longest?"
+
+The user identified that the *turn* is the natural pruning trigger — we gain information about which origin matters when price reverses direction.
+
+---
+
 ## December 19, 2025 - DAG Visualization Mode Doesn't Work
 
 **Context:** User tested DAG visualization mode (#167). All implementation issues (#168-#172) were marked complete, but the tool is not usable.

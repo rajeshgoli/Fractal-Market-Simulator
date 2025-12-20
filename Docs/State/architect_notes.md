@@ -28,7 +28,7 @@ Read in order:
 
 ---
 
-## Current Phase: DAG Visualization + Validation
+## Current Phase: Manual Validation
 
 ### DAG Algorithm — COMPLETE
 
@@ -46,22 +46,26 @@ Read in order:
 | #174 | Leg→swing invalidation propagation | ✅ Complete |
 | #175 | Wire Reference layer into calibrate()/advance() | ✅ Complete |
 
-### Next: DAG Visualization Mode
+### DAG Visualization Mode — COMPLETE + REFINEMENTS
 
 **Epic #167 — Visual validation tool for DAG algorithm**
 
-Watch the algorithm "think" in real-time to validate detection behavior before proceeding with further development.
-
 | Issue | Feature | Status |
 |-------|---------|--------|
-| #168 | Add leg lifecycle events to HierarchicalDetector | Open |
-| #169 | Add DAG state API endpoint | Open |
-| #170 | Add linger toggle to playback controls | Open |
-| #171 | Create DAG state panel | Open |
-| #172 | Add leg visualization on charts | Open |
+| #168 | Add leg lifecycle events to HierarchicalDetector | ✅ Complete |
+| #169 | Add DAG state API endpoint | ✅ Complete |
+| #170 | Add linger toggle to playback controls | ✅ Complete |
+| #171 | Create DAG state panel | ✅ Complete |
+| #172 | Add leg visualization on charts | ✅ Complete |
+| #179 | Fix incremental playback from bar 0 | ✅ Complete |
+| #181 | Prune redundant legs on directional turn | 🔄 Open |
+| #182 | Visualize orphaned origins on chart | 🔄 Open |
 
-**Spec:** `Docs/Working/DAG_visualization_spec.md`
-**Estimate:** 3-5 days MVP
+**Spec:** `Docs/Working/DAG_visualization_spec.md` — implementation complete, matches spec.
+
+**Validation session (Dec 19):** User confirmed visualization works. Two refinements identified:
+- Liberal leg creation during trends — prune to longest on directional turn (#181)
+- Orphaned origins as numbers hard to correlate — add dimmed chart markers (#182)
 
 ---
 
@@ -80,7 +84,8 @@ Watch the algorithm "think" in real-time to validate detection behavior before p
 | Discretization | Complete | Accepts SwingNode via adapter |
 | V2 API Schemas | Complete | HierarchicalSwingResponse, etc. |
 | Legacy Detectors | Deleted | #153 completed cleanup |
-| Test Suite | Healthy | 587 tests passing |
+| DAG Visualization | Complete | Epic #167 + #179 fix |
+| Test Suite | Healthy | 606 tests passing |
 | Documentation | Current | Both guides updated |
 
 ---
@@ -158,6 +163,8 @@ Before proceeding with new features:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 19 | DAG Visualization validation session — #181, #182 filed | Refinements identified |
+| Dec 19 | #168-#172, #179 — DAG Visualization Mode (6 issues) | All Accepted |
 | Dec 19 | #158-#175 — DAG algorithm rewrite + Reference layer (9 issues) | All Accepted |
 | Dec 19 | #152, #153, #155, #157 — Performance optimization + cleanup | All Accepted |
 | Dec 18 | #142-#151 — Swing Detection Rewrite (10 issues) | All Accepted; #154 performance issue identified |
