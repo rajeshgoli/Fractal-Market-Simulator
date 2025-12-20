@@ -459,6 +459,35 @@ class HierarchicalDetector:
         else:  # lower_high and higher_low (inside bar)
             return BarType.TYPE_1
 
+    def _would_leg_be_dominated(self, direction: str, pivot_price: Decimal) -> bool:
+        """
+        Check if a new leg would be dominated by an existing leg (#194).
+
+        A leg is dominated if an existing active leg of the same direction has
+        a better or equal pivot. Since all legs of the same direction converge
+        to the same origin (via _extend_leg_origins), the leg with the best
+        pivot will always have the largest range and survive turn pruning.
+
+        Creating dominated legs is wasteful - they will be pruned at turn.
+
+        Args:
+            direction: 'bull' or 'bear'
+            pivot_price: The pivot price of the potential new leg
+
+        Returns:
+            True if an existing leg dominates (new leg would be pruned)
+        """
+        for leg in self.state.active_legs:
+            if leg.direction != direction or leg.status != 'active':
+                continue
+            # Bull: lower pivot is better (larger range when origins converge)
+            # Bear: higher pivot is better (larger range when origins converge)
+            if direction == 'bull' and leg.pivot_price <= pivot_price:
+                return True
+            if direction == 'bear' and leg.pivot_price >= pivot_price:
+                return True
+        return False
+
     def _extend_leg_origins(self, bar: Bar, bar_high: Decimal, bar_low: Decimal) -> None:
         """
         Extend leg origins when price makes new extremes (#188).
@@ -673,6 +702,9 @@ class HierarchicalDetector:
                 and leg.pivot_price == pending.price and leg.pivot_index == pending.bar_index
                 for leg in self.state.active_legs
             )
+            # Skip if dominated by existing leg with better pivot (#194)
+            if self._would_leg_be_dominated('bull', pending.price):
+                existing_bull_leg = True
             # Origin extension handled by _extend_leg_origins (#188)
             if not existing_bull_leg:
                 # Create new bull leg: prev_low (defended pivot) → bar_high (origin)
@@ -763,6 +795,9 @@ class HierarchicalDetector:
                     existing_bull_leg.pivot_price = bar_low
                     existing_bull_leg.pivot_index = bar.index
                     existing_bull_leg.last_modified_bar = bar.index
+            elif self._would_leg_be_dominated('bull', bar_low):
+                # Skip if dominated by existing leg with better pivot (#194)
+                pass
             else:
                 new_leg = Leg(
                     direction='bull',
@@ -797,6 +832,9 @@ class HierarchicalDetector:
                 and leg.pivot_price == pending.price and leg.pivot_index == pending.bar_index
                 for leg in self.state.active_legs
             )
+            # Skip if dominated by existing leg with better pivot (#194)
+            if self._would_leg_be_dominated('bear', pending.price):
+                existing_bear_leg = True
             # Origin extension handled by _extend_leg_origins (#188)
             if not existing_bear_leg:
                 new_bear_leg = Leg(
@@ -869,7 +907,9 @@ class HierarchicalDetector:
                 # We have pending high (origin) and pending low (pivot)
                 # Check if origin came before pivot temporally
                 # Use strict inequality to prevent same-bar legs (temporal causality)
-                if pending_bear.bar_index < pending_bull.bar_index:
+                # Skip if dominated by existing leg with better pivot (#194)
+                if (pending_bear.bar_index < pending_bull.bar_index
+                    and not self._would_leg_be_dominated('bull', pending_bull.price)):
                     new_bull_leg = Leg(
                         direction='bull',
                         pivot_price=pending_bull.price,  # low as defended pivot
@@ -898,7 +938,9 @@ class HierarchicalDetector:
             if pending_bear and pending_bull:
                 # We have pending low (origin) and pending high (pivot)
                 # Use strict inequality to prevent same-bar legs (temporal causality)
-                if pending_bull.bar_index < pending_bear.bar_index:
+                # Skip if dominated by existing leg with better pivot (#194)
+                if (pending_bull.bar_index < pending_bear.bar_index
+                    and not self._would_leg_be_dominated('bear', pending_bear.price)):
                     new_bear_leg = Leg(
                         direction='bear',
                         pivot_price=pending_bear.price,  # high as defended pivot
