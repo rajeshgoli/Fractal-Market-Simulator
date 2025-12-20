@@ -360,7 +360,9 @@ When a leg is invalidated, its origin is preserved as an "orphaned origin" for p
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Orphaned origins are pruned each bar using the 10% rule: if any two origins are within 10% of the larger range (measured from origin to current working pivot), the smaller is pruned. This keeps the list sparse while preserving structurally significant origins.
+Orphaned origins are managed with two cleanup mechanisms:
+1. **Leg creation cleanup (#196)**: When a new leg is created, any orphaned origin matching the leg's origin (same price and bar index) is removed. An origin can't be both "orphaned" and "in use" by an active leg.
+2. **10% pruning**: Each bar, origins within 10% of the larger range (measured from origin to current working pivot) are pruned. This keeps the list sparse while preserving structurally significant origins.
 
 **Recursive 10% pruning (#185):**
 

@@ -1919,3 +1919,177 @@ class TestSameBarLegPrevention:
         assert old_bear_condition is True, "Sanity check: old behavior was <=, True"
         assert new_bull_condition is False, "Fix: < prevents same-bar leg"
         assert new_bear_condition is False, "Fix: < prevents same-bar leg"
+
+
+class TestLegCreationCleansUpState:
+    """
+    Tests for issue #196: Leg creation doesn't clear orphaned origins or pending pivots.
+
+    When a new leg is created, the code should clean up related state:
+    1. Orphaned origins containing the new leg's origin should be removed
+    2. Pending pivots used to create the leg should be cleared
+    """
+
+    def test_leg_creation_clears_orphaned_origin_with_matching_price(self):
+        """
+        When a new leg is created with an origin that matches an orphaned origin,
+        the orphaned origin should be removed.
+
+        Reproduces the scenario from issue #196:
+        - Bar 4: Bull leg created with origin=4416.00
+        - Bar 5: Bull leg origin extended to 4419.25, then invalidated → origin added to orphaned_origins
+        - Bar 6: New bull leg created with origin=4419.25 → orphaned origin should be cleared
+        """
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Set up initial state with bars 0-3 establishing context
+        bars = [
+            make_bar(0, 4410.0, 4412.0, 4408.0, 4411.0),  # Initial bar
+            make_bar(1, 4411.0, 4413.0, 4410.0, 4412.0),  # TYPE_2_BULL (HH, HL)
+            make_bar(2, 4412.0, 4415.0, 4411.0, 4414.0),  # TYPE_2_BULL (HH, HL)
+            make_bar(3, 4414.0, 4416.0, 4413.0, 4415.0),  # TYPE_2_BULL (HH, HL)
+            # Bar 4: TYPE_2_BULL - Bull leg created
+            make_bar(4, 4415.0, 4416.0, 4414.25, 4415.5),  # HH (4416 > 4415.5), HL (4414.25 > 4413)
+            # Bar 5: TYPE_3 (outside bar) - extends origin, may invalidate
+            make_bar(5, 4415.5, 4419.25, 4411.25, 4413.0),  # HH (4419.25 > 4416), LL (4411.25 < 4414.25)
+            # Bar 6: TYPE_2_BEAR - New bull leg should be created
+            make_bar(6, 4413.0, 4412.25, 4409.0, 4410.0),  # LH (4412.25 < 4419.25), LL (4409 < 4411.25)
+        ]
+
+        # Process all bars
+        for bar in bars:
+            detector.process_bar(bar)
+
+        # Find if there's a bull leg with origin at bar 5, price 4419.25
+        bull_legs_with_origin_at_5 = [
+            leg for leg in detector.state.active_legs
+            if leg.direction == 'bull' and leg.origin_index == 5
+        ]
+
+        # Check orphaned_origins for bull direction
+        bull_orphans = detector.state.orphaned_origins.get('bull', [])
+        orphan_at_bar_5 = [o for o in bull_orphans if o[1] == 5]
+
+        # If a bull leg exists with origin at bar 5, the orphaned origin at bar 5 should be cleared
+        if bull_legs_with_origin_at_5:
+            assert len(orphan_at_bar_5) == 0, (
+                f"Orphaned origin at bar 5 should be cleared when a new leg uses that origin. "
+                f"Bull legs with origin at 5: {bull_legs_with_origin_at_5}, "
+                f"Orphans at bar 5: {orphan_at_bar_5}"
+            )
+
+    def test_pending_pivots_track_extremes_for_future_legs(self):
+        """
+        Pending pivots track the most extreme value for potential future legs.
+
+        Unlike orphaned origins, pending pivots are NOT cleared when a leg is created.
+        This is because:
+        1. Multiple legs may share the same pivot (e.g., sibling swings)
+        2. Pending pivots are only replaced when a MORE extreme value appears
+        3. This preserves the #193 fix for proper pivot tracking
+
+        The same price appearing in both pending_pivots and an active leg's pivot
+        is semantically correct - they're tracking the same extreme.
+        """
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Create a sequence that forms a bear leg from a pending bear pivot
+        bars = [
+            make_bar(0, 100.0, 105.0, 95.0, 102.0),  # Initial
+            make_bar(1, 102.0, 110.0, 100.0, 108.0),  # TYPE_2_BULL - creates pending bear pivot at 110
+            make_bar(2, 108.0, 108.5, 105.0, 106.0),  # TYPE_2_BEAR - creates bear leg from pending pivot
+        ]
+
+        for bar in bars:
+            detector.process_bar(bar)
+
+        # Check if bear leg was created with the pending pivot
+        bear_legs = [leg for leg in detector.state.active_legs if leg.direction == 'bear']
+        bear_legs_with_pivot_at_110 = [
+            leg for leg in bear_legs if leg.pivot_price == Decimal("110")
+        ]
+
+        # Verify a bear leg was created with the pivot at 110
+        assert len(bear_legs_with_pivot_at_110) > 0, "Bear leg should be created with pivot at 110"
+
+        # Verify pending pivot still tracks the extreme (not cleared)
+        pending_bear = detector.state.pending_pivots.get('bear')
+        assert pending_bear is not None, "Pending bear pivot should still exist"
+        # The pending pivot should be the most extreme value seen
+        # Either 110 (original) or 108.5 (bar 2 high, if higher)
+        assert pending_bear.price == Decimal("110"), (
+            f"Pending bear pivot should remain at 110 (the most extreme high). "
+            f"Found: {pending_bear.price}"
+        )
+
+    def test_same_price_not_in_multiple_places(self):
+        """
+        A price/bar should not appear in multiple places simultaneously:
+        - active leg origin
+        - orphaned_origins
+        - pending_pivots
+
+        This is the core invariant that issue #196 violates.
+        """
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Process bars that might create duplicates
+        bars = [
+            make_bar(0, 4410.0, 4412.0, 4408.0, 4411.0),
+            make_bar(1, 4411.0, 4413.0, 4410.0, 4412.0),
+            make_bar(2, 4412.0, 4415.0, 4411.0, 4414.0),
+            make_bar(3, 4414.0, 4416.0, 4413.0, 4415.0),
+            make_bar(4, 4415.0, 4416.0, 4414.25, 4415.5),
+            make_bar(5, 4415.5, 4419.25, 4411.25, 4413.0),
+            make_bar(6, 4413.0, 4412.25, 4409.0, 4410.0),
+        ]
+
+        for bar in bars:
+            detector.process_bar(bar)
+
+        # Collect all locations where each (price, bar_index) appears
+        all_locations = {}
+
+        # Check active leg origins
+        for leg in detector.state.active_legs:
+            if leg.status == 'active':
+                origin_key = (leg.origin_price, leg.origin_index)
+                if origin_key not in all_locations:
+                    all_locations[origin_key] = []
+                all_locations[origin_key].append(f"active_leg:{leg.direction}:{leg.leg_id}")
+
+        # Check orphaned origins
+        for direction in ['bull', 'bear']:
+            for origin_price, origin_index in detector.state.orphaned_origins.get(direction, []):
+                origin_key = (origin_price, origin_index)
+                if origin_key not in all_locations:
+                    all_locations[origin_key] = []
+                all_locations[origin_key].append(f"orphaned_origins:{direction}")
+
+        # Check pending pivots (for origin-like usage)
+        for direction in ['bull', 'bear']:
+            pending = detector.state.pending_pivots.get(direction)
+            if pending:
+                # For bull pending pivot, the price could become a bear leg origin
+                # For bear pending pivot, the price could become a bull leg origin
+                origin_key = (pending.price, pending.bar_index)
+                if origin_key not in all_locations:
+                    all_locations[origin_key] = []
+                all_locations[origin_key].append(f"pending_pivots:{direction}")
+
+        # Find any duplicates - a price/bar should not appear as both:
+        # 1. Active leg origin AND orphaned origin of same direction
+        for origin_key, locations in all_locations.items():
+            active_leg_origins = [loc for loc in locations if loc.startswith("active_leg:")]
+            orphaned_origins = [loc for loc in locations if loc.startswith("orphaned_origins:")]
+
+            for active_loc in active_leg_origins:
+                direction = active_loc.split(":")[1]
+                matching_orphan = [o for o in orphaned_origins if f"orphaned_origins:{direction}" in o]
+                assert len(matching_orphan) == 0, (
+                    f"Price {origin_key} appears in both active_leg origin AND orphaned_origins "
+                    f"for {direction} direction. Locations: {locations}"
+                )

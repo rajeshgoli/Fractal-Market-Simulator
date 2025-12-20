@@ -718,6 +718,8 @@ class HierarchicalDetector:
                     last_modified_bar=bar.index,
                 )
                 self.state.active_legs.append(new_leg)
+                # Clean up orphaned origins (#196)
+                self._clean_up_after_leg_creation(new_leg)
                 # Emit LegCreatedEvent (#168)
                 events.append(LegCreatedEvent(
                     bar_index=bar.index,
@@ -802,6 +804,8 @@ class HierarchicalDetector:
                     last_modified_bar=bar.index,
                 )
                 self.state.active_legs.append(new_bear_leg)
+                # Clean up orphaned origins (#196)
+                self._clean_up_after_leg_creation(new_bear_leg)
                 # Emit LegCreatedEvent (#168)
                 events.append(LegCreatedEvent(
                     bar_index=bar.index,
@@ -875,6 +879,8 @@ class HierarchicalDetector:
                         last_modified_bar=bar.index,
                     )
                     self.state.active_legs.append(new_bull_leg)
+                    # Clean up orphaned origins (#196)
+                    self._clean_up_after_leg_creation(new_bull_leg)
                     # Emit LegCreatedEvent (#168)
                     events.append(LegCreatedEvent(
                         bar_index=bar.index,
@@ -906,6 +912,8 @@ class HierarchicalDetector:
                         last_modified_bar=bar.index,
                     )
                     self.state.active_legs.append(new_bear_leg)
+                    # Clean up orphaned origins (#196)
+                    self._clean_up_after_leg_creation(new_bear_leg)
                     # Emit LegCreatedEvent (#168)
                     events.append(LegCreatedEvent(
                         bar_index=bar.index,
@@ -1602,6 +1610,27 @@ class HierarchicalDetector:
                             ))
 
         return events
+
+    def _clean_up_after_leg_creation(self, leg: Leg) -> None:
+        """
+        Clean up orphaned origins after leg creation (#196).
+
+        When a new leg is created, remove orphaned origins that match the new
+        leg's origin (same direction). An origin is no longer "orphaned" if an
+        active leg uses it.
+
+        Note: Pending pivots are NOT cleared here because they track "the most
+        extreme value for potential pivots" and may be used for multiple legs.
+        They are only replaced when a more extreme value appears.
+
+        Args:
+            leg: The newly created leg
+        """
+        # Bug A fix: Remove matching orphaned origins
+        # An origin is no longer "orphaned" if an active leg uses it
+        origin_tuple = (leg.origin_price, leg.origin_index)
+        if origin_tuple in self.state.orphaned_origins.get(leg.direction, []):
+            self.state.orphaned_origins[leg.direction].remove(origin_tuple)
 
     def _prune_orphaned_origins(self, bar: Bar) -> None:
         """
