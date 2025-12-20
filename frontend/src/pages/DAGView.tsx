@@ -267,19 +267,37 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     currentPlaybackPosition,
   ]);
 
-  // Compute DAG context for feedback
+  // Compute DAG context for feedback - now includes full data for debugging (#187)
   const dagContext = useMemo((): DagContext | undefined => {
     if (!dagState) return undefined;
-    // Count pending pivots (null means none)
-    const pendingPivotsCount = (dagState.pending_pivots?.bull ? 1 : 0) +
-                               (dagState.pending_pivots?.bear ? 1 : 0);
     return {
-      activeLegsCount: dagState.active_legs.length,
-      orphanedOriginsCount: {
-        bull: dagState.orphaned_origins.bull?.length || 0,
-        bear: dagState.orphaned_origins.bear?.length || 0,
+      activeLegs: dagState.active_legs.map(leg => ({
+        leg_id: leg.leg_id,
+        direction: leg.direction,
+        pivot_price: leg.pivot_price,
+        pivot_index: leg.pivot_index,
+        origin_price: leg.origin_price,
+        origin_index: leg.origin_index,
+        range: Math.abs(leg.origin_price - leg.pivot_price),
+      })),
+      orphanedOrigins: {
+        bull: (dagState.orphaned_origins.bull || []).map(o => ({
+          price: o.price,
+          bar_index: o.bar_index,
+        })),
+        bear: (dagState.orphaned_origins.bear || []).map(o => ({
+          price: o.price,
+          bar_index: o.bar_index,
+        })),
       },
-      pendingPivotsCount,
+      pendingPivots: {
+        bull: dagState.pending_pivots.bull
+          ? { price: dagState.pending_pivots.bull.price, bar_index: dagState.pending_pivots.bull.bar_index }
+          : null,
+        bear: dagState.pending_pivots.bear
+          ? { price: dagState.pending_pivots.bear.price, bar_index: dagState.pending_pivots.bear.bar_index }
+          : null,
+      },
     };
   }, [dagState]);
 

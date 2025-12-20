@@ -250,11 +250,34 @@ class ReplayContext(BaseModel):
     calibration_state: Optional[str] = None
 
 
+class DagFeedbackLeg(BaseModel):
+    """A leg captured in feedback snapshot."""
+    leg_id: str
+    direction: str  # "bull" or "bear"
+    pivot_price: float
+    pivot_index: int
+    origin_price: float
+    origin_index: int
+    range: float  # |origin_price - pivot_price|
+
+
+class DagFeedbackOrigin(BaseModel):
+    """An origin captured in feedback snapshot."""
+    price: float
+    bar_index: int
+
+
+class DagFeedbackPivot(BaseModel):
+    """A pending pivot captured in feedback snapshot."""
+    price: float
+    bar_index: int
+
+
 class DagContext(BaseModel):
-    """DAG mode-specific context."""
-    active_legs_count: int = 0
-    orphaned_origins_count: Optional[Dict] = None
-    pending_pivots_count: int = 0
+    """DAG mode-specific context with full leg/origin/pivot data for debugging."""
+    active_legs: List[DagFeedbackLeg] = []
+    orphaned_origins: Optional[Dict[str, List[DagFeedbackOrigin]]] = None
+    pending_pivots: Optional[Dict[str, Optional[DagFeedbackPivot]]] = None
 
 
 class PlaybackFeedbackSnapshot(BaseModel):

@@ -39,11 +39,37 @@ export interface ReplayContext {
   calibrationState: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
 }
 
-// DAG mode context
+// DAG mode context - full data for feedback snapshots
+export interface DagContextLeg {
+  leg_id: string;
+  direction: 'bull' | 'bear';
+  pivot_price: number;
+  pivot_index: number;
+  origin_price: number;
+  origin_index: number;
+  range: number;  // |origin_price - pivot_price|
+}
+
+export interface DagContextOrigin {
+  price: number;
+  bar_index: number;
+}
+
+export interface DagContextPivot {
+  price: number;
+  bar_index: number;
+}
+
 export interface DagContext {
-  activeLegsCount: number;
-  orphanedOriginsCount: { bull: number; bear: number };
-  pendingPivotsCount: number;
+  activeLegs: DagContextLeg[];
+  orphanedOrigins: {
+    bull: DagContextOrigin[];
+    bear: DagContextOrigin[];
+  };
+  pendingPivots: {
+    bull: DagContextPivot | null;
+    bear: DagContextPivot | null;
+  };
 }
 
 interface FeedbackContext {
@@ -191,9 +217,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         };
       } else if (mode === 'dag' && dagContext) {
         snapshot.dag_context = {
-          active_legs_count: dagContext.activeLegsCount,
-          orphaned_origins_count: dagContext.orphanedOriginsCount,
-          pending_pivots_count: dagContext.pendingPivotsCount,
+          active_legs: dagContext.activeLegs.map(leg => ({
+            leg_id: leg.leg_id,
+            direction: leg.direction,
+            pivot_price: leg.pivot_price,
+            pivot_index: leg.pivot_index,
+            origin_price: leg.origin_price,
+            origin_index: leg.origin_index,
+            range: leg.range,
+          })),
+          orphaned_origins: {
+            bull: dagContext.orphanedOrigins.bull.map(o => ({ price: o.price, bar_index: o.bar_index })),
+            bear: dagContext.orphanedOrigins.bear.map(o => ({ price: o.price, bar_index: o.bar_index })),
+          },
+          pending_pivots: {
+            bull: dagContext.pendingPivots.bull
+              ? { price: dagContext.pendingPivots.bull.price, bar_index: dagContext.pendingPivots.bull.bar_index }
+              : null,
+            bear: dagContext.pendingPivots.bear
+              ? { price: dagContext.pendingPivots.bear.price, bar_index: dagContext.pendingPivots.bear.bar_index }
+              : null,
+          },
         };
       }
 
@@ -383,19 +427,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="space-y-1.5 text-xs">
             <div className="flex justify-between">
               <span className="text-app-muted">Active Legs</span>
-              <span className="text-app-text font-medium">{dagContext.activeLegsCount}</span>
+              <span className="text-app-text font-medium">{dagContext.activeLegs.length}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-app-muted">Orphaned Origins</span>
               <span className="text-app-text font-medium">
-                <span className="text-trading-blue">{dagContext.orphanedOriginsCount.bull}</span>
+                <span className="text-trading-blue">{dagContext.orphanedOrigins.bull.length}</span>
                 {' / '}
-                <span className="text-trading-bear">{dagContext.orphanedOriginsCount.bear}</span>
+                <span className="text-trading-bear">{dagContext.orphanedOrigins.bear.length}</span>
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-app-muted">Pending Pivots</span>
-              <span className="text-app-text font-medium">{dagContext.pendingPivotsCount}</span>
+              <span className="text-app-text font-medium">
+                {(dagContext.pendingPivots.bull ? 1 : 0) + (dagContext.pendingPivots.bear ? 1 : 0)}
+              </span>
             </div>
           </div>
         </div>

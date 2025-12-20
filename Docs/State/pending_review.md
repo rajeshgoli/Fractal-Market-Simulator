@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2025-12-19
 
@@ -8,7 +8,12 @@
 
 ## Pending Changes
 
+- #187 — Feedback snapshot captures full leg/origin/pivot data (not just counts)
 - #183 — Sidebar Shared Infrastructure + DAG Integration
+- (cleanup) — Replaced Discretizer/Annotator nav with Replay/DAG view switching in Header
+- (enhancement) — Added keyboard shortcuts to DAG Build Mode (Escape, Space, arrows, brackets)
+- (UX) — Hide event filter toggles when linger is disabled
+- (UX) — Added hover highlighting for DAG state panel items (legs/origins/pivots highlight on charts)
 
 ---
 

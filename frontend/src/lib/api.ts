@@ -197,11 +197,25 @@ export interface PlaybackFeedbackSnapshot {
     };
     calibration_state: string;
   };
-  // DAG-specific context
+  // DAG-specific context - full data for debugging
   dag_context?: {
-    active_legs_count: number;
-    orphaned_origins_count: { bull: number; bear: number };
-    pending_pivots_count: number;
+    active_legs: {
+      leg_id: string;
+      direction: 'bull' | 'bear';
+      pivot_price: number;
+      pivot_index: number;
+      origin_price: number;
+      origin_index: number;
+      range: number;
+    }[];
+    orphaned_origins: {
+      bull: { price: number; bar_index: number }[];
+      bear: { price: number; bar_index: number }[];
+    };
+    pending_pivots: {
+      bull: { price: number; bar_index: number } | null;
+      bear: { price: number; bar_index: number } | null;
+    };
   };
 }
 
