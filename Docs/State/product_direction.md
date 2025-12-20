@@ -1,6 +1,6 @@
 # Product Direction
 
-**Last Updated:** December 19, 2025 (PM3)
+**Last Updated:** December 20, 2025 (PM4)
 **Owner:** Product
 
 ---
@@ -9,33 +9,45 @@
 
 **Ship reliable, performant swing detection that correctly identifies the valid swings defined in `Docs/Reference/valid_swings.md`.**
 
-DAG visualization working (#179 complete). Validation session confirmed core functionality. Now focused on **pruning refinements** to achieve properly tuned DAG behavior before further iteration.
+DAG visualization complete (#167, #185, #186 all done). Validation session Dec 19-20 uncovered a **fundamental causality bug** in leg creation that must be fixed before L1-L7 validation can proceed.
 
 ---
 
-## P0: Pruning & Chart Fixes
-
-Two issues from validation session:
+## P0: Data Integrity Bugs
 
 | Issue | Problem | Priority |
 |-------|---------|----------|
-| #185 | Pruning too aggressive — loses intermediate structure | **High** |
-| #186 | Charts ignore timeframe config — both show same data | Medium |
+| #189 | Same-bar legs violate temporal causality | **Blocking** |
+| #192 | Leg bar indices don't match actual price locations | **Blocking** |
 
-### #185: Recursive 10% Pruning
+### #189: Same-Bar Leg Creation
 
-**Problem:** Current approach (keep one leg) quickly reduces to giant arrow between extremes.
+**Problem:** `_process_type1()` creates legs where both `pivot_index` and `origin_index` are the same bar. This claims to know H→L or L→H ordering within a single candle — which is unknowable from OHLC data.
 
-**Solution:**
-- During trend: accumulate candidates
-- At confirmed pivot: prune to biggest among same-origin candidates
-- After direction change: preserve legs from different origins (different structural levels)
-- Recursive 10% rule: each leg prunes subtrees <10% of its size
-- Result: detailed near active zone, compressed further back
+**Root cause:** After any Type 2 bar, both pending pivots have the same `bar_index`. When the next bar is Type 1 (inside bar), both leg-creation conditions pass, creating same-bar legs.
 
-### #186: Chart Timeframe Bug
+**Fix:** Use strict inequality in `_process_type1()` — only create legs when pending pivots are from different bars.
 
-Both charts show identical data despite different timeframe configs (1H vs 5m). Blocks multi-timeframe validation.
+### #192: Bar Index Mismatch
+
+**Problem:** Leg objects show correct prices but wrong bar indices. Example at bar 45:
+- `pivot_price: 4426.50` at `pivot_index: 37` — but bar 37's low is 4432.00
+- `origin_price: 4434.00` at `origin_index: 36` — but bar 36's high is 4435.25
+
+The prices 4426.50 and 4434.00 exist in the data, just not at those bar indices.
+
+**Root cause:** Running extremas are tracked correctly as prices, but bar indices aren't updated when extrema values change.
+
+**Fix:** Ensure pivot_index and origin_index always point to the bar where the current price actually occurred.
+
+---
+
+## Completed: Pruning & Chart Fixes
+
+| Issue | Problem | Status |
+|-------|---------|--------|
+| #185 | Recursive 10% pruning | ✅ Done |
+| #186 | Per-chart timeframe aggregation | ✅ Done |
 
 ---
 
@@ -90,7 +102,7 @@ From `Docs/Reference/valid_swings.md` — ES as of Dec 18, 2025:
 | **L6** | 1=6929, 0=6771 | Detected |
 | **L7** | 1=6882, 0=6770 | Pending validation |
 
-Full validation pending #185 fix — need properly tuned DAG to confirm sibling detection.
+Full validation blocked by #189 and #192 — must fix data integrity bugs before trusting leg/swing detection.
 
 ---
 
@@ -100,19 +112,21 @@ Full validation pending #185 fix — need properly tuned DAG to confirm sibling 
 |-----------|--------|
 | <5s for 10K bars | Done (#158) |
 | 100K window loads in frontend | Done (#158) |
-| Valid swings (L1-L7) detected | Pending #185 |
-| Sibling swings with same 0 detected | Pending #185 |
+| Valid swings (L1-L7) detected | Blocked by #189, #192 |
+| Sibling swings with same 0 detected | Blocked by #189, #192 |
 | Parent-child relationships correct | Done (#158) |
 | Visual validation of DAG behavior | Done (#167) |
-| Multi-timeframe chart view | Pending #186 |
+| Multi-timeframe chart view | Done (#186) |
+| Temporal causality enforced | Blocked by #189 |
+| Bar indices match prices | Blocked by #192 |
 
 ---
 
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- #185 fixed — DAG shows properly tuned structure with multi-level preservation
-- L1-L7 validation complete with tuned DAG
+- #189 and #192 fixed — data integrity restored
+- L1-L7 validation complete
 - Unexpected detection behavior observed
 
 ---

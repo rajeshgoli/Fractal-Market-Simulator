@@ -19,53 +19,38 @@ Read in order:
 - Backend-controlled data boundary for replay (single source of truth)
 - **DAG/Reference separation:** Structural tracking vs semantic filtering
 - **Rules by construction:** Temporal ordering from bar relationships (Type 1/2/3)
-- **Sibling detection:** Orphaned origins with 10% pruning
+- **Strict inter-bar causality:** Legs only form when pivots are from different bars (#189)
+- **Sibling detection:** Orphaned origins with recursive 10% pruning
+- **Turn pruning:** Within-origin (keep largest) + cross-origin (10% subtree) + active swing immunity
 
 **Known debt:**
-- `MULTI_TF_LOOKBACKS` constants (12, 6, 5 bars) — documented but not derived from domain primitives
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
 - #177 — Minor: missing `invalidated_at_bar` field, AppState/cache duplication
+- `SwingConfig.lookback_bars` — vestigial from pre-DAG architecture, unused by HierarchicalDetector (cleanup candidate)
 
 ---
 
-## Current Phase: Manual Validation
+## Current Phase: L1-L7 Validation
 
-### DAG Algorithm — COMPLETE
+### Temporal Causality — FIXED
 
-**Performance target achieved:** 4.06s for 10K bars (target was <5s)
+**#189 resolved:** Same-bar legs no longer created. Strict inequality in `_process_type1()` ensures legs only form when origin and pivot are from different bars.
 
-| Issue | Feature | Status |
-|-------|---------|--------|
-| #158 | DAG-based swing detection (O(n log k)) | ✅ Complete |
-| #159 | Reference layer for filtering/invalidation | ✅ Complete |
-| #160 | Wire ReferenceLayer into API pipeline | ✅ Complete |
-| #163 | Sibling swing detection (orphaned origins) | ✅ Complete |
-| #164 | Remove legacy candidate lists | ✅ Complete |
-| #165 | Simplify Reference Layer | ✅ Complete |
-| #166 | Redesign calibration UI (tree navigation) | ✅ Complete |
-| #174 | Leg→swing invalidation propagation | ✅ Complete |
-| #175 | Wire Reference layer into calibrate()/advance() | ✅ Complete |
+### Next: Validate L1-L7 Detection
 
-### DAG Visualization Mode — COMPLETE + REFINEMENTS
+With temporal causality enforced, L1-L7 validation can proceed:
 
-**Epic #167 — Visual validation tool for DAG algorithm**
+| Label | Structure | Expected Status |
+|-------|-----------|-----------------|
+| **L1** | 1=6166, 0=4832 | Should detect |
+| **L2** | 1=5837, 0=4832 | Should detect (sibling of L1) |
+| **L3** | 1=6955, 0=6524 | Should detect |
+| **L4** | 1=6896, 0=6524 | Should detect (sibling of L3) |
+| **L5** | 1=6790, 0=6524 | Should detect (sibling of L3) |
+| **L6** | 1=6929, 0=6771 | Should detect |
+| **L7** | 1=6882, 0=6770 | Should detect |
 
-| Issue | Feature | Status |
-|-------|---------|--------|
-| #168 | Add leg lifecycle events to HierarchicalDetector | ✅ Complete |
-| #169 | Add DAG state API endpoint | ✅ Complete |
-| #170 | Add linger toggle to playback controls | ✅ Complete |
-| #171 | Create DAG state panel | ✅ Complete |
-| #172 | Add leg visualization on charts | ✅ Complete |
-| #179 | Fix incremental playback from bar 0 | ✅ Complete |
-| #181 | Prune redundant legs on directional turn | 🔄 Open |
-| #182 | Visualize orphaned origins on chart | 🔄 Open |
-
-**Spec:** `Docs/Working/DAG_visualization_spec.md` — implementation complete, matches spec.
-
-**Validation session (Dec 19):** User confirmed visualization works. Two refinements identified:
-- Liberal leg creation during trends — prune to longest on directional turn (#181)
-- Orphaned origins as numbers hard to correlate — add dimmed chart markers (#182)
+**Validation method:** Use DAG Build Mode to observe leg/swing formation at key price levels.
 
 ---
 
@@ -74,29 +59,22 @@ Read in order:
 | Component | Status | Notes |
 |-----------|--------|-------|
 | HierarchicalDetector | **Complete** | O(n log k), 4.06s for 10K bars |
+| Temporal Causality | **Fixed** | Strict inter-bar ordering (#189) |
+| Leg Origin Updates | **Fixed** | Origins update on price extensions (#188) |
 | SwingConfig | Complete | Centralizes all parameters |
 | SwingNode | Complete | DAG hierarchy model |
 | ReferenceFrame | Complete | Central coordinate abstraction |
 | ReferenceLayer | Complete | Tolerance/completion rules |
-| Sibling Detection | Complete | Orphaned origins + 10% pruning |
+| Sibling Detection | Complete | Orphaned origins + recursive 10% pruning |
+| Turn Pruning | Complete | Within-origin + cross-origin + immunity |
 | Compatibility Adapter | Complete | SwingNode ↔ ReferenceSwing |
 | Replay View | Complete | Tree-based UI, forward playback |
+| DAG Visualization | Complete | Leg/origin visualization, hover highlighting |
 | Discretization | Complete | Accepts SwingNode via adapter |
 | V2 API Schemas | Complete | HierarchicalSwingResponse, etc. |
 | Legacy Detectors | Deleted | #153 completed cleanup |
-| DAG Visualization | Complete | Epic #167 + #179 fix |
-| Test Suite | Healthy | 606 tests passing |
+| Test Suite | Healthy | 628 tests passing |
 | Documentation | Current | Both guides updated |
-
----
-
-## Pending Validation
-
-Before proceeding with new features:
-
-1. **Manual validation** — Use Replay View on real data to verify swing detection quality
-2. **Compare L1-L7** — Validate against `Docs/Reference/valid_swings.md` examples
-3. **Fix #176** — After validation, wire Reference layer into `get_windowed_swings`
 
 ---
 
@@ -104,8 +82,8 @@ Before proceeding with new features:
 
 | Document | Status | Action Needed |
 |----------|--------|---------------|
-| `developer_guide.md` | Current | Reference layer, sibling detection documented |
-| `user_guide.md` | Current | Tree-based UI, calibration report documented |
+| `developer_guide.md` | Current | - |
+| `user_guide.md` | Current | - |
 | `CLAUDE.md` | Current | - |
 
 ---
@@ -121,6 +99,8 @@ Before proceeding with new features:
 - **Backend-controlled boundaries:** Backend owns data visibility
 - **DAG/Reference separation:** DAG tracks structural extremas; Reference layer defines "good reference" semantics
 - **Rules by construction:** Temporal ordering enforced by bar relationships, not post-hoc filtering
+- **Strict inter-bar causality:** Legs require pivots from different bars (#189)
+- **Fractal compression:** Recursive 10% pruning creates detail near active zone, sparse further back
 
 ---
 
@@ -163,7 +143,8 @@ Before proceeding with new features:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
-| Dec 19 | DAG Visualization validation session — #181, #182 filed | Refinements identified |
+| Dec 19 | #187-#189, #183, UX fixes (10 changes) — Temporal causality fix, sidebar unification | All Accepted |
+| Dec 19 | #125, #180-#182, #185, #186 — DAG refinements + UX fixes (6 issues) | All Accepted |
 | Dec 19 | #168-#172, #179 — DAG Visualization Mode (6 issues) | All Accepted |
 | Dec 19 | #158-#175 — DAG algorithm rewrite + Reference layer (9 issues) | All Accepted |
 | Dec 19 | #152, #153, #155, #157 — Performance optimization + cleanup | All Accepted |

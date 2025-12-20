@@ -4,6 +4,130 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 20, 2025 - Leg Bar Index Mismatch Bug
+
+**Context:** Continued DAG validation. User observed leg data with incorrect bar indices.
+
+### Observation
+
+At bar 45, a bull leg showed:
+```
+pivot_price: 4426.50 at pivot_index: 37
+origin_price: 4434.00 at origin_index: 36
+```
+
+User question: "This leg is called a bull leg but it connects a high to a low (and neither seem proper extremas -- better H and L available around). Why?"
+
+### Investigation Findings
+
+**1. Prices don't match bar data:**
+- Bar 37's actual low is 4432.00, not 4426.50
+- Bar 36's actual high is 4435.25, not 4434.00
+
+**2. Where the prices actually occur:**
+- 4426.50 appears as the low of bars 31, 32, and 39
+- 4434.00 appears as the high of bar 38
+
+**3. Temporal inversion:**
+- origin_index (36) < pivot_index (37)
+- For a bull leg, the low (pivot) should occur before the high (origin)
+
+### Root Cause Hypothesis
+
+The detector is tracking running extremas correctly as *prices*, but when those values are updated, the *bar indices* are not being updated to match. Result: price and index become decoupled.
+
+### Issue Filed
+
+**#192** — Leg bar indices don't match actual price locations
+
+### Key Insight
+
+This is a backend bug in `HierarchicalDetector` — the prices are correct but indices are stale. Engineer needs to trace when pivot_index and origin_index are set/updated during leg lifecycle.
+
+---
+
+## December 20, 2025 - Turn Prune Tie-Breaking Bug
+
+**Context:** Continued DAG validation. User observed duplicate siblings surviving turn_prune.
+
+### Observation
+
+At bar 62, two bear legs with identical coordinates both survived turn_prune:
+- `3d6d33a8`: pivot 4433.50 (bar 39) → origin 4422.25 (bar 53), range 11.25
+- `6095afd0`: pivot 4433.50 (bar 40) → origin 4422.25 (bar 53), range 11.25
+
+Both bars hit the same high price (4433.50), creating legs with identical range. The "keep largest" rule doesn't break ties.
+
+### User Decision
+
+> "No -- there's no meaning when it gets to reference swing which only cares about useful extremas, prune last."
+
+Two bars hitting the same price doesn't add structural meaning — it's the same extrema. Keep the first occurrence.
+
+### Issue Filed
+
+**#190** — Turn prune should keep first leg on tie, not both
+
+### Fix
+
+When selecting "largest" within an origin:
+1. Sort by range descending
+2. On tie, sort by pivot_bar ascending (earliest first)
+3. Keep only the first
+
+---
+
+## December 20, 2025 - Temporal Causality Bug Discovery
+
+**Context:** Continued validation of DAG visualization. User identified fundamental bug in leg creation.
+
+### The Observation
+
+User noticed a bear leg displayed with:
+- `pivot_price: 4422.75, pivot_index: 21`
+- `origin_price: 4417.5, origin_index: 21`
+
+Both indices are the same bar. User immediately recognized the issue:
+
+> "In this state, why is there a bear leg from a single candle's high to low. This can never happen because H->L temporal order is not known, no?"
+
+### Why This Matters
+
+Within a single OHLC bar, we **cannot know** whether the High came before the Low or vice versa. The entire bar-type classification system exists to establish inter-bar temporal ordering:
+
+- Type 2-Bull: `prev.L → curr.H` (known order)
+- Type 2-Bear: `prev.H → curr.L` (known order)
+
+A leg claiming `bar[N].H → bar[N].L` violates this fundamental constraint.
+
+### Root Cause Identified
+
+In `_process_type1()` (inside bar processing), legs are created from pending pivots:
+
+```python
+if pending_bear.bar_index <= pending_bull.bar_index:
+    new_bull_leg = Leg(
+        pivot_index=pending_bull.bar_index,   # same bar
+        origin_index=pending_bear.bar_index,  # same bar
+    )
+```
+
+After any Type 2 bar, both pending pivots have the **same bar_index**. When the next bar is Type 1 (inside bar), both conditions pass, creating same-bar legs.
+
+### Impact
+
+This bug undermines trust in all leg/swing detection. Cannot proceed with L1-L7 validation until fixed.
+
+### Issue Filed
+
+**#189** — Same-bar legs created in Type 1 processing violate temporal causality
+
+### Key Insight
+
+User's domain expertise caught a subtle but fundamental flaw that code review missed. The bar-type classification was designed correctly, but `_process_type1()` bypassed its guarantees.
+
+---
+
 ## December 19, 2025 - DAG Visualization Validation Session
 
 **Context:** User tested DAG visualization mode after #179 fix. First successful validation session.
