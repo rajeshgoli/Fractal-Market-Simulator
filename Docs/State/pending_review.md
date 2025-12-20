@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-19
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#194** — Skip creating dominated legs that would be pruned at turn
 - **#193** — Pending pivot overwrite bug: preserve extreme pivots for correct leg pivot/origin matching
 - **#192** — Leg pivot extension: ensure pivot_index always matches pivot_price location
 - **#190** — Turn prune tie-breaking: keep earliest pivot bar when ranges are equal
