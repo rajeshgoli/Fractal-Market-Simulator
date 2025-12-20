@@ -212,6 +212,14 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     }
   }, [calibrationPhase, forwardPlayback]);
 
+  // Handler to step forward one bar (without starting continuous playback)
+  const handleStepForward = useCallback(() => {
+    if (calibrationPhase === CalibrationPhase.CALIBRATED) {
+      setCalibrationPhase(CalibrationPhase.PLAYING);
+    }
+    forwardPlayback.stepForward();
+  }, [calibrationPhase, forwardPlayback]);
+
   // Handler for toggling linger event types
   const handleToggleLingerEvent = useCallback((eventId: string) => {
     setLingerEvents(prev =>
@@ -781,11 +789,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
                   : forwardPlayback.togglePlayPause
               }
               onStepBack={forwardPlayback.stepBack}
-              onStepForward={
-                calibrationPhase === CalibrationPhase.CALIBRATED
-                  ? handleStartPlayback
-                  : forwardPlayback.stepForward
-              }
+              onStepForward={handleStepForward}
               onJumpToStart={forwardPlayback.jumpToStart}
               onJumpToEnd={undefined}
               onJumpToPreviousEvent={undefined}
