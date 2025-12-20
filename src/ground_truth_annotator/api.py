@@ -154,6 +154,10 @@ async def get_session():
     }
 
 
+# Scale code to timeframe minutes mapping
+SCALE_TO_MINUTES = {"S": 5, "M": 15, "L": 60, "XL": 240}
+
+
 @app.get("/api/bars", response_model=List[BarResponse])
 async def get_bars(
     scale: Optional[str] = Query(None, description="Scale for aggregation (XL, L, M, S)"),
@@ -162,7 +166,8 @@ async def get_bars(
     """
     Get bars for chart display.
 
-    Returns bars aggregated to the appropriate level for visualization.
+    Returns bars aggregated to the appropriate timeframe for visualization.
+    Scale maps to timeframe: S=5m, M=15m, L=1H, XL=4H.
     """
     s = get_state()
 
@@ -180,16 +185,22 @@ async def get_bars(
     if limit is not None and limit <= 0:
         return []
 
-    # Scale target bar counts
-    scale_targets = {"XL": 50, "L": 200, "M": 800, "S": None}
-
     if scale and s.aggregator:
-        target = scale_targets.get(scale.upper())
+        # Get timeframe minutes for this scale
+        timeframe_minutes = SCALE_TO_MINUTES.get(scale.upper(), s.resolution_minutes)
 
-        if scale.upper() == "S" or target is None:
-            # S scale: return source bars directly
+        # Clamp to source resolution (can't aggregate to finer granularity)
+        effective_timeframe = max(timeframe_minutes, s.resolution_minutes)
+
+        # Get source bars (limited if playback is active)
+        source_bars_to_use = s.source_bars[:limit] if limit is not None else s.source_bars
+
+        if not source_bars_to_use:
+            return []
+
+        # If effective timeframe equals source resolution, return source bars directly
+        if effective_timeframe == s.resolution_minutes:
             bars = []
-            source_bars_to_use = s.source_bars[:limit] if limit is not None else s.source_bars
             for i, src_bar in enumerate(source_bars_to_use):
                 bars.append(BarResponse(
                     index=i,
@@ -202,33 +213,39 @@ async def get_bars(
                     source_end_index=i,
                 ))
             return bars
-        else:
-            # Aggregate to target bar count
-            if limit is not None:
-                limited_bars = s.source_bars[:limit]
-                temp_aggregator = BarAggregator(limited_bars)
-                agg_bars = temp_aggregator.aggregate_to_target_bars(target)
-                source_bar_count = limit
-            else:
-                agg_bars = s.aggregator.aggregate_to_target_bars(target)
-                source_bar_count = len(s.source_bars)
 
-            bars_per_candle = source_bar_count // target if source_bar_count > target else 1
-            bars = []
-            for i, agg_bar in enumerate(agg_bars):
-                source_start = i * bars_per_candle
-                source_end = min(source_start + bars_per_candle - 1, source_bar_count - 1)
-                bars.append(BarResponse(
-                    index=i,
-                    timestamp=agg_bar.timestamp,
-                    open=agg_bar.open,
-                    high=agg_bar.high,
-                    low=agg_bar.low,
-                    close=agg_bar.close,
-                    source_start_index=source_start,
-                    source_end_index=source_end,
-                ))
-            return bars
+        # Create aggregator for the limited bars and get timeframe-aggregated bars
+        if limit is not None:
+            temp_aggregator = BarAggregator(source_bars_to_use, s.resolution_minutes)
+            agg_bars = temp_aggregator.get_bars(effective_timeframe)
+            source_to_agg_map = temp_aggregator._source_to_agg_mapping.get(effective_timeframe, {})
+        else:
+            agg_bars = s.aggregator.get_bars(effective_timeframe)
+            source_to_agg_map = s.aggregator._source_to_agg_mapping.get(effective_timeframe, {})
+
+        # Build inverse mapping: agg_idx -> (min_source_idx, max_source_idx)
+        agg_to_source = {}
+        for source_idx, agg_idx in source_to_agg_map.items():
+            if agg_idx not in agg_to_source:
+                agg_to_source[agg_idx] = (source_idx, source_idx)
+            else:
+                min_idx, max_idx = agg_to_source[agg_idx]
+                agg_to_source[agg_idx] = (min(min_idx, source_idx), max(max_idx, source_idx))
+
+        bars = []
+        for i, agg_bar in enumerate(agg_bars):
+            source_start, source_end = agg_to_source.get(i, (0, 0))
+            bars.append(BarResponse(
+                index=i,
+                timestamp=agg_bar.timestamp,
+                open=agg_bar.open,
+                high=agg_bar.high,
+                low=agg_bar.low,
+                close=agg_bar.close,
+                source_start_index=source_start,
+                source_end_index=source_end,
+            ))
+        return bars
 
     # Default: return pre-computed aggregated bars
     bars = []

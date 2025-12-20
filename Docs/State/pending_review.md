@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2025-12-19
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#186** — Fix per-chart timeframe aggregation (charts now use actual timeframes: 5m, 15m, 1H, 4H)
 - **#125** — Preserve zoom level on chart updates (frontend fix)
 - **#185** — Recursive 10% leg pruning with multi-origin preservation and active swing immunity
 - **#182** — Visualize orphaned origins on chart (markers for preserved pivots)
