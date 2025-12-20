@@ -1354,12 +1354,17 @@ class HierarchicalDetector:
         self, direction: str, bar: Bar, timestamp: datetime
     ) -> List[LegPrunedEvent]:
         """
-        Prune legs of given direction to keep only the longest when a turn occurs (#181).
+        Prune legs with recursive 10% rule and multi-origin preservation (#185).
 
-        During strong trends, the DAG creates many parallel legs with different pivots
-        all converging to the same origin. When a directional turn is detected (Type 2-Bear
-        for bull legs, Type 2-Bull for bear legs), we prune to keep only the longest leg
-        per origin group.
+        Replaces #181's "keep only longest" with a more nuanced approach:
+
+        1. Group legs by origin
+        2. For each origin group: keep largest + legs >= 10% of largest
+        3. Multi-origin preservation: always keep at least one leg per origin
+        4. Recursive 10% across origins: apply 10% rule globally to prune small origins
+        5. Active swing immunity: legs with active swings are never pruned
+
+        This preserves nested structure while compressing noise.
 
         Args:
             direction: 'bull' or 'bear' - which legs to prune
@@ -1367,11 +1372,12 @@ class HierarchicalDetector:
             timestamp: Timestamp for events
 
         Returns:
-            List of LegPrunedEvent for pruned legs with reason="turn_prune"
+            List of LegPrunedEvent for pruned legs
         """
         from collections import defaultdict
 
         events: List[LegPrunedEvent] = []
+        prune_threshold = Decimal("0.1")
 
         # Get active legs of the specified direction
         legs = [
@@ -1382,25 +1388,43 @@ class HierarchicalDetector:
         if len(legs) <= 1:
             return events  # Nothing to prune
 
+        # Build set of active swing IDs for immunity check
+        active_swing_ids = {
+            swing.swing_id for swing in self.state.active_swings
+            if swing.status == 'active'
+        }
+
         # Group by origin (same origin_price and origin_index)
         origin_groups: Dict[Tuple[Decimal, int], List[Leg]] = defaultdict(list)
         for leg in legs:
             key = (leg.origin_price, leg.origin_index)
             origin_groups[key].append(leg)
 
-        # For each group with multiple legs, keep only the longest
         pruned_leg_ids: Set[str] = set()
 
+        # Step 1: Within each origin group, apply 10% rule
+        # Keep largest + all legs >= 10% of largest (not just one)
+        # Active swing immunity: legs with active swings are never pruned
+        best_per_origin: Dict[Tuple[Decimal, int], Leg] = {}
+
         for origin_key, group in origin_groups.items():
+            # Find the largest in this origin group
+            largest = max(group, key=lambda l: l.range)
+            best_per_origin[origin_key] = largest
+
             if len(group) <= 1:
                 continue
 
-            # Find the leg with the largest range
-            longest = max(group, key=lambda l: l.range)
+            threshold = prune_threshold * largest.range
 
-            # Prune all others
+            # Prune legs < 10% of largest within same origin
             for leg in group:
-                if leg.leg_id != longest.leg_id:
+                if leg.leg_id == largest.leg_id:
+                    continue
+                # Active swing immunity: never prune legs with active swings
+                if leg.swing_id and leg.swing_id in active_swing_ids:
+                    continue
+                if leg.range < threshold:
                     leg.status = 'pruned'
                     pruned_leg_ids.add(leg.leg_id)
                     events.append(LegPrunedEvent(
@@ -1408,14 +1432,124 @@ class HierarchicalDetector:
                         timestamp=timestamp,
                         swing_id="",
                         leg_id=leg.leg_id,
-                        reason="turn_prune",
+                        reason="10pct_prune",
                     ))
+
+        # Step 2: Recursive 10% across origins (subtree pruning)
+        # Apply 10% rule to prune small origin groups whose best leg is
+        # contained within a larger origin's best leg range
+        events.extend(self._apply_recursive_subtree_prune(
+            direction, bar, timestamp, best_per_origin, pruned_leg_ids, active_swing_ids
+        ))
 
         # Remove pruned legs from active_legs
         self.state.active_legs = [
             leg for leg in self.state.active_legs
             if leg.leg_id not in pruned_leg_ids
         ]
+
+        return events
+
+    def _apply_recursive_subtree_prune(
+        self,
+        direction: str,
+        bar: Bar,
+        timestamp: datetime,
+        best_per_origin: Dict[Tuple[Decimal, int], "Leg"],
+        pruned_leg_ids: Set[str],
+        active_swing_ids: Set[str],
+    ) -> List[LegPrunedEvent]:
+        """
+        Apply recursive 10% rule across origin groups (#185).
+
+        For each origin's best leg, check if smaller origins are contained
+        within its range. If a contained origin's best leg is <10% of the
+        parent, prune all legs from that origin.
+
+        Active swing immunity: Legs with active swings are never pruned.
+        If an origin has any active swings, the entire origin is immune.
+
+        This creates fractal compression: detailed near active zone, sparse further back.
+
+        Args:
+            direction: 'bull' or 'bear'
+            bar: Current bar
+            timestamp: Timestamp for events
+            best_per_origin: Dict mapping origin -> best leg for that origin
+            pruned_leg_ids: Set to track pruned leg IDs (mutated)
+            active_swing_ids: Set of swing IDs that are currently active
+
+        Returns:
+            List of LegPrunedEvent for pruned legs with reason="subtree_prune"
+        """
+        events: List[LegPrunedEvent] = []
+        prune_threshold = Decimal("0.1")
+
+        # Sort origins by their best leg's range (descending)
+        sorted_origins = sorted(
+            best_per_origin.items(),
+            key=lambda x: x[1].range,
+            reverse=True
+        )
+
+        # Track surviving origins
+        pruned_origins: Set[Tuple[Decimal, int]] = set()
+
+        # Build map of origins with active swings (immune from subtree pruning)
+        immune_origins: Set[Tuple[Decimal, int]] = set()
+        for leg in self.state.active_legs:
+            if leg.direction == direction and leg.swing_id and leg.swing_id in active_swing_ids:
+                immune_origins.add((leg.origin_price, leg.origin_index))
+
+        for i, (parent_origin, parent_leg) in enumerate(sorted_origins):
+            if parent_origin in pruned_origins:
+                continue
+
+            parent_threshold = prune_threshold * parent_leg.range
+
+            # Check smaller origins for containment
+            for child_origin, child_leg in sorted_origins[i + 1:]:
+                if child_origin in pruned_origins:
+                    continue
+                if child_leg.leg_id in pruned_leg_ids:
+                    continue
+                # Active swing immunity: don't prune origins with active swings
+                if child_origin in immune_origins:
+                    continue
+
+                # Check if child is contained within parent's range
+                if direction == 'bull':
+                    # Bull: pivot is low, origin is high
+                    in_range = (parent_leg.pivot_price <= child_leg.pivot_price and
+                                child_leg.origin_price <= parent_leg.origin_price)
+                else:
+                    # Bear: pivot is high, origin is low
+                    in_range = (parent_leg.origin_price <= child_leg.origin_price and
+                                child_leg.pivot_price <= parent_leg.pivot_price)
+
+                # If contained and < 10% of parent, prune
+                if in_range and child_leg.range < parent_threshold:
+                    pruned_origins.add(child_origin)
+
+                    # Prune all legs from this origin (except those with active swings)
+                    for leg in self.state.active_legs:
+                        if leg.leg_id in pruned_leg_ids:
+                            continue
+                        if leg.direction != direction:
+                            continue
+                        if (leg.origin_price, leg.origin_index) == child_origin:
+                            # Active swing immunity check
+                            if leg.swing_id and leg.swing_id in active_swing_ids:
+                                continue
+                            leg.status = 'pruned'
+                            pruned_leg_ids.add(leg.leg_id)
+                            events.append(LegPrunedEvent(
+                                bar_index=bar.index,
+                                timestamp=timestamp,
+                                swing_id="",
+                                leg_id=leg.leg_id,
+                                reason="subtree_prune",
+                            ))
 
         return events
 

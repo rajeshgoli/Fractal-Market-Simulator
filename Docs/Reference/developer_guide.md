@@ -361,15 +361,28 @@ When a leg is invalidated, its origin is preserved as an "orphaned origin" for p
 
 Orphaned origins are pruned each bar using the 10% rule: if any two origins are within 10% of the larger range (measured from origin to current working pivot), the smaller is pruned. This keeps the list sparse while preserving structurally significant origins.
 
-**Turn pruning (#181):**
+**Recursive 10% pruning (#185):**
 
-During strong trends, the DAG creates many parallel legs with different pivots all converging to the same origin. For example, a 50-bar uptrend creates ~50 bull legs. When a directional turn is detected (Type 2-Bear bar for bull legs, Type 2-Bull bar for bear legs), we prune redundant legs:
+During strong trends, the DAG creates many parallel legs with different pivots all converging to the same origin. When a directional turn is detected (Type 2-Bear bar for bull legs, Type 2-Bull bar for bear legs), we apply the recursive 10% pruning rule:
 
+**Step 1: Within-origin pruning (10% rule)**
 1. Group active legs by direction that share the same origin (price and index)
-2. Keep only the leg with the largest range (lowest pivot for bull, highest pivot for bear)
-3. Emit `LegPrunedEvent` with `reason="turn_prune"` for discarded legs
+2. For each group: keep the largest leg + all legs >= 10% of the largest
+3. Emit `LegPrunedEvent` with `reason="10pct_prune"` for discarded legs
 
-This significantly reduces visual clutter during trends and is computationally more efficient.
+**Step 2: Cross-origin subtree pruning**
+1. Sort remaining origins by their best leg's range (descending)
+2. For each origin's best leg, check if smaller origins are "contained" within its range
+3. If a contained origin's best leg is < 10% of the parent, prune all legs from that origin
+4. Emit `LegPrunedEvent` with `reason="subtree_prune"` for discarded legs
+
+**Active swing immunity:**
+Legs that have formed into active swings are never pruned. If an origin has any active swings, the entire origin is immune from subtree pruning.
+
+**Benefits:**
+- Multi-origin preservation: Keeps legs from different structural levels
+- Fractal compression: Detailed near active zone, sparse further back
+- Self-regulating: Tree size stays bounded as older noise is pruned
 
 ---
 

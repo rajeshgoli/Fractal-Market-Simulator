@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-19
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#185** — Recursive 10% leg pruning with multi-origin preservation and active swing immunity
 - **#182** — Visualize orphaned origins on chart (markers for preserved pivots)
 - **#181** — Prune redundant legs on directional turn (turn_prune)
 - **#180** — Add diagnostic logging to forward playback hook to debug DAG playback freeze
