@@ -390,6 +390,17 @@ Each leg shows a single line connecting:
 - **Origin point**: The swing origin extremum (where the move started)
 - **Pivot point**: The defended pivot price (where the retracement reversed)
 
+### Orphaned Origin Markers
+
+Orphaned origins (preserved pivots from invalidated legs) are visualized as **circular markers** on both charts:
+
+| Direction | Appearance | Position |
+|-----------|------------|----------|
+| Bull origins | Faded blue circle (40% opacity) | Above bar at origin bar index |
+| Bear origins | Faded red circle (40% opacity) | Below bar at origin bar index |
+
+These markers help you see *where* preserved pivots are in relation to current price action. Orphaned origins can form sibling swings when price revisits the same defended pivot with a new origin point.
+
 ### DAG State Panel
 
 The DAG State Panel is always visible in this mode (no toggle needed). It shows:

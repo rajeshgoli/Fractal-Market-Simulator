@@ -5,6 +5,7 @@ import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { DAGStatePanel } from '../components/DAGStatePanel';
 import { LegOverlay } from '../components/LegOverlay';
+import { OrphanedOriginsOverlay } from '../components/OrphanedOriginsOverlay';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import {
   fetchBars,
@@ -497,6 +498,22 @@ export const DAGView: React.FC = () => {
             chart={chart2Ref.current}
             series={series2Ref.current}
             legs={activeLegs}
+            bars={chart2Bars}
+            currentPosition={currentPlaybackPosition}
+          />
+
+          {/* Orphaned Origins Overlays - render markers for preserved pivots (#182) */}
+          <OrphanedOriginsOverlay
+            markersPlugin={markers1Ref.current}
+            bullOrigins={dagState?.orphaned_origins.bull ?? []}
+            bearOrigins={dagState?.orphaned_origins.bear ?? []}
+            bars={chart1Bars}
+            currentPosition={currentPlaybackPosition}
+          />
+          <OrphanedOriginsOverlay
+            markersPlugin={markers2Ref.current}
+            bullOrigins={dagState?.orphaned_origins.bull ?? []}
+            bearOrigins={dagState?.orphaned_origins.bear ?? []}
             bars={chart2Bars}
             currentPosition={currentPlaybackPosition}
           />
