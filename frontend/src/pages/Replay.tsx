@@ -1210,6 +1210,7 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
             onFeedbackBlur={forwardPlayback.resumeLingerTimer}
             onPausePlayback={forwardPlayback.pause}
             screenshotTargetRef={mainContentRef}
+            lingerEnabled={lingerEnabled}
           />
         </div>
 

@@ -104,6 +104,9 @@ interface SidebarProps {
 
   // Screenshot capture target (main content area)
   screenshotTargetRef?: RefObject<HTMLElement | null>;
+
+  // Linger enabled state - controls visibility of event filters
+  lingerEnabled?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -129,6 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   replayContext,
   dagContext,
   screenshotTargetRef,
+  lingerEnabled = true,
 }) => {
   const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
   const [feedbackText, setFeedbackText] = useState('');
@@ -282,49 +286,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className={`flex flex-col bg-app-secondary border-r border-app-border h-full ${className}`}>
-      {/* Sidebar Header */}
-      <div className="p-4 border-b border-app-border">
-        <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
-          <Filter size={14} />
-          {mode === 'dag' ? 'DAG Events' : 'Linger Events'}
-        </h2>
-      </div>
+      {/* Linger Event Toggles - only shown when linger is enabled */}
+      {lingerEnabled && (
+        <>
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-app-border">
+          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
+            <Filter size={14} />
+            {mode === 'dag' ? 'DAG Events' : 'Linger Events'}
+          </h2>
+        </div>
 
-      {/* Linger Event Toggles - mode-specific, same design for both modes */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-1">
-        {lingerEvents.map((event) => (
-          <div
-            key={event.id}
-            className={`
-              group flex items-start gap-3 p-3 rounded-lg transition-all duration-200
-              ${event.isEnabled
-                ? 'bg-app-card border border-app-border'
-                : 'hover:bg-app-card/50 border border-transparent opacity-70'
-              }
-            `}
-          >
-            <div className="pt-1">
-              {getIconForType(event.id)}
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className={`text-sm font-medium ${event.isEnabled ? 'text-app-text' : 'text-app-muted'}`}>
-                  {event.label}
-                </span>
-                <Toggle
-                  checked={event.isEnabled}
-                  onChange={() => onToggleLingerEvent(event.id)}
-                  id={`toggle-${event.id}`}
-                />
+        {/* Event toggles */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-1">
+          {lingerEvents.map((event) => (
+            <div
+              key={event.id}
+              className={`
+                group flex items-start gap-3 p-3 rounded-lg transition-all duration-200
+                ${event.isEnabled
+                  ? 'bg-app-card border border-app-border'
+                  : 'hover:bg-app-card/50 border border-transparent opacity-70'
+                }
+              `}
+            >
+              <div className="pt-1">
+                {getIconForType(event.id)}
               </div>
-              <p className="text-xs text-app-muted truncate group-hover:whitespace-normal group-hover:overflow-visible">
-                {event.description}
-              </p>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`text-sm font-medium ${event.isEnabled ? 'text-app-text' : 'text-app-muted'}`}>
+                    {event.label}
+                  </span>
+                  <Toggle
+                    checked={event.isEnabled}
+                    onChange={() => onToggleLingerEvent(event.id)}
+                    id={`toggle-${event.id}`}
+                  />
+                </div>
+                <p className="text-xs text-app-muted truncate group-hover:whitespace-normal group-hover:overflow-visible">
+                  {event.description}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+        </>
+      )}
 
       {/* Scale Filters Section (shown during playback, replay mode only) */}
       {showScaleFilters && displayConfig && onToggleScale && (

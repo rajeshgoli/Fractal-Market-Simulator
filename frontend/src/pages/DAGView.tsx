@@ -657,6 +657,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             onPausePlayback={forwardPlayback.pause}
             dagContext={dagContext}
             screenshotTargetRef={mainContentRef}
+            lingerEnabled={lingerEnabled}
           />
         </div>
 
