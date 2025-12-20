@@ -1999,7 +1999,7 @@ class TestLegCreationCleansUpState:
         bars = [
             make_bar(0, 100.0, 105.0, 95.0, 102.0),  # Initial
             make_bar(1, 102.0, 110.0, 100.0, 108.0),  # TYPE_2_BULL - creates pending bear pivot at 110
-            make_bar(2, 108.0, 108.5, 105.0, 106.0),  # TYPE_2_BEAR - creates bear leg from pending pivot
+            make_bar(2, 108.0, 108.5, 98.0, 100.0),  # TYPE_2_BEAR (LH, LL) - creates bear leg from pending pivot
         ]
 
         for bar in bars:

@@ -213,3 +213,90 @@ class TestType2BearBullLegRemoval:
                 f"Found bull leg with inverted temporal order during downtrend: "
                 f"origin_index={leg.origin_index}, pivot_index={leg.pivot_index}"
             )
+
+
+class TestType1DirectionInversion:
+    """
+    Test that TYPE_1 (inside bar) creates legs with correct direction.
+
+    TYPE_1 was creating "bull" legs for HIGH→LOW structures and "bear" legs
+    for LOW→HIGH structures, which is semantically inverted.
+
+    The fix ensures:
+    - HIGH before LOW → BEAR leg (price moved down)
+    - LOW before HIGH → BULL leg (price moved up)
+    """
+
+    def test_type1_high_before_low_creates_bear_leg(self):
+        """
+        When HIGH appears before LOW temporally, TYPE_1 should create BEAR leg.
+
+        This is the same bug as #195 but manifesting in TYPE_1 code path.
+        """
+        detector = HierarchicalDetector()
+
+        # Setup: establish HIGH at bar 6, LOW at bar 7
+        bars = [
+            make_bar(0, 4416.0, 4417.25, 4414.75, 4415.75),
+            make_bar(1, 4415.75, 4416.25, 4414.25, 4415.25),
+            make_bar(2, 4415.25, 4416.00, 4414.25, 4415.25),
+            make_bar(3, 4415.25, 4415.75, 4414.25, 4414.75),
+            make_bar(4, 4414.50, 4415.25, 4413.75, 4415.00),
+            make_bar(5, 4415.00, 4416.00, 4414.25, 4415.50),
+            make_bar(6, 4415.50, 4419.25, 4411.25, 4411.25),  # Outside bar: new HIGH
+            make_bar(7, 4411.00, 4412.25, 4409.00, 4410.25),  # TYPE_2_BEAR: new LOW
+            make_bar(8, 4410.00, 4412.00, 4409.00, 4409.25),  # TYPE_1: triggers leg creation
+        ]
+
+        for bar in bars:
+            detector.process_bar(bar)
+
+        # All legs should have correct temporal order
+        for leg in detector.state.active_legs:
+            if leg.status == 'active':
+                assert leg.pivot_index < leg.origin_index, (
+                    f"{leg.direction.upper()} leg has inverted temporal order: "
+                    f"pivot_index={leg.pivot_index}, origin_index={leg.origin_index}"
+                )
+
+        # Verify no "bull" leg exists with HIGH origin and LOW pivot
+        # (that would be a bear structure mislabeled as bull)
+        for leg in detector.state.active_legs:
+            if leg.direction == 'bull' and leg.status == 'active':
+                assert leg.pivot_price < leg.origin_price, (
+                    f"Bull leg has inverted prices: pivot={leg.pivot_price} should be LOW, "
+                    f"origin={leg.origin_price} should be HIGH"
+                )
+
+    def test_type1_low_before_high_creates_bull_leg(self):
+        """
+        When LOW appears before HIGH temporally, TYPE_1 should create BULL leg.
+        """
+        detector = HierarchicalDetector()
+
+        # Create uptrend: LOW at earlier bar, HIGH at later bar
+        bars = [
+            make_bar(0, 100.0, 102.0, 98.0, 101.0),   # Initial
+            make_bar(1, 101.0, 103.0, 100.0, 102.0),  # TYPE_2_BULL
+            make_bar(2, 102.0, 105.0, 101.0, 104.0),  # TYPE_2_BULL
+            make_bar(3, 104.0, 104.5, 103.0, 103.5),  # TYPE_1: LH, HL
+        ]
+
+        for bar in bars:
+            detector.process_bar(bar)
+
+        # Check bull legs have LOW pivot and HIGH origin
+        bull_legs = [
+            leg for leg in detector.state.active_legs
+            if leg.direction == 'bull' and leg.status == 'active'
+        ]
+
+        for leg in bull_legs:
+            assert leg.pivot_price < leg.origin_price, (
+                f"Bull leg should have LOW pivot and HIGH origin: "
+                f"pivot={leg.pivot_price}, origin={leg.origin_price}"
+            )
+            assert leg.pivot_index < leg.origin_index, (
+                f"Bull leg should have pivot before origin: "
+                f"pivot_index={leg.pivot_index}, origin_index={leg.origin_index}"
+            )

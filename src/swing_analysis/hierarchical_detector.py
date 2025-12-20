@@ -860,53 +860,20 @@ class HierarchicalDetector:
             pending_bear = self.state.pending_pivots.get('bear')  # High pivot
             pending_bull = self.state.pending_pivots.get('bull')  # Low pivot
 
-            # Create bull leg if we have both high origin and low pivot
-            # Bull swing: origin=HIGH, pivot=LOW (defended)
+            # Create bear leg if HIGH came before LOW (price moved down)
+            # Bear swing: pivot=HIGH (defended), origin=LOW
+            # Temporal order: pivot_index < origin_index (#195)
             if pending_bear and pending_bull:
-                # We have pending high (origin) and pending low (pivot)
-                # Check if origin came before pivot temporally
-                # Use strict inequality to prevent same-bar legs (temporal causality)
+                # pending_bear = HIGH, pending_bull = LOW
+                # If HIGH came before LOW, this is a BEAR structure
                 # Skip if dominated by existing leg with better pivot (#194)
                 if (pending_bear.bar_index < pending_bull.bar_index
-                    and not self._would_leg_be_dominated('bull', pending_bull.price)):
-                    new_bull_leg = Leg(
-                        direction='bull',
-                        pivot_price=pending_bull.price,  # low as defended pivot
-                        pivot_index=pending_bull.bar_index,
-                        origin_price=pending_bear.price,  # high as origin
-                        origin_index=pending_bear.bar_index,
-                        price_at_creation=bar_close,
-                        last_modified_bar=bar.index,
-                    )
-                    self.state.active_legs.append(new_bull_leg)
-                    # Clean up orphaned origins (#196)
-                    self._clean_up_after_leg_creation(new_bull_leg)
-                    # Emit LegCreatedEvent (#168)
-                    events.append(LegCreatedEvent(
-                        bar_index=bar.index,
-                        timestamp=timestamp,
-                        swing_id="",
-                        leg_id=new_bull_leg.leg_id,
-                        direction=new_bull_leg.direction,
-                        pivot_price=new_bull_leg.pivot_price,
-                        pivot_index=new_bull_leg.pivot_index,
-                        origin_price=new_bull_leg.origin_price,
-                        origin_index=new_bull_leg.origin_index,
-                    ))
-
-            # Create bear leg if we have both low origin and high pivot
-            # Bear swing: origin=LOW, pivot=HIGH (defended)
-            if pending_bear and pending_bull:
-                # We have pending low (origin) and pending high (pivot)
-                # Use strict inequality to prevent same-bar legs (temporal causality)
-                # Skip if dominated by existing leg with better pivot (#194)
-                if (pending_bull.bar_index < pending_bear.bar_index
                     and not self._would_leg_be_dominated('bear', pending_bear.price)):
                     new_bear_leg = Leg(
                         direction='bear',
-                        pivot_price=pending_bear.price,  # high as defended pivot
+                        pivot_price=pending_bear.price,  # HIGH as defended pivot
                         pivot_index=pending_bear.bar_index,
-                        origin_price=pending_bull.price,  # low as origin
+                        origin_price=pending_bull.price,  # LOW as origin
                         origin_index=pending_bull.bar_index,
                         price_at_creation=bar_close,
                         last_modified_bar=bar.index,
@@ -925,6 +892,40 @@ class HierarchicalDetector:
                         pivot_index=new_bear_leg.pivot_index,
                         origin_price=new_bear_leg.origin_price,
                         origin_index=new_bear_leg.origin_index,
+                    ))
+
+            # Create bull leg if LOW came before HIGH (price moved up)
+            # Bull swing: pivot=LOW (defended), origin=HIGH
+            # Temporal order: pivot_index < origin_index (#195)
+            if pending_bear and pending_bull:
+                # pending_bull = LOW, pending_bear = HIGH
+                # If LOW came before HIGH, this is a BULL structure
+                # Skip if dominated by existing leg with better pivot (#194)
+                if (pending_bull.bar_index < pending_bear.bar_index
+                    and not self._would_leg_be_dominated('bull', pending_bull.price)):
+                    new_bull_leg = Leg(
+                        direction='bull',
+                        pivot_price=pending_bull.price,  # LOW as defended pivot
+                        pivot_index=pending_bull.bar_index,
+                        origin_price=pending_bear.price,  # HIGH as origin
+                        origin_index=pending_bear.bar_index,
+                        price_at_creation=bar_close,
+                        last_modified_bar=bar.index,
+                    )
+                    self.state.active_legs.append(new_bull_leg)
+                    # Clean up orphaned origins (#196)
+                    self._clean_up_after_leg_creation(new_bull_leg)
+                    # Emit LegCreatedEvent (#168)
+                    events.append(LegCreatedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id="",
+                        leg_id=new_bull_leg.leg_id,
+                        direction=new_bull_leg.direction,
+                        pivot_price=new_bull_leg.pivot_price,
+                        pivot_index=new_bull_leg.pivot_index,
+                        origin_price=new_bull_leg.origin_price,
+                        origin_index=new_bull_leg.origin_index,
                     ))
 
             # Update pending pivots only if more extreme
