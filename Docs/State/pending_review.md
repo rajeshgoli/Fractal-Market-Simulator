@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-19
 
@@ -8,12 +8,7 @@
 
 ## Pending Changes
 
-- **#186** — Fix per-chart timeframe aggregation (charts now use actual timeframes: 5m, 15m, 1H, 4H)
-- **#125** — Preserve zoom level on chart updates (frontend fix)
-- **#185** — Recursive 10% leg pruning with multi-origin preservation and active swing immunity
-- **#182** — Visualize orphaned origins on chart (markers for preserved pivots)
-- **#181** — Prune redundant legs on directional turn (turn_prune)
-- **#180** — Add diagnostic logging to forward playback hook to debug DAG playback freeze
+- #183 — Sidebar Shared Infrastructure + DAG Integration
 
 ---
 
@@ -21,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 19 | #125, #180-#182, #185, #186 — DAG refinements + UX fixes (6 issues) | All Accepted |
 | Dec 19 | #168-#172, #179 — DAG Visualization Mode (6 issues) | All Accepted |
 | Dec 19 | #158-#175 — DAG algorithm rewrite + Reference layer (9 issues) | All Accepted |
 | Dec 19 | #152, #153, #155, #157 — Performance optimization + cleanup (4 issues) | All Accepted |
