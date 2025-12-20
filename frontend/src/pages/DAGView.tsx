@@ -108,6 +108,9 @@ export const DAGView: React.FC = () => {
   const markers1Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markers2Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
+  // Main content ref for screenshot capture
+  const mainContentRef = useRef<HTMLElement | null>(null);
+
   // Sync ref
   const syncChartsToPositionRef = useRef<(sourceIndex: number) => void>(() => {});
 
@@ -436,7 +439,7 @@ export const DAGView: React.FC = () => {
     }
   }, [calibrationPhase, calibrationData]);
 
-  // Fetch DAG state during playback
+  // Fetch DAG state when position changes (handles both play and step forward)
   useEffect(() => {
     if (calibrationPhase !== CalibrationPhase.PLAYING) {
       return;
@@ -454,18 +457,9 @@ export const DAGView: React.FC = () => {
       }
     };
 
-    // Fetch initially
+    // Fetch whenever position changes (covers both play and manual step)
     fetchState();
-
-    // Refetch periodically during playback
-    const positionInterval = setInterval(() => {
-      if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
-        fetchState();
-      }
-    }, 500);
-
-    return () => clearInterval(positionInterval);
-  }, [calibrationPhase, forwardPlayback.playbackState]);
+  }, [calibrationPhase, currentPlaybackPosition]);
 
   // Collect leg events from forward playback
   useEffect(() => {
@@ -654,10 +648,11 @@ export const DAGView: React.FC = () => {
             onFeedbackBlur={forwardPlayback.resumeLingerTimer}
             onPausePlayback={forwardPlayback.pause}
             dagContext={dagContext}
+            screenshotTargetRef={mainContentRef}
           />
         </div>
 
-        <main className="flex-1 flex flex-col min-w-0">
+        <main ref={mainContentRef} className="flex-1 flex flex-col min-w-0">
           {/* Charts Area */}
           <ChartArea
             chart1Data={chart1Bars}

@@ -280,6 +280,7 @@ class PlaybackFeedbackRequest(BaseModel):
     text: str
     playback_bar: int
     snapshot: PlaybackFeedbackSnapshot
+    screenshot_data: Optional[str] = None  # Base64 encoded PNG
 
 
 class PlaybackFeedbackResponse(BaseModel):

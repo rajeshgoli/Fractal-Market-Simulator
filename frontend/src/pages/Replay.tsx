@@ -244,6 +244,9 @@ export const Replay: React.FC = () => {
   const series1Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const series2Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
+  // Main content ref for screenshot capture
+  const mainContentRef = useRef<HTMLElement | null>(null);
+
   // Marker plugin refs (single plugin per chart for all markers)
   const markers1Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const markers2Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
@@ -1198,11 +1201,12 @@ export const Replay: React.FC = () => {
             onFeedbackFocus={forwardPlayback.pauseLingerTimer}
             onFeedbackBlur={forwardPlayback.resumeLingerTimer}
             onPausePlayback={forwardPlayback.pause}
+            screenshotTargetRef={mainContentRef}
           />
         </div>
 
         {/* Center Content */}
-        <main className="flex-1 flex flex-col min-w-0">
+        <main ref={mainContentRef} className="flex-1 flex flex-col min-w-0">
           {/* Charts Area */}
           <ChartArea
             chart1Data={chart1Bars}

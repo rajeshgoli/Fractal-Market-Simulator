@@ -214,7 +214,8 @@ export interface PlaybackFeedbackResponse {
 export async function submitPlaybackFeedback(
   text: string,
   playbackBar: number,
-  snapshot: PlaybackFeedbackSnapshot
+  snapshot: PlaybackFeedbackSnapshot,
+  screenshotData?: string  // Base64 encoded PNG
 ): Promise<PlaybackFeedbackResponse> {
   const response = await fetch(`${API_BASE}/playback/feedback`, {
     method: 'POST',
@@ -225,6 +226,7 @@ export async function submitPlaybackFeedback(
       text,
       playback_bar: playbackBar,
       snapshot,
+      screenshot_data: screenshotData,
     }),
   });
   if (!response.ok) {

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, RefObject } from 'react';
+import html2canvas from 'html2canvas';
 import { EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
 import { Toggle } from './ui/Toggle';
 import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban } from 'lucide-react';
@@ -221,7 +222,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext]);
+  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext, screenshotTargetRef]);
 
   const handleInputFocus = useCallback(() => {
     // Pause linger timer if lingering
