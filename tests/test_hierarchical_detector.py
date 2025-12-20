@@ -1502,6 +1502,67 @@ class TestTurnPruning:
         remaining = [leg for leg in detector.state.active_legs if leg.status == 'active']
         assert len(remaining) == 2
 
+    def test_turn_prune_tie_keeps_earliest_pivot(self):
+        """
+        When legs have identical range, keep the earliest pivot bar (#190).
+
+        Example: Two bear legs with same origin (4422.25, bar 53) and same range (11.25):
+        - leg1: pivot at bar 39 (pivot=4433.50)
+        - leg2: pivot at bar 40 (pivot=4433.50)
+
+        Both have identical range so there's a tie. Should keep leg1 (bar 39).
+        """
+        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.events import LegPrunedEvent
+        from decimal import Decimal
+        from datetime import datetime
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Same origin for both legs
+        shared_origin_price = Decimal("4422.25")
+        shared_origin_index = 53
+
+        # Both legs hit the same high price, creating identical ranges
+        # leg1: earlier pivot (bar 39) - should be KEPT
+        leg1 = Leg(
+            direction='bear',
+            pivot_price=Decimal("4433.50"),  # Range: 11.25
+            pivot_index=39,  # Earlier pivot
+            origin_price=shared_origin_price,
+            origin_index=shared_origin_index,
+            status='active',
+        )
+        # leg2: later pivot (bar 40) - should be PRUNED
+        leg2 = Leg(
+            direction='bear',
+            pivot_price=Decimal("4433.50"),  # Range: 11.25 (same as leg1)
+            pivot_index=40,  # Later pivot
+            origin_price=shared_origin_price,
+            origin_index=shared_origin_index,
+            status='active',
+        )
+
+        # Intentionally add them in reverse order to test tie-breaking is not order-dependent
+        detector.state.active_legs = [leg2, leg1]
+
+        bar = make_bar(62, 4425.0, 4430.0, 4420.0, 4425.0)
+        timestamp = datetime.fromtimestamp(bar.timestamp)
+
+        events = detector._prune_legs_on_turn('bear', bar, timestamp)
+
+        # leg2 should be pruned (later pivot), leg1 kept (earlier pivot)
+        assert len(events) == 1
+        assert isinstance(events[0], LegPrunedEvent)
+        assert events[0].reason == "turn_prune"
+        assert events[0].leg_id == leg2.leg_id
+
+        remaining = [leg for leg in detector.state.active_legs if leg.status == 'active']
+        assert len(remaining) == 1
+        assert remaining[0].pivot_index == 39, "Should keep earliest pivot"
+        assert remaining[0].leg_id == leg1.leg_id
+
 
 class TestLegOriginExtension:
     """

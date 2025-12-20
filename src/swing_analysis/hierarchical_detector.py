@@ -1358,6 +1358,7 @@ class HierarchicalDetector:
 
         1. Group legs by origin
         2. For each origin group: keep ONLY the largest (prune others)
+           - On tie, keep earliest pivot bar (#190)
         3. Multi-origin preservation: always keep one leg per origin
         4. Recursive 10% across origins: prune small contained origins
         5. Active swing immunity: legs with active swings are never pruned
@@ -1404,8 +1405,8 @@ class HierarchicalDetector:
         best_per_origin: Dict[Tuple[Decimal, int], Leg] = {}
 
         for origin_key, group in origin_groups.items():
-            # Find the largest in this origin group
-            largest = max(group, key=lambda l: l.range)
+            # Find the largest in this origin group; on tie, keep earliest pivot (fixes #190)
+            largest = max(group, key=lambda l: (l.range, -l.pivot_index))
             best_per_origin[origin_key] = largest
 
             if len(group) <= 1:

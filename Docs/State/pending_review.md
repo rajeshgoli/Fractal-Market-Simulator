@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 10
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-19
 
@@ -8,15 +8,7 @@
 
 ## Pending Changes
 
-- #189 — Fix same-bar legs violating temporal causality (strict inequality in _process_type1)
-- #188 — Fix leg origins not updating when price extends to new extreme
-- #187 — Feedback snapshot captures full leg/origin/pivot data (not just counts)
-- #183 — Sidebar Shared Infrastructure + DAG Integration
-- (cleanup) — Replaced Discretizer/Annotator nav with Replay/DAG view switching in Header
-- (enhancement) — Added keyboard shortcuts to DAG Build Mode (Escape, Space, arrows, brackets)
-- (UX) — Hide event filter toggles when linger is disabled
-- (UX) — Added hover highlighting for DAG state panel items (legs/origins/pivots highlight on charts)
-- (UX) — Event navigation (>>/<<) no longer auto-starts playback when paused
+- **#190** — Turn prune tie-breaking: keep earliest pivot bar when ranges are equal
 
 ---
 
@@ -24,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 19 | #187-#189, #183, UX fixes (10 changes) — Temporal causality, sidebar unification, feedback snapshots | All Accepted |
 | Dec 19 | #125, #180-#182, #185, #186 — DAG refinements + UX fixes (6 issues) | All Accepted |
 | Dec 19 | #168-#172, #179 — DAG Visualization Mode (6 issues) | All Accepted |
 | Dec 19 | #158-#175 — DAG algorithm rewrite + Reference layer (9 issues) | All Accepted |
