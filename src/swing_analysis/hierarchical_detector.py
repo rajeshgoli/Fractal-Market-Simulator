@@ -699,15 +699,19 @@ class HierarchicalDetector:
                     origin_index=new_leg.origin_index,
                 ))
 
-        # Update pending pivots
-        # New high could be a defended pivot for future bear swings
-        self.state.pending_pivots['bear'] = PendingPivot(
-            price=bar_high, bar_index=bar.index, direction='bear', source='high'
-        )
-        # New higher low could be a defended pivot for future bull swings
-        self.state.pending_pivots['bull'] = PendingPivot(
-            price=bar_low, bar_index=bar.index, direction='bull', source='low'
-        )
+        # Update pending pivots only if more extreme
+        # Bear pivot: only update if this high is higher (tracking swing highs)
+        existing_bear = self.state.pending_pivots.get('bear')
+        if existing_bear is None or bar_high > existing_bear.price:
+            self.state.pending_pivots['bear'] = PendingPivot(
+                price=bar_high, bar_index=bar.index, direction='bear', source='high'
+            )
+        # Bull pivot: only update if this low is lower (tracking swing lows)
+        existing_bull = self.state.pending_pivots.get('bull')
+        if existing_bull is None or bar_low < existing_bull.price:
+            self.state.pending_pivots['bull'] = PendingPivot(
+                price=bar_low, bar_index=bar.index, direction='bull', source='low'
+            )
 
         # Check for formations using close price (don't know H/L order within bar)
         events.extend(self._check_leg_formations(bar, timestamp, bar_close))
@@ -818,15 +822,19 @@ class HierarchicalDetector:
                     origin_index=new_bear_leg.origin_index,
                 ))
 
-        # Update pending pivots
-        # New low could be a defended pivot for future bull swings
-        self.state.pending_pivots['bull'] = PendingPivot(
-            price=bar_low, bar_index=bar.index, direction='bull', source='low'
-        )
-        # New lower high could be a defended pivot for future bear swings
-        self.state.pending_pivots['bear'] = PendingPivot(
-            price=bar_high, bar_index=bar.index, direction='bear', source='high'
-        )
+        # Update pending pivots only if more extreme
+        # Bull pivot: only update if this low is lower (tracking swing lows)
+        existing_bull = self.state.pending_pivots.get('bull')
+        if existing_bull is None or bar_low < existing_bull.price:
+            self.state.pending_pivots['bull'] = PendingPivot(
+                price=bar_low, bar_index=bar.index, direction='bull', source='low'
+            )
+        # Bear pivot: only update if this high is higher (tracking swing highs)
+        existing_bear = self.state.pending_pivots.get('bear')
+        if existing_bear is None or bar_high > existing_bear.price:
+            self.state.pending_pivots['bear'] = PendingPivot(
+                price=bar_high, bar_index=bar.index, direction='bear', source='high'
+            )
 
         # Check for formations using close price
         events.extend(self._check_leg_formations(bar, timestamp, bar_close))
@@ -914,13 +922,19 @@ class HierarchicalDetector:
                         origin_index=new_bear_leg.origin_index,
                     ))
 
-            # Update pending pivots to current bar's extremes (for next iteration)
-            self.state.pending_pivots['bear'] = PendingPivot(
-                price=bar_high, bar_index=bar.index, direction='bear', source='high'
-            )
-            self.state.pending_pivots['bull'] = PendingPivot(
-                price=bar_low, bar_index=bar.index, direction='bull', source='low'
-            )
+            # Update pending pivots only if more extreme
+            # Bear pivot: only update if this high is higher (tracking swing highs)
+            existing_bear = self.state.pending_pivots.get('bear')
+            if existing_bear is None or bar_high > existing_bear.price:
+                self.state.pending_pivots['bear'] = PendingPivot(
+                    price=bar_high, bar_index=bar.index, direction='bear', source='high'
+                )
+            # Bull pivot: only update if this low is lower (tracking swing lows)
+            existing_bull = self.state.pending_pivots.get('bull')
+            if existing_bull is None or bar_low < existing_bull.price:
+                self.state.pending_pivots['bull'] = PendingPivot(
+                    price=bar_low, bar_index=bar.index, direction='bull', source='low'
+                )
 
         # Update retracement for bull legs using bar.high (prev.L was before bar.H)
         for leg in self.state.active_legs:
@@ -959,13 +973,19 @@ class HierarchicalDetector:
 
         # Note: Leg origin extension now handled by _extend_leg_origins (#188)
 
-        # Update pending pivots to new extremes
-        self.state.pending_pivots['bull'] = PendingPivot(
-            price=bar_low, bar_index=bar.index, direction='bull', source='low'
-        )
-        self.state.pending_pivots['bear'] = PendingPivot(
-            price=bar_high, bar_index=bar.index, direction='bear', source='high'
-        )
+        # Update pending pivots only if more extreme
+        # Bull pivot: only update if this low is lower (tracking swing lows)
+        existing_bull = self.state.pending_pivots.get('bull')
+        if existing_bull is None or bar_low < existing_bull.price:
+            self.state.pending_pivots['bull'] = PendingPivot(
+                price=bar_low, bar_index=bar.index, direction='bull', source='low'
+            )
+        # Bear pivot: only update if this high is higher (tracking swing highs)
+        existing_bear = self.state.pending_pivots.get('bear')
+        if existing_bear is None or bar_high > existing_bear.price:
+            self.state.pending_pivots['bear'] = PendingPivot(
+                price=bar_high, bar_index=bar.index, direction='bear', source='high'
+            )
 
         # Check for formations using close (conservative - don't know H/L order)
         events.extend(self._check_leg_formations(bar, timestamp, bar_close))

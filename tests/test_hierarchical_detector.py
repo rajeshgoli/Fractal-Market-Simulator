@@ -990,10 +990,12 @@ class TestSwingInvalidationPropagation:
         detector = HierarchicalDetector(config)
 
         # Create bars that form a bull swing
+        # Need a sequence where the swing forms, then is invalidated by a bar that
+        # doesn't extend the leg (Type 3 outside bar works - HH AND LL)
         bars = [
             make_bar(0, 5050.0, 5100.0, 5050.0, 5080.0),  # High at 5100
-            make_bar(1, 5020.0, 5030.0, 5000.0, 5010.0),  # Low at 5000 (pivot)
-            make_bar(2, 5020.0, 5040.0, 5015.0, 5035.0),  # Close above formation
+            make_bar(1, 5020.0, 5030.0, 5000.0, 5010.0),  # Low at 5000 (pivot) - Type 2-Bear
+            make_bar(2, 5020.0, 5040.0, 5015.0, 5035.0),  # Type 2-Bull - swing forms
         ]
 
         for bar in bars:
@@ -1003,10 +1005,12 @@ class TestSwingInvalidationPropagation:
         bull_swings_before = [s for s in detector.get_active_swings() if s.direction == "bull"]
         initial_bull_count = len(bull_swings_before)
 
-        # Now add a bar that invalidates the swing by going 38.2% below the pivot
+        # Now add a Type 3 (outside) bar that invalidates the swing
+        # Type 3 = HH AND LL, and doesn't extend bull leg pivots
         # Swing range = 5100 - 5000 = 100
         # Invalidation at 5000 - 0.382 * 100 = 4961.8
-        bar3 = make_bar(3, 5000.0, 5005.0, 4950.0, 4960.0)  # Low at 4950 < 4961.8
+        # Use Type 3: H=5110 (HH > 5040), L=4950 (LL < 5015)
+        bar3 = make_bar(3, 5030.0, 5110.0, 4950.0, 4980.0)  # Type 3, Low at 4950 < 4961.8
         events = detector.process_bar(bar3)
 
         # Check that SwingInvalidatedEvent was emitted
