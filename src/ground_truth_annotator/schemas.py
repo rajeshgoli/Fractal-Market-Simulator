@@ -244,6 +244,19 @@ class SwingCountsByScale(BaseModel):
     S: int = 0
 
 
+class ReplayContext(BaseModel):
+    """Replay mode-specific context."""
+    selected_swing: Optional[Dict] = None
+    calibration_state: Optional[str] = None
+
+
+class DagContext(BaseModel):
+    """DAG mode-specific context."""
+    active_legs_count: int = 0
+    orphaned_origins_count: Optional[Dict] = None
+    pending_pivots_count: int = 0
+
+
 class PlaybackFeedbackSnapshot(BaseModel):
     """Rich context snapshot for feedback capture."""
     state: str  # calibrating, calibration_complete, playing, paused
@@ -255,6 +268,11 @@ class PlaybackFeedbackSnapshot(BaseModel):
     swings_invalidated: int
     swings_completed: int
     event_context: Optional[PlaybackFeedbackEventContext] = None
+    # Mode (replay or dag)
+    mode: Optional[str] = None
+    # Mode-specific context
+    replay_context: Optional[ReplayContext] = None
+    dag_context: Optional[DagContext] = None
 
 
 class PlaybackFeedbackRequest(BaseModel):

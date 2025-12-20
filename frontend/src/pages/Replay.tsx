@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { IChartApi, ISeriesApi, createSeriesMarkers, SeriesMarker, Time, ISeriesMarkersPluginApi } from 'lightweight-charts';
 import { Header } from '../components/Header';
-import { Sidebar } from '../components/Sidebar';
+import { Sidebar, REPLAY_LINGER_EVENTS, LingerEventConfig } from '../components/Sidebar';
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { ExplanationPanel } from '../components/ExplanationPanel';
@@ -213,6 +213,9 @@ export const Replay: React.FC = () => {
 
   // Linger toggle (pause on events)
   const [lingerEnabled, setLingerEnabled] = useState(true);
+
+  // Linger event toggles (Replay-specific events)
+  const [lingerEvents, setLingerEvents] = useState<LingerEventConfig[]>(REPLAY_LINGER_EVENTS);
 
   // DAG visualization mode state (Issue #171)
   const [dagVisualizationMode, setDagVisualizationMode] = useState(false);
@@ -513,6 +516,13 @@ export const Replay: React.FC = () => {
     });
     // Reset index when filter changes
     setCurrentActiveSwingIndex(0);
+  }, []);
+
+  // Handler for toggling linger event types
+  const handleToggleLingerEvent = useCallback((eventId: string) => {
+    setLingerEvents(prev =>
+      prev.map(e => e.id === eventId ? { ...e, isEnabled: !e.isEnabled } : e)
+    );
   }, []);
 
   // Handler for setting active swing count
@@ -1189,6 +1199,9 @@ export const Replay: React.FC = () => {
             showScaleFilters={calibrationPhase === CalibrationPhase.PLAYING}
             displayConfig={displayConfig}
             onToggleScale={handleToggleScale}
+            // Linger event toggles
+            lingerEvents={lingerEvents}
+            onToggleLingerEvent={handleToggleLingerEvent}
             // Stats toggle (shown during playback)
             showStatsToggle={calibrationPhase === CalibrationPhase.PLAYING}
             showStats={showStats}

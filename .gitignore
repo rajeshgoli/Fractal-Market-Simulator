@@ -88,5 +88,8 @@ validation_results/
 # Ground truth annotator - in-progress sessions (ephemeral)
 ground_truth/sessions/
 
+# Screenshots captured during feedback (binary bloat)
+ground_truth/screenshots/
+
 # Frontend build output (can be rebuilt with npm run build)
 frontend/dist/

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { IChartApi, ISeriesApi, createSeriesMarkers, Time, ISeriesMarkersPluginApi } from 'lightweight-charts';
 import { Header } from '../components/Header';
+import { Sidebar, DAG_LINGER_EVENTS, LingerEventConfig, DagContext } from '../components/Sidebar';
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { DAGStatePanel } from '../components/DAGStatePanel';
@@ -94,6 +95,12 @@ export const DAGView: React.FC = () => {
 
   // Linger toggle state (for DAG mode, default OFF for continuous observation)
   const [lingerEnabled, setLingerEnabled] = useState(false);
+
+  // Sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Linger event toggles (DAG-specific events)
+  const [lingerEvents, setLingerEvents] = useState<LingerEventConfig[]>(DAG_LINGER_EVENTS);
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -192,6 +199,82 @@ export const DAGView: React.FC = () => {
       forwardPlayback.play();
     }
   }, [calibrationPhase, forwardPlayback]);
+
+  // Handler for toggling linger event types
+  const handleToggleLingerEvent = useCallback((eventId: string) => {
+    setLingerEvents(prev =>
+      prev.map(e => e.id === eventId ? { ...e, isEnabled: !e.isEnabled } : e)
+    );
+  }, []);
+
+  // Handler for toggling filters
+  const handleToggleFilter = useCallback((_id: string) => {
+    // No-op for DAG mode - filters are not used
+  }, []);
+
+  // Handler for resetting defaults
+  const handleResetDefaults = useCallback(() => {
+    setLingerEvents(DAG_LINGER_EVENTS);
+  }, []);
+
+  // Compute feedback context for DAG mode
+  const feedbackContext = useMemo(() => {
+    if (calibrationPhase !== CalibrationPhase.CALIBRATED && calibrationPhase !== CalibrationPhase.PLAYING) {
+      return null;
+    }
+
+    let stateString: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
+    if (calibrationPhase === CalibrationPhase.CALIBRATED) {
+      stateString = 'calibration_complete';
+    } else if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
+      stateString = 'playing';
+    } else {
+      stateString = 'paused';
+    }
+
+    // Count events by type
+    let swingsInvalidated = 0;
+    let swingsCompleted = 0;
+    for (const event of forwardPlayback.allEvents) {
+      if (event.type === 'SWING_INVALIDATED' || event.type === 'LEG_INVALIDATED') swingsInvalidated++;
+      if (event.type === 'SWING_COMPLETED') swingsCompleted++;
+    }
+
+    return {
+      playbackState: forwardPlayback.playbackState,
+      calibrationPhase: stateString,
+      windowOffset: sessionInfo?.windowOffset || 0,
+      calibrationBarCount: calibrationData?.calibration_bar_count || 0,
+      currentBarIndex: currentPlaybackPosition,
+      swingsFoundByScale: { XL: 0, L: 0, M: 0, S: 0 }, // Not used in DAG mode
+      totalEvents: forwardPlayback.allEvents.length,
+      swingsInvalidated,
+      swingsCompleted,
+    };
+  }, [
+    calibrationPhase,
+    forwardPlayback.playbackState,
+    forwardPlayback.allEvents,
+    sessionInfo?.windowOffset,
+    calibrationData?.calibration_bar_count,
+    currentPlaybackPosition,
+  ]);
+
+  // Compute DAG context for feedback
+  const dagContext = useMemo((): DagContext | undefined => {
+    if (!dagState) return undefined;
+    // Count pending pivots (null means none)
+    const pendingPivotsCount = (dagState.pending_pivots?.bull ? 1 : 0) +
+                               (dagState.pending_pivots?.bear ? 1 : 0);
+    return {
+      activeLegsCount: dagState.active_legs.length,
+      orphanedOriginsCount: {
+        bull: dagState.orphaned_origins.bull?.length || 0,
+        bear: dagState.orphaned_origins.bear?.length || 0,
+      },
+      pendingPivotsCount,
+    };
+  }, [dagState]);
 
   // Load initial data
   // DAG mode: Initialize with bar_count=0 for incremental build from bar 0 (#179)
@@ -457,7 +540,7 @@ export const DAGView: React.FC = () => {
     <div className="flex flex-col h-screen w-full bg-app-bg text-app-text font-sans overflow-hidden">
       {/* Header */}
       <Header
-        onToggleSidebar={() => {}}
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         currentTimestamp={currentTimestamp}
         sourceBarCount={sourceBars.length}
         calibrationStatus={
@@ -471,8 +554,30 @@ export const DAGView: React.FC = () => {
         }
       />
 
-      {/* Main Layout - No sidebar in DAG mode */}
+      {/* Main Layout */}
       <div className="flex-1 flex min-h-0">
+        {/* Sidebar */}
+        <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden`}>
+          <Sidebar
+            mode="dag"
+            filters={filters}
+            onToggleFilter={handleToggleFilter}
+            onResetDefaults={handleResetDefaults}
+            className="w-64"
+            lingerEvents={lingerEvents}
+            onToggleLingerEvent={handleToggleLingerEvent}
+            showFeedback={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
+            isLingering={forwardPlayback.isLingering}
+            lingerEvent={forwardPlayback.lingerEvent}
+            currentPlaybackBar={currentPlaybackPosition}
+            feedbackContext={feedbackContext || undefined}
+            onFeedbackFocus={forwardPlayback.pauseLingerTimer}
+            onFeedbackBlur={forwardPlayback.resumeLingerTimer}
+            onPausePlayback={forwardPlayback.pause}
+            dagContext={dagContext}
+          />
+        </div>
+
         <main className="flex-1 flex flex-col min-w-0">
           {/* Charts Area */}
           <ChartArea
