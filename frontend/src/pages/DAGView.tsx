@@ -29,6 +29,7 @@ import {
   ActiveLeg,
   LegEvent,
 } from '../types';
+import { ViewMode } from '../App';
 
 /**
  * Convert DagLeg from API to ActiveLeg for visualization.
@@ -58,7 +59,12 @@ function dagLegToActiveLeg(leg: DagLeg): ActiveLeg {
  * - Stale legs shown dashed/yellow
  * - DAG internal state panel (legs, orphaned origins, pending pivots)
  */
-export const DAGView: React.FC = () => {
+interface DAGViewProps {
+  currentMode: ViewMode;
+  onModeChange: (mode: ViewMode) => void;
+}
+
+export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) => {
   // Chart aggregation state
   const [chart1Aggregation, setChart1Aggregation] = useState<AggregationScale>('L');
   const [chart2Aggregation, setChart2Aggregation] = useState<AggregationScale>('S');
@@ -627,6 +633,8 @@ export const DAGView: React.FC = () => {
             ? 'playing'
             : undefined
         }
+        currentMode={currentMode}
+        onModeChange={onModeChange}
       />
 
       {/* Main Layout */}

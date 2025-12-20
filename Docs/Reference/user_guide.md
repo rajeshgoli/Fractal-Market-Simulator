@@ -56,7 +56,7 @@ The server supports two visualization modes:
 
 ### Layout
 
-- **Header**: Timestamp display, calibration status badge
+- **Header**: Navigation menu (switch between Replay/DAG views), timestamp display, calibration status badge
 - **Sidebar**: Event filter toggles with descriptions
 - **Top Chart**: Overview chart (default: L / 1H aggregation)
 - **Bottom Chart**: Detail chart (default: S / 5m aggregation)

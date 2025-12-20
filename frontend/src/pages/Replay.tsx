@@ -39,6 +39,7 @@ import {
   LegEvent,
 } from '../types';
 import { useSwingDisplay, useHierarchicalDisplay } from '../hooks/useSwingDisplay';
+import { ViewMode } from '../App';
 
 /**
  * Convert a discretization swing to a DetectedSwing for chart overlay.
@@ -156,7 +157,12 @@ function replayEventToSwingData(event: ReplayEvent, sourceBars: BarData[]): Swin
   };
 }
 
-export const Replay: React.FC = () => {
+interface ReplayProps {
+  currentMode: ViewMode;
+  onModeChange: (mode: ViewMode) => void;
+}
+
+export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => {
   // UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -1173,6 +1179,8 @@ export const Replay: React.FC = () => {
             ? 'playing'
             : undefined
         }
+        currentMode={currentMode}
+        onModeChange={onModeChange}
       />
 
       {/* Main Layout */}

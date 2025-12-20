@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Replay } from './pages/Replay'
 import { DAGView } from './pages/DAGView'
 import { fetchConfig } from './lib/api'
 
+export type ViewMode = 'calibration' | 'dag'
+
 function App() {
-  const [mode, setMode] = useState<'calibration' | 'dag'>('calibration')
+  const [mode, setMode] = useState<ViewMode>('calibration')
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -21,6 +23,10 @@ function App() {
       })
   }, [])
 
+  const handleModeChange = useCallback((newMode: ViewMode) => {
+    setMode(newMode)
+  }, [])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-app-bg text-app-text">
@@ -32,7 +38,9 @@ function App() {
     )
   }
 
-  return mode === 'dag' ? <DAGView /> : <Replay />
+  return mode === 'dag'
+    ? <DAGView currentMode={mode} onModeChange={handleModeChange} />
+    : <Replay currentMode={mode} onModeChange={handleModeChange} />
 }
 
 export default App
