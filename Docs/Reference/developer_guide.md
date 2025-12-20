@@ -323,6 +323,7 @@ The pipeline order per bar:
 - **DAG hierarchy** — Swings can have multiple parents for structural context
 - **Multi-TF optimization** — Uses higher-timeframe bars (1h, 4h, 1d) as candidates for O(1) candidate pairs vs O(lookback²)
 - **Sibling swing detection** — Orphaned origins from invalidated legs are preserved and can form sibling swings sharing the same defended pivot (#163)
+- **Directional leg creation** — Bull legs are only created in TYPE_2_BULL (HH, HL) and bear legs only in TYPE_2_BEAR (LH, LL). This ensures correct temporal order: pivot_index < origin_index for all legs (#195)
 
 **Event types:**
 | Event | When emitted |

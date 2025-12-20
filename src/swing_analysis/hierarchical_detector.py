@@ -761,11 +761,13 @@ class HierarchicalDetector:
         """
         Process Type 2-Bear bar (LH, LL - trending down).
 
-        Establishes temporal order: prev_bar.H occurred before bar.L.
-        This confirms a BULL swing structure: prev_bar.H → bar.L (high origin → low pivot).
-        A bull swing has: origin at high, defended pivot at low.
+        TYPE_2_BEAR signals a downtrend, so we only create bear legs here.
+        Bull legs are NOT created in TYPE_2_BEAR because:
+        1. Price is trending down, so expecting upward movement doesn't make sense
+        2. Creating bull legs here would result in inverted temporal order
+           (origin_index < pivot_index instead of pivot_index < origin_index)
 
-        Also extends any existing bear legs (tracking downward movement).
+        See issue #195 for details on the temporal order bug this fixes.
         """
         events: List[SwingEvent] = []
 
@@ -775,54 +777,7 @@ class HierarchicalDetector:
 
         # Note: Bear leg origin extension now handled by _extend_leg_origins (#188)
 
-        # Type 2-Bear confirms temporal order: prev_high → bar_low
-        # This creates a BULL swing structure: origin=prev_high, pivot=bar_low
-        # Create a bull leg with the pending high as origin and current low as pivot
-        if self.state.pending_pivots.get('bear'):
-            pending = self.state.pending_pivots['bear']
-            # For bull swing: pivot (defended) is at LOW, origin is at HIGH
-            # Only create if we don't already have a bull leg with this origin
-            existing_bull_leg = None
-            for leg in self.state.active_legs:
-                if (leg.direction == 'bull' and leg.status == 'active'
-                    and leg.origin_price == pending.price and leg.origin_index == pending.bar_index):
-                    existing_bull_leg = leg
-                    break
-
-            if existing_bull_leg:
-                # Update pivot if this is a lower low
-                if bar_low < existing_bull_leg.pivot_price:
-                    existing_bull_leg.pivot_price = bar_low
-                    existing_bull_leg.pivot_index = bar.index
-                    existing_bull_leg.last_modified_bar = bar.index
-            elif self._would_leg_be_dominated('bull', bar_low):
-                # Skip if dominated by existing leg with better pivot (#194)
-                pass
-            else:
-                new_leg = Leg(
-                    direction='bull',
-                    pivot_price=bar_low,
-                    pivot_index=bar.index,
-                    origin_price=pending.price,  # prev_high
-                    origin_index=pending.bar_index,
-                    price_at_creation=bar_close,
-                    last_modified_bar=bar.index,
-                )
-                self.state.active_legs.append(new_leg)
-                # Emit LegCreatedEvent (#168)
-                events.append(LegCreatedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id="",
-                    leg_id=new_leg.leg_id,
-                    direction=new_leg.direction,
-                    pivot_price=new_leg.pivot_price,
-                    pivot_index=new_leg.pivot_index,
-                    origin_price=new_leg.origin_price,
-                    origin_index=new_leg.origin_index,
-                ))
-
-        # Also start new bear leg for potential bear swing
+        # Start new bear leg for potential bear swing
         # (tracking downward movement for possible bear retracement later)
         if self.state.pending_pivots.get('bear'):
             pending = self.state.pending_pivots['bear']

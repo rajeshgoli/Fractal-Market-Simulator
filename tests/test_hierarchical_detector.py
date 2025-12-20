@@ -152,7 +152,17 @@ class TestSwingFormation:
     """Test swing formation logic."""
 
     def test_bull_swing_forms(self):
-        """Bull swing forms when price rises from low to formation threshold."""
+        """Bull swing forms when price rises from low to formation threshold.
+
+        Bull legs are created in TYPE_2_BULL (HH, HL) with:
+        - pivot = previous LOW (from pending_pivots['bull'])
+        - origin = current HIGH
+
+        The sequence is:
+        1. Low is established (pending pivot for bull)
+        2. Type 2-Bull bar (HH, HL) creates bull leg
+        3. Price rises, crossing formation threshold
+        """
         config = SwingConfig(
             bull=DirectionConfig(formation_fib=0.287, self_separation=0.10),
             bear=DirectionConfig(formation_fib=0.287, self_separation=0.10),
@@ -160,16 +170,17 @@ class TestSwingFormation:
         )
         detector = HierarchicalDetector(config)
 
-        # Bar 0: High at 5100, establishing origin
-        bar0 = make_bar(0, 5050.0, 5100.0, 5050.0, 5080.0)
+        # Bar 0: Establish low at 5000 (future pivot for bull swing)
+        bar0 = make_bar(0, 5020.0, 5050.0, 5000.0, 5030.0)
         events0 = detector.process_bar(bar0)
 
-        # Bar 1: Low at 5000, establishing defended pivot
-        bar1 = make_bar(1, 5020.0, 5030.0, 5000.0, 5010.0)
+        # Bar 1: Type 2-Bull (HH=5100 > 5050, HL=5020 > 5000)
+        # Creates bull leg: pivot=5000 (prev low), origin=5100 (current high)
+        bar1 = make_bar(1, 5040.0, 5100.0, 5020.0, 5080.0)
         events1 = detector.process_bar(bar1)
 
         # Bar 2: Close above formation level (5000 + 100 * 0.287 = 5028.7)
-        bar2 = make_bar(2, 5020.0, 5040.0, 5015.0, 5035.0)
+        bar2 = make_bar(2, 5080.0, 5090.0, 5030.0, 5035.0)
         events2 = detector.process_bar(bar2)
 
         # Check that a bull swing formed with the expected origin-pivot pair
@@ -225,7 +236,13 @@ class TestSwingFormation:
         assert len(bear_swings) >= 1, f"Expected at least 1 bear swing, got {len(bear_swings)}"
 
     def test_formation_requires_threshold(self):
-        """Swing does not form until formation threshold is breached."""
+        """Swing does not form until formation threshold is breached.
+
+        Bull legs are created in TYPE_2_BULL (HH, HL), so we need to:
+        1. Establish a low (pending pivot)
+        2. Create TYPE_2_BULL to generate bull leg
+        3. Test that formation requires threshold
+        """
         config = SwingConfig(
             bull=DirectionConfig(formation_fib=0.5),  # 50% required
             bear=DirectionConfig(formation_fib=0.5),  # 50% required for bear too
@@ -233,24 +250,26 @@ class TestSwingFormation:
         )
         detector = HierarchicalDetector(config)
 
-        # Bar 0: High at 5100, establishing origin
-        bar0 = make_bar(0, 5050.0, 5100.0, 5050.0, 5080.0)
+        # Bar 0: Establish low at 5000 (future pivot for bull swing)
+        bar0 = make_bar(0, 5020.0, 5050.0, 5000.0, 5030.0)
         detector.process_bar(bar0)
 
-        # Bar 1: Low at 5000, establishing pivot
-        bar1 = make_bar(1, 5010.0, 5020.0, 5000.0, 5005.0)
+        # Bar 1: Type 2-Bull (HH=5100 > 5050, HL=5010 > 5000)
+        # Creates bull leg: pivot=5000, origin=5100
+        bar1 = make_bar(1, 5030.0, 5100.0, 5010.0, 5020.0)
         detector.process_bar(bar1)
 
         # After bar 1, check for bull swings with origin 5100 -> pivot 5000
         # This shouldn't form yet because we need 50% retracement
+        # (close at 5020 is only 20% retracement)
         bull_swings_5100_5000 = [
             s for s in detector.get_active_swings()
             if s.direction == "bull" and s.high_price == Decimal("5100") and s.low_price == Decimal("5000")
         ]
-        assert len(bull_swings_5100_5000) == 0, "Swing should not form yet at 0.05% retracement"
+        assert len(bull_swings_5100_5000) == 0, "Swing should not form yet at 20% retracement"
 
         # Bar 2: Close at 5040 (only 40% retracement of 100pt swing, need 50%)
-        bar2 = make_bar(2, 5020.0, 5040.0, 5015.0, 5040.0)
+        bar2 = make_bar(2, 5020.0, 5045.0, 5015.0, 5040.0)
         events2 = detector.process_bar(bar2)
 
         # Still no 5100->5000 swing should form

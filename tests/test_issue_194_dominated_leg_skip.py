@@ -150,20 +150,21 @@ class TestDominatedLegSkipping:
         """
         In Type 2-Bull processing, don't create bull leg if dominated.
 
-        Scenario:
+        Scenario (updated for #195 fix - bull legs only created in TYPE_2_BULL):
         - Bar 0: Establishes pending bull pivot at low=90
-        - Bar 1: Type 2-Bear, creates bull leg with pivot=88 (new low)
-        - Bar 2: Type 2-Bull, should NOT create new bull leg with pivot=90
-                 because existing leg has pivot=88 which is better
+        - Bar 1: Type 2-Bull, creates bull leg with pivot=90, origin=102
+        - Bar 2: Continue uptrend with new low at 92 (higher than 90)
+        - Bar 3: Type 2-Bull, should NOT create new bull leg with pivot=92
+                 because existing leg has pivot=90 which is better (lower)
         """
         detector = HierarchicalDetector()
 
-        # Bar 0: Initial bar
+        # Bar 0: Initial bar - establishes pending bull pivot at 90
         bar0 = make_bar(0, 95.0, 100.0, 90.0, 97.0)
         detector.process_bar(bar0)
 
-        # Bar 1: Type 2-Bear (LH, LL) - creates bull leg with lower pivot
-        bar1 = make_bar(1, 97.0, 98.0, 88.0, 89.0)
+        # Bar 1: Type 2-Bull (HH=102 > 100, HL=92 > 90) - creates bull leg with pivot=90
+        bar1 = make_bar(1, 97.0, 102.0, 92.0, 101.0)
         events1 = detector.process_bar(bar1)
 
         bull_legs_after_bar1 = [
@@ -171,22 +172,22 @@ class TestDominatedLegSkipping:
             if leg.direction == 'bull' and leg.status == 'active'
         ]
         assert len(bull_legs_after_bar1) == 1
-        assert bull_legs_after_bar1[0].pivot_price == Decimal('88')
+        assert bull_legs_after_bar1[0].pivot_price == Decimal('90')
 
-        # Bar 2: Type 2-Bull (HH, HL) - should NOT create new bull leg
-        # because existing leg with pivot=88 dominates potential leg with pivot=90
-        bar2 = make_bar(2, 89.0, 102.0, 90.0, 101.0)
+        # Bar 2: Another Type 2-Bull (HH=105 > 102, HL=94 > 92)
+        # Should NOT create new bull leg with pivot=92 because 90 < 92
+        bar2 = make_bar(2, 101.0, 105.0, 94.0, 104.0)
         events2 = detector.process_bar(bar2)
 
-        # Should still have only 1 bull leg
+        # Should still have only 1 bull leg (with pivot=90)
         bull_legs_after_bar2 = [
             leg for leg in detector.state.active_legs
             if leg.direction == 'bull' and leg.status == 'active'
         ]
         assert len(bull_legs_after_bar2) == 1
-        assert bull_legs_after_bar2[0].pivot_price == Decimal('88')
+        assert bull_legs_after_bar2[0].pivot_price == Decimal('90')
 
-        # Verify no LegCreatedEvent for dominated bull leg
+        # Verify no new LegCreatedEvent for dominated bull leg
         bull_created_events = [
             e for e in events2
             if isinstance(e, LegCreatedEvent) and e.direction == 'bull'
@@ -244,26 +245,32 @@ class TestDominatedLegSkipping:
         """
         Legs with better pivots should still be created.
 
-        Scenario:
-        - Bar 0: Creates bull leg with pivot=100
-        - Bar 1: Type 2-Bear makes new low at 95 - should create new leg
-                 because 95 < 100 (better pivot)
+        Scenario (updated for #195 fix - bull legs only created in TYPE_2_BULL):
+        - Bar 0: Establishes pending bull pivot at low=100
+        - Bar 1: Dip to make new low at 95 (pending bull pivot updates to 95)
+        - Bar 2: Type 2-Bull creates bull leg with pivot=95
+        - Verify the better pivot (95) was used
         """
         detector = HierarchicalDetector()
 
-        # Bar 0: Initial bar
-        bar0 = make_bar(0, 95.0, 110.0, 100.0, 105.0)
+        # Bar 0: Initial bar - establishes pending bull pivot at 100
+        bar0 = make_bar(0, 102.0, 110.0, 100.0, 108.0)
         detector.process_bar(bar0)
 
-        # Bar 1: Type 2-Bear with lower low - should create leg
-        bar1 = make_bar(1, 105.0, 108.0, 95.0, 96.0)
-        events1 = detector.process_bar(bar1)
+        # Bar 1: Price dips to make lower low at 95
+        # This updates pending_pivots['bull'] to 95
+        bar1 = make_bar(1, 108.0, 109.0, 95.0, 100.0)
+        detector.process_bar(bar1)
+
+        # Bar 2: Type 2-Bull (HH=115 > 109, HL=98 > 95) - creates bull leg with pivot=95
+        bar2 = make_bar(2, 100.0, 115.0, 98.0, 112.0)
+        events2 = detector.process_bar(bar2)
 
         # Check that a bull leg with the lower pivot was created
         bull_legs = [
             leg for leg in detector.state.active_legs
             if leg.direction == 'bull' and leg.status == 'active'
         ]
-        # Should have at least one bull leg with the lower pivot
+        # Should have at least one bull leg with pivot=95 (the best low seen)
         pivots = [leg.pivot_price for leg in bull_legs]
         assert Decimal('95') in pivots or any(p <= Decimal('95') for p in pivots)
