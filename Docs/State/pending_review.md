@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2025-12-19
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#196** — Clear orphaned origins when new leg uses that origin
 - **#195** — Fix TYPE_2_BEAR creating bull legs with inverted temporal order
 - **#194** — Skip creating dominated legs that would be pruned at turn
 - **#193** — Pending pivot overwrite bug: preserve extreme pivots for correct leg pivot/origin matching
