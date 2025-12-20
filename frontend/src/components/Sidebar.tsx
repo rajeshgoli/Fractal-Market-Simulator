@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, RefObject } from 'react';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 import { EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
 import { Toggle } from './ui/Toggle';
 import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban } from 'lucide-react';
@@ -201,11 +201,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       let screenshotData: string | undefined;
       if (screenshotTargetRef?.current) {
         try {
-          const canvas = await html2canvas(screenshotTargetRef.current, {
+          const dataUrl = await toPng(screenshotTargetRef.current, {
             backgroundColor: '#1a1a2e', // Match app background
-            scale: 1, // Use 1x scale for reasonable file size
+            pixelRatio: 1, // Use 1x scale for reasonable file size
           });
-          screenshotData = canvas.toDataURL('image/png').split(',')[1]; // Get base64 without prefix
+          screenshotData = dataUrl.split(',')[1]; // Get base64 without prefix
         } catch (err) {
           console.warn('Failed to capture screenshot:', err);
           // Continue without screenshot
