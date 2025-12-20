@@ -497,6 +497,94 @@ export const DAGView: React.FC = () => {
     markers2Ref.current = createSeriesMarkers(series, []);
   }, []);
 
+  // Keyboard shortcuts for DAG mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore keyboard shortcuts when typing in input/textarea elements
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Calibrated phase: Space/Enter to start playback
+      if (calibrationPhase === CalibrationPhase.CALIBRATED) {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          handleStartPlayback();
+        }
+        return;
+      }
+
+      // Playing phase
+      if (calibrationPhase === CalibrationPhase.PLAYING) {
+        // Escape key dismisses linger
+        if (e.key === 'Escape' && forwardPlayback.isLingering) {
+          e.preventDefault();
+          forwardPlayback.dismissLinger();
+          return;
+        }
+
+        // Space toggles play/pause
+        if (e.key === ' ') {
+          e.preventDefault();
+          forwardPlayback.togglePlayPause();
+          return;
+        }
+
+        // Linger queue navigation (when multiple events at same bar)
+        if (forwardPlayback.isLingering && forwardPlayback.lingerQueuePosition && forwardPlayback.lingerQueuePosition.total > 1) {
+          if (e.key === 'ArrowLeft' && !e.shiftKey) {
+            e.preventDefault();
+            forwardPlayback.navigatePrevEvent();
+            return;
+          } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+            e.preventDefault();
+            forwardPlayback.navigateNextEvent();
+            return;
+          }
+        }
+
+        // Step controls: [ / ] or Arrow keys
+        // Shift modifier for fine control (bar-by-bar)
+        if (e.key === '[') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            forwardPlayback.stepBack();
+          } else {
+            forwardPlayback.stepBack();
+          }
+        } else if (e.key === ']') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            forwardPlayback.stepForward();
+          } else {
+            forwardPlayback.stepForward();
+          }
+        } else if (e.key === 'ArrowLeft' && !forwardPlayback.isLingering) {
+          e.preventDefault();
+          forwardPlayback.stepBack();
+        } else if (e.key === 'ArrowRight' && !forwardPlayback.isLingering) {
+          e.preventDefault();
+          forwardPlayback.stepForward();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    calibrationPhase,
+    handleStartPlayback,
+    forwardPlayback.isLingering,
+    forwardPlayback.lingerQueuePosition,
+    forwardPlayback.dismissLinger,
+    forwardPlayback.togglePlayPause,
+    forwardPlayback.stepBack,
+    forwardPlayback.stepForward,
+    forwardPlayback.navigatePrevEvent,
+    forwardPlayback.navigateNextEvent,
+  ]);
+
   // Get current timestamp for header
   const currentTimestamp = sourceBars[currentPlaybackPosition]?.timestamp
     ? new Date(sourceBars[currentPlaybackPosition].timestamp * 1000).toISOString()

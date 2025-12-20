@@ -342,6 +342,19 @@ The feedback input is always visible during playback (not just during linger eve
 | `→` | Linger (multi-event) | Next event in queue |
 | `Escape` | Linger | Dismiss linger and resume playback |
 
+### DAG Build Mode
+
+| Key | Context | Action |
+|-----|---------|--------|
+| `Space` | Ready | Start playback |
+| `Enter` | Ready | Start playback |
+| `Space` | Playing | Play/Pause |
+| `[` or `←` | Playing | Step back one bar |
+| `]` or `→` | Playing | Step forward one bar |
+| `←` | Linger (multi-event) | Previous event in queue |
+| `→` | Linger (multi-event) | Next event in queue |
+| `Escape` | Linger | Dismiss linger and resume playback |
+
 ---
 
 ## DAG Build Mode

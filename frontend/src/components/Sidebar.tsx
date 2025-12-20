@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, RefObject } from 'react';
 import { EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
 import { Toggle } from './ui/Toggle';
 import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban } from 'lucide-react';
@@ -100,6 +100,9 @@ interface SidebarProps {
   // Mode-specific context
   replayContext?: ReplayContext;
   dagContext?: DagContext;
+
+  // Screenshot capture target (main content area)
+  screenshotTargetRef?: RefObject<HTMLElement | null>;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -124,6 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onPausePlayback,
   replayContext,
   dagContext,
+  screenshotTargetRef,
 }) => {
   const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
   const [feedbackText, setFeedbackText] = useState('');
@@ -188,7 +192,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         };
       }
 
-      await submitPlaybackFeedback(feedbackText, currentPlaybackBar, snapshot);
+      // Capture screenshot if target ref is available
+      let screenshotData: string | undefined;
+      if (screenshotTargetRef?.current) {
+        try {
+          const canvas = await html2canvas(screenshotTargetRef.current, {
+            backgroundColor: '#1a1a2e', // Match app background
+            scale: 1, // Use 1x scale for reasonable file size
+          });
+          screenshotData = canvas.toDataURL('image/png').split(',')[1]; // Get base64 without prefix
+        } catch (err) {
+          console.warn('Failed to capture screenshot:', err);
+          // Continue without screenshot
+        }
+      }
+
+      await submitPlaybackFeedback(feedbackText, currentPlaybackBar, snapshot, screenshotData);
       setFeedbackText('');
       setSubmitStatus('success');
       setHasAutopaused(false); // Reset autopause state after successful submit
