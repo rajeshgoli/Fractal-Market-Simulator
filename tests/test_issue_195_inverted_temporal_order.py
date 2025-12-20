@@ -33,11 +33,12 @@ def make_bar(index: int, open_: float, high: float, low: float, close: float) ->
 class TestBullLegTemporalOrder:
     """Test that bull legs always have correct temporal order."""
 
-    def test_bull_legs_have_pivot_before_origin_temporally(self):
+    def test_bull_legs_have_origin_before_pivot_temporally(self):
         """
-        Bull legs should have pivot_index < origin_index.
+        Bull legs should have origin_index < pivot_index.
 
-        This ensures temporal order: past LOW (pivot) → current HIGH (origin)
+        After #197: Bull leg has origin=LOW (past), pivot=HIGH (current).
+        This ensures temporal order: past LOW (origin) → current HIGH (pivot)
         which matches the structure created by TYPE_2_BULL.
         """
         detector = HierarchicalDetector()
@@ -58,15 +59,19 @@ class TestBullLegTemporalOrder:
         ]
 
         for leg in bull_legs:
-            assert leg.pivot_index < leg.origin_index, (
+            # After #197: origin is in the past, pivot is current/later
+            assert leg.origin_index < leg.pivot_index, (
                 f"Bull leg has inverted temporal order: "
-                f"pivot_index={leg.pivot_index}, origin_index={leg.origin_index}. "
-                f"Expected pivot_index < origin_index."
+                f"origin_index={leg.origin_index}, pivot_index={leg.pivot_index}. "
+                f"Expected origin_index < pivot_index."
             )
 
     def test_type2_bear_does_not_create_inverted_bull_leg(self):
         """
         TYPE_2_BEAR should not create bull legs with inverted temporal order.
+
+        After #197 fix: TYPE_2_BEAR no longer creates bull legs at all, since
+        price is trending down. Bull legs are only created in TYPE_2_BULL.
 
         Reproduction of issue #195:
         - Bar 0: H=4416.25 L=4414.25
@@ -74,10 +79,9 @@ class TestBullLegTemporalOrder:
         - Bar 2: H=4415.75 L=4414.25 (TYPE_1 - equal low)
         - Bar 3: H=4415.25 L=4413.75 (TYPE_2_BEAR - LH, LL)
 
-        The bug was that at bar 3, a bull leg was created with:
-        - origin: 4416.25 @ bar 0 (HIGH) - PAST
-        - pivot: 4413.75 @ bar 3 (LOW) - CURRENT
-        This has origin_index < pivot_index (inverted temporal order).
+        With the fix, no bull legs should be created in this downtrend scenario.
+        If any bull legs exist (from earlier TYPE_2_BULL), they should have
+        correct temporal order: origin_index < pivot_index.
         """
         detector = HierarchicalDetector()
 
@@ -97,30 +101,31 @@ class TestBullLegTemporalOrder:
         bar3 = make_bar(3, 4415.0, 4415.25, 4413.75, 4414.0)
         events3 = detector.process_bar(bar3)
 
-        # Check that no bull leg has inverted temporal order
+        # Check that any bull legs have correct temporal order
+        # After #197: origin_index < pivot_index
         bull_legs = [
             leg for leg in detector.state.active_legs
             if leg.direction == 'bull' and leg.status == 'active'
         ]
 
         for leg in bull_legs:
-            assert leg.pivot_index < leg.origin_index, (
+            assert leg.origin_index < leg.pivot_index, (
                 f"Bull leg has inverted temporal order after TYPE_2_BEAR: "
                 f"origin_price={leg.origin_price} @ index {leg.origin_index}, "
                 f"pivot_price={leg.pivot_price} @ index {leg.pivot_index}. "
-                f"Expected pivot_index < origin_index."
+                f"Expected origin_index < pivot_index."
             )
 
     def test_type2_bear_creates_bear_leg_correctly(self):
         """
         TYPE_2_BEAR should create bear legs with correct structure.
 
-        Bear legs have:
-        - pivot (defended) at HIGH
-        - origin at LOW
+        After #197: Bear legs have:
+        - origin at HIGH (where downward move started)
+        - pivot at LOW (defended extreme that extends on new lows)
 
-        Temporal order: past HIGH (pivot) → current LOW (origin)
-        So pivot_index < origin_index.
+        Temporal order: past HIGH (origin) → current LOW (pivot)
+        So origin_index < pivot_index.
         """
         detector = HierarchicalDetector()
 
@@ -133,16 +138,17 @@ class TestBullLegTemporalOrder:
         events1 = detector.process_bar(bar1)
 
         # Check bear legs have correct temporal order
+        # After #197: origin_index < pivot_index
         bear_legs = [
             leg for leg in detector.state.active_legs
             if leg.direction == 'bear' and leg.status == 'active'
         ]
 
         for leg in bear_legs:
-            assert leg.pivot_index < leg.origin_index, (
+            assert leg.origin_index < leg.pivot_index, (
                 f"Bear leg has inverted temporal order: "
-                f"pivot_index={leg.pivot_index}, origin_index={leg.origin_index}. "
-                f"Expected pivot_index < origin_index."
+                f"origin_index={leg.origin_index}, pivot_index={leg.pivot_index}. "
+                f"Expected origin_index < pivot_index."
             )
 
 
@@ -183,6 +189,7 @@ class TestType2BearBullLegRemoval:
         During an extended downtrend, no bull legs with inverted temporal order.
 
         Simulates multiple TYPE_2_BEAR bars in succession.
+        After #197: Any bull legs should have origin_index < pivot_index.
         """
         detector = HierarchicalDetector()
 
@@ -203,13 +210,14 @@ class TestType2BearBullLegRemoval:
             detector.process_bar(bar)
 
         # Check no bull legs with inverted temporal order exist
+        # After #197: origin_index < pivot_index
         bull_legs = [
             leg for leg in detector.state.active_legs
             if leg.direction == 'bull' and leg.status == 'active'
         ]
 
         for leg in bull_legs:
-            assert leg.pivot_index < leg.origin_index, (
+            assert leg.origin_index < leg.pivot_index, (
                 f"Found bull leg with inverted temporal order during downtrend: "
                 f"origin_index={leg.origin_index}, pivot_index={leg.pivot_index}"
             )
@@ -219,19 +227,16 @@ class TestType1DirectionInversion:
     """
     Test that TYPE_1 (inside bar) creates legs with correct direction.
 
-    TYPE_1 was creating "bull" legs for HIGH→LOW structures and "bear" legs
-    for LOW→HIGH structures, which is semantically inverted.
-
-    The fix ensures:
-    - HIGH before LOW → BEAR leg (price moved down)
-    - LOW before HIGH → BULL leg (price moved up)
+    After #197:
+    - Bull leg: origin=LOW (past) → pivot=HIGH (current)
+    - Bear leg: origin=HIGH (past) → pivot=LOW (current)
     """
 
     def test_type1_high_before_low_creates_bear_leg(self):
         """
         When HIGH appears before LOW temporally, TYPE_1 should create BEAR leg.
 
-        This is the same bug as #195 but manifesting in TYPE_1 code path.
+        After #197: Bear legs have origin=HIGH (past), pivot=LOW (current).
         """
         detector = HierarchicalDetector()
 
@@ -252,25 +257,28 @@ class TestType1DirectionInversion:
             detector.process_bar(bar)
 
         # All legs should have correct temporal order
+        # After #197: origin_index < pivot_index
         for leg in detector.state.active_legs:
             if leg.status == 'active':
-                assert leg.pivot_index < leg.origin_index, (
+                assert leg.origin_index < leg.pivot_index, (
                     f"{leg.direction.upper()} leg has inverted temporal order: "
-                    f"pivot_index={leg.pivot_index}, origin_index={leg.origin_index}"
+                    f"origin_index={leg.origin_index}, pivot_index={leg.pivot_index}"
                 )
 
-        # Verify no "bull" leg exists with HIGH origin and LOW pivot
-        # (that would be a bear structure mislabeled as bull)
+        # Verify bull legs have LOW origin and HIGH pivot
+        # After #197: bull leg has origin=LOW (lower price), pivot=HIGH (higher price)
         for leg in detector.state.active_legs:
             if leg.direction == 'bull' and leg.status == 'active':
-                assert leg.pivot_price < leg.origin_price, (
-                    f"Bull leg has inverted prices: pivot={leg.pivot_price} should be LOW, "
-                    f"origin={leg.origin_price} should be HIGH"
+                assert leg.origin_price < leg.pivot_price, (
+                    f"Bull leg has inverted prices: origin={leg.origin_price} should be LOW, "
+                    f"pivot={leg.pivot_price} should be HIGH"
                 )
 
     def test_type1_low_before_high_creates_bull_leg(self):
         """
         When LOW appears before HIGH temporally, TYPE_1 should create BULL leg.
+
+        After #197: Bull legs have origin=LOW (past), pivot=HIGH (current).
         """
         detector = HierarchicalDetector()
 
@@ -285,18 +293,19 @@ class TestType1DirectionInversion:
         for bar in bars:
             detector.process_bar(bar)
 
-        # Check bull legs have LOW pivot and HIGH origin
+        # Check bull legs have LOW origin and HIGH pivot
+        # After #197: origin=LOW (lower price), pivot=HIGH (higher price)
         bull_legs = [
             leg for leg in detector.state.active_legs
             if leg.direction == 'bull' and leg.status == 'active'
         ]
 
         for leg in bull_legs:
-            assert leg.pivot_price < leg.origin_price, (
-                f"Bull leg should have LOW pivot and HIGH origin: "
-                f"pivot={leg.pivot_price}, origin={leg.origin_price}"
+            assert leg.origin_price < leg.pivot_price, (
+                f"Bull leg should have LOW origin and HIGH pivot: "
+                f"origin={leg.origin_price}, pivot={leg.pivot_price}"
             )
-            assert leg.pivot_index < leg.origin_index, (
-                f"Bull leg should have pivot before origin: "
-                f"pivot_index={leg.pivot_index}, origin_index={leg.origin_index}"
+            assert leg.origin_index < leg.pivot_index, (
+                f"Bull leg should have origin before pivot: "
+                f"origin_index={leg.origin_index}, pivot_index={leg.pivot_index}"
             )

@@ -110,36 +110,39 @@ class TestLegBarIndexConsistency:
             pivot_bar = bars[leg.pivot_index] if leg.pivot_index < len(bars) else None
             origin_bar = bars[leg.origin_index] if leg.origin_index < len(bars) else None
 
+            # After #197 terminology fix:
+            # - Bull leg: origin=LOW (starting point), pivot=HIGH (defended extreme)
+            # - Bear leg: origin=HIGH (starting point), pivot=LOW (defended extreme)
             if pivot_bar is not None:
                 if leg.direction == 'bull':
-                    # Bull leg pivot is at LOW
-                    actual_price_at_index = Decimal(str(pivot_bar.low))
-                    assert leg.pivot_price == actual_price_at_index, (
-                        f"Bull leg {leg.leg_id}: pivot_price={leg.pivot_price} "
-                        f"but bar {leg.pivot_index}'s low is {actual_price_at_index}"
-                    )
-                else:
-                    # Bear leg pivot is at HIGH
+                    # Bull leg pivot is at HIGH
                     actual_price_at_index = Decimal(str(pivot_bar.high))
                     assert leg.pivot_price == actual_price_at_index, (
-                        f"Bear leg {leg.leg_id}: pivot_price={leg.pivot_price} "
+                        f"Bull leg {leg.leg_id}: pivot_price={leg.pivot_price} "
                         f"but bar {leg.pivot_index}'s high is {actual_price_at_index}"
+                    )
+                else:
+                    # Bear leg pivot is at LOW
+                    actual_price_at_index = Decimal(str(pivot_bar.low))
+                    assert leg.pivot_price == actual_price_at_index, (
+                        f"Bear leg {leg.leg_id}: pivot_price={leg.pivot_price} "
+                        f"but bar {leg.pivot_index}'s low is {actual_price_at_index}"
                     )
 
             if origin_bar is not None:
                 if leg.direction == 'bull':
-                    # Bull leg origin is at HIGH
-                    actual_price_at_index = Decimal(str(origin_bar.high))
-                    assert leg.origin_price == actual_price_at_index, (
-                        f"Bull leg {leg.leg_id}: origin_price={leg.origin_price} "
-                        f"but bar {leg.origin_index}'s high is {actual_price_at_index}"
-                    )
-                else:
-                    # Bear leg origin is at LOW
+                    # Bull leg origin is at LOW
                     actual_price_at_index = Decimal(str(origin_bar.low))
                     assert leg.origin_price == actual_price_at_index, (
-                        f"Bear leg {leg.leg_id}: origin_price={leg.origin_price} "
+                        f"Bull leg {leg.leg_id}: origin_price={leg.origin_price} "
                         f"but bar {leg.origin_index}'s low is {actual_price_at_index}"
+                    )
+                else:
+                    # Bear leg origin is at HIGH
+                    actual_price_at_index = Decimal(str(origin_bar.high))
+                    assert leg.origin_price == actual_price_at_index, (
+                        f"Bear leg {leg.leg_id}: origin_price={leg.origin_price} "
+                        f"but bar {leg.origin_index}'s high is {actual_price_at_index}"
                     )
 
     def test_origin_index_matches_origin_price_location(self):
@@ -175,32 +178,38 @@ class TestLegBarIndexConsistency:
         for leg in detector.state.active_legs:
             origin_bar = bars[leg.origin_index] if leg.origin_index < len(bars) else None
 
+            # After #197 terminology fix:
+            # - Bull leg: origin=LOW (starting point), pivot=HIGH (defended extreme)
+            # - Bear leg: origin=HIGH (starting point), pivot=LOW (defended extreme)
             if origin_bar is not None:
                 if leg.direction == 'bull':
-                    actual_price_at_index = Decimal(str(origin_bar.high))
-                    assert leg.origin_price == actual_price_at_index, (
-                        f"Bull leg {leg.leg_id}: origin_price={leg.origin_price} "
-                        f"but bar {leg.origin_index}'s high is {actual_price_at_index}"
-                    )
-                else:
                     actual_price_at_index = Decimal(str(origin_bar.low))
                     assert leg.origin_price == actual_price_at_index, (
-                        f"Bear leg {leg.leg_id}: origin_price={leg.origin_price} "
+                        f"Bull leg {leg.leg_id}: origin_price={leg.origin_price} "
                         f"but bar {leg.origin_index}'s low is {actual_price_at_index}"
+                    )
+                else:
+                    actual_price_at_index = Decimal(str(origin_bar.high))
+                    assert leg.origin_price == actual_price_at_index, (
+                        f"Bear leg {leg.leg_id}: origin_price={leg.origin_price} "
+                        f"but bar {leg.origin_index}'s high is {actual_price_at_index}"
                     )
 
     def test_extended_origin_updates_both_price_and_index(self):
         """
-        When an origin extends to a new extreme, both price AND index must update.
+        Origins are FIXED after #197 - they do NOT extend.
+        This test now verifies origin consistency (price matches bar).
+
+        Bull leg: origin=LOW (fixed starting point)
+        Bear leg: origin=HIGH (fixed starting point)
         """
-        # Bars with progressively higher highs for bull leg origin extension
         bars = [
-            make_bar(0, 100.0, 105.0, 95.0, 100.0),   # Initial high 105
-            make_bar(1, 100.0, 108.0, 98.0, 105.0),   # Type 2-Bull, higher high 108
-            make_bar(2, 105.0, 112.0, 102.0, 110.0),  # Type 2-Bull, higher high 112
-            make_bar(3, 110.0, 115.0, 107.0, 112.0),  # Type 2-Bull, higher high 115
-            make_bar(4, 112.0, 113.0, 108.0, 110.0),  # Type 2-Bear retracement
-            make_bar(5, 110.0, 112.0, 109.0, 111.0),  # More retracement
+            make_bar(0, 100.0, 105.0, 95.0, 100.0),
+            make_bar(1, 100.0, 108.0, 98.0, 105.0),
+            make_bar(2, 105.0, 112.0, 102.0, 110.0),
+            make_bar(3, 110.0, 115.0, 107.0, 112.0),
+            make_bar(4, 112.0, 113.0, 108.0, 110.0),
+            make_bar(5, 110.0, 112.0, 109.0, 111.0),
         ]
 
         config = SwingConfig.default()
@@ -210,38 +219,40 @@ class TestLegBarIndexConsistency:
         for leg in detector.state.active_legs:
             if leg.direction == 'bull':
                 origin_bar = bars[leg.origin_index]
-                actual_high_at_index = Decimal(str(origin_bar.high))
-                assert leg.origin_price == actual_high_at_index, (
+                # Bull leg origin is at LOW (not HIGH)
+                actual_low_at_index = Decimal(str(origin_bar.low))
+                assert leg.origin_price == actual_low_at_index, (
                     f"Bull leg origin mismatch: origin_price={leg.origin_price} "
-                    f"but bar {leg.origin_index}'s high is {actual_high_at_index}"
+                    f"but bar {leg.origin_index}'s low is {actual_low_at_index}"
                 )
 
     def test_extended_pivot_updates_both_price_and_index(self):
         """
         When a pivot extends to a new extreme, both price AND index must update.
+        After #197: Bull leg pivot is at HIGH and extends on new highs.
         """
-        # Bars with progressively lower lows for bull leg pivot extension
+        # Bars with progressively higher highs for bull leg pivot extension
         bars = [
-            make_bar(0, 100.0, 105.0, 95.0, 100.0),   # Initial structure
-            make_bar(1, 100.0, 108.0, 98.0, 105.0),   # High established
-            make_bar(2, 105.0, 106.0, 90.0, 92.0),    # Type 2-Bear, lower low 90
-            make_bar(3, 92.0, 94.0, 85.0, 88.0),      # Type 2-Bear, lower low 85
-            make_bar(4, 88.0, 90.0, 80.0, 82.0),      # Type 2-Bear, lower low 80
-            make_bar(5, 82.0, 95.0, 81.0, 94.0),      # Reversal, formation
-            make_bar(6, 94.0, 98.0, 92.0, 97.0),      # More up
+            make_bar(0, 100.0, 105.0, 95.0, 100.0),
+            make_bar(1, 100.0, 108.0, 98.0, 105.0),   # Type 2-Bull
+            make_bar(2, 105.0, 112.0, 102.0, 110.0),  # Type 2-Bull, higher high 112
+            make_bar(3, 110.0, 115.0, 107.0, 112.0),  # Type 2-Bull, higher high 115
+            make_bar(4, 112.0, 113.0, 108.0, 110.0),  # Type 2-Bear retracement
+            make_bar(5, 110.0, 112.0, 109.0, 111.0),
         ]
 
         config = SwingConfig.default()
         detector, events = calibrate(bars, config)
 
         # Check that bull legs have consistent pivot price/index
+        # Bull leg pivot is at HIGH (not LOW)
         for leg in detector.state.active_legs:
             if leg.direction == 'bull':
                 pivot_bar = bars[leg.pivot_index]
-                actual_low_at_index = Decimal(str(pivot_bar.low))
-                assert leg.pivot_price == actual_low_at_index, (
+                actual_high_at_index = Decimal(str(pivot_bar.high))
+                assert leg.pivot_price == actual_high_at_index, (
                     f"Bull leg pivot mismatch: pivot_price={leg.pivot_price} "
-                    f"but bar {leg.pivot_index}'s low is {actual_low_at_index}"
+                    f"but bar {leg.pivot_index}'s high is {actual_high_at_index}"
                 )
 
 
@@ -313,14 +324,16 @@ class TestPivotExtension:
         When pivot extends, both price AND index must update together.
 
         This is the core of issue #192 - prices were updating but indices were stale.
+
+        After #197: Bull leg pivot is at HIGH (defended extreme that extends on new highs).
         """
         bars = [
             make_bar(0, 100.0, 105.0, 95.0, 100.0),
             make_bar(1, 100.0, 108.0, 98.0, 105.0),   # Type 2-Bull
-            make_bar(2, 105.0, 106.0, 85.0, 90.0),    # Type 2-Bear, low at 85
-            make_bar(3, 90.0, 92.0, 80.0, 82.0),      # Type 2-Bear, lower at 80
-            make_bar(4, 82.0, 85.0, 75.0, 78.0),      # Type 2-Bear, lower at 75
-            make_bar(5, 78.0, 90.0, 77.0, 88.0),      # Reversal
+            make_bar(2, 105.0, 112.0, 102.0, 110.0),  # Type 2-Bull, high at 112
+            make_bar(3, 110.0, 115.0, 107.0, 113.0),  # Type 2-Bull, higher at 115
+            make_bar(4, 113.0, 118.0, 110.0, 116.0),  # Type 2-Bull, higher at 118
+            make_bar(5, 116.0, 117.0, 112.0, 114.0),  # Retracement
         ]
 
         config = SwingConfig.default()
@@ -329,10 +342,11 @@ class TestPivotExtension:
         for leg in detector.state.active_legs:
             if leg.direction == 'bull':
                 pivot_bar = bars[leg.pivot_index]
-                actual_low = Decimal(str(pivot_bar.low))
-                assert leg.pivot_price == actual_low, (
+                # After #197: Bull leg pivot is at HIGH
+                actual_high = Decimal(str(pivot_bar.high))
+                assert leg.pivot_price == actual_high, (
                     f"MISMATCH: Bull leg pivot_price={leg.pivot_price} "
-                    f"but bar {leg.pivot_index}'s low is {actual_low}. "
+                    f"but bar {leg.pivot_index}'s high is {actual_high}. "
                     f"The index points to a bar with different price!"
                 )
 

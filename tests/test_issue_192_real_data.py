@@ -60,6 +60,9 @@ class TestIssue192RealData:
         detector, events = calibrate(bars[:46], config)
 
         # Check all active legs for price/index consistency
+        # After #197:
+        # - Bull leg: origin=LOW (where upward move started), pivot=HIGH (defended extreme)
+        # - Bear leg: origin=HIGH (where downward move started), pivot=LOW (defended extreme)
         errors = []
         for leg in detector.state.active_legs:
             if leg.pivot_index >= len(bars) or leg.origin_index >= len(bars):
@@ -69,34 +72,34 @@ class TestIssue192RealData:
             origin_bar = bars[leg.origin_index]
 
             if leg.direction == 'bull':
-                # Bull leg: pivot at LOW, origin at HIGH
-                actual_pivot_price = Decimal(str(pivot_bar.low))
-                actual_origin_price = Decimal(str(origin_bar.high))
+                # Bull leg: origin at LOW, pivot at HIGH
+                actual_origin_price = Decimal(str(origin_bar.low))
+                actual_pivot_price = Decimal(str(pivot_bar.high))
 
-                if leg.pivot_price != actual_pivot_price:
-                    errors.append(
-                        f"Bull leg {leg.leg_id}: pivot_price={leg.pivot_price} "
-                        f"but bar {leg.pivot_index}'s low is {actual_pivot_price}"
-                    )
                 if leg.origin_price != actual_origin_price:
                     errors.append(
                         f"Bull leg {leg.leg_id}: origin_price={leg.origin_price} "
-                        f"but bar {leg.origin_index}'s high is {actual_origin_price}"
+                        f"but bar {leg.origin_index}'s low is {actual_origin_price}"
                     )
-            else:
-                # Bear leg: pivot at HIGH, origin at LOW
-                actual_pivot_price = Decimal(str(pivot_bar.high))
-                actual_origin_price = Decimal(str(origin_bar.low))
-
                 if leg.pivot_price != actual_pivot_price:
                     errors.append(
-                        f"Bear leg {leg.leg_id}: pivot_price={leg.pivot_price} "
+                        f"Bull leg {leg.leg_id}: pivot_price={leg.pivot_price} "
                         f"but bar {leg.pivot_index}'s high is {actual_pivot_price}"
                     )
+            else:
+                # Bear leg: origin at HIGH, pivot at LOW
+                actual_origin_price = Decimal(str(origin_bar.high))
+                actual_pivot_price = Decimal(str(pivot_bar.low))
+
                 if leg.origin_price != actual_origin_price:
                     errors.append(
                         f"Bear leg {leg.leg_id}: origin_price={leg.origin_price} "
-                        f"but bar {leg.origin_index}'s low is {actual_origin_price}"
+                        f"but bar {leg.origin_index}'s high is {actual_origin_price}"
+                    )
+                if leg.pivot_price != actual_pivot_price:
+                    errors.append(
+                        f"Bear leg {leg.leg_id}: pivot_price={leg.pivot_price} "
+                        f"but bar {leg.pivot_index}'s low is {actual_pivot_price}"
                     )
 
         if errors:
@@ -135,6 +138,9 @@ class TestIssue192RealData:
             detector.process_bar(bar)
 
             # After each bar, verify all legs are consistent
+            # After #197:
+            # - Bull leg: origin=LOW (where upward move started), pivot=HIGH (defended extreme)
+            # - Bear leg: origin=HIGH (where downward move started), pivot=LOW (defended extreme)
             for leg in detector.state.active_legs:
                 if leg.pivot_index > bar_idx or leg.origin_index > bar_idx:
                     continue  # Skip legs with future indices
@@ -143,26 +149,28 @@ class TestIssue192RealData:
                 origin_bar = bars[leg.origin_index]
 
                 if leg.direction == 'bull':
-                    actual_pivot = Decimal(str(pivot_bar.low))
-                    actual_origin = Decimal(str(origin_bar.high))
+                    # Bull leg: origin at LOW, pivot at HIGH
+                    actual_origin = Decimal(str(origin_bar.low))
+                    actual_pivot = Decimal(str(pivot_bar.high))
 
-                    assert leg.pivot_price == actual_pivot, (
-                        f"After bar {bar_idx}, bull leg {leg.leg_id}: "
-                        f"pivot_price={leg.pivot_price} != bar[{leg.pivot_index}].low={actual_pivot}"
-                    )
                     assert leg.origin_price == actual_origin, (
                         f"After bar {bar_idx}, bull leg {leg.leg_id}: "
-                        f"origin_price={leg.origin_price} != bar[{leg.origin_index}].high={actual_origin}"
+                        f"origin_price={leg.origin_price} != bar[{leg.origin_index}].low={actual_origin}"
                     )
-                else:
-                    actual_pivot = Decimal(str(pivot_bar.high))
-                    actual_origin = Decimal(str(origin_bar.low))
-
                     assert leg.pivot_price == actual_pivot, (
-                        f"After bar {bar_idx}, bear leg {leg.leg_id}: "
+                        f"After bar {bar_idx}, bull leg {leg.leg_id}: "
                         f"pivot_price={leg.pivot_price} != bar[{leg.pivot_index}].high={actual_pivot}"
                     )
+                else:
+                    # Bear leg: origin at HIGH, pivot at LOW
+                    actual_origin = Decimal(str(origin_bar.high))
+                    actual_pivot = Decimal(str(pivot_bar.low))
+
                     assert leg.origin_price == actual_origin, (
                         f"After bar {bar_idx}, bear leg {leg.leg_id}: "
-                        f"origin_price={leg.origin_price} != bar[{leg.origin_index}].low={actual_origin}"
+                        f"origin_price={leg.origin_price} != bar[{leg.origin_index}].high={actual_origin}"
+                    )
+                    assert leg.pivot_price == actual_pivot, (
+                        f"After bar {bar_idx}, bear leg {leg.leg_id}: "
+                        f"pivot_price={leg.pivot_price} != bar[{leg.pivot_index}].low={actual_pivot}"
                     )

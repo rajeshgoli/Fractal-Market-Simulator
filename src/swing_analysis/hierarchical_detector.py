@@ -77,16 +77,20 @@ class Leg:
     """
     A directional price movement with known temporal ordering.
 
-    Bull leg: Low (defended pivot) → High (origin)
-    Bear leg: High (defended pivot) → Low (origin)
+    Terminology:
+    - Origin: Where the move started (fixed starting point)
+    - Pivot: The defended extreme where price may turn (extends as leg grows)
+
+    Bull leg: origin at LOW → pivot at HIGH (upward movement)
+    Bear leg: origin at HIGH → pivot at LOW (downward movement)
 
     Attributes:
         direction: 'bull' or 'bear'
-        pivot_price: The defended pivot price (must hold)
-        pivot_index: Bar index where pivot was established
-        origin_price: Current origin price (extends as leg grows)
-        origin_index: Bar index of origin
-        retracement_pct: Current retracement percentage toward pivot
+        origin_price: Where the move originated (fixed starting point)
+        origin_index: Bar index where origin was established
+        pivot_price: Current defended extreme (extends as leg grows)
+        pivot_index: Bar index of current pivot
+        retracement_pct: Current retracement percentage toward origin
         formed: Whether 38.2% threshold has been reached
         parent_leg_id: ID of parent leg if this is a child
         status: 'active', 'stale', or 'invalidated'
@@ -96,10 +100,10 @@ class Leg:
         price_at_creation: Price when leg was created (for staleness)
     """
     direction: Literal['bull', 'bear']
-    pivot_price: Decimal
-    pivot_index: int
     origin_price: Decimal
     origin_index: int
+    pivot_price: Decimal
+    pivot_index: int
     retracement_pct: Decimal = Decimal("0")
     formed: bool = False
     parent_leg_id: Optional[str] = None
@@ -459,20 +463,20 @@ class HierarchicalDetector:
         else:  # lower_high and higher_low (inside bar)
             return BarType.TYPE_1
 
-    def _would_leg_be_dominated(self, direction: str, pivot_price: Decimal) -> bool:
+    def _would_leg_be_dominated(self, direction: str, origin_price: Decimal) -> bool:
         """
         Check if a new leg would be dominated by an existing leg (#194).
 
         A leg is dominated if an existing active leg of the same direction has
-        a better or equal pivot. Since all legs of the same direction converge
-        to the same origin (via _extend_leg_origins), the leg with the best
-        pivot will always have the largest range and survive turn pruning.
+        a better or equal origin. Since all legs of the same direction converge
+        to the same pivot (via _extend_leg_pivots), the leg with the best
+        origin will always have the largest range and survive turn pruning.
 
         Creating dominated legs is wasteful - they will be pruned at turn.
 
         Args:
             direction: 'bull' or 'bear'
-            pivot_price: The pivot price of the potential new leg
+            origin_price: The origin price of the potential new leg
 
         Returns:
             True if an existing leg dominates (new leg would be pruned)
@@ -480,81 +484,47 @@ class HierarchicalDetector:
         for leg in self.state.active_legs:
             if leg.direction != direction or leg.status != 'active':
                 continue
-            # Bull: lower pivot is better (larger range when origins converge)
-            # Bear: higher pivot is better (larger range when origins converge)
-            if direction == 'bull' and leg.pivot_price <= pivot_price:
+            # Bull: lower origin is better (origin=LOW, larger range)
+            # Bear: higher origin is better (origin=HIGH, larger range)
+            if direction == 'bull' and leg.origin_price <= origin_price:
                 return True
-            if direction == 'bear' and leg.pivot_price >= pivot_price:
+            if direction == 'bear' and leg.origin_price >= origin_price:
                 return True
         return False
 
-    def _extend_leg_origins(self, bar: Bar, bar_high: Decimal, bar_low: Decimal) -> None:
+    def _extend_leg_pivots(self, bar: Bar, bar_high: Decimal, bar_low: Decimal) -> None:
         """
-        Extend leg origins when price makes new extremes (#188).
+        Extend leg pivots when price makes new extremes (#188, #197).
 
-        This handles origin updates independently of bar type classification.
-        When price makes a new high, all bull leg origins are extended.
-        When price makes a new low, all bear leg origins are extended.
+        Terminology (correct):
+        - Origin: Where the move started (fixed, does NOT extend)
+        - Pivot: Current defended extreme (extends as leg grows)
+
+        Bull leg: origin at LOW (fixed) → pivot at HIGH (extends on new highs)
+        Bear leg: origin at HIGH (fixed) → pivot at LOW (extends on new lows)
 
         This fixes the bug where bars with HH+EL (higher high, equal low) or
         EH+LL (equal high, lower low) were classified as Type 1 and didn't
-        extend origins, causing legs to show stale origin values.
+        extend pivots, causing legs to show stale pivot values.
 
         Args:
             bar: Current bar
             bar_high: Current bar's high as Decimal
             bar_low: Current bar's low as Decimal
         """
-        # Extend bull leg origins on new highs
+        # Extend bull leg pivots on new highs
         for leg in self.state.active_legs:
             if leg.direction == 'bull' and leg.status == 'active':
-                if bar_high > leg.origin_price:
-                    leg.origin_price = bar_high
-                    leg.origin_index = bar.index
-                    leg.last_modified_bar = bar.index
-
-        # Extend bear leg origins on new lows
-        for leg in self.state.active_legs:
-            if leg.direction == 'bear' and leg.status == 'active':
-                if bar_low < leg.origin_price:
-                    leg.origin_price = bar_low
-                    leg.origin_index = bar.index
-                    leg.last_modified_bar = bar.index
-
-    def _extend_leg_pivots(self, bar: Bar, bar_high: Decimal, bar_low: Decimal) -> None:
-        """
-        Extend leg pivots when price makes new extremes (#192).
-
-        This handles pivot updates independently of bar type classification,
-        ensuring symmetric treatment with origin extension.
-
-        For bull legs: pivot is at LOW (defended), extends when new low occurs
-        For bear legs: pivot is at HIGH (defended), extends when new high occurs
-
-        This fixes the bug where pivot indices became stale when only some legs
-        were updated through the origin-matching logic in bar type handlers.
-
-        IMPORTANT: Only extends pivots for legs that haven't formed yet. Once a
-        leg forms into a swing, its endpoints are fixed and shouldn't change.
-
-        Args:
-            bar: Current bar
-            bar_high: Current bar's high as Decimal
-            bar_low: Current bar's low as Decimal
-        """
-        # Extend bull leg pivots on new lows (only for non-formed legs)
-        for leg in self.state.active_legs:
-            if leg.direction == 'bull' and leg.status == 'active' and not leg.formed:
-                if bar_low < leg.pivot_price:
-                    leg.pivot_price = bar_low
+                if bar_high > leg.pivot_price:
+                    leg.pivot_price = bar_high
                     leg.pivot_index = bar.index
                     leg.last_modified_bar = bar.index
 
-        # Extend bear leg pivots on new highs (only for non-formed legs)
+        # Extend bear leg pivots on new lows
         for leg in self.state.active_legs:
-            if leg.direction == 'bear' and leg.status == 'active' and not leg.formed:
-                if bar_high > leg.pivot_price:
-                    leg.pivot_price = bar_high
+            if leg.direction == 'bear' and leg.status == 'active':
+                if bar_low < leg.pivot_price:
+                    leg.pivot_price = bar_low
                     leg.pivot_index = bar.index
                     leg.last_modified_bar = bar.index
 
@@ -589,11 +559,11 @@ class HierarchicalDetector:
         self.state.price_high_water = max(self.state.price_high_water, bar_high)
         self.state.price_low_water = min(self.state.price_low_water, bar_low)
 
-        # Extend leg origins and pivots on new extremes (#188, #192)
+        # Extend leg pivots on new extremes (#188, #192, #197)
         # This must happen BEFORE bar type classification because bars with
-        # HH+EL or EH+LL fall through to Type 1 which didn't extend origins.
-        # Pivot extension ensures symmetric treatment of both endpoints.
-        self._extend_leg_origins(bar, bar_high, bar_low)
+        # HH+EL or EH+LL fall through to Type 1 which didn't extend pivots.
+        # Origins are FIXED (where move started) and do NOT extend.
+        # Only pivots (current defended extreme) extend as price moves.
         self._extend_leg_pivots(bar, bar_high, bar_low)
 
         # First bar initialization
@@ -692,34 +662,36 @@ class HierarchicalDetector:
             pass  # Bear swings form differently
 
         # Check if we can start a bull leg from the pending bull pivot
-        # prev_low could be the defended pivot for a bull swing extending up
-        # Only create if there isn't already a bull leg with the same pivot
+        # prev_low is the origin (starting point) for a bull swing extending up
+        # Only create if there isn't already a bull leg with the same origin
         if self.state.pending_pivots.get('bull'):
             pending = self.state.pending_pivots['bull']
-            # Check if we already have a bull leg from this pivot
+            # Check if we already have a bull leg from this origin
             existing_bull_leg = any(
                 leg.direction == 'bull' and leg.status == 'active'
-                and leg.pivot_price == pending.price and leg.pivot_index == pending.bar_index
+                and leg.origin_price == pending.price and leg.origin_index == pending.bar_index
                 for leg in self.state.active_legs
             )
-            # Skip if dominated by existing leg with better pivot (#194)
+            # Skip if dominated by existing leg with better origin (#194)
             if self._would_leg_be_dominated('bull', pending.price):
                 existing_bull_leg = True
-            # Origin extension handled by _extend_leg_origins (#188)
+            # Pivot extension handled by _extend_leg_pivots (#188)
             if not existing_bull_leg:
-                # Create new bull leg: prev_low (defended pivot) → bar_high (origin)
+                # Create new bull leg: origin at LOW → pivot at HIGH
                 new_leg = Leg(
                     direction='bull',
-                    pivot_price=pending.price,
-                    pivot_index=pending.bar_index,
-                    origin_price=bar_high,
-                    origin_index=bar.index,
+                    origin_price=pending.price,  # LOW - where upward move started
+                    origin_index=pending.bar_index,
+                    pivot_price=bar_high,  # HIGH - current defended extreme
+                    pivot_index=bar.index,
                     price_at_creation=bar_close,
                     last_modified_bar=bar.index,
                 )
                 self.state.active_legs.append(new_leg)
                 # Clean up orphaned origins (#196)
                 self._clean_up_after_leg_creation(new_leg)
+                # Clear pending pivot after leg creation (#197)
+                self.state.pending_pivots['bull'] = None
                 # Emit LegCreatedEvent (#168)
                 events.append(LegCreatedEvent(
                     bar_index=bar.index,
@@ -727,10 +699,10 @@ class HierarchicalDetector:
                     swing_id="",  # Leg doesn't have swing_id yet
                     leg_id=new_leg.leg_id,
                     direction=new_leg.direction,
-                    pivot_price=new_leg.pivot_price,
-                    pivot_index=new_leg.pivot_index,
                     origin_price=new_leg.origin_price,
                     origin_index=new_leg.origin_index,
+                    pivot_price=new_leg.pivot_price,
+                    pivot_index=new_leg.pivot_index,
                 ))
 
         # Update pending pivots only if more extreme
@@ -777,35 +749,37 @@ class HierarchicalDetector:
         turn_prune_events = self._prune_legs_on_turn('bull', bar, timestamp)
         events.extend(turn_prune_events)
 
-        # Note: Bear leg origin extension now handled by _extend_leg_origins (#188)
+        # Note: Bear leg pivot extension now handled by _extend_leg_pivots (#188)
 
         # Start new bear leg for potential bear swing
         # (tracking downward movement for possible bear retracement later)
         if self.state.pending_pivots.get('bear'):
             pending = self.state.pending_pivots['bear']
-            # Only create if we don't already have a bear leg with this pivot
+            # Only create if we don't already have a bear leg with this origin
             existing_bear_leg = any(
                 leg.direction == 'bear' and leg.status == 'active'
-                and leg.pivot_price == pending.price and leg.pivot_index == pending.bar_index
+                and leg.origin_price == pending.price and leg.origin_index == pending.bar_index
                 for leg in self.state.active_legs
             )
-            # Skip if dominated by existing leg with better pivot (#194)
+            # Skip if dominated by existing leg with better origin (#194)
             if self._would_leg_be_dominated('bear', pending.price):
                 existing_bear_leg = True
-            # Origin extension handled by _extend_leg_origins (#188)
+            # Pivot extension handled by _extend_leg_pivots (#188)
             if not existing_bear_leg:
                 new_bear_leg = Leg(
                     direction='bear',
-                    pivot_price=pending.price,  # prev_high is defended
-                    pivot_index=pending.bar_index,
-                    origin_price=bar_low,  # current low is origin
-                    origin_index=bar.index,
+                    origin_price=pending.price,  # HIGH - where downward move started
+                    origin_index=pending.bar_index,
+                    pivot_price=bar_low,  # LOW - current defended extreme
+                    pivot_index=bar.index,
                     price_at_creation=bar_close,
                     last_modified_bar=bar.index,
                 )
                 self.state.active_legs.append(new_bear_leg)
                 # Clean up orphaned origins (#196)
                 self._clean_up_after_leg_creation(new_bear_leg)
+                # Clear pending pivot after leg creation (#197)
+                self.state.pending_pivots['bear'] = None
                 # Emit LegCreatedEvent (#168)
                 events.append(LegCreatedEvent(
                     bar_index=bar.index,
@@ -813,10 +787,10 @@ class HierarchicalDetector:
                     swing_id="",
                     leg_id=new_bear_leg.leg_id,
                     direction=new_bear_leg.direction,
-                    pivot_price=new_bear_leg.pivot_price,
-                    pivot_index=new_bear_leg.pivot_index,
                     origin_price=new_bear_leg.origin_price,
                     origin_index=new_bear_leg.origin_index,
+                    pivot_price=new_bear_leg.pivot_price,
+                    pivot_index=new_bear_leg.pivot_index,
                 ))
 
         # Update pending pivots only if more extreme
@@ -861,26 +835,29 @@ class HierarchicalDetector:
             pending_bull = self.state.pending_pivots.get('bull')  # Low pivot
 
             # Create bear leg if HIGH came before LOW (price moved down)
-            # Bear swing: pivot=HIGH (defended), origin=LOW
-            # Temporal order: pivot_index < origin_index (#195)
+            # Bear swing: origin=HIGH (starting point), pivot=LOW (defended extreme)
+            # Temporal order: origin_index < pivot_index (#195)
             if pending_bear and pending_bull:
                 # pending_bear = HIGH, pending_bull = LOW
                 # If HIGH came before LOW, this is a BEAR structure
-                # Skip if dominated by existing leg with better pivot (#194)
+                # Skip if dominated by existing leg with better origin (#194)
                 if (pending_bear.bar_index < pending_bull.bar_index
                     and not self._would_leg_be_dominated('bear', pending_bear.price)):
                     new_bear_leg = Leg(
                         direction='bear',
-                        pivot_price=pending_bear.price,  # HIGH as defended pivot
-                        pivot_index=pending_bear.bar_index,
-                        origin_price=pending_bull.price,  # LOW as origin
-                        origin_index=pending_bull.bar_index,
+                        origin_price=pending_bear.price,  # HIGH - where downward move started
+                        origin_index=pending_bear.bar_index,
+                        pivot_price=pending_bull.price,  # LOW - current defended extreme
+                        pivot_index=pending_bull.bar_index,
                         price_at_creation=bar_close,
                         last_modified_bar=bar.index,
                     )
                     self.state.active_legs.append(new_bear_leg)
                     # Clean up orphaned origins (#196)
                     self._clean_up_after_leg_creation(new_bear_leg)
+                    # Clear pending pivots after leg creation (#197)
+                    self.state.pending_pivots['bear'] = None
+                    self.state.pending_pivots['bull'] = None
                     # Emit LegCreatedEvent (#168)
                     events.append(LegCreatedEvent(
                         bar_index=bar.index,
@@ -888,33 +865,36 @@ class HierarchicalDetector:
                         swing_id="",
                         leg_id=new_bear_leg.leg_id,
                         direction=new_bear_leg.direction,
-                        pivot_price=new_bear_leg.pivot_price,
-                        pivot_index=new_bear_leg.pivot_index,
                         origin_price=new_bear_leg.origin_price,
                         origin_index=new_bear_leg.origin_index,
+                        pivot_price=new_bear_leg.pivot_price,
+                        pivot_index=new_bear_leg.pivot_index,
                     ))
 
             # Create bull leg if LOW came before HIGH (price moved up)
-            # Bull swing: pivot=LOW (defended), origin=HIGH
-            # Temporal order: pivot_index < origin_index (#195)
+            # Bull swing: origin=LOW (starting point), pivot=HIGH (defended extreme)
+            # Temporal order: origin_index < pivot_index (#195)
             if pending_bear and pending_bull:
                 # pending_bull = LOW, pending_bear = HIGH
                 # If LOW came before HIGH, this is a BULL structure
-                # Skip if dominated by existing leg with better pivot (#194)
+                # Skip if dominated by existing leg with better origin (#194)
                 if (pending_bull.bar_index < pending_bear.bar_index
                     and not self._would_leg_be_dominated('bull', pending_bull.price)):
                     new_bull_leg = Leg(
                         direction='bull',
-                        pivot_price=pending_bull.price,  # LOW as defended pivot
-                        pivot_index=pending_bull.bar_index,
-                        origin_price=pending_bear.price,  # HIGH as origin
-                        origin_index=pending_bear.bar_index,
+                        origin_price=pending_bull.price,  # LOW - where upward move started
+                        origin_index=pending_bull.bar_index,
+                        pivot_price=pending_bear.price,  # HIGH - current defended extreme
+                        pivot_index=pending_bear.bar_index,
                         price_at_creation=bar_close,
                         last_modified_bar=bar.index,
                     )
                     self.state.active_legs.append(new_bull_leg)
                     # Clean up orphaned origins (#196)
                     self._clean_up_after_leg_creation(new_bull_leg)
+                    # Clear pending pivots after leg creation (#197)
+                    self.state.pending_pivots['bull'] = None
+                    self.state.pending_pivots['bear'] = None
                     # Emit LegCreatedEvent (#168)
                     events.append(LegCreatedEvent(
                         bar_index=bar.index,
@@ -922,10 +902,10 @@ class HierarchicalDetector:
                         swing_id="",
                         leg_id=new_bull_leg.leg_id,
                         direction=new_bull_leg.direction,
-                        pivot_price=new_bull_leg.pivot_price,
-                        pivot_index=new_bull_leg.pivot_index,
                         origin_price=new_bull_leg.origin_price,
                         origin_index=new_bull_leg.origin_index,
+                        pivot_price=new_bull_leg.pivot_price,
+                        pivot_index=new_bull_leg.pivot_index,
                     ))
 
             # Update pending pivots only if more extreme
@@ -943,17 +923,19 @@ class HierarchicalDetector:
                 )
 
         # Update retracement for bull legs using bar.high (prev.L was before bar.H)
+        # Bull: origin=LOW, pivot=HIGH, retracement = (current - origin) / range
         for leg in self.state.active_legs:
             if leg.direction == 'bull' and leg.status == 'active':
                 if leg.range > 0:
-                    retracement = (bar_high - leg.pivot_price) / leg.range
+                    retracement = (bar_high - leg.origin_price) / leg.range
                     leg.retracement_pct = retracement
 
         # Update retracement for bear legs using bar.low (prev.H was before bar.L)
+        # Bear: origin=HIGH, pivot=LOW, retracement = (origin - current) / range
         for leg in self.state.active_legs:
             if leg.direction == 'bear' and leg.status == 'active':
                 if leg.range > 0:
-                    retracement = (leg.pivot_price - bar_low) / leg.range
+                    retracement = (leg.origin_price - bar_low) / leg.range
                     leg.retracement_pct = retracement
 
         # Check for formations (can use H/L for inside bars)
@@ -1025,11 +1007,13 @@ class HierarchicalDetector:
             if leg.range == 0:
                 continue
 
-            # Calculate retracement
+            # Calculate retracement (extension from origin toward pivot)
+            # Bull: origin=LOW, retracement = (current - origin) / range
+            # Bear: origin=HIGH, retracement = (origin - current) / range
             if leg.direction == 'bull':
-                retracement = (check_price - leg.pivot_price) / leg.range
+                retracement = (check_price - leg.origin_price) / leg.range
             else:
-                retracement = (leg.pivot_price - check_price) / leg.range
+                retracement = (leg.origin_price - check_price) / leg.range
 
             leg.retracement_pct = retracement
 
@@ -1064,10 +1048,12 @@ class HierarchicalDetector:
 
             # For bull legs, use bar.high (prev.L was before bar.H for inside bars)
             # For bear legs, use bar.low (prev.H was before bar.L for inside bars)
+            # Bull: origin=LOW, retracement = (current - origin) / range
+            # Bear: origin=HIGH, retracement = (origin - current) / range
             if leg.direction == 'bull':
-                retracement = (bar_high - leg.pivot_price) / leg.range
+                retracement = (bar_high - leg.origin_price) / leg.range
             else:
-                retracement = (leg.pivot_price - bar_low) / leg.range
+                retracement = (leg.origin_price - bar_low) / leg.range
 
             leg.retracement_pct = retracement
 
@@ -1099,13 +1085,15 @@ class HierarchicalDetector:
             SwingFormedEvent or None if swing already exists
         """
         # Create SwingNode
+        # Bull leg: origin at LOW → pivot at HIGH
+        # Bear leg: origin at HIGH → pivot at LOW
         if leg.direction == 'bull':
             swing = SwingNode(
                 swing_id=SwingNode.generate_id(),
-                high_bar_index=leg.origin_index,
-                high_price=leg.origin_price,
-                low_bar_index=leg.pivot_index,
-                low_price=leg.pivot_price,
+                low_bar_index=leg.origin_index,  # origin is at LOW
+                low_price=leg.origin_price,
+                high_bar_index=leg.pivot_index,  # pivot is at HIGH
+                high_price=leg.pivot_price,
                 direction="bull",
                 status="active",
                 formed_at_bar=bar.index,
@@ -1113,10 +1101,10 @@ class HierarchicalDetector:
         else:
             swing = SwingNode(
                 swing_id=SwingNode.generate_id(),
-                high_bar_index=leg.pivot_index,
-                high_price=leg.pivot_price,
-                low_bar_index=leg.origin_index,
-                low_price=leg.origin_price,
+                high_bar_index=leg.origin_index,  # origin is at HIGH
+                high_price=leg.origin_price,
+                low_bar_index=leg.pivot_index,  # pivot is at LOW
+                low_price=leg.pivot_price,
                 direction="bear",
                 status="active",
                 formed_at_bar=bar.index,
@@ -1177,6 +1165,12 @@ class HierarchicalDetector:
         if not orphaned:
             return events
 
+        # After terminology fix (#197):
+        # - Bull leg: origin=LOW, pivot=HIGH
+        # - Bear leg: origin=HIGH, pivot=LOW
+        # - Orphaned bull origins are at LOWs (where upward moves started)
+        # - Orphaned bear origins are at HIGHs (where downward moves started)
+        # Sibling swings share the same PIVOT (defended extreme) with different origins
         pivot_price = leg.pivot_price
         pivot_index = leg.pivot_index
 
@@ -1194,12 +1188,12 @@ class HierarchicalDetector:
                 continue
 
             # Check formation threshold
+            # Bull: origin=LOW (orphaned), pivot=HIGH, ratio = (close - origin) / range
+            # Bear: origin=HIGH (orphaned), pivot=LOW, ratio = (origin - close) / range
             if leg.direction == 'bull':
-                # Bull: ratio = (close - pivot) / range
-                ratio = (close_price - pivot_price) / swing_range
+                ratio = (close_price - origin_price) / swing_range
             else:
-                # Bear: ratio = (pivot - close) / range
-                ratio = (pivot_price - close_price) / swing_range
+                ratio = (origin_price - close_price) / swing_range
 
             if ratio < formation_threshold:
                 continue
@@ -1212,12 +1206,14 @@ class HierarchicalDetector:
             for swing in self.state.active_swings:
                 if swing.direction != leg.direction:
                     continue
+                # Bull: origin at low_bar_index, pivot at high_bar_index
+                # Bear: origin at high_bar_index, pivot at low_bar_index
                 if leg.direction == 'bull':
-                    if swing.high_bar_index == origin_index and swing.low_bar_index == pivot_index:
+                    if swing.low_bar_index == origin_index and swing.high_bar_index == pivot_index:
                         swing_exists = True
                         break
                 else:
-                    if swing.low_bar_index == origin_index and swing.high_bar_index == pivot_index:
+                    if swing.high_bar_index == origin_index and swing.low_bar_index == pivot_index:
                         swing_exists = True
                         break
 
@@ -1225,13 +1221,15 @@ class HierarchicalDetector:
                 continue
 
             # Create the sibling swing
+            # Bull: origin at LOW → pivot at HIGH
+            # Bear: origin at HIGH → pivot at LOW
             if leg.direction == 'bull':
                 swing = SwingNode(
                     swing_id=SwingNode.generate_id(),
-                    high_bar_index=origin_index,
-                    high_price=origin_price,
-                    low_bar_index=pivot_index,
-                    low_price=pivot_price,
+                    low_bar_index=origin_index,  # orphaned origin is at LOW
+                    low_price=origin_price,
+                    high_bar_index=pivot_index,  # pivot is at HIGH
+                    high_price=pivot_price,
                     direction="bull",
                     status="active",
                     formed_at_bar=bar.index,
@@ -1239,10 +1237,10 @@ class HierarchicalDetector:
             else:
                 swing = SwingNode(
                     swing_id=SwingNode.generate_id(),
-                    high_bar_index=pivot_index,
-                    high_price=pivot_price,
-                    low_bar_index=origin_index,
-                    low_price=origin_price,
+                    high_bar_index=origin_index,  # orphaned origin is at HIGH
+                    high_price=origin_price,
+                    low_bar_index=pivot_index,  # pivot is at LOW
+                    low_price=pivot_price,
                     direction="bear",
                     status="active",
                     formed_at_bar=bar.index,
@@ -1311,14 +1309,18 @@ class HierarchicalDetector:
 
             threshold_amount = invalidation_threshold * leg.range
 
+            # Invalidation happens when price breaches 38.2% beyond the origin
+            # (the origin is the defended level that must hold)
+            # Bull: origin=LOW, invalidation if price drops below origin - threshold
+            # Bear: origin=HIGH, invalidation if price rises above origin + threshold
             if leg.direction == 'bull':
-                invalidation_price = leg.pivot_price - threshold_amount
+                invalidation_price = leg.origin_price - threshold_amount
                 if bar_low < invalidation_price:
                     leg.status = 'invalidated'
                     invalidated_legs.append(leg)
                     invalidation_prices[leg.leg_id] = bar_low
             else:  # bear
-                invalidation_price = leg.pivot_price + threshold_amount
+                invalidation_price = leg.origin_price + threshold_amount
                 if bar_high > invalidation_price:
                     leg.status = 'invalidated'
                     invalidated_legs.append(leg)
@@ -1578,13 +1580,17 @@ class HierarchicalDetector:
 
                 # Check if child is contained within parent's range
                 if direction == 'bull':
-                    # Bull: pivot is low, origin is high
-                    in_range = (parent_leg.pivot_price <= child_leg.pivot_price and
-                                child_leg.origin_price <= parent_leg.origin_price)
-                else:
-                    # Bear: pivot is high, origin is low
-                    in_range = (parent_leg.origin_price <= child_leg.origin_price and
+                    # Bull: origin=LOW, pivot=HIGH
+                    # Contained if child's origin >= parent's origin (both LOWs)
+                    # and child's pivot <= parent's pivot (both HIGHs)
+                    in_range = (child_leg.origin_price >= parent_leg.origin_price and
                                 child_leg.pivot_price <= parent_leg.pivot_price)
+                else:
+                    # Bear: origin=HIGH, pivot=LOW
+                    # Contained if child's origin <= parent's origin (both HIGHs)
+                    # and child's pivot >= parent's pivot (both LOWs)
+                    in_range = (child_leg.origin_price <= parent_leg.origin_price and
+                                child_leg.pivot_price >= parent_leg.pivot_price)
 
                 # If contained and < 10% of parent, prune
                 if in_range and child_leg.range < parent_threshold:

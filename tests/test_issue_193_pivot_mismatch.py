@@ -35,9 +35,9 @@ class TestPendingPivotOverwrite:
         """
         Bug #193: Bear pivot should only be updated when bar.high > existing pivot.
 
-        Scenario:
+        Scenario (using Type 1 inside bars to avoid leg creation):
         - Bar 0: High = 100 (sets initial bear pivot)
-        - Bar 1: High = 98 (lower high - should NOT overwrite bear pivot)
+        - Bar 1: Inside bar with High = 98 (lower high - should NOT overwrite bear pivot)
 
         Expected: pending_pivots['bear'].price should remain 100
         """
@@ -51,25 +51,25 @@ class TestPendingPivotOverwrite:
         assert detector.state.pending_pivots['bear'].price == Decimal('100')
         assert detector.state.pending_pivots['bear'].bar_index == 0
 
-        # Bar 1: Lower high (Type 2-Bear: LH, LL) - should NOT overwrite bear pivot
-        bar1 = make_bar(1, 97.0, 98.0, 88.0, 89.0)
+        # Bar 1: Inside bar (LH, HL) - doesn't create legs, doesn't overwrite bear pivot
+        bar1 = make_bar(1, 97.0, 98.0, 92.0, 95.0)
         detector.process_bar(bar1)
 
         # Bear pivot should still be 100 from bar 0
         assert detector.state.pending_pivots['bear'].price == Decimal('100')
         assert detector.state.pending_pivots['bear'].bar_index == 0
 
-        # Bull pivot SHOULD be updated to lower low
-        assert detector.state.pending_pivots['bull'].price == Decimal('88')
-        assert detector.state.pending_pivots['bull'].bar_index == 1
+        # Bull pivot should also remain at 90 (higher low doesn't overwrite)
+        assert detector.state.pending_pivots['bull'].price == Decimal('90')
+        assert detector.state.pending_pivots['bull'].bar_index == 0
 
     def test_bull_pivot_not_overwritten_by_higher_low(self):
         """
         Bull pivot should only be updated when bar.low < existing pivot.
 
-        Scenario:
+        Scenario (using Type 1 inside bars to avoid leg creation):
         - Bar 0: Low = 90 (sets initial bull pivot)
-        - Bar 1: Low = 92 (higher low - should NOT overwrite bull pivot)
+        - Bar 1: Inside bar with Low = 92 (higher low - should NOT overwrite bull pivot)
 
         Expected: pending_pivots['bull'].price should remain 90
         """
@@ -82,17 +82,17 @@ class TestPendingPivotOverwrite:
         assert detector.state.pending_pivots['bull'] is not None
         assert detector.state.pending_pivots['bull'].price == Decimal('90')
 
-        # Bar 1: Higher low (Type 2-Bull: HH, HL) - should NOT overwrite bull pivot
-        bar1 = make_bar(1, 97.0, 102.0, 92.0, 101.0)
+        # Bar 1: Inside bar (LH, HL) - doesn't create legs, doesn't overwrite bull pivot
+        bar1 = make_bar(1, 97.0, 98.0, 92.0, 95.0)
         detector.process_bar(bar1)
 
         # Bull pivot should still be 90 from bar 0
         assert detector.state.pending_pivots['bull'].price == Decimal('90')
         assert detector.state.pending_pivots['bull'].bar_index == 0
 
-        # Bear pivot SHOULD be updated to higher high
-        assert detector.state.pending_pivots['bear'].price == Decimal('102')
-        assert detector.state.pending_pivots['bear'].bar_index == 1
+        # Bear pivot should also remain at 100 (lower high doesn't overwrite)
+        assert detector.state.pending_pivots['bear'].price == Decimal('100')
+        assert detector.state.pending_pivots['bear'].bar_index == 0
 
     def test_bear_pivot_updated_when_higher(self):
         """Bear pivot should be updated when bar.high > existing pivot."""

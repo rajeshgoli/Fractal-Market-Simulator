@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2025-12-19
 
@@ -8,8 +8,9 @@
 
 ## Pending Changes
 
+- **#197** — Fix incorrect pivot/origin terminology in leg creation code
 - **#196** — Clear orphaned origins when new leg uses that origin
-- **#195** — Fix TYPE_2_BEAR creating bull legs with inverted temporal order
+- **#195** — Fix TYPE_2_BEAR and TYPE_1 creating legs with inverted direction
 - **#194** — Skip creating dominated legs that would be pruned at turn
 - **#193** — Pending pivot overwrite bug: preserve extreme pivots for correct leg pivot/origin matching
 - **#192** — Leg pivot extension: ensure pivot_index always matches pivot_price location

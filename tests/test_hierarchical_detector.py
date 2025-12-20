@@ -1353,7 +1353,7 @@ class TestTurnPruning:
         assert len(remaining) == 2
 
     def test_subtree_prune_removes_contained_small_origins(self):
-        """Subtree prune removes origins contained within larger origin if < 10%."""
+        """Subtree prune removes origins contained within larger origin if < 10%. Fixed for #197."""
         from src.swing_analysis.hierarchical_detector import Leg
         from src.swing_analysis.events import LegPrunedEvent
         from decimal import Decimal
@@ -1363,25 +1363,27 @@ class TestTurnPruning:
         detector = HierarchicalDetector(config)
 
         # Create two origin groups where one is contained within the other
-        # Origin 1: large leg (pivot=5000, origin=5100, range=100)
+        # After #197 fix: bull leg has origin=LOW, pivot=HIGH
+        # Origin 1: large leg (origin=5000, pivot=5100, range=100)
         leg1 = Leg(
             direction='bull',
-            pivot_price=Decimal("5000"),  # Range: 100
-            pivot_index=5,
-            origin_price=Decimal("5100"),
-            origin_index=10,
+            origin_price=Decimal("5000"),  # LOW - starting point
+            origin_index=5,
+            pivot_price=Decimal("5100"),   # HIGH - defended extreme
+            pivot_index=10,
             status='active',
         )
 
         # Origin 2: small leg contained within leg1's range
-        # pivot=5040, origin=5045, range=5 (5% of 100 → PRUNE)
-        # Contained: leg1.pivot (5000) <= leg2.pivot (5040) AND leg2.origin (5045) <= leg1.origin (5100)
+        # origin=5040, pivot=5045, range=5 (5% of 100 → PRUNE)
+        # Contained: child.origin >= parent.origin AND child.pivot <= parent.pivot
+        #            5040 >= 5000 AND 5045 <= 5100 → TRUE
         leg2 = Leg(
             direction='bull',
-            pivot_price=Decimal("5040"),  # Range: 5
-            pivot_index=8,
-            origin_price=Decimal("5045"),
-            origin_index=9,
+            origin_price=Decimal("5040"),  # LOW - starting point
+            origin_index=8,
+            pivot_price=Decimal("5045"),   # HIGH - defended extreme
+            pivot_index=9,
             status='active',
         )
 
@@ -1400,7 +1402,7 @@ class TestTurnPruning:
 
         remaining = [leg for leg in detector.state.active_legs if leg.status == 'active']
         assert len(remaining) == 1
-        assert remaining[0].pivot_price == Decimal("5000")
+        assert remaining[0].origin_price == Decimal("5000")  # leg1 remains
 
     def test_single_leg_not_pruned(self):
         """A single leg should not be pruned (nothing to compare against)."""
@@ -1598,12 +1600,16 @@ class TestLegOriginExtension:
     This is independent of bar type classification.
     """
 
-    def test_bull_leg_origin_extended_on_higher_high_equal_low(self):
+    def test_bull_leg_pivot_extended_on_higher_high_equal_low(self):
         """
-        Bug fix for #188: Bull leg origins should update on HH+EL bar.
+        Bug fix for #188, #197: Bull leg pivots should update on HH+EL bar.
+
+        After terminology fix (#197):
+        - Bull leg: origin=LOW (fixed starting point), pivot=HIGH (extends)
+        - Bear leg: origin=HIGH (fixed starting point), pivot=LOW (extends)
 
         When bar has higher high but equal low, it's classified as Type 1
-        (inside bar), but bull leg origins should still extend.
+        (inside bar), but bull leg pivots should still extend.
         """
         from src.swing_analysis.hierarchical_detector import Leg
 
@@ -1614,39 +1620,46 @@ class TestLegOriginExtension:
         bar0 = make_bar(0, 100.0, 105.0, 95.0, 103.0)
         detector.process_bar(bar0)
 
-        # Create a bull leg with origin at bar 1's high
+        # Create bar 1 for classification context
         bar1 = make_bar(1, 103.0, 110.0, 100.0, 108.0)
         detector.process_bar(bar1)
 
-        # Add a bull leg manually with origin at 110.0
+        # Add a bull leg manually with origin at LOW (100), pivot at HIGH (110)
         bull_leg = Leg(
             direction='bull',
-            pivot_price=Decimal("100"),
-            pivot_index=1,
-            origin_price=Decimal("110"),
+            origin_price=Decimal("100"),  # LOW - fixed starting point
             origin_index=1,
+            pivot_price=Decimal("110"),   # HIGH - extends
+            pivot_index=1,
             price_at_creation=Decimal("108"),
             last_modified_bar=1,
         )
         detector.state.active_legs.append(bull_leg)
 
-        # Bar 2: Higher high (115) but EQUAL low (100) - should still extend origin
+        # Bar 2: Higher high (115) but EQUAL low (100) - should extend pivot
         # This is the edge case from #188
         bar2 = make_bar(2, 108.0, 115.0, 100.0, 113.0)
         detector.process_bar(bar2)
 
-        # Verify origin was extended
-        assert bull_leg.origin_price == Decimal("115"), \
-            f"Expected origin_price 115, got {bull_leg.origin_price}"
-        assert bull_leg.origin_index == 2, \
-            f"Expected origin_index 2, got {bull_leg.origin_index}"
+        # Verify pivot was extended (not origin - origin is fixed)
+        assert bull_leg.pivot_price == Decimal("115"), \
+            f"Expected pivot_price 115, got {bull_leg.pivot_price}"
+        assert bull_leg.pivot_index == 2, \
+            f"Expected pivot_index 2, got {bull_leg.pivot_index}"
+        # Origin should remain fixed at starting point
+        assert bull_leg.origin_price == Decimal("100"), \
+            f"Origin should remain fixed at 100, got {bull_leg.origin_price}"
 
-    def test_bear_leg_origin_extended_on_lower_low_equal_high(self):
+    def test_bear_leg_pivot_extended_on_lower_low_equal_high(self):
         """
-        Bug fix for #188: Bear leg origins should update on EH+LL bar.
+        Bug fix for #188, #197: Bear leg pivots should update on EH+LL bar.
+
+        After terminology fix (#197):
+        - Bull leg: origin=LOW (fixed starting point), pivot=HIGH (extends)
+        - Bear leg: origin=HIGH (fixed starting point), pivot=LOW (extends)
 
         When bar has equal high but lower low, it's classified as Type 1
-        (inside bar), but bear leg origins should still extend.
+        (inside bar), but bear leg pivots should still extend.
         """
         from src.swing_analysis.hierarchical_detector import Leg
 
@@ -1661,30 +1674,33 @@ class TestLegOriginExtension:
         bar1 = make_bar(1, 100.0, 110.0, 90.0, 95.0)
         detector.process_bar(bar1)
 
-        # Add a bear leg manually with origin at 90.0
+        # Add a bear leg manually with origin at HIGH (110), pivot at LOW (90)
         bear_leg = Leg(
             direction='bear',
-            pivot_price=Decimal("110"),
-            pivot_index=1,
-            origin_price=Decimal("90"),
+            origin_price=Decimal("110"),  # HIGH - fixed starting point
             origin_index=1,
+            pivot_price=Decimal("90"),    # LOW - extends
+            pivot_index=1,
             price_at_creation=Decimal("95"),
             last_modified_bar=1,
         )
         detector.state.active_legs.append(bear_leg)
 
-        # Bar 2: EQUAL high (110) but lower low (85) - should still extend origin
+        # Bar 2: EQUAL high (110) but lower low (85) - should extend pivot
         bar2 = make_bar(2, 95.0, 110.0, 85.0, 88.0)
         detector.process_bar(bar2)
 
-        # Verify origin was extended
-        assert bear_leg.origin_price == Decimal("85"), \
-            f"Expected origin_price 85, got {bear_leg.origin_price}"
-        assert bear_leg.origin_index == 2, \
-            f"Expected origin_index 2, got {bear_leg.origin_index}"
+        # Verify pivot was extended (not origin - origin is fixed)
+        assert bear_leg.pivot_price == Decimal("85"), \
+            f"Expected pivot_price 85, got {bear_leg.pivot_price}"
+        assert bear_leg.pivot_index == 2, \
+            f"Expected pivot_index 2, got {bear_leg.pivot_index}"
+        # Origin should remain fixed at starting point
+        assert bear_leg.origin_price == Decimal("110"), \
+            f"Origin should remain fixed at 110, got {bear_leg.origin_price}"
 
-    def test_bull_leg_origin_extended_on_type2_bull(self):
-        """Bull leg origins extend on Type 2-Bull bars (HH+HL)."""
+    def test_bull_leg_pivot_extended_on_type2_bull(self):
+        """Bull leg pivots extend on Type 2-Bull bars (HH+HL). Fixed for #197."""
         from src.swing_analysis.hierarchical_detector import Leg
 
         config = SwingConfig.default()
@@ -1696,13 +1712,13 @@ class TestLegOriginExtension:
         bar1 = make_bar(1, 103.0, 110.0, 98.0, 108.0)
         detector.process_bar(bar1)
 
-        # Add a bull leg
+        # Add a bull leg with origin at LOW (98), pivot at HIGH (110)
         bull_leg = Leg(
             direction='bull',
-            pivot_price=Decimal("98"),
-            pivot_index=1,
-            origin_price=Decimal("110"),
+            origin_price=Decimal("98"),   # LOW - fixed starting point
             origin_index=1,
+            pivot_price=Decimal("110"),   # HIGH - extends
+            pivot_index=1,
             price_at_creation=Decimal("108"),
             last_modified_bar=1,
         )
@@ -1712,11 +1728,14 @@ class TestLegOriginExtension:
         bar2 = make_bar(2, 108.0, 115.0, 100.0, 113.0)
         detector.process_bar(bar2)
 
-        assert bull_leg.origin_price == Decimal("115")
-        assert bull_leg.origin_index == 2
+        # Pivot extends to new high
+        assert bull_leg.pivot_price == Decimal("115")
+        assert bull_leg.pivot_index == 2
+        # Origin remains fixed
+        assert bull_leg.origin_price == Decimal("98")
 
-    def test_bear_leg_origin_extended_on_type2_bear(self):
-        """Bear leg origins extend on Type 2-Bear bars (LH+LL)."""
+    def test_bear_leg_pivot_extended_on_type2_bear(self):
+        """Bear leg pivots extend on Type 2-Bear bars (LH+LL). Fixed for #197."""
         from src.swing_analysis.hierarchical_detector import Leg
 
         config = SwingConfig.default()
@@ -1728,13 +1747,13 @@ class TestLegOriginExtension:
         bar1 = make_bar(1, 100.0, 108.0, 90.0, 92.0)
         detector.process_bar(bar1)
 
-        # Add a bear leg
+        # Add a bear leg with origin at HIGH (108), pivot at LOW (90)
         bear_leg = Leg(
             direction='bear',
-            pivot_price=Decimal("108"),
-            pivot_index=1,
-            origin_price=Decimal("90"),
+            origin_price=Decimal("108"),  # HIGH - fixed starting point
             origin_index=1,
+            pivot_price=Decimal("90"),    # LOW - extends
+            pivot_index=1,
             price_at_creation=Decimal("92"),
             last_modified_bar=1,
         )
@@ -1744,11 +1763,14 @@ class TestLegOriginExtension:
         bar2 = make_bar(2, 92.0, 105.0, 85.0, 88.0)
         detector.process_bar(bar2)
 
-        assert bear_leg.origin_price == Decimal("85")
-        assert bear_leg.origin_index == 2
+        # Pivot extends to new low
+        assert bear_leg.pivot_price == Decimal("85")
+        assert bear_leg.pivot_index == 2
+        # Origin remains fixed
+        assert bear_leg.origin_price == Decimal("108")
 
-    def test_both_legs_extend_on_type3(self):
-        """Both bull and bear legs extend on Type 3 bars (HH+LL)."""
+    def test_both_legs_pivot_extend_on_type3(self):
+        """Both bull and bear leg pivots extend on Type 3 bars (HH+LL). Fixed for #197."""
         from src.swing_analysis.hierarchical_detector import Leg
 
         config = SwingConfig.default()
@@ -1760,22 +1782,22 @@ class TestLegOriginExtension:
         bar1 = make_bar(1, 100.0, 110.0, 90.0, 100.0)
         detector.process_bar(bar1)
 
-        # Add both bull and bear legs
+        # Add both bull and bear legs with correct terminology
         bull_leg = Leg(
             direction='bull',
-            pivot_price=Decimal("90"),
-            pivot_index=1,
-            origin_price=Decimal("110"),
+            origin_price=Decimal("90"),   # LOW - fixed starting point
             origin_index=1,
+            pivot_price=Decimal("110"),   # HIGH - extends
+            pivot_index=1,
             price_at_creation=Decimal("100"),
             last_modified_bar=1,
         )
         bear_leg = Leg(
             direction='bear',
-            pivot_price=Decimal("110"),
-            pivot_index=1,
-            origin_price=Decimal("90"),
+            origin_price=Decimal("110"),  # HIGH - fixed starting point
             origin_index=1,
+            pivot_price=Decimal("90"),    # LOW - extends
+            pivot_index=1,
             price_at_creation=Decimal("100"),
             last_modified_bar=1,
         )
@@ -1785,13 +1807,17 @@ class TestLegOriginExtension:
         bar2 = make_bar(2, 100.0, 115.0, 85.0, 100.0)
         detector.process_bar(bar2)
 
-        assert bull_leg.origin_price == Decimal("115")
-        assert bull_leg.origin_index == 2
-        assert bear_leg.origin_price == Decimal("85")
-        assert bear_leg.origin_index == 2
+        # Pivots extend on Type 3
+        assert bull_leg.pivot_price == Decimal("115")
+        assert bull_leg.pivot_index == 2
+        assert bear_leg.pivot_price == Decimal("85")
+        assert bear_leg.pivot_index == 2
+        # Origins remain fixed
+        assert bull_leg.origin_price == Decimal("90")
+        assert bear_leg.origin_price == Decimal("110")
 
-    def test_origin_not_extended_if_not_new_extreme(self):
-        """Origin should not change if bar doesn't make new extreme."""
+    def test_pivot_not_extended_if_not_new_extreme(self):
+        """Pivot should not change if bar doesn't make new extreme. Fixed for #197."""
         from src.swing_analysis.hierarchical_detector import Leg
 
         config = SwingConfig.default()
@@ -1803,25 +1829,27 @@ class TestLegOriginExtension:
         bar1 = make_bar(1, 100.0, 112.0, 88.0, 100.0)
         detector.process_bar(bar1)
 
-        # Add a bull leg with origin at 115
+        # Add a bull leg with origin at LOW (85), pivot at HIGH (115)
         bull_leg = Leg(
             direction='bull',
-            pivot_price=Decimal("85"),
-            pivot_index=0,
-            origin_price=Decimal("115"),
+            origin_price=Decimal("85"),   # LOW - fixed
             origin_index=0,
+            pivot_price=Decimal("115"),   # HIGH - extends on new highs only
+            pivot_index=0,
             price_at_creation=Decimal("100"),
             last_modified_bar=0,
         )
         detector.state.active_legs.append(bull_leg)
 
-        # Bar 2: Inside bar, no new high (110 < 112)
+        # Bar 2: Inside bar, no new high (110 < 115)
         bar2 = make_bar(2, 100.0, 110.0, 90.0, 100.0)
         detector.process_bar(bar2)
 
-        # Origin should remain unchanged
-        assert bull_leg.origin_price == Decimal("115")
-        assert bull_leg.origin_index == 0
+        # Pivot should remain unchanged (no new high)
+        assert bull_leg.pivot_price == Decimal("115")
+        assert bull_leg.pivot_index == 0
+        # Origin is always fixed
+        assert bull_leg.origin_price == Decimal("85")
 
 
 class TestSameBarLegPrevention:
@@ -1979,18 +2007,19 @@ class TestLegCreationCleansUpState:
                 f"Orphans at bar 5: {orphan_at_bar_5}"
             )
 
-    def test_pending_pivots_track_extremes_for_future_legs(self):
+    def test_pending_pivots_cleared_after_leg_creation(self):
         """
-        Pending pivots track the most extreme value for potential future legs.
+        Pending pivots are cleared when a leg is created from them (#197 fix).
 
-        Unlike orphaned origins, pending pivots are NOT cleared when a leg is created.
-        This is because:
-        1. Multiple legs may share the same pivot (e.g., sibling swings)
-        2. Pending pivots are only replaced when a MORE extreme value appears
-        3. This preserves the #193 fix for proper pivot tracking
+        After the terminology fix (#197):
+        - Bear leg: origin_price = HIGH (where downward move started), pivot_price = LOW
+        - Bull leg: origin_price = LOW (where upward move started), pivot_price = HIGH
+        - pending_pivots['bear'] tracks HIGHs (potential bear origins)
+        - pending_pivots['bull'] tracks LOWs (potential bull origins)
 
-        The same price appearing in both pending_pivots and an active leg's pivot
-        is semantically correct - they're tracking the same extreme.
+        When a leg is created from a pending pivot, that pending pivot is cleared.
+        However, subsequent bar processing may set a NEW pending pivot, so we check
+        that the pending pivot (if any) is different from the one used for the leg.
         """
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -1999,30 +2028,32 @@ class TestLegCreationCleansUpState:
         bars = [
             make_bar(0, 100.0, 105.0, 95.0, 102.0),  # Initial
             make_bar(1, 102.0, 110.0, 100.0, 108.0),  # TYPE_2_BULL - creates pending bear pivot at 110
-            make_bar(2, 108.0, 108.5, 98.0, 100.0),  # TYPE_2_BEAR (LH, LL) - creates bear leg from pending pivot
+            make_bar(2, 108.0, 108.5, 98.0, 100.0),  # TYPE_2_BEAR (LH, LL) - creates bear leg from pending pivot at 110
         ]
 
         for bar in bars:
             detector.process_bar(bar)
 
-        # Check if bear leg was created with the pending pivot
+        # Check if bear leg was created with origin at 110 (pending bear pivot)
+        # After #197 fix: bear leg origin = HIGH (where downward move started)
         bear_legs = [leg for leg in detector.state.active_legs if leg.direction == 'bear']
-        bear_legs_with_pivot_at_110 = [
-            leg for leg in bear_legs if leg.pivot_price == Decimal("110")
+        bear_legs_with_origin_at_110 = [
+            leg for leg in bear_legs if leg.origin_price == Decimal("110")
         ]
 
-        # Verify a bear leg was created with the pivot at 110
-        assert len(bear_legs_with_pivot_at_110) > 0, "Bear leg should be created with pivot at 110"
+        # Verify a bear leg was created with origin at 110
+        assert len(bear_legs_with_origin_at_110) > 0, "Bear leg should be created with origin at 110"
 
-        # Verify pending pivot still tracks the extreme (not cleared)
+        # Verify the original pending pivot at 110 was cleared (#197 fix)
+        # After leg creation, the pending pivot may be updated to a new value (bar 2 high = 108.5)
+        # but it should NOT still be at 110 (which was consumed by the leg)
         pending_bear = detector.state.pending_pivots.get('bear')
-        assert pending_bear is not None, "Pending bear pivot should still exist"
-        # The pending pivot should be the most extreme value seen
-        # Either 110 (original) or 108.5 (bar 2 high, if higher)
-        assert pending_bear.price == Decimal("110"), (
-            f"Pending bear pivot should remain at 110 (the most extreme high). "
-            f"Found: {pending_bear.price}"
-        )
+        if pending_bear is not None:
+            # If there's a pending pivot, it should be from a later bar, not the consumed one
+            assert pending_bear.price != Decimal("110"), (
+                f"Pending bear pivot at 110 should be cleared after leg creation. "
+                f"Found: {pending_bear}"
+            )
 
     def test_same_price_not_in_multiple_places(self):
         """
