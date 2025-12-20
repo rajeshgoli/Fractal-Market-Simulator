@@ -430,6 +430,17 @@ The DAG State Panel is always visible in this mode (no toggle needed). It shows:
 | Pending Pivots | Potential pivots awaiting confirmation for bull and bear directions |
 | Recent Events | Log of leg lifecycle events (LEG_CREATED, LEG_PRUNED, LEG_INVALIDATED) |
 
+### Hover Highlighting
+
+Hover over any item in the DAG State Panel to highlight it on the charts:
+
+| Item Type | Hover Effect |
+|-----------|--------------|
+| Active Leg | Leg line becomes thicker (4px) with full opacity; panel item shows blue ring |
+| Orphaned Origin | Origin marker becomes larger (2x size) with full opacity; panel item shows colored ring |
+
+This provides immediate visual feedback for reasoning about the algorithm's internal state.
+
 ### Leg Event Types
 
 | Event | Description |

@@ -28,6 +28,7 @@ import {
   getAggregationMinutes,
   ActiveLeg,
   LegEvent,
+  HighlightedDagItem,
 } from '../types';
 import { ViewMode } from '../App';
 
@@ -96,6 +97,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   const [dagState, setDagState] = useState<DagStateResponse | null>(null);
   const [recentLegEvents, setRecentLegEvents] = useState<LegEvent[]>([]);
   const [isDagLoading, setIsDagLoading] = useState(false);
+
+  // Hover highlighting state for DAG items
+  const [highlightedDagItem, setHighlightedDagItem] = useState<HighlightedDagItem | null>(null);
 
   // Linger toggle state (for DAG mode, default OFF for continuous observation)
   const [lingerEnabled, setLingerEnabled] = useState(false);
@@ -681,6 +685,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             legs={activeLegs}
             bars={chart1Bars}
             currentPosition={currentPlaybackPosition}
+            highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
           />
           <LegOverlay
             chart={chart2Ref.current}
@@ -688,6 +693,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             legs={activeLegs}
             bars={chart2Bars}
             currentPosition={currentPlaybackPosition}
+            highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
           />
 
           {/* Orphaned Origins Overlays - render markers for preserved pivots (#182) */}
@@ -697,6 +703,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             bearOrigins={dagState?.orphaned_origins.bear ?? []}
             bars={chart1Bars}
             currentPosition={currentPlaybackPosition}
+            highlightedOrigin={
+              highlightedDagItem?.type === 'orphaned_origin'
+                ? { direction: highlightedDagItem.direction, index: parseInt(highlightedDagItem.id.split('-')[1]) }
+                : undefined
+            }
           />
           <OrphanedOriginsOverlay
             markersPlugin={markers2Ref.current}
@@ -704,6 +715,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             bearOrigins={dagState?.orphaned_origins.bear ?? []}
             bars={chart2Bars}
             currentPosition={currentPlaybackPosition}
+            highlightedOrigin={
+              highlightedDagItem?.type === 'orphaned_origin'
+                ? { direction: highlightedDagItem.direction, index: parseInt(highlightedDagItem.id.split('-')[1]) }
+                : undefined
+            }
           />
 
           {/* Playback Controls */}
@@ -764,6 +780,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
               dagState={dagState}
               recentLegEvents={recentLegEvents}
               isLoading={isDagLoading}
+              onHoverItem={setHighlightedDagItem}
+              highlightedItem={highlightedDagItem}
             />
           </div>
         </main>

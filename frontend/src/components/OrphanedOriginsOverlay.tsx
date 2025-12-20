@@ -9,11 +9,15 @@ interface OrphanedOriginsOverlayProps {
   bearOrigins: DagOrphanedOrigin[];
   bars: BarData[];
   currentPosition: number;
+  highlightedOrigin?: { direction: 'bull' | 'bear'; index: number };
 }
 
 // Marker colors with transparency (30-50% opacity as specified in #182)
 const BULL_MARKER_COLOR = 'rgba(59, 130, 246, 0.4)'; // Blue with 40% opacity
 const BEAR_MARKER_COLOR = 'rgba(239, 68, 68, 0.4)'; // Red with 40% opacity
+// Highlighted colors with full opacity
+const BULL_MARKER_COLOR_HIGHLIGHTED = 'rgba(59, 130, 246, 1.0)'; // Blue with 100% opacity
+const BEAR_MARKER_COLOR_HIGHLIGHTED = 'rgba(239, 68, 68, 1.0)'; // Red with 100% opacity
 
 /**
  * OrphanedOriginsOverlay renders markers on the chart for orphaned origins.
@@ -33,6 +37,7 @@ export const OrphanedOriginsOverlay: React.FC<OrphanedOriginsOverlayProps> = ({
   bearOrigins,
   bars,
   currentPosition,
+  highlightedOrigin,
 }) => {
   // Find bar timestamp by source index
   const getTimestampForIndex = useCallback((barIndex: number): number | null => {
@@ -69,41 +74,43 @@ export const OrphanedOriginsOverlay: React.FC<OrphanedOriginsOverlayProps> = ({
     const visibleBullOrigins = bullOrigins.filter(o => o.bar_index <= currentPosition);
     const visibleBearOrigins = bearOrigins.filter(o => o.bar_index <= currentPosition);
 
-    // Add bull origin markers (circle below bar)
-    for (const origin of visibleBullOrigins) {
+    // Add bull origin markers (circle above bar)
+    visibleBullOrigins.forEach((origin, idx) => {
       const timestamp = getTimestampForIndex(origin.bar_index);
       if (timestamp !== null) {
+        const isHighlighted = highlightedOrigin?.direction === 'bull' && highlightedOrigin?.index === idx;
         markers.push({
           time: timestamp as Time,
           position: 'aboveBar',
-          color: BULL_MARKER_COLOR,
+          color: isHighlighted ? BULL_MARKER_COLOR_HIGHLIGHTED : BULL_MARKER_COLOR,
           shape: 'circle',
           text: '',
-          size: 1,
+          size: isHighlighted ? 2 : 1,
         });
       }
-    }
+    });
 
-    // Add bear origin markers (circle above bar)
-    for (const origin of visibleBearOrigins) {
+    // Add bear origin markers (circle below bar)
+    visibleBearOrigins.forEach((origin, idx) => {
       const timestamp = getTimestampForIndex(origin.bar_index);
       if (timestamp !== null) {
+        const isHighlighted = highlightedOrigin?.direction === 'bear' && highlightedOrigin?.index === idx;
         markers.push({
           time: timestamp as Time,
           position: 'belowBar',
-          color: BEAR_MARKER_COLOR,
+          color: isHighlighted ? BEAR_MARKER_COLOR_HIGHLIGHTED : BEAR_MARKER_COLOR,
           shape: 'circle',
           text: '',
-          size: 1,
+          size: isHighlighted ? 2 : 1,
         });
       }
-    }
+    });
 
     // Sort by time (required by lightweight-charts)
     markers.sort((a, b) => (a.time as number) - (b.time as number));
 
     return markers;
-  }, [bullOrigins, bearOrigins, currentPosition, getTimestampForIndex]);
+  }, [bullOrigins, bearOrigins, currentPosition, highlightedOrigin, getTimestampForIndex]);
 
   // Update markers when origins or bars change
   useEffect(() => {

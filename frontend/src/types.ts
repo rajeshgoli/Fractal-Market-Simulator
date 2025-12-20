@@ -279,6 +279,15 @@ export interface CalibrationDataHierarchical extends CalibrationData {
 // DAG State Types (Issue #171 - DAG State Panel)
 // ============================================================================
 
+/**
+ * Represents an item hovered in the DAG State Panel for chart highlighting.
+ */
+export interface HighlightedDagItem {
+  type: 'leg' | 'orphaned_origin' | 'pending_pivot';
+  id: string;  // leg_id or origin key (e.g., "bull-0")
+  direction: 'bull' | 'bear';
+}
+
 export interface LegEvent {
   type: 'LEG_CREATED' | 'LEG_PRUNED' | 'LEG_INVALIDATED';
   leg_id: string;

@@ -1,12 +1,14 @@
 import React from 'react';
 import { DagStateResponse, DagLeg } from '../lib/api';
-import { LegEvent } from '../types';
+import { LegEvent, HighlightedDagItem } from '../types';
 import { GitBranch, Circle, Target, History } from 'lucide-react';
 
 interface DAGStatePanelProps {
   dagState: DagStateResponse | null;
   recentLegEvents: LegEvent[];
   isLoading?: boolean;
+  onHoverItem?: (item: HighlightedDagItem | null) => void;
+  highlightedItem?: HighlightedDagItem | null;
 }
 
 // Format price for display
@@ -39,8 +41,23 @@ const getStatusStyle = (status: string): string => {
 };
 
 // Leg item component
-const LegItem: React.FC<{ leg: DagLeg }> = ({ leg }) => (
-  <div className={`text-xs p-2 rounded border border-app-border/50 ${getDirectionBg(leg.direction)}`}>
+interface LegItemProps {
+  leg: DagLeg;
+  isHighlighted?: boolean;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}
+
+const LegItem: React.FC<LegItemProps> = ({ leg, isHighlighted, onMouseEnter, onMouseLeave }) => (
+  <div
+    className={`text-xs p-2 rounded border transition-all duration-150 cursor-pointer ${
+      isHighlighted
+        ? 'border-trading-blue ring-2 ring-trading-blue/50 scale-[1.02]'
+        : 'border-app-border/50 hover:border-app-border'
+    } ${getDirectionBg(leg.direction)}`}
+    onMouseEnter={onMouseEnter}
+    onMouseLeave={onMouseLeave}
+  >
     <div className="flex items-center justify-between mb-1">
       <span className={`font-medium ${getDirectionColor(leg.direction)}`}>
         {leg.direction.toUpperCase()}
@@ -101,6 +118,8 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
   dagState,
   recentLegEvents,
   isLoading = false,
+  onHoverItem,
+  highlightedItem,
 }) => {
   if (isLoading) {
     return (
@@ -154,7 +173,13 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
               <div className="text-xs text-app-muted italic">No active legs</div>
             ) : (
               active_legs.slice(0, 6).map((leg) => (
-                <LegItem key={leg.leg_id} leg={leg} />
+                <LegItem
+                  key={leg.leg_id}
+                  leg={leg}
+                  isHighlighted={highlightedItem?.type === 'leg' && highlightedItem.id === leg.leg_id}
+                  onMouseEnter={() => onHoverItem?.({ type: 'leg', id: leg.leg_id, direction: leg.direction })}
+                  onMouseLeave={() => onHoverItem?.(null)}
+                />
               ))
             )}
             {active_legs.length > 6 && (
@@ -181,12 +206,23 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
                 <span className="text-xs text-app-muted italic">None</span>
               ) : (
                 <div className="space-y-1">
-                  {orphaned_origins.bull.slice(0, 4).map((origin, idx) => (
-                    <div key={idx} className="text-xs bg-trading-bull/10 rounded px-2 py-1 flex justify-between">
-                      <span className="font-mono">{formatPrice(origin.price)}</span>
-                      <span className="text-app-muted">@{origin.bar_index}</span>
-                    </div>
-                  ))}
+                  {orphaned_origins.bull.slice(0, 4).map((origin, idx) => {
+                    const originId = `bull-${idx}`;
+                    const isHighlighted = highlightedItem?.type === 'orphaned_origin' && highlightedItem.id === originId;
+                    return (
+                      <div
+                        key={idx}
+                        className={`text-xs bg-trading-bull/10 rounded px-2 py-1 flex justify-between cursor-pointer transition-all duration-150 ${
+                          isHighlighted ? 'ring-2 ring-trading-bull/50 scale-[1.02]' : 'hover:bg-trading-bull/20'
+                        }`}
+                        onMouseEnter={() => onHoverItem?.({ type: 'orphaned_origin', id: originId, direction: 'bull' })}
+                        onMouseLeave={() => onHoverItem?.(null)}
+                      >
+                        <span className="font-mono">{formatPrice(origin.price)}</span>
+                        <span className="text-app-muted">@{origin.bar_index}</span>
+                      </div>
+                    );
+                  })}
                   {orphaned_origins.bull.length > 4 && (
                     <div className="text-[10px] text-app-muted">+{orphaned_origins.bull.length - 4} more</div>
                   )}
@@ -200,12 +236,23 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
                 <span className="text-xs text-app-muted italic">None</span>
               ) : (
                 <div className="space-y-1">
-                  {orphaned_origins.bear.slice(0, 4).map((origin, idx) => (
-                    <div key={idx} className="text-xs bg-trading-bear/10 rounded px-2 py-1 flex justify-between">
-                      <span className="font-mono">{formatPrice(origin.price)}</span>
-                      <span className="text-app-muted">@{origin.bar_index}</span>
-                    </div>
-                  ))}
+                  {orphaned_origins.bear.slice(0, 4).map((origin, idx) => {
+                    const originId = `bear-${idx}`;
+                    const isHighlighted = highlightedItem?.type === 'orphaned_origin' && highlightedItem.id === originId;
+                    return (
+                      <div
+                        key={idx}
+                        className={`text-xs bg-trading-bear/10 rounded px-2 py-1 flex justify-between cursor-pointer transition-all duration-150 ${
+                          isHighlighted ? 'ring-2 ring-trading-bear/50 scale-[1.02]' : 'hover:bg-trading-bear/20'
+                        }`}
+                        onMouseEnter={() => onHoverItem?.({ type: 'orphaned_origin', id: originId, direction: 'bear' })}
+                        onMouseLeave={() => onHoverItem?.(null)}
+                      >
+                        <span className="font-mono">{formatPrice(origin.price)}</span>
+                        <span className="text-app-muted">@{origin.bar_index}</span>
+                      </div>
+                    );
+                  })}
                   {orphaned_origins.bear.length > 4 && (
                     <div className="text-[10px] text-app-muted">+{orphaned_origins.bear.length - 4} more</div>
                   )}

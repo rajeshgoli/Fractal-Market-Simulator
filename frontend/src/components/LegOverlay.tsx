@@ -8,6 +8,7 @@ interface LegOverlayProps {
   legs: ActiveLeg[];
   bars: BarData[];
   currentPosition: number;
+  highlightedLegId?: string;
 }
 
 /**
@@ -52,6 +53,7 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
   legs,
   bars,
   currentPosition,
+  highlightedLegId,
 }) => {
   // Track created line series so we can remove them on update
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,15 +102,18 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
 
   // Create line series for a leg
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const createLegLine = useCallback((leg: ActiveLeg): ISeriesApi<any> | null => {
+  const createLegLine = useCallback((leg: ActiveLeg, isHighlighted: boolean): ISeriesApi<any> | null => {
     if (!chart || !series) return null;
 
     const style = LEG_STATUS_STYLES[leg.status];
+    // Highlighted legs get full opacity and thicker line
+    const opacity = isHighlighted ? 1.0 : style.opacity;
+    const lineWidth = isHighlighted ? 4 : 2;
     const color = getColorWithOpacity(
       style.color[leg.direction],
-      style.opacity
+      opacity
     );
-    const lineStyle = getLineStyleValue(leg.status);
+    const lineStyle = isHighlighted ? LineStyle.Solid : getLineStyleValue(leg.status);
 
     // Get timestamps for origin and pivot
     const originTime = getTimestampForIndex(leg.origin_index);
@@ -122,7 +127,7 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       // Create line series for this leg using v5 API
       const lineSeries = chart.addSeries(LineSeries, {
         color,
-        lineWidth: 2,
+        lineWidth,
         lineStyle,
         crosshairMarkerVisible: false,
         priceLineVisible: false,
@@ -166,8 +171,16 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     });
 
     // Create line series for each visible leg
-    for (const leg of visibleLegs) {
-      const lineSeries = createLegLine(leg);
+    // Render non-highlighted legs first, then highlighted leg on top
+    const sortedLegs = [...visibleLegs].sort((a, b) => {
+      const aHighlighted = a.leg_id === highlightedLegId ? 1 : 0;
+      const bHighlighted = b.leg_id === highlightedLegId ? 1 : 0;
+      return aHighlighted - bHighlighted;
+    });
+
+    for (const leg of sortedLegs) {
+      const isHighlighted = leg.leg_id === highlightedLegId;
+      const lineSeries = createLegLine(leg, isHighlighted);
       if (lineSeries) {
         lineSeriesRef.current.set(leg.leg_id, lineSeries);
       }
@@ -177,7 +190,7 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     return () => {
       clearLineSeries();
     };
-  }, [chart, series, legs, bars, currentPosition, clearLineSeries, createLegLine]);
+  }, [chart, series, legs, bars, currentPosition, highlightedLegId, clearLineSeries, createLegLine]);
 
   // This component doesn't render any DOM elements
   // It only manages line series on the chart via side effects
