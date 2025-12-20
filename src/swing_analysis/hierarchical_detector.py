@@ -492,6 +492,43 @@ class HierarchicalDetector:
                     leg.origin_index = bar.index
                     leg.last_modified_bar = bar.index
 
+    def _extend_leg_pivots(self, bar: Bar, bar_high: Decimal, bar_low: Decimal) -> None:
+        """
+        Extend leg pivots when price makes new extremes (#192).
+
+        This handles pivot updates independently of bar type classification,
+        ensuring symmetric treatment with origin extension.
+
+        For bull legs: pivot is at LOW (defended), extends when new low occurs
+        For bear legs: pivot is at HIGH (defended), extends when new high occurs
+
+        This fixes the bug where pivot indices became stale when only some legs
+        were updated through the origin-matching logic in bar type handlers.
+
+        IMPORTANT: Only extends pivots for legs that haven't formed yet. Once a
+        leg forms into a swing, its endpoints are fixed and shouldn't change.
+
+        Args:
+            bar: Current bar
+            bar_high: Current bar's high as Decimal
+            bar_low: Current bar's low as Decimal
+        """
+        # Extend bull leg pivots on new lows (only for non-formed legs)
+        for leg in self.state.active_legs:
+            if leg.direction == 'bull' and leg.status == 'active' and not leg.formed:
+                if bar_low < leg.pivot_price:
+                    leg.pivot_price = bar_low
+                    leg.pivot_index = bar.index
+                    leg.last_modified_bar = bar.index
+
+        # Extend bear leg pivots on new highs (only for non-formed legs)
+        for leg in self.state.active_legs:
+            if leg.direction == 'bear' and leg.status == 'active' and not leg.formed:
+                if bar_high > leg.pivot_price:
+                    leg.pivot_price = bar_high
+                    leg.pivot_index = bar.index
+                    leg.last_modified_bar = bar.index
+
     def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[SwingFormedEvent]:
         """
         Update DAG state with new bar using streaming leg tracking.
@@ -523,10 +560,12 @@ class HierarchicalDetector:
         self.state.price_high_water = max(self.state.price_high_water, bar_high)
         self.state.price_low_water = min(self.state.price_low_water, bar_low)
 
-        # Extend leg origins on new extremes (#188)
+        # Extend leg origins and pivots on new extremes (#188, #192)
         # This must happen BEFORE bar type classification because bars with
-        # HH+EL or EH+LL fall through to Type 1 which didn't extend origins
+        # HH+EL or EH+LL fall through to Type 1 which didn't extend origins.
+        # Pivot extension ensures symmetric treatment of both endpoints.
         self._extend_leg_origins(bar, bar_high, bar_low)
+        self._extend_leg_pivots(bar, bar_high, bar_low)
 
         # First bar initialization
         if self.state.prev_bar is None:
