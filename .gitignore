@@ -87,3 +87,6 @@ validation_results/
 
 # Ground truth annotator - in-progress sessions (ephemeral)
 ground_truth/sessions/
+
+# Frontend build output (can be rebuilt with npm run build)
+frontend/dist/
