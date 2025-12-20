@@ -316,10 +316,15 @@ The feedback input is always visible during playback (not just during linger eve
 - Swings invalidated count
 - Swings completed count
 - Optional event context (if during linger event)
+- Mode-specific context (replay or DAG state)
+
+**Auto-Screenshot:** A screenshot of the chart area is automatically captured with each observation for visual reference.
 
 **Status Indicator:** Shows "paused" badge when playback was auto-paused for typing.
 
-**Storage:** Observations persist to `ground_truth/playback_feedback.json` grouped by session.
+**Storage:**
+- Observations persist to `ground_truth/playback_feedback.json` grouped by session
+- Screenshots saved to `ground_truth/screenshots/{timestamp}_{mode}_{source}_{id}.png`
 
 ---
 
