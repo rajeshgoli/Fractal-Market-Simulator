@@ -48,6 +48,8 @@ const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  // Track whether initial data has been loaded (for zoom preservation)
+  const hasInitialDataRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -115,12 +117,17 @@ const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady }) => {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      hasInitialDataRef.current = false;
     };
   }, [onChartReady]);
 
-  // Update data when it changes
+  // Update data when it changes - preserve zoom level (#125)
   useEffect(() => {
     if (seriesRef.current && data.length > 0) {
+      // Save current visible range before updating data
+      const chart = chartRef.current;
+      const savedRange = chart?.timeScale().getVisibleLogicalRange();
+
       const formattedData: CandlestickData[] = data.map(d => ({
         time: d.timestamp as Time,
         open: d.open,
@@ -130,10 +137,16 @@ const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady }) => {
       }));
       seriesRef.current.setData(formattedData);
 
-      // Fit content for small datasets, otherwise show last ~100 bars
-      if (chartRef.current) {
-        if (data.length <= 200) {
-          chartRef.current.timeScale().fitContent();
+      if (chart) {
+        if (!hasInitialDataRef.current) {
+          // First time loading data - fit content for small datasets
+          hasInitialDataRef.current = true;
+          if (data.length <= 200) {
+            chart.timeScale().fitContent();
+          }
+        } else if (savedRange) {
+          // Subsequent updates - restore the saved visible range to preserve zoom
+          chart.timeScale().setVisibleLogicalRange(savedRange);
         }
       }
     }
