@@ -332,7 +332,7 @@ The pipeline order per bar:
 | `SwingCompletedEvent` | Price reaches 2.0 extension target |
 | `LevelCrossEvent` | Price crosses Fib level boundary |
 | `LegCreatedEvent` | New candidate leg is created (pre-formation) |
-| `LegPrunedEvent` | Leg is removed due to staleness |
+| `LegPrunedEvent` | Leg is removed due to staleness or turn pruning |
 | `LegInvalidatedEvent` | Leg falls below 0.382 threshold (decisive invalidation) |
 
 **Tolerance rules (Rule 2.2):**
@@ -360,6 +360,16 @@ When a leg is invalidated, its origin is preserved as an "orphaned origin" for p
 ```
 
 Orphaned origins are pruned each bar using the 10% rule: if any two origins are within 10% of the larger range (measured from origin to current working pivot), the smaller is pruned. This keeps the list sparse while preserving structurally significant origins.
+
+**Turn pruning (#181):**
+
+During strong trends, the DAG creates many parallel legs with different pivots all converging to the same origin. For example, a 50-bar uptrend creates ~50 bull legs. When a directional turn is detected (Type 2-Bear bar for bull legs, Type 2-Bull bar for bear legs), we prune redundant legs:
+
+1. Group active legs by direction that share the same origin (price and index)
+2. Keep only the leg with the largest range (lowest pivot for bull, highest pivot for bear)
+3. Emit `LegPrunedEvent` with `reason="turn_prune"` for discarded legs
+
+This significantly reduces visual clutter during trends and is computationally more efficient.
 
 ---
 

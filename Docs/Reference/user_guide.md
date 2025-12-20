@@ -406,7 +406,7 @@ The DAG State Panel is always visible in this mode (no toggle needed). It shows:
 | Event | Description |
 |-------|-------------|
 | LEG_CREATED | New candidate leg created from pivot + origin pair |
-| LEG_PRUNED | Leg removed due to staleness (superseded by better candidate) |
+| LEG_PRUNED | Leg removed due to staleness or turn pruning (redundant legs pruned on direction change) |
 | LEG_INVALIDATED | Leg fell below 0.382 threshold (decisive invalidation) |
 
 ### Playback Controls

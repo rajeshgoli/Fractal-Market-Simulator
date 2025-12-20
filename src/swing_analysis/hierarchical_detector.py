@@ -567,6 +567,10 @@ class HierarchicalDetector:
         """
         events: List[SwingEvent] = []
 
+        # Prune bear legs on turn (#181): Type 2-Bull signals turn, prune redundant bear legs
+        turn_prune_events = self._prune_legs_on_turn('bear', bar, timestamp)
+        events.extend(turn_prune_events)
+
         # Extend existing bull legs (tracking upward movement from defended lows)
         for leg in self.state.active_legs:
             if leg.direction == 'bull' and leg.status == 'active':
@@ -664,6 +668,10 @@ class HierarchicalDetector:
         Also extends any existing bear legs (tracking downward movement).
         """
         events: List[SwingEvent] = []
+
+        # Prune bull legs on turn (#181): Type 2-Bear signals turn, prune redundant bull legs
+        turn_prune_events = self._prune_legs_on_turn('bull', bar, timestamp)
+        events.extend(turn_prune_events)
 
         # Extend existing bear legs (tracking downward movement from defended highs)
         for leg in self.state.active_legs:
@@ -1339,6 +1347,75 @@ class HierarchicalDetector:
 
         # Remove stale legs
         self.state.active_legs = [leg for leg in self.state.active_legs if leg.status != 'stale']
+
+        return events
+
+    def _prune_legs_on_turn(
+        self, direction: str, bar: Bar, timestamp: datetime
+    ) -> List[LegPrunedEvent]:
+        """
+        Prune legs of given direction to keep only the longest when a turn occurs (#181).
+
+        During strong trends, the DAG creates many parallel legs with different pivots
+        all converging to the same origin. When a directional turn is detected (Type 2-Bear
+        for bull legs, Type 2-Bull for bear legs), we prune to keep only the longest leg
+        per origin group.
+
+        Args:
+            direction: 'bull' or 'bear' - which legs to prune
+            bar: Current bar (for event metadata)
+            timestamp: Timestamp for events
+
+        Returns:
+            List of LegPrunedEvent for pruned legs with reason="turn_prune"
+        """
+        from collections import defaultdict
+
+        events: List[LegPrunedEvent] = []
+
+        # Get active legs of the specified direction
+        legs = [
+            leg for leg in self.state.active_legs
+            if leg.direction == direction and leg.status == 'active'
+        ]
+
+        if len(legs) <= 1:
+            return events  # Nothing to prune
+
+        # Group by origin (same origin_price and origin_index)
+        origin_groups: Dict[Tuple[Decimal, int], List[Leg]] = defaultdict(list)
+        for leg in legs:
+            key = (leg.origin_price, leg.origin_index)
+            origin_groups[key].append(leg)
+
+        # For each group with multiple legs, keep only the longest
+        pruned_leg_ids: Set[str] = set()
+
+        for origin_key, group in origin_groups.items():
+            if len(group) <= 1:
+                continue
+
+            # Find the leg with the largest range
+            longest = max(group, key=lambda l: l.range)
+
+            # Prune all others
+            for leg in group:
+                if leg.leg_id != longest.leg_id:
+                    leg.status = 'pruned'
+                    pruned_leg_ids.add(leg.leg_id)
+                    events.append(LegPrunedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id="",
+                        leg_id=leg.leg_id,
+                        reason="turn_prune",
+                    ))
+
+        # Remove pruned legs from active_legs
+        self.state.active_legs = [
+            leg for leg in self.state.active_legs
+            if leg.leg_id not in pruned_leg_ids
+        ]
 
         return events
 

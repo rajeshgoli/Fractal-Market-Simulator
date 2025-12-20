@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-19
 
@@ -8,12 +8,8 @@
 
 ## Pending Changes
 
-- **#168** — Add leg lifecycle events to HierarchicalDetector (LegCreatedEvent, LegPrunedEvent, LegInvalidatedEvent)
-- **#169** — Add DAG state API endpoint (`/api/dag/state`) for visualization
-- **#170** — Add linger toggle to playback controls (lingerEnabled option, toggle button)
-- **#171** — Add DAG state panel for displaying internal algorithm state (active legs, orphaned origins, pending pivots, recent events)
-- **#172** — Add leg visualization on charts with DAG Build mode (--mode dag CLI flag, LegOverlay component, DAGView page)
-- **#179** — Fix DAG visualization mode: incremental playback from bar 0, diagonal leg lines, working linger toggle
+- **#181** — Prune redundant legs on directional turn (turn_prune)
+- **#180** — Add diagnostic logging to forward playback hook to debug DAG playback freeze
 
 ---
 
@@ -21,6 +17,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 19 | #168-#172, #179 — DAG Visualization Mode (6 issues) | All Accepted |
 | Dec 19 | #158-#175 — DAG algorithm rewrite + Reference layer (9 issues) | All Accepted |
 | Dec 19 | #152, #153, #155, #157 — Performance optimization + cleanup (4 issues) | All Accepted |
 | Dec 18 | #142-#151 — Swing Detection Rewrite (10 issues) | All Accepted; #154 performance issue identified with prescriptive sub-issues #155, #156 |
