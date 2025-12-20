@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-19
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#195** — Fix TYPE_2_BEAR creating bull legs with inverted temporal order
 - **#194** — Skip creating dominated legs that would be pruned at turn
 - **#193** — Pending pivot overwrite bug: preserve extreme pivots for correct leg pivot/origin matching
 - **#192** — Leg pivot extension: ensure pivot_index always matches pivot_price location
