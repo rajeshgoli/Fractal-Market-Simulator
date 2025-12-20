@@ -1217,8 +1217,8 @@ class TestTurnPruning:
         # After pruning, we should have fewer or equal bear legs
         assert bear_legs_after <= bear_legs_before
 
-    def test_10pct_prune_emits_leg_pruned_event(self):
-        """LegPrunedEvent with reason='10pct_prune' is emitted for legs < 10% of largest."""
+    def test_turn_prune_emits_leg_pruned_event(self):
+        """LegPrunedEvent with reason='turn_prune' is emitted for non-largest legs."""
         from src.swing_analysis.events import LegPrunedEvent
         from src.swing_analysis.hierarchical_detector import Leg
         from decimal import Decimal
@@ -1232,9 +1232,9 @@ class TestTurnPruning:
         shared_origin_index = 10
 
         # Create legs with different pivots but same origin
-        # leg1: range = 100 (largest)
-        # leg2: range = 5 (5% of 100 → prune)
-        # leg3: range = 3 (3% of 100 → prune)
+        # leg1: range = 100 (largest - KEEP)
+        # leg2: range = 50 (smaller → PRUNE)
+        # leg3: range = 80 (smaller → PRUNE)
         leg1 = Leg(
             direction='bull',
             pivot_price=Decimal("5000"),  # Range: 100 (KEEP - largest)
@@ -1245,7 +1245,7 @@ class TestTurnPruning:
         )
         leg2 = Leg(
             direction='bull',
-            pivot_price=Decimal("5095"),  # Range: 5 (5% → PRUNE)
+            pivot_price=Decimal("5050"),  # Range: 50 → PRUNE
             pivot_index=8,
             origin_price=shared_origin_price,
             origin_index=shared_origin_index,
@@ -1253,7 +1253,7 @@ class TestTurnPruning:
         )
         leg3 = Leg(
             direction='bull',
-            pivot_price=Decimal("5097"),  # Range: 3 (3% → PRUNE)
+            pivot_price=Decimal("5020"),  # Range: 80 → PRUNE
             pivot_index=6,
             origin_price=shared_origin_price,
             origin_index=shared_origin_index,
@@ -1273,65 +1273,12 @@ class TestTurnPruning:
         # Should have pruned 2 legs (leg2 and leg3), keeping leg1 (largest range)
         assert len(events) == 2
         assert all(isinstance(e, LegPrunedEvent) for e in events)
-        assert all(e.reason == "10pct_prune" for e in events)
+        assert all(e.reason == "turn_prune" for e in events)
 
         # Only leg1 should remain (largest range: 5100 - 5000 = 100)
         remaining_legs = [leg for leg in detector.state.active_legs if leg.status == 'active']
         assert len(remaining_legs) == 1
         assert remaining_legs[0].pivot_price == Decimal("5000")
-
-    def test_10pct_rule_keeps_significant_legs(self):
-        """Legs >= 10% of largest in origin group are kept."""
-        from src.swing_analysis.events import LegPrunedEvent
-        from src.swing_analysis.hierarchical_detector import Leg
-        from decimal import Decimal
-
-        config = SwingConfig.default()
-        detector = HierarchicalDetector(config)
-
-        shared_origin_price = Decimal("5100")
-        shared_origin_index = 10
-
-        # leg1: range = 100 (largest)
-        # leg2: range = 50 (50% of 100 → KEEP)
-        # leg3: range = 15 (15% of 100 → KEEP)
-        leg1 = Leg(
-            direction='bull',
-            pivot_price=Decimal("5000"),  # Range: 100
-            pivot_index=5,
-            origin_price=shared_origin_price,
-            origin_index=shared_origin_index,
-            status='active',
-        )
-        leg2 = Leg(
-            direction='bull',
-            pivot_price=Decimal("5050"),  # Range: 50
-            pivot_index=8,
-            origin_price=shared_origin_price,
-            origin_index=shared_origin_index,
-            status='active',
-        )
-        leg3 = Leg(
-            direction='bull',
-            pivot_price=Decimal("5085"),  # Range: 15
-            pivot_index=6,
-            origin_price=shared_origin_price,
-            origin_index=shared_origin_index,
-            status='active',
-        )
-
-        detector.state.active_legs = [leg1, leg2, leg3]
-
-        from datetime import datetime
-        bar = make_bar(15, 5090.0, 5095.0, 5080.0, 5085.0)
-        timestamp = datetime.fromtimestamp(bar.timestamp)
-
-        events = detector._prune_legs_on_turn('bull', bar, timestamp)
-
-        # All 3 legs are >= 10% of largest, so none should be pruned
-        assert len(events) == 0
-        remaining_legs = [leg for leg in detector.state.active_legs if leg.status == 'active']
-        assert len(remaining_legs) == 3
 
     def test_10pct_rule_preserves_multi_origin_structure(self):
         """Legs from different origins are preserved even if small."""

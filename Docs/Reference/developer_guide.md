@@ -363,24 +363,24 @@ Orphaned origins are pruned each bar using the 10% rule: if any two origins are 
 
 **Recursive 10% pruning (#185):**
 
-During strong trends, the DAG creates many parallel legs with different pivots all converging to the same origin. When a directional turn is detected (Type 2-Bear bar for bull legs, Type 2-Bull bar for bear legs), we apply the recursive 10% pruning rule:
+During strong trends, the DAG creates many parallel legs with different pivots all converging to the same origin. When a directional turn is detected (Type 2-Bear bar for bull legs, Type 2-Bull bar for bear legs), we apply two-stage pruning:
 
-**Step 1: Within-origin pruning (10% rule)**
+**Step 1: Within-origin pruning (turn_prune)**
 1. Group active legs by direction that share the same origin (price and index)
-2. For each group: keep the largest leg + all legs >= 10% of the largest
-3. Emit `LegPrunedEvent` with `reason="10pct_prune"` for discarded legs
+2. For each group: keep ONLY the leg with the largest range
+3. Emit `LegPrunedEvent` with `reason="turn_prune"` for discarded legs
 
-**Step 2: Cross-origin subtree pruning**
+**Step 2: Cross-origin subtree pruning (10% rule)**
 1. Sort remaining origins by their best leg's range (descending)
 2. For each origin's best leg, check if smaller origins are "contained" within its range
 3. If a contained origin's best leg is < 10% of the parent, prune all legs from that origin
 4. Emit `LegPrunedEvent` with `reason="subtree_prune"` for discarded legs
 
 **Active swing immunity:**
-Legs that have formed into active swings are never pruned. If an origin has any active swings, the entire origin is immune from subtree pruning.
+Legs that have formed into active swings are never pruned. If an origin has any active swings, the entire origin is immune from pruning.
 
 **Benefits:**
-- Multi-origin preservation: Keeps legs from different structural levels
+- Multi-origin preservation: Keeps the best leg from each structural level
 - Fractal compression: Detailed near active zone, sparse further back
 - Self-regulating: Tree size stays bounded as older noise is pruned
 

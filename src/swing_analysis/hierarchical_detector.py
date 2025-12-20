@@ -1356,12 +1356,10 @@ class HierarchicalDetector:
         """
         Prune legs with recursive 10% rule and multi-origin preservation (#185).
 
-        Replaces #181's "keep only longest" with a more nuanced approach:
-
         1. Group legs by origin
-        2. For each origin group: keep largest + legs >= 10% of largest
-        3. Multi-origin preservation: always keep at least one leg per origin
-        4. Recursive 10% across origins: apply 10% rule globally to prune small origins
+        2. For each origin group: keep ONLY the largest (prune others)
+        3. Multi-origin preservation: always keep one leg per origin
+        4. Recursive 10% across origins: prune small contained origins
         5. Active swing immunity: legs with active swings are never pruned
 
         This preserves nested structure while compressing noise.
@@ -1377,7 +1375,6 @@ class HierarchicalDetector:
         from collections import defaultdict
 
         events: List[LegPrunedEvent] = []
-        prune_threshold = Decimal("0.1")
 
         # Get active legs of the specified direction
         legs = [
@@ -1402,9 +1399,8 @@ class HierarchicalDetector:
 
         pruned_leg_ids: Set[str] = set()
 
-        # Step 1: Within each origin group, apply 10% rule
-        # Keep largest + all legs >= 10% of largest (not just one)
-        # Active swing immunity: legs with active swings are never pruned
+        # Step 1: Within each origin group, keep ONLY the largest
+        # (Prune all others except those with active swings)
         best_per_origin: Dict[Tuple[Decimal, int], Leg] = {}
 
         for origin_key, group in origin_groups.items():
@@ -1415,25 +1411,22 @@ class HierarchicalDetector:
             if len(group) <= 1:
                 continue
 
-            threshold = prune_threshold * largest.range
-
-            # Prune legs < 10% of largest within same origin
+            # Prune all legs except the largest (old behavior from #181)
             for leg in group:
                 if leg.leg_id == largest.leg_id:
                     continue
                 # Active swing immunity: never prune legs with active swings
                 if leg.swing_id and leg.swing_id in active_swing_ids:
                     continue
-                if leg.range < threshold:
-                    leg.status = 'pruned'
-                    pruned_leg_ids.add(leg.leg_id)
-                    events.append(LegPrunedEvent(
-                        bar_index=bar.index,
-                        timestamp=timestamp,
-                        swing_id="",
-                        leg_id=leg.leg_id,
-                        reason="10pct_prune",
-                    ))
+                leg.status = 'pruned'
+                pruned_leg_ids.add(leg.leg_id)
+                events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id="",
+                    leg_id=leg.leg_id,
+                    reason="turn_prune",
+                ))
 
         # Step 2: Recursive 10% across origins (subtree pruning)
         # Apply 10% rule to prune small origin groups whose best leg is

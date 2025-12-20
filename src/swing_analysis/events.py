@@ -297,17 +297,17 @@ class LegPrunedEvent(SwingEvent):
     Emitted when a leg is removed due to staleness or pruning rules.
 
     Legs are pruned when they become stale (price has moved 2x the leg's range
-    without the leg changing), or when the recursive 10% pruning rule applies (#185).
+    without the leg changing), or when turn pruning / subtree pruning applies (#185).
 
     Prune reasons:
     - "staleness": Leg hasn't changed in 10 bars while price moved 2x its range
-    - "10pct_prune": Leg is <10% of the largest leg sharing its origin
+    - "turn_prune": Leg is not the largest in its origin group (on directional turn)
     - "subtree_prune": Origin's best leg is <10% of a containing parent leg
 
     Attributes:
         event_type: Always "LEG_PRUNED".
         leg_id: Unique identifier for the pruned leg.
-        reason: Why pruned ("staleness", "10pct_prune", or "subtree_prune").
+        reason: Why pruned ("staleness", "turn_prune", or "subtree_prune").
 
     Example:
         >>> from datetime import datetime
@@ -324,7 +324,7 @@ class LegPrunedEvent(SwingEvent):
 
     event_type: Literal["LEG_PRUNED"] = field(default="LEG_PRUNED", init=False)
     leg_id: str = ""
-    reason: str = ""  # 'staleness', '10pct_prune', 'subtree_prune'
+    reason: str = ""  # 'staleness', 'turn_prune', 'subtree_prune'
 
 
 @dataclass
