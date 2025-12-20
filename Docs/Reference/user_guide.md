@@ -56,7 +56,7 @@ The server supports two visualization modes:
 
 ### Layout
 
-- **Header**: Navigation menu, timestamp display, calibration status badge
+- **Header**: Timestamp display, calibration status badge
 - **Sidebar**: Event filter toggles with descriptions
 - **Top Chart**: Overview chart (default: L / 1H aggregation)
 - **Bottom Chart**: Detail chart (default: S / 5m aggregation)
@@ -441,7 +441,7 @@ In DAG Build mode, all playback controls are functional:
 |---------|------------------|----------------|
 | Initial state | Pre-calibrated (10K bars) | Empty (0 bars) |
 | Build process | Instant (pre-computed) | Incremental (watch it build) |
-| Sidebar | Event filters, feedback | Hidden |
+| Sidebar | Event filters, scale toggles, feedback | DAG state, linger toggles, feedback |
 | Swing overlay | Fib levels for formed swings | Diagonal leg lines for candidates |
 | Linger default | ON | OFF (continuous observation) |
 | Event navigation | Jump between swing events | Not available |
