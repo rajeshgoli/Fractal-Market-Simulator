@@ -90,6 +90,7 @@ export function useForwardPlayback({
   const isPlayingRef = useRef(false); // Ref to avoid stale closures in setTimeout chain
   const lingerPausedRef = useRef(false); // Whether linger timer is paused (for feedback input)
   const lingerRemainingRef = useRef(0); // Remaining time when paused
+  const wasPlayingBeforeLingerRef = useRef(false); // Track if playback was active before linger
 
   // Ref to hold the latest functions (avoids stale closures)
   const showCurrentEventRef = useRef<() => void>(() => {});
@@ -164,9 +165,11 @@ export function useForwardPlayback({
       if (eventIndexRef.current < eventQueueRef.current.length) {
         showCurrentEventRef.current();
       } else {
-        // Resume playback
+        // Only resume playback if it was playing before linger
         exitLingerRef.current();
-        startPlaybackRef.current();
+        if (wasPlayingBeforeLingerRef.current) {
+          startPlaybackRef.current();
+        }
       }
     }, LINGER_DURATION_MS);
   }, []);
@@ -194,7 +197,8 @@ export function useForwardPlayback({
   }, [exitLinger]);
 
   // Enter linger state with events
-  const enterLinger = useCallback((events: ReplayEvent[]) => {
+  const enterLinger = useCallback((events: ReplayEvent[], wasPlaying: boolean = false) => {
+    wasPlayingBeforeLingerRef.current = wasPlaying;
     isPlayingRef.current = false;
     clearTimers();
     setPlaybackState(PlaybackState.LINGERING);
@@ -284,7 +288,8 @@ export function useForwardPlayback({
       const filteredEvents = filterEvents(response.events);
       if (filteredEvents.length > 0 && lingerEnabled) {
         // Trigger linger only for filtered events when linger is enabled
-        enterLinger(filteredEvents);
+        // Pass wasPlaying=true since advanceBar is called during playback
+        enterLinger(filteredEvents, true);
       }
     } catch (err) {
       console.error('Failed to advance replay:', err);
@@ -414,11 +419,14 @@ export function useForwardPlayback({
     showCurrentEventRef.current();
   }, [playbackState]);
 
-  // Dismiss linger and resume playback
+  // Dismiss linger and resume playback only if it was playing before
   const dismissLinger = useCallback(() => {
     if (playbackState !== PlaybackState.LINGERING) return;
+    const wasPlaying = wasPlayingBeforeLingerRef.current;
     exitLinger();
-    startPlayback();
+    if (wasPlaying) {
+      startPlayback();
+    }
   }, [playbackState, exitLinger, startPlayback]);
 
   // Pause linger timer (for feedback input focus)
@@ -461,7 +469,9 @@ export function useForwardPlayback({
         showCurrentEventRef.current();
       } else {
         exitLingerRef.current();
-        startPlaybackRef.current();
+        if (wasPlayingBeforeLingerRef.current) {
+          startPlaybackRef.current();
+        }
       }
       return;
     }
@@ -489,7 +499,9 @@ export function useForwardPlayback({
         showCurrentEventRef.current();
       } else {
         exitLingerRef.current();
-        startPlaybackRef.current();
+        if (wasPlayingBeforeLingerRef.current) {
+          startPlaybackRef.current();
+        }
       }
     }, remaining);
   }, [playbackState]);
@@ -562,7 +574,8 @@ export function useForwardPlayback({
       const eventsAtBar = allEvents.filter(e => e.bar_index === targetBarIndex);
       const filteredEventsAtBar = filterEvents(eventsAtBar);
       if (filteredEventsAtBar.length > 0) {
-        enterLinger(filteredEventsAtBar);
+        // Pass wasPlaying=false since this is manual navigation
+        enterLinger(filteredEventsAtBar, false);
       }
     }
   }, [allEvents, currentEventIndex, currentPosition, playbackState, exitLinger, clearTimers, calibrationBars, enterLinger, filterEvents]);
@@ -646,7 +659,8 @@ export function useForwardPlayback({
         const filteredEvents = filterEvents(response.events);
         if (filteredEvents.length > 0) {
           if (lingerEnabled) {
-            enterLinger(filteredEvents);
+            // Pass wasPlaying=false since this is manual navigation
+            enterLinger(filteredEvents, false);
           }
           foundEvent = true;
         }
