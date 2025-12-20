@@ -2,6 +2,55 @@
 
 ---
 
+## Q-2025-12-19-1: DAG Visualization Mode Feasibility
+
+**From:** Product
+**To:** Architect
+**Date:** December 19, 2025
+**Status:** Resolved
+
+### Context
+
+User wants to watch the DAG build in real-time during calibration. Visual iteration is faster than abstract debugging. Temporary tool — remove once algorithm is validated.
+
+**Spec:** `Docs/Working/DAG_visualization_spec.md`
+
+### Questions Asked
+
+1. **DAG hooks:** Does HierarchicalDetector currently emit creation/pruning events, or do we need to add instrumentation?
+2. **Replay reuse:** How much of existing Replay View infrastructure applies here?
+3. **Two-chart layout:** New component or extension of current chart?
+4. **State panel:** Reuse explanation panel or new rendering?
+5. **Complexity estimate:** Is this a day, a week, or bigger?
+
+### Resolution (Architect)
+
+**Status:** FEASIBLE — 3-5 days MVP
+
+| Question | Finding |
+|----------|---------|
+| DAG hooks | No events for legs. Need `LegCreatedEvent`, `LegPrunedEvent`, `LegInvalidatedEvent` (~0.5 days) |
+| Replay reuse | **95% reusable** — PlaybackControls, linger logic all work. Need linger toggle (~0.5 days) |
+| Two-chart layout | **Already exists!** `Replay.tsx` has dual charts. Zero work. |
+| State panel | Structure reusable, content needs adaptation (~1 day) |
+| Complexity | **3-5 days** total |
+
+**Recommendation:** PROCEED — Contained change, high reuse potential.
+
+### Outcome
+
+GitHub issues created:
+- #167 — DAG Visualization Mode (Epic)
+- #168 — Add leg lifecycle events to HierarchicalDetector
+- #169 — Add DAG state API endpoint
+- #170 — Add linger toggle to playback controls
+- #171 — Create DAG state panel
+- #172 — Add leg visualization on charts
+
+Ready for engineering implementation.
+
+---
+
 ## Q-2025-12-18-1: DAG vs Tree — Multiple Parents (Swing Detection Rewrite)
 
 **From:** Architect

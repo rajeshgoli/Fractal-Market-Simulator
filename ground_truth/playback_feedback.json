@@ -6,79 +6,13 @@
       "session_id": "500a1735-2ae9-4f4f-b97d-5036c44d4926",
       "data_file": "test_data/es-5m.csv",
       "offset": 1172207,
-      "started_at": "2025-12-19T19:10:38.879992+00:00",
+      "started_at": "2025-12-19T21:21:43.164839+00:00",
       "observations": [
         {
-          "observation_id": "a10e8ac7-e0a6-4d33-a1e6-9fa7c232e37b",
-          "text": "How is this admitted by DAG? The H comes pre-violated, there are higher highs between the H and L.",
-          "playback_bar": 10011,
-          "created_at": "2025-12-19T19:10:38.883356+00:00",
-          "snapshot": {
-            "state": "paused",
-            "window_offset": 1172207,
-            "bars_since_calibration": 11,
-            "current_bar_index": 10011,
-            "calibration_bar_count": 10000,
-            "swings_found": {
-              "XL": 0,
-              "L": 0,
-              "M": 0,
-              "S": 0
-            },
-            "swings_invalidated": 16,
-            "swings_completed": 10,
-            "event_context": {
-              "event_type": "SWING_FORMED",
-              "scale": "L",
-              "swing": {
-                "high_bar_index": 10007,
-                "low_bar_index": 9929,
-                "high_price": "4733.5",
-                "low_price": "4728.25",
-                "direction": "bear"
-              },
-              "detection_bar_index": 10008
-            }
-          }
-        },
-        {
-          "observation_id": "11ae3489-088e-43be-988c-4137f41f8be8",
-          "text": "These re insignificant. Should be a way to configure min swing size to show. ",
-          "playback_bar": 10035,
-          "created_at": "2025-12-19T19:11:34.712505+00:00",
-          "snapshot": {
-            "state": "paused",
-            "window_offset": 1172207,
-            "bars_since_calibration": 35,
-            "current_bar_index": 10035,
-            "calibration_bar_count": 10000,
-            "swings_found": {
-              "XL": 0,
-              "L": 0,
-              "M": 0,
-              "S": 0
-            },
-            "swings_invalidated": 51,
-            "swings_completed": 32,
-            "event_context": {
-              "event_type": "SWING_INVALIDATED",
-              "scale": "M",
-              "swing": {
-                "high_bar_index": 10014,
-                "low_bar_index": 10014,
-                "high_price": "4731.5",
-                "low_price": "4729.5",
-                "direction": "bull"
-              },
-              "detection_bar_index": 10024
-            }
-          }
-        },
-        {
-          "observation_id": "33bcd5c3-c279-47c0-a5eb-42f7a2d70ae8",
-          "text": "How can there be no reference swings? I see quite a few that seem acceptable. Can you check DAG output and reference fitlers to see why I see no reference swing at all here? For example there's one bear ref from ~4555 to ~4826. This is the blatently obvious one. ",
+          "observation_id": "ef133fbe-b006-42af-85f7-a19e2b4358cf",
+          "text": "There are couple of more bigger swings that must be active but are not detected. For e.g. 8Dec23 ~4555 to 20Dec23 11:30 ~4826. Why isn't this detected? Also how can we have a smallest swing be -0.25 pts? ",
           "playback_bar": 9999,
-          "created_at": "2025-12-19T19:13:30.939078+00:00",
+          "created_at": "2025-12-19T21:21:43.164839+00:00",
           "snapshot": {
             "state": "calibration_complete",
             "window_offset": 1172207,
@@ -86,10 +20,10 @@
             "current_bar_index": 9999,
             "calibration_bar_count": 10000,
             "swings_found": {
-              "XL": 0,
-              "L": 0,
-              "M": 0,
-              "S": 0
+              "XL": 9,
+              "L": 2,
+              "M": 3,
+              "S": 10
             },
             "swings_invalidated": 0,
             "swings_completed": 0,
