@@ -16,10 +16,9 @@ import {
   DagStateResponse,
   DagLeg,
 } from '../lib/api';
-import { INITIAL_FILTERS, LINGER_DURATION_MS } from '../constants';
+import { LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
-  FilterState,
   AggregationScale,
   CalibrationData,
   CalibrationPhase,
@@ -74,7 +73,6 @@ export const DAGView: React.FC = () => {
   const [calibrationBars, setCalibrationBars] = useState<BarData[]>([]);
   const [chart1Bars, setChart1Bars] = useState<BarData[]>([]);
   const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
-  const [filters] = useState<FilterState[]>(INITIAL_FILTERS);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,7 +161,7 @@ export const DAGView: React.FC = () => {
     calibrationBars,
     playbackIntervalMs: effectivePlaybackIntervalMs,
     barsPerAdvance,
-    filters,
+    filters: lingerEvents,
     enabledScales: new Set(['XL', 'L', 'M']),
     lingerEnabled, // Use lingerEnabled state for toggle
     onNewBars: useCallback((newBars: BarData[]) => {
@@ -205,11 +203,6 @@ export const DAGView: React.FC = () => {
     setLingerEvents(prev =>
       prev.map(e => e.id === eventId ? { ...e, isEnabled: !e.isEnabled } : e)
     );
-  }, []);
-
-  // Handler for toggling filters
-  const handleToggleFilter = useCallback((_id: string) => {
-    // No-op for DAG mode - filters are not used
   }, []);
 
   // Handler for resetting defaults
@@ -560,12 +553,10 @@ export const DAGView: React.FC = () => {
         <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden`}>
           <Sidebar
             mode="dag"
-            filters={filters}
-            onToggleFilter={handleToggleFilter}
-            onResetDefaults={handleResetDefaults}
-            className="w-64"
             lingerEvents={lingerEvents}
             onToggleLingerEvent={handleToggleLingerEvent}
+            onResetDefaults={handleResetDefaults}
+            className="w-64"
             showFeedback={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
             isLingering={forwardPlayback.isLingering}
             lingerEvent={forwardPlayback.lingerEvent}

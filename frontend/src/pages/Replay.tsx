@@ -10,10 +10,9 @@ import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { fetchBars, fetchSession, fetchDetectedSwings, fetchCalibration, fetchDagState, ReplayEvent, DagStateResponse } from '../lib/api';
-import { INITIAL_FILTERS, LINGER_DURATION_MS } from '../constants';
+import { LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
-  FilterState,
   AggregationScale,
   DiscretizationEvent,
   DiscretizationSwing,
@@ -160,7 +159,6 @@ function replayEventToSwingData(event: ReplayEvent, sourceBars: BarData[]): Swin
 export const Replay: React.FC = () => {
   // UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [filters, setFilters] = useState<FilterState[]>(INITIAL_FILTERS);
 
   // Chart aggregation state
   const [chart1Aggregation, setChart1Aggregation] = useState<AggregationScale>('L');
@@ -295,7 +293,7 @@ export const Replay: React.FC = () => {
     sourceBars,
     events,
     swings,
-    filters,
+    filters: lingerEvents,
     playbackIntervalMs: effectivePlaybackIntervalMs,
     onPositionChange: useCallback((position: number) => {
       syncChartsToPositionRef.current(position);
@@ -323,7 +321,7 @@ export const Replay: React.FC = () => {
     calibrationBars,
     playbackIntervalMs: effectivePlaybackIntervalMs,
     barsPerAdvance,  // How many source bars to skip per tick (aggregation factor)
-    filters,
+    filters: lingerEvents,
     enabledScales: displayConfig.enabledScales,
     lingerEnabled,  // Whether to pause on events
     onNewBars: useCallback((newBars: BarData[]) => {
@@ -1004,18 +1002,6 @@ export const Replay: React.FC = () => {
     markers2Ref.current = createSeriesMarkers(series, []);
   }, []);
 
-  // Toggle filter
-  const handleToggleFilter = useCallback((id: string) => {
-    setFilters(prev => prev.map(f =>
-      f.id === id ? { ...f, isEnabled: !f.isEnabled } : f
-    ));
-  }, []);
-
-  // Reset filters to defaults
-  const handleResetFilters = useCallback(() => {
-    setFilters(INITIAL_FILTERS);
-  }, []);
-
   // Keyboard shortcuts for navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1192,16 +1178,13 @@ export const Replay: React.FC = () => {
         <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden`}>
           <Sidebar
             mode="replay"
-            filters={filters}
-            onToggleFilter={handleToggleFilter}
-            onResetDefaults={handleResetFilters}
+            lingerEvents={lingerEvents}
+            onToggleLingerEvent={handleToggleLingerEvent}
+            onResetDefaults={() => setLingerEvents(REPLAY_LINGER_EVENTS)}
             className="w-64"
             showScaleFilters={calibrationPhase === CalibrationPhase.PLAYING}
             displayConfig={displayConfig}
             onToggleScale={handleToggleScale}
-            // Linger event toggles
-            lingerEvents={lingerEvents}
-            onToggleLingerEvent={handleToggleLingerEvent}
             // Stats toggle (shown during playback)
             showStatsToggle={calibrationPhase === CalibrationPhase.PLAYING}
             showStats={showStats}

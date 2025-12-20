@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { FilterState, EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
+import { EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
 import { Toggle } from './ui/Toggle';
 import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent } from '../lib/api';
@@ -69,25 +69,21 @@ interface SidebarProps {
   // Mode selection
   mode: 'replay' | 'dag';
 
-  // Common props
-  filters: FilterState[];
-  onToggleFilter: (id: string) => void;
+  // Linger event toggles (mode-specific)
+  lingerEvents: LingerEventConfig[];
+  onToggleLingerEvent: (eventId: string) => void;
   onResetDefaults: () => void;
   className?: string;
 
-  // Scale filter props (shown during playback)
+  // Scale filter props (shown during playback, replay mode only)
   showScaleFilters?: boolean;
   displayConfig?: SwingDisplayConfig;
   onToggleScale?: (scale: SwingScaleKey) => void;
 
-  // Stats panel toggle (shown during playback)
+  // Stats panel toggle (shown during playback, replay mode only)
   showStatsToggle?: boolean;
   showStats?: boolean;
   onToggleShowStats?: () => void;
-
-  // Linger event toggles
-  lingerEvents?: LingerEventConfig[];
-  onToggleLingerEvent?: (eventId: string) => void;
 
   // Feedback props - now always visible during playback
   showFeedback?: boolean;
@@ -108,8 +104,8 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   mode,
-  filters,
-  onToggleFilter,
+  lingerEvents,
+  onToggleLingerEvent,
   onResetDefaults,
   className = '',
   showScaleFilters = false,
@@ -118,8 +114,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   showStatsToggle = false,
   showStats = false,
   onToggleShowStats,
-  lingerEvents,
-  onToggleLingerEvent,
   showFeedback = false,
   isLingering = false,
   lingerEvent,
@@ -276,83 +270,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </h2>
       </div>
 
-      {/* Filter List */}
+      {/* Linger Event Toggles - mode-specific, same design for both modes */}
       <div className="flex-1 overflow-y-auto p-4 space-y-1">
-        {filters.map((filter) => (
+        {lingerEvents.map((event) => (
           <div
-            key={filter.id}
+            key={event.id}
             className={`
               group flex items-start gap-3 p-3 rounded-lg transition-all duration-200
-              ${filter.isEnabled
+              ${event.isEnabled
                 ? 'bg-app-card border border-app-border'
                 : 'hover:bg-app-card/50 border border-transparent opacity-70'
               }
             `}
           >
             <div className="pt-1">
-              {getIconForType(filter.id)}
+              {getIconForType(event.id)}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
-                <span className={`text-sm font-medium ${filter.isEnabled ? 'text-app-text' : 'text-app-muted'}`}>
-                  {filter.label}
+                <span className={`text-sm font-medium ${event.isEnabled ? 'text-app-text' : 'text-app-muted'}`}>
+                  {event.label}
                 </span>
                 <Toggle
-                  checked={filter.isEnabled}
-                  onChange={() => onToggleFilter(filter.id)}
-                  id={`toggle-${filter.id}`}
+                  checked={event.isEnabled}
+                  onChange={() => onToggleLingerEvent(event.id)}
+                  id={`toggle-${event.id}`}
                 />
               </div>
               <p className="text-xs text-app-muted truncate group-hover:whitespace-normal group-hover:overflow-visible">
-                {filter.description}
+                {event.description}
               </p>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Linger Event Toggles (mode-specific) */}
-      {lingerEvents && lingerEvents.length > 0 && onToggleLingerEvent && (
-        <div className="p-4 border-t border-app-border">
-          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
-            <Pause size={14} />
-            Pause On
-          </h2>
-          <div className="space-y-1">
-            {lingerEvents.map((event) => (
-              <label
-                key={event.id}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
-                  event.isEnabled
-                    ? 'bg-app-card'
-                    : 'hover:bg-app-card/50 opacity-70'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={event.isEnabled}
-                  onChange={() => onToggleLingerEvent(event.id)}
-                  className="sr-only"
-                />
-                <span className={`w-3 h-3 rounded-sm border flex items-center justify-center ${
-                  event.isEnabled ? 'bg-trading-blue border-trading-blue' : 'border-app-muted'
-                }`}>
-                  {event.isEnabled && <span className="text-white text-[10px]">✓</span>}
-                </span>
-                <span className="flex-1 flex items-center gap-2">
-                  {getIconForType(event.id)}
-                  <span className={`text-xs ${event.isEnabled ? 'text-app-text' : 'text-app-muted'}`}>
-                    {event.label}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Scale Filters Section (shown during playback) */}
+      {/* Scale Filters Section (shown during playback, replay mode only) */}
       {showScaleFilters && displayConfig && onToggleScale && (
         <div className="p-4 border-t border-app-border">
           <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
@@ -418,7 +372,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
-      {/* Show Stats Toggle (shown during playback) */}
+      {/* Show Stats Toggle (shown during playback, replay mode only) */}
       {showStatsToggle && onToggleShowStats && (
         <div className="p-4 border-t border-app-border">
           <div
