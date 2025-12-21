@@ -96,7 +96,7 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Prune existing legs dominated by a newly created leg (#204).
+        Prune existing legs dominated by a newly created leg (#204, #207).
 
         When a new leg is created with a better origin than existing legs,
         those worse legs should be pruned. This is the reverse of
@@ -106,9 +106,12 @@ class LegPruner:
         For trading: having a leg with origin 2 points worse means stop losses
         would be placed incorrectly, potentially getting stopped out on noise.
 
-        Note: This prunes ALL dominated legs regardless of turn boundaries.
-        Turn boundaries are respected for leg CREATION (to allow nested structure),
-        but not for pruning (to consolidate origins within the same move).
+        IMPORTANT (#207): Turn boundaries are respected for BOTH creation AND pruning.
+        Legs from different turns represent independent structural phases and must
+        coexist. A leg from turn A should never be pruned by a leg from turn B.
+
+        Definition of "same turn": Legs are in the same turn if their origin_index
+        is >= the last_turn_bar[direction] value when they were created.
 
         Immunity: Legs that have formed into active swings are never pruned.
 
@@ -125,6 +128,9 @@ class LegPruner:
         direction = new_leg.direction
         new_origin = new_leg.origin_price
 
+        # Get the turn boundary - only prune legs from the SAME turn (#207)
+        turn_start = state.last_turn_bar.get(direction, -1)
+
         # Build set of active swing IDs for immunity check
         active_swing_ids = {
             swing.swing_id for swing in state.active_swings
@@ -137,6 +143,9 @@ class LegPruner:
             if leg.leg_id == new_leg.leg_id:
                 continue  # Don't prune self
             if leg.direction != direction or leg.status != 'active':
+                continue
+            # #207: Skip legs from previous turns - they represent different structures
+            if leg.origin_index < turn_start:
                 continue
             # Active swing immunity - legs with active swings are never pruned
             if leg.swing_id and leg.swing_id in active_swing_ids:

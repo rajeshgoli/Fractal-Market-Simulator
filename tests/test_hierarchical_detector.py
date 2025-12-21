@@ -2242,24 +2242,26 @@ class TestBidirectionalDomination:
         assert len(remaining_legs) == 1
         assert remaining_legs[0].origin_price == Decimal("112")
 
-    def test_all_dominated_legs_pruned_regardless_of_turn(self):
+    def test_cross_turn_legs_not_pruned_by_domination(self):
         """
-        ALL dominated legs should be pruned when a better origin is found,
-        regardless of turn boundaries. Turn boundaries are respected for
-        leg CREATION (to allow nested structure), but not for PRUNING
-        (to consolidate origins within the same move).
+        Legs from PREVIOUS turns should NOT be pruned by domination (#207).
 
-        Directly tests _prune_dominated_legs_in_turn.
+        Turn boundaries are respected for BOTH creation AND pruning.
+        Legs from different turns represent independent structural phases
+        and must coexist.
+
+        TC1 from #207: Cross-Turn Survival.
         """
         from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
 
-        # Set up turn boundary (shouldn't affect pruning anymore)
+        # Set up turn boundary at bar 10
         detector.state.last_turn_bar['bull'] = 10
 
         # Leg from BEFORE the turn (origin_index = 5 < turn_start = 10)
+        # This represents a different structural phase
         leg_from_prev_turn = Leg(
             direction='bull',
             origin_price=Decimal("100"),  # Worse origin (higher)
@@ -2272,7 +2274,7 @@ class TestBidirectionalDomination:
         # Leg from CURRENT turn (origin_index = 12 >= turn_start = 10)
         leg_from_current_turn = Leg(
             direction='bull',
-            origin_price=Decimal("105"),  # Also worse origin
+            origin_price=Decimal("105"),  # Also worse origin than new_leg
             origin_index=12,
             pivot_price=Decimal("120"),
             pivot_index=15,
@@ -2281,7 +2283,7 @@ class TestBidirectionalDomination:
 
         detector.state.active_legs = [leg_from_prev_turn, leg_from_current_turn]
 
-        # New leg with better origin
+        # New leg with better origin (in current turn)
         new_leg = Leg(
             direction='bull',
             origin_price=Decimal("90"),  # Best origin (lowest)
@@ -2299,18 +2301,146 @@ class TestBidirectionalDomination:
 
         events = detector._pruner.prune_dominated_legs_in_turn(detector.state, new_leg, bar, timestamp)
 
-        # BOTH legs with worse origins should be pruned (100 and 105)
-        # Turn boundaries are NOT respected for pruning
-        assert len(events) == 2, f"Expected 2 prune events, got {len(events)}"
+        # Only leg from CURRENT turn should be pruned (105)
+        # Leg from PREVIOUS turn should survive (100) - different structural phase
+        assert len(events) == 1, f"Expected 1 prune event, got {len(events)}"
 
         remaining_legs = [leg for leg in detector.state.active_legs if leg.status == 'active']
         origins = [leg.origin_price for leg in remaining_legs]
 
-        # Only the new leg (90) should remain
-        assert len(origins) == 1, f"Expected 1 leg remaining, got {len(origins)}"
+        # Both the new leg (90) AND the previous-turn leg (100) should remain
+        assert len(origins) == 2, f"Expected 2 legs remaining, got {len(origins)}"
         assert Decimal("90") in origins, "New leg should exist"
-        assert Decimal("100") not in origins, "Leg from previous turn should be pruned"
+        assert Decimal("100") in origins, "Leg from previous turn should survive (#207)"
         assert Decimal("105") not in origins, "Leg from current turn should be pruned"
+
+    def test_same_turn_legs_still_pruned_by_domination(self):
+        """
+        Legs from the SAME turn should still be pruned by domination (#207 R4).
+
+        Within a single turn, domination pruning should still work to consolidate
+        redundant legs tracking the same structural move.
+
+        TC2 from #207: Same-Turn Pruning.
+        """
+        from src.swing_analysis.dag import Leg
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Set up turn boundary at bar 10
+        detector.state.last_turn_bar['bear'] = 10
+
+        # Two bear legs from the SAME turn (both origin_index >= turn_start)
+        leg_worse_origin = Leg(
+            direction='bear',
+            origin_price=Decimal("100"),  # Worse origin (lower for bear)
+            origin_index=12,
+            pivot_price=Decimal("90"),
+            pivot_index=15,
+            status='active',
+        )
+
+        detector.state.active_legs = [leg_worse_origin]
+
+        # New leg with better origin (in same current turn)
+        new_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("105"),  # Better origin (higher for bear)
+            origin_index=14,
+            pivot_price=Decimal("88"),
+            pivot_index=18,
+            status='active',
+        )
+        detector.state.active_legs.append(new_leg)
+
+        # Prune dominated legs
+        from datetime import datetime
+        bar = make_bar(18, 89.0, 92.0, 88.0, 90.0)
+        timestamp = datetime.fromtimestamp(bar.timestamp)
+
+        events = detector._pruner.prune_dominated_legs_in_turn(detector.state, new_leg, bar, timestamp)
+
+        # The worse-origin leg (100) should be pruned - both are in same turn
+        assert len(events) == 1, f"Expected 1 prune event, got {len(events)}"
+
+        remaining_legs = [leg for leg in detector.state.active_legs if leg.status == 'active']
+        origins = [leg.origin_price for leg in remaining_legs]
+
+        assert len(origins) == 1, f"Expected 1 leg remaining, got {len(origins)}"
+        assert Decimal("105") in origins, "New leg (better origin) should exist"
+        assert Decimal("100") not in origins, "Same-turn leg with worse origin should be pruned"
+
+    def test_swing_immunity_still_works_with_turn_scoping(self):
+        """
+        Legs with active swings are never pruned, even within the same turn (#207 R3).
+
+        This confirms swing immunity is preserved with turn-scoped pruning.
+
+        TC3 from #207: Swing Immunity Still Works.
+        """
+        from src.swing_analysis.dag import Leg
+        from src.swing_analysis.swing_node import SwingNode
+
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Set up turn boundary - all legs in current turn
+        detector.state.last_turn_bar['bull'] = 10
+
+        # Create an active swing
+        active_swing = SwingNode(
+            swing_id="swing_immune",
+            high_bar_index=15,
+            high_price=Decimal("112"),
+            low_bar_index=12,
+            low_price=Decimal("100"),
+            direction="bull",
+            status="active",
+            formed_at_bar=15,
+        )
+        detector.state.active_swings = [active_swing]
+
+        # Leg with active swing (immune)
+        immune_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),  # Worse origin
+            origin_index=12,
+            pivot_price=Decimal("112"),
+            pivot_index=15,
+            status='active',
+            swing_id="swing_immune",  # Has active swing
+        )
+
+        detector.state.active_legs = [immune_leg]
+
+        # New leg with better origin
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("95"),  # Better origin
+            origin_index=14,
+            pivot_price=Decimal("120"),
+            pivot_index=18,
+            status='active',
+        )
+        detector.state.active_legs.append(new_leg)
+
+        # Prune dominated legs
+        from datetime import datetime
+        bar = make_bar(18, 115.0, 120.0, 113.0, 118.0)
+        timestamp = datetime.fromtimestamp(bar.timestamp)
+
+        events = detector._pruner.prune_dominated_legs_in_turn(detector.state, new_leg, bar, timestamp)
+
+        # No legs should be pruned - the worse-origin leg has swing immunity
+        assert len(events) == 0, f"Expected 0 prune events, got {len(events)}"
+
+        remaining_legs = [leg for leg in detector.state.active_legs if leg.status == 'active']
+        origins = [leg.origin_price for leg in remaining_legs]
+
+        assert len(origins) == 2, f"Expected 2 legs remaining, got {len(origins)}"
+        assert Decimal("95") in origins, "New leg should exist"
+        assert Decimal("100") in origins, "Immune leg should survive due to swing immunity"
 
     def test_active_swing_immunity_on_dominated_prune(self):
         """
