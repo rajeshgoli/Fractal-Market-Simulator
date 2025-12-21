@@ -40,7 +40,7 @@ python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10
 #   --offset random     Random window offset (default: 0)
 #   --start-date 2020-Jan-01  Start at specific date
 #   --mode calibration  Visualization mode (default: calibration)
-#   --mode dag          DAG Build mode for leg visualization
+#   --mode dag          Market Structure View for leg visualization
 ```
 
 ### Visualization Modes
@@ -50,13 +50,13 @@ The server supports two visualization modes:
 | Mode | Command | Description |
 |------|---------|-------------|
 | Calibration | `--mode calibration` | Default mode for swing calibration and review |
-| DAG Build | `--mode dag` | Watch the DAG build in real-time with leg visualization |
+| Market Structure | `--mode dag` | View market structure as it forms with leg visualization |
 
-**DAG Build Mode** is useful for observing how the hierarchical detector creates and manages candidate legs before they form into swings. See [DAG Build Mode](#dag-build-mode) for details.
+**Market Structure View** is useful for observing how the hierarchical detector creates and manages candidate legs before they form into swings. See [Market Structure View](#market-structure-view) for details.
 
 ### Layout
 
-- **Header**: Navigation menu (switch between Replay/DAG views), timestamp display, calibration status badge
+- **Header**: Navigation menu (switch between Replay View and Market Structure View), timestamp display, calibration status badge
 - **Sidebar**: Event filter toggles with descriptions
 - **Top Chart**: Overview chart (default: L / 1H aggregation)
 - **Bottom Chart**: Detail chart (default: S / 5m aggregation)
@@ -252,17 +252,17 @@ During forward playback, the sidebar also shows scale filters (S/M/L/XL). Toggle
 
 During playback, a "Show Stats" toggle appears in the sidebar. When enabled, it displays the calibration stats panel (thresholds, swing counts by scale) instead of the swing explanation panel. This is useful for referencing calibration data while observing playback events.
 
-**DAG State Panel Toggle:**
+**Current Structure Panel Toggle:**
 
 During playback, tab buttons appear above the bottom panel allowing you to switch between:
 - **Swings**: The default swing explanation panel showing formed swings and details
-- **DAG State**: Internal algorithm state visualization showing:
+- **Current Structure**: Algorithm state visualization showing:
   - **Active Legs**: Pre-formation candidate legs with pivot/origin prices and retracement percentages
   - **Orphaned Origins**: Preserved origins from invalidated legs awaiting sibling swing formation
   - **Pending Pivots**: Potential pivots awaiting confirmation for each direction
   - **Recent Events**: Log of leg lifecycle events (created, pruned, invalidated)
 
-This is useful for understanding how the DAG algorithm detects swings and why certain swings form or fail to form.
+This is useful for understanding how the algorithm detects swings and why certain swings form or fail to form.
 
 **Multiple Events:**
 When multiple events occur at the same bar, they are queued and shown sequentially. The indicator displays queue position (e.g., "1/3"). Use ◀/▶ buttons or arrow keys to navigate between events.
@@ -316,7 +316,7 @@ The feedback input is always visible during playback (not just during linger eve
 - Swings invalidated count
 - Swings completed count
 - Optional event context (if during linger event)
-- Mode-specific context (replay or DAG state)
+- Mode-specific context (Replay View or Market Structure View)
 
 **Auto-Screenshot:** A screenshot of the chart area is automatically captured with each observation for visual reference.
 
@@ -328,10 +328,10 @@ The feedback input is always visible during playback (not just during linger eve
 
 ### Observation Attachments
 
-When using DAG mode or the DAG State Panel, you can attach specific items to your observation for precise feedback:
+When using Market Structure View or the Current Structure Panel, you can attach specific items to your observation for precise feedback:
 
 **How to attach:**
-1. Click on any item in the DAG State Panel (leg, orphaned origin, or pending origin)
+1. Click on any item in the Current Structure Panel (leg, orphaned origin, or pending origin)
 2. A purple ring highlights the attached item
 3. The item appears in the Observation panel with a paperclip icon
 4. Up to 5 items can be attached per observation
@@ -343,7 +343,7 @@ When using DAG mode or the DAG State Panel, you can attach specific items to you
 
 **To detach:**
 - Click the X button next to the attachment in the Observation section
-- Or click the item again in the DAG State Panel
+- Or click the item again in the Current Structure Panel
 
 **In saved feedback:**
 Attachments are stored in the snapshot with full context (leg_id, prices, bar indices) for later debugging.
@@ -369,7 +369,7 @@ Attachments are stored in the snapshot with full context (leg_id, prices, bar in
 | `→` | Linger (multi-event) | Next event in queue |
 | `Escape` | Linger | Dismiss linger and resume playback |
 
-### DAG Build Mode
+### Market Structure View
 
 | Key | Context | Action |
 |-----|---------|--------|
@@ -384,35 +384,35 @@ Attachments are stored in the snapshot with full context (leg_id, prices, bar in
 
 ---
 
-## DAG Build Mode
+## Market Structure View
 
-DAG Build Mode provides a specialized view for observing how the hierarchical detector creates and manages candidate legs before they form into swings. Unlike Calibration mode, DAG Build starts with zero bars and builds incrementally as you watch.
+Market Structure View provides a specialized view for observing how the hierarchical detector creates and manages candidate legs before they form into swings. Unlike Calibration mode, Market Structure View starts with zero bars and builds incrementally as you watch.
 
 ### Quick Start
 
 ```bash
-# Launch in DAG Build mode
+# Launch in Market Structure View
 source venv/bin/activate
 python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000 --mode dag
 ```
 
 ### Layout
 
-DAG Build Mode has a simplified layout compared to Calibration mode:
+Market Structure View has a simplified layout compared to Calibration mode:
 
 - **Header**: Timestamp display, bar count indicator
 - **Top Chart**: Overview chart (macro) with leg overlays
 - **Bottom Chart**: Detail chart (micro) with leg overlays
 - **Playback Controls**: Transport buttons, speed control, linger toggle
-- **DAG State Panel**: Always-visible internal state display
+- **Current Structure Panel**: Always-visible algorithm state display
 
 ### Incremental Build (Fixes #179)
 
-DAG Build Mode now starts with **zero bars processed** and builds the structure incrementally:
+Market Structure View now starts with **zero bars processed** and builds the structure incrementally:
 
 1. **Press Play** to start processing bars from bar 0
 2. **Watch legs form** as each bar is processed through the detector
-3. **See the DAG grow** as legs appear, get pruned, and eventually form swings
+3. **See the structure grow** as legs appear, get pruned, and eventually form swings
 
 This matches the spec requirement: "Watch the structure build in real-time as bars load."
 
@@ -441,9 +441,9 @@ Orphaned origins (preserved pivots from invalidated legs) are visualized as **ci
 
 These markers help you see *where* preserved pivots are in relation to current price action. Orphaned origins can form sibling swings when price revisits the same defended pivot with a new origin point.
 
-### DAG State Panel
+### Current Structure Panel
 
-The DAG State Panel is always visible in this mode (no toggle needed). It shows:
+The Current Structure Panel is always visible in this mode (no toggle needed). It shows:
 
 | Column | Description |
 |--------|-------------|
@@ -458,7 +458,7 @@ The DAG State Panel is always visible in this mode (no toggle needed). It shows:
 
 ### Hover Highlighting
 
-Hover over any item in the DAG State Panel to highlight it on the charts:
+Hover over any item in the Current Structure Panel to highlight it on the charts:
 
 | Item Type | Hover Effect |
 |-----------|--------------|
@@ -478,7 +478,7 @@ This provides immediate visual feedback for reasoning about the algorithm's inte
 
 ### Playback Controls
 
-In DAG Build mode, all playback controls are functional:
+In Market Structure View, all playback controls are functional:
 
 | Control | Icon | Description |
 |---------|------|-------------|
@@ -487,21 +487,21 @@ In DAG Build mode, all playback controls are functional:
 | Step Back | ◀ | Not functional (forward-only) |
 | Jump to Start | \|◀ | Reset to bar 0 (restart incremental build) |
 | Speed | dropdown | 1x, 2x, 5x, 10x, 20x playback speed |
-| Linger | toggle | Toggle pause-on-event behavior (OFF by default in DAG mode) |
+| Linger | toggle | Toggle pause-on-event behavior (OFF by default in Market Structure View) |
 
-**Linger Toggle:** In DAG mode, linger is OFF by default for continuous observation. Enable it to pause and examine events as they occur.
+**Linger Toggle:** In Market Structure View, linger is OFF by default for continuous observation. Enable it to pause and examine events as they occur.
 
 ### Differences from Calibration Mode
 
-| Feature | Calibration Mode | DAG Build Mode |
-|---------|------------------|----------------|
+| Feature | Calibration Mode | Market Structure View |
+|---------|------------------|----------------------|
 | Initial state | Pre-calibrated (10K bars) | Empty (0 bars) |
 | Build process | Instant (pre-computed) | Incremental (watch it build) |
-| Sidebar | Event filters, scale toggles, feedback | DAG state, linger toggles, feedback |
+| Sidebar | Event filters, scale toggles, feedback | Current structure, linger toggles, feedback |
 | Swing overlay | Fib levels for formed swings | Diagonal leg lines for candidates |
 | Linger default | ON | OFF (continuous observation) |
 | Event navigation | Jump between swing events | Not available |
-| DAG State Panel | Toggle (Swings/DAG tabs) | Always visible |
+| Current Structure Panel | Toggle (Swings/Current Structure tabs) | Always visible |
 
 ### Use Cases
 
