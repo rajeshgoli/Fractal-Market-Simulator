@@ -17,7 +17,29 @@ import uvicorn
 
 from .api import app, init_app
 from ..data.ohlc_loader import get_file_metrics, load_ohlc
-from ..swing_analysis.resolution import SUPPORTED_RESOLUTIONS, parse_resolution
+
+# Resolution constants (inlined from deleted resolution.py)
+SUPPORTED_RESOLUTIONS = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+
+RESOLUTION_TO_MINUTES = {
+    "1m": 1,
+    "5m": 5,
+    "15m": 15,
+    "30m": 30,
+    "1h": 60,
+    "4h": 240,
+    "1d": 1440,
+}
+
+
+def parse_resolution(resolution: str) -> int:
+    """Parse resolution string to minutes."""
+    if resolution not in RESOLUTION_TO_MINUTES:
+        raise ValueError(
+            f"Unsupported resolution: {resolution}. "
+            f"Supported: {', '.join(SUPPORTED_RESOLUTIONS)}"
+        )
+    return RESOLUTION_TO_MINUTES[resolution]
 
 logging.basicConfig(
     level=logging.INFO,
