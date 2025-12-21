@@ -5,7 +5,7 @@ All request/response schemas for replay endpoints.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict
 
@@ -294,6 +294,39 @@ class DagContext(BaseModel):
     pending_origins: Optional[Dict[str, Optional[DagFeedbackPendingOrigin]]] = None
 
 
+# ============================================================================
+# Feedback Attachment Models
+# ============================================================================
+
+
+class FeedbackAttachmentLeg(BaseModel):
+    """A leg attachment in feedback."""
+    type: str = "leg"
+    leg_id: str
+    direction: str  # "bull" or "bear"
+    pivot_price: float
+    origin_price: float
+    pivot_index: int
+    origin_index: int
+
+
+class FeedbackAttachmentOrphanedOrigin(BaseModel):
+    """An orphaned origin attachment in feedback."""
+    type: str = "orphaned_origin"
+    direction: str  # "bull" or "bear"
+    price: float
+    bar_index: int
+
+
+class FeedbackAttachmentPendingOrigin(BaseModel):
+    """A pending origin attachment in feedback."""
+    type: str = "pending_origin"
+    direction: str  # "bull" or "bear"
+    price: float
+    bar_index: int
+    source: str  # "high", "low", "open", "close"
+
+
 class PlaybackFeedbackSnapshot(BaseModel):
     """Rich context snapshot for feedback capture."""
     state: str  # calibrating, calibration_complete, playing, paused
@@ -310,6 +343,12 @@ class PlaybackFeedbackSnapshot(BaseModel):
     # Mode-specific context
     replay_context: Optional[ReplayContext] = None
     dag_context: Optional[DagContext] = None
+    # Attachments (legs, orphaned origins, pending origins highlighted by user)
+    attachments: Optional[List[Union[
+        FeedbackAttachmentLeg,
+        FeedbackAttachmentOrphanedOrigin,
+        FeedbackAttachmentPendingOrigin
+    ]]] = None
 
 
 class PlaybackFeedbackRequest(BaseModel):
