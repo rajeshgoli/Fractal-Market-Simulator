@@ -351,12 +351,12 @@ class TestPivotExtension:
                 )
 
 
-class TestPendingPivotConsistency:
-    """Test that pending pivots maintain price/index consistency."""
+class TestPendingOriginConsistency:
+    """Test that pending origins maintain price/index consistency."""
 
-    def test_pending_pivot_price_matches_index(self):
+    def test_pending_origin_price_matches_index(self):
         """
-        Pending pivot's price should always match the bar at its index.
+        Pending origin's price should always match the bar at its index.
         """
         bars = [
             make_bar(0, 100.0, 105.0, 95.0, 100.0),
@@ -370,9 +370,9 @@ class TestPendingPivotConsistency:
         for bar in bars:
             detector.process_bar(bar)
 
-            # After each bar, check pending pivots are consistent
+            # After each bar, check pending origins are consistent
             for direction in ['bull', 'bear']:
-                pending = detector.state.pending_pivots.get(direction)
+                pending = detector.state.pending_origins.get(direction)
                 if pending is not None:
                     # Get the bar at the pending pivot's index
                     pivot_bar = bars[pending.bar_index]

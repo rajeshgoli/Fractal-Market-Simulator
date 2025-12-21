@@ -55,7 +55,7 @@ export interface DagContextOrigin {
   bar_index: number;
 }
 
-export interface DagContextPivot {
+export interface DagContextPendingOrigin {
   price: number;
   bar_index: number;
 }
@@ -66,9 +66,9 @@ export interface DagContext {
     bull: DagContextOrigin[];
     bear: DagContextOrigin[];
   };
-  pendingPivots: {
-    bull: DagContextPivot | null;
-    bear: DagContextPivot | null;
+  pendingOrigins: {
+    bull: DagContextPendingOrigin | null;
+    bear: DagContextPendingOrigin | null;
   };
 }
 
@@ -230,12 +230,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             bull: dagContext.orphanedOrigins.bull.map(o => ({ price: o.price, bar_index: o.bar_index })),
             bear: dagContext.orphanedOrigins.bear.map(o => ({ price: o.price, bar_index: o.bar_index })),
           },
-          pending_pivots: {
-            bull: dagContext.pendingPivots.bull
-              ? { price: dagContext.pendingPivots.bull.price, bar_index: dagContext.pendingPivots.bull.bar_index }
+          pending_origins: {
+            bull: dagContext.pendingOrigins.bull
+              ? { price: dagContext.pendingOrigins.bull.price, bar_index: dagContext.pendingOrigins.bull.bar_index }
               : null,
-            bear: dagContext.pendingPivots.bear
-              ? { price: dagContext.pendingPivots.bear.price, bar_index: dagContext.pendingPivots.bear.bar_index }
+            bear: dagContext.pendingOrigins.bear
+              ? { price: dagContext.pendingOrigins.bear.price, bar_index: dagContext.pendingOrigins.bear.bar_index }
               : null,
           },
         };
@@ -438,9 +438,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-app-muted">Pending Pivots</span>
+              <span className="text-app-muted">Pending Origins</span>
               <span className="text-app-text font-medium">
-                {(dagContext.pendingPivots.bull ? 1 : 0) + (dagContext.pendingPivots.bear ? 1 : 0)}
+                {(dagContext.pendingOrigins.bull ? 1 : 0) + (dagContext.pendingOrigins.bear ? 1 : 0)}
               </span>
             </div>
           </div>

@@ -137,7 +137,7 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
     );
   }
 
-  const { active_legs, orphaned_origins, pending_pivots, leg_counts } = dagState;
+  const { active_legs, orphaned_origins, pending_origins, leg_counts } = dagState;
 
   return (
     <div className="h-full bg-app-secondary border-t border-app-border flex flex-col font-sans text-sm">
@@ -262,59 +262,59 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
           </div>
         </div>
 
-        {/* Column 3: Pending Pivots */}
+        {/* Column 3: Pending Origins */}
         <div className="p-3 flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 mb-2">
             <Target size={12} className="text-trading-purple" />
             <span className="text-xs text-app-muted font-medium uppercase tracking-wider">
-              Pending Pivots
+              Pending Origins
             </span>
           </div>
           <div className="flex-1 space-y-3">
-            {/* Bull Pivot */}
+            {/* Bull Origin */}
             <div>
               <span className="text-[10px] text-trading-bull uppercase block mb-1">Bull</span>
-              {pending_pivots.bull ? (
+              {pending_origins.bull ? (
                 <div
                   className={`text-xs bg-trading-bull/10 rounded px-2 py-2 border cursor-pointer transition-all duration-150 ${
-                    highlightedItem?.type === 'pending_pivot' && highlightedItem.id === 'bull'
+                    highlightedItem?.type === 'pending_origin' && highlightedItem.id === 'bull'
                       ? 'border-trading-bull ring-2 ring-trading-bull/50 scale-[1.02]'
                       : 'border-trading-bull/20 hover:border-trading-bull/40'
                   }`}
-                  onMouseEnter={() => onHoverItem?.({ type: 'pending_pivot', id: 'bull', direction: 'bull' })}
+                  onMouseEnter={() => onHoverItem?.({ type: 'pending_origin', id: 'bull', direction: 'bull' })}
                   onMouseLeave={() => onHoverItem?.(null)}
                 >
                   <div className="flex justify-between mb-1">
-                    <span className="font-mono font-medium">{formatPrice(pending_pivots.bull.price)}</span>
-                    <span className="text-app-muted">@{pending_pivots.bull.bar_index}</span>
+                    <span className="font-mono font-medium">{formatPrice(pending_origins.bull.price)}</span>
+                    <span className="text-app-muted">@{pending_origins.bull.bar_index}</span>
                   </div>
                   <div className="text-[10px] text-app-muted">
-                    Source: {pending_pivots.bull.source}
+                    Source: {pending_origins.bull.source}
                   </div>
                 </div>
               ) : (
                 <span className="text-xs text-app-muted italic">None pending</span>
               )}
             </div>
-            {/* Bear Pivot */}
+            {/* Bear Origin */}
             <div>
               <span className="text-[10px] text-trading-bear uppercase block mb-1">Bear</span>
-              {pending_pivots.bear ? (
+              {pending_origins.bear ? (
                 <div
                   className={`text-xs bg-trading-bear/10 rounded px-2 py-2 border cursor-pointer transition-all duration-150 ${
-                    highlightedItem?.type === 'pending_pivot' && highlightedItem.id === 'bear'
+                    highlightedItem?.type === 'pending_origin' && highlightedItem.id === 'bear'
                       ? 'border-trading-bear ring-2 ring-trading-bear/50 scale-[1.02]'
                       : 'border-trading-bear/20 hover:border-trading-bear/40'
                   }`}
-                  onMouseEnter={() => onHoverItem?.({ type: 'pending_pivot', id: 'bear', direction: 'bear' })}
+                  onMouseEnter={() => onHoverItem?.({ type: 'pending_origin', id: 'bear', direction: 'bear' })}
                   onMouseLeave={() => onHoverItem?.(null)}
                 >
                   <div className="flex justify-between mb-1">
-                    <span className="font-mono font-medium">{formatPrice(pending_pivots.bear.price)}</span>
-                    <span className="text-app-muted">@{pending_pivots.bear.bar_index}</span>
+                    <span className="font-mono font-medium">{formatPrice(pending_origins.bear.price)}</span>
+                    <span className="text-app-muted">@{pending_origins.bear.bar_index}</span>
                   </div>
                   <div className="text-[10px] text-app-muted">
-                    Source: {pending_pivots.bear.source}
+                    Source: {pending_origins.bear.source}
                   </div>
                 </div>
               ) : (

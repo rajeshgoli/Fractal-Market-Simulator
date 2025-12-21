@@ -7,7 +7,7 @@ import { PlaybackControls } from '../components/PlaybackControls';
 import { DAGStatePanel } from '../components/DAGStatePanel';
 import { LegOverlay } from '../components/LegOverlay';
 import { OrphanedOriginsOverlay } from '../components/OrphanedOriginsOverlay';
-import { PendingPivotsOverlay } from '../components/PendingPivotsOverlay';
+import { PendingOriginsOverlay } from '../components/PendingOriginsOverlay';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import {
   fetchBars,
@@ -59,7 +59,7 @@ function dagLegToActiveLeg(leg: DagLeg): ActiveLeg {
  * - Active legs drawn as lines from pivot to origin
  * - Bull legs colored blue, bear legs colored red
  * - Stale legs shown dashed/yellow
- * - DAG internal state panel (legs, orphaned origins, pending pivots)
+ * - DAG internal state panel (legs, orphaned origins, pending origins)
  */
 interface DAGViewProps {
   currentMode: ViewMode;
@@ -97,7 +97,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   // DAG state
   const [dagState, setDagState] = useState<DagStateResponse | null>(null);
   const [recentLegEvents, setRecentLegEvents] = useState<LegEvent[]>([]);
-  const [isDagLoading, setIsDagLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [isDagLoading, _setIsDagLoading] = useState(false);
 
   // Hover highlighting state for DAG items
   const [highlightedDagItem, setHighlightedDagItem] = useState<HighlightedDagItem | null>(null);
@@ -154,19 +155,25 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     return Math.max(50, Math.round(1000 / speedMultiplier));
   }, [speedMultiplier]);
 
-  // Handler to refresh aggregated bars
-  const handleRefreshAggregatedBars = useCallback(async () => {
-    try {
-      const [bars1, bars2] = await Promise.all([
-        fetchBars(chart1Aggregation),
-        fetchBars(chart2Aggregation),
-      ]);
-      setChart1Bars(bars1);
-      setChart2Bars(bars2);
-    } catch (err) {
-      console.error('Failed to refresh aggregated bars:', err);
+  // Handler for aggregated bars from API response (replaces separate fetchBars calls)
+  const handleAggregatedBarsChange = useCallback((aggBars: import('../lib/api').AggregatedBarsResponse) => {
+    // Map scale to the aggregated bars
+    const scaleToAggKey = { 'S': 'S', 'M': 'M', 'L': 'L', 'XL': 'XL' } as const;
+    const chart1Key = scaleToAggKey[chart1Aggregation as keyof typeof scaleToAggKey];
+    const chart2Key = scaleToAggKey[chart2Aggregation as keyof typeof scaleToAggKey];
+
+    if (chart1Key && aggBars[chart1Key]) {
+      setChart1Bars(aggBars[chart1Key]!);
+    }
+    if (chart2Key && aggBars[chart2Key]) {
+      setChart2Bars(aggBars[chart2Key]!);
     }
   }, [chart1Aggregation, chart2Aggregation]);
+
+  // Handler for DAG state from API response (replaces separate fetchDagState call)
+  const handleDagStateChange = useCallback((state: import('../lib/api').DagStateResponse) => {
+    setDagState(state);
+  }, []);
 
   // Forward playback hook
   // For DAG mode with bar_count=0 calibration, we start from position -1 (before first bar)
@@ -178,6 +185,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     filters: lingerEvents,
     enabledScales: new Set(['XL', 'L', 'M']),
     lingerEnabled, // Use lingerEnabled state for toggle
+    // Request aggregated bars for both chart scales + DAG state
+    chartAggregationScales: [chart1Aggregation, chart2Aggregation],
+    includeDagState: true,
     onNewBars: useCallback((newBars: BarData[]) => {
       setSourceBars(prev => [...prev, ...newBars]);
       if (newBars.length > 0) {
@@ -185,7 +195,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         syncChartsToPositionRef.current(lastBar.index);
       }
     }, []),
-    onRefreshAggregatedBars: handleRefreshAggregatedBars,
+    onAggregatedBarsChange: handleAggregatedBarsChange,
+    onDagStateChange: handleDagStateChange,
   });
 
   // Convert DAG legs to ActiveLeg[] for visualization
@@ -298,12 +309,12 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
           bar_index: o.bar_index,
         })),
       },
-      pendingPivots: {
-        bull: dagState.pending_pivots.bull
-          ? { price: dagState.pending_pivots.bull.price, bar_index: dagState.pending_pivots.bull.bar_index }
+      pendingOrigins: {
+        bull: dagState.pending_origins.bull
+          ? { price: dagState.pending_origins.bull.price, bar_index: dagState.pending_origins.bull.bar_index }
           : null,
-        bear: dagState.pending_pivots.bear
-          ? { price: dagState.pending_pivots.bear.price, bar_index: dagState.pending_pivots.bear.bar_index }
+        bear: dagState.pending_origins.bear
+          ? { price: dagState.pending_origins.bear.price, bar_index: dagState.pending_origins.bear.bar_index }
           : null,
       },
     };
@@ -476,27 +487,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     }
   }, [calibrationPhase, calibrationData]);
 
-  // Fetch DAG state when position changes (handles both play and step forward)
-  useEffect(() => {
-    if (calibrationPhase !== CalibrationPhase.PLAYING) {
-      return;
-    }
-
-    const fetchState = async () => {
-      setIsDagLoading(true);
-      try {
-        const state = await fetchDagState();
-        setDagState(state);
-      } catch (err) {
-        console.error('Failed to fetch DAG state:', err);
-      } finally {
-        setIsDagLoading(false);
-      }
-    };
-
-    // Fetch whenever position changes (covers both play and manual step)
-    fetchState();
-  }, [calibrationPhase, currentPlaybackPosition]);
+  // NOTE: DAG state is now fetched via /advance API response (onDagStateChange callback)
+  // This eliminates the extra API call per bar advance.
 
   // Collect leg events from forward playback
   useEffect(() => {
@@ -749,25 +741,25 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             }
           />
 
-          {/* Pending Pivots Overlays - render price lines for highlighted pending pivots */}
-          <PendingPivotsOverlay
+          {/* Pending Origins Overlays - render price lines for highlighted pending origins */}
+          <PendingOriginsOverlay
             chart={chart1Ref.current}
             series={series1Ref.current}
-            bullPivot={dagState?.pending_pivots.bull ?? null}
-            bearPivot={dagState?.pending_pivots.bear ?? null}
-            highlightedPivot={
-              highlightedDagItem?.type === 'pending_pivot'
+            bullOrigin={dagState?.pending_origins.bull ?? null}
+            bearOrigin={dagState?.pending_origins.bear ?? null}
+            highlightedOrigin={
+              highlightedDagItem?.type === 'pending_origin'
                 ? highlightedDagItem.direction
                 : null
             }
           />
-          <PendingPivotsOverlay
+          <PendingOriginsOverlay
             chart={chart2Ref.current}
             series={series2Ref.current}
-            bullPivot={dagState?.pending_pivots.bull ?? null}
-            bearPivot={dagState?.pending_pivots.bear ?? null}
-            highlightedPivot={
-              highlightedDagItem?.type === 'pending_pivot'
+            bullOrigin={dagState?.pending_origins.bull ?? null}
+            bearOrigin={dagState?.pending_origins.bear ?? null}
+            highlightedOrigin={
+              highlightedDagItem?.type === 'pending_origin'
                 ? highlightedDagItem.direction
                 : null
             }

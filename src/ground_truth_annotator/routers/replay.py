@@ -37,7 +37,9 @@ from ...swing_analysis.adapters import (
 from ...swing_analysis.types import Bar
 from ...swing_analysis.reference_frame import ReferenceFrame
 from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceSwingInfo
+from ...swing_analysis.bar_aggregator import BarAggregator
 from ..schemas import (
+    BarResponse,
     DetectedSwingResponse,
     SwingsWindowedResponse,
     CalibrationSwingResponse,
@@ -48,6 +50,7 @@ from ..schemas import (
     ReplayEventResponse,
     ReplaySwingState,
     ReplayAdvanceResponse,
+    AggregatedBarsResponse,
     PlaybackFeedbackRequest,
     PlaybackFeedbackResponse,
     # New hierarchical models (Issue #166)
@@ -57,7 +60,7 @@ from ..schemas import (
     # DAG state models (Issue #169)
     DagLegResponse,
     DagOrphanedOrigin,
-    DagPendingPivot,
+    DagPendingOrigin,
     DagLegCounts,
     DagStateResponse,
 )
@@ -70,6 +73,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["replay"])
 
 
+# Scale to timeframe mapping (matches api.py)
+SCALE_TO_MINUTES = {"S": 5, "M": 15, "L": 60, "XL": 240}
+
 # Global cache for replay state
 _replay_cache: Dict[str, Any] = {
     "last_bar_index": -1,
@@ -77,6 +83,8 @@ _replay_cache: Dict[str, Any] = {
     "calibration_bar_count": 0,
     "calibration_events": [],  # Events from calibration
     "reference_layer": None,  # ReferenceLayer for filtering and invalidation
+    "aggregator": None,  # BarAggregator for incremental bar aggregation
+    "source_resolution": 5,  # Source resolution in minutes
 }
 
 
@@ -762,6 +770,7 @@ async def calibrate_replay(
         _replay_cache["calibration_events"] = []
         _replay_cache["scale_thresholds"] = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
         _replay_cache["reference_layer"] = ref_layer
+        _replay_cache["source_resolution"] = s.resolution_minutes
 
         # Update app state
         s.playback_index = -1
@@ -880,6 +889,7 @@ async def calibrate_replay(
     _replay_cache["calibration_events"] = events
     _replay_cache["scale_thresholds"] = scale_thresholds
     _replay_cache["reference_layer"] = ref_layer
+    _replay_cache["source_resolution"] = s.resolution_minutes
 
     total_time = time.time() - start_time
     logger.info(
@@ -949,6 +959,15 @@ async def advance_replay(request: ReplayAdvanceRequest):
         else:
             active_swings = active_dag_swings
 
+        # Build optional fields
+        aggregated_bars = None
+        if request.include_aggregated_bars:
+            source_resolution = _replay_cache.get("source_resolution", s.resolution_minutes)
+            aggregated_bars = _build_aggregated_bars(
+                s.source_bars, request.include_aggregated_bars, source_resolution
+            )
+        dag_state = _build_dag_state(detector) if request.include_dag_state else None
+
         return ReplayAdvanceResponse(
             new_bars=[],
             events=[],
@@ -956,6 +975,8 @@ async def advance_replay(request: ReplayAdvanceRequest):
             current_bar_index=len(s.source_bars) - 1,
             current_price=current_bar.close,
             end_of_data=True,
+            aggregated_bars=aggregated_bars,
+            dag_state=dag_state,
         )
 
     # Process new bars incrementally
@@ -1040,6 +1061,22 @@ async def advance_replay(request: ReplayAdvanceRequest):
     current_bar = s.source_bars[end_idx - 1]
     end_of_data = end_idx >= len(s.source_bars)
 
+    # Build optional aggregated bars (for batched playback)
+    aggregated_bars = None
+    if request.include_aggregated_bars:
+        source_resolution = _replay_cache.get("source_resolution", s.resolution_minutes)
+        aggregated_bars = _build_aggregated_bars(
+            s.source_bars,
+            request.include_aggregated_bars,
+            source_resolution,
+            limit=end_idx,
+        )
+
+    # Build optional DAG state (for batched playback)
+    dag_state = None
+    if request.include_dag_state:
+        dag_state = _build_dag_state(detector)
+
     return ReplayAdvanceResponse(
         new_bars=new_bars,
         events=all_events,
@@ -1047,6 +1084,8 @@ async def advance_replay(request: ReplayAdvanceRequest):
         current_bar_index=end_idx - 1,
         current_price=current_bar.close,
         end_of_data=end_of_data,
+        aggregated_bars=aggregated_bars,
+        dag_state=dag_state,
     )
 
 
@@ -1088,6 +1127,131 @@ def _build_swing_state(
         L=by_scale["L"],
         M=by_scale["M"],
         S=by_scale["S"],
+    )
+
+
+def _build_aggregated_bars(
+    source_bars: List[Bar],
+    scales: List[str],
+    source_resolution: int,
+    limit: Optional[int] = None,
+) -> AggregatedBarsResponse:
+    """
+    Build aggregated bars for requested scales.
+
+    Args:
+        source_bars: All source bars.
+        scales: List of scales to aggregate (e.g., ["S", "M"]).
+        source_resolution: Source bar resolution in minutes.
+        limit: Optional limit on number of source bars to use.
+
+    Returns:
+        AggregatedBarsResponse with bars for each requested scale.
+    """
+    bars_to_use = source_bars[:limit] if limit else source_bars
+    if not bars_to_use:
+        return AggregatedBarsResponse()
+
+    # Create aggregator for the bars
+    aggregator = BarAggregator(bars_to_use, source_resolution)
+
+    result = AggregatedBarsResponse()
+
+    for scale in scales:
+        scale_upper = scale.upper()
+        timeframe = SCALE_TO_MINUTES.get(scale_upper, source_resolution)
+        effective_tf = max(timeframe, source_resolution)
+
+        try:
+            agg_bars = aggregator.get_bars(effective_tf)
+            source_to_agg = aggregator._source_to_agg_mapping.get(effective_tf, {})
+
+            # Build inverse mapping
+            agg_to_source = {}
+            for src_idx, agg_idx in source_to_agg.items():
+                if agg_idx not in agg_to_source:
+                    agg_to_source[agg_idx] = (src_idx, src_idx)
+                else:
+                    min_idx, max_idx = agg_to_source[agg_idx]
+                    agg_to_source[agg_idx] = (min(min_idx, src_idx), max(max_idx, src_idx))
+
+            bar_responses = []
+            for i, agg_bar in enumerate(agg_bars):
+                src_start, src_end = agg_to_source.get(i, (0, 0))
+                bar_responses.append(BarResponse(
+                    index=i,
+                    timestamp=agg_bar.timestamp,
+                    open=agg_bar.open,
+                    high=agg_bar.high,
+                    low=agg_bar.low,
+                    close=agg_bar.close,
+                    source_start_index=src_start,
+                    source_end_index=src_end,
+                ))
+
+            setattr(result, scale_upper, bar_responses)
+        except Exception as e:
+            logger.warning(f"Failed to aggregate bars for scale {scale}: {e}")
+
+    return result
+
+
+def _build_dag_state(detector: HierarchicalDetector) -> DagStateResponse:
+    """
+    Build DAG state response from detector.
+
+    Args:
+        detector: The HierarchicalDetector instance.
+
+    Returns:
+        DagStateResponse with current DAG state.
+    """
+    state = detector.state
+
+    active_legs = [
+        DagLegResponse(
+            leg_id=leg.leg_id,
+            direction=leg.direction,
+            pivot_price=float(leg.pivot_price),
+            pivot_index=leg.pivot_index,
+            origin_price=float(leg.origin_price),
+            origin_index=leg.origin_index,
+            retracement_pct=float(leg.retracement_pct),
+            formed=leg.formed,
+            status=leg.status,
+            bar_count=leg.bar_count,
+        )
+        for leg in state.active_legs
+    ]
+
+    orphaned_origins = {
+        direction: [
+            DagOrphanedOrigin(price=float(price), bar_index=idx)
+            for price, idx in origins
+        ]
+        for direction, origins in state.orphaned_origins.items()
+    }
+
+    pending_origins = {
+        direction: DagPendingOrigin(
+            price=float(origin.price),
+            bar_index=origin.bar_index,
+            direction=origin.direction,
+            source=origin.source,
+        ) if origin else None
+        for direction, origin in state.pending_origins.items()
+    }
+
+    leg_counts = DagLegCounts(
+        bull=sum(1 for leg in state.active_legs if leg.direction == 'bull'),
+        bear=sum(1 for leg in state.active_legs if leg.direction == 'bear'),
+    )
+
+    return DagStateResponse(
+        active_legs=active_legs,
+        orphaned_origins=orphaned_origins,
+        pending_origins=pending_origins,
+        leg_counts=leg_counts,
     )
 
 
@@ -1163,7 +1327,7 @@ async def get_dag_state():
     Exposes leg-level state from the detector for debugging and DAG visualization:
     - active_legs: Currently tracked legs (pre-formation candidate swings)
     - orphaned_origins: Preserved origins from invalidated legs for sibling detection
-    - pending_pivots: Potential pivots awaiting temporal confirmation
+    - pending_origins: Potential origins for new legs awaiting temporal confirmation
     - leg_counts: Count of legs by direction
     """
     global _replay_cache
@@ -1203,15 +1367,15 @@ async def get_dag_state():
         for direction, origins in state.orphaned_origins.items()
     }
 
-    # Convert pending pivots
-    pending_pivots = {
-        direction: DagPendingPivot(
-            price=float(pivot.price),
-            bar_index=pivot.bar_index,
-            direction=pivot.direction,
-            source=pivot.source,
-        ) if pivot else None
-        for direction, pivot in state.pending_pivots.items()
+    # Convert pending origins
+    pending_origins = {
+        direction: DagPendingOrigin(
+            price=float(origin.price),
+            bar_index=origin.bar_index,
+            direction=origin.direction,
+            source=origin.source,
+        ) if origin else None
+        for direction, origin in state.pending_origins.items()
     }
 
     # Compute leg counts
@@ -1223,6 +1387,6 @@ async def get_dag_state():
     return DagStateResponse(
         active_legs=active_legs,
         orphaned_origins=orphaned_origins,
-        pending_pivots=pending_pivots,
+        pending_origins=pending_origins,
         leg_counts=leg_counts,
     )

@@ -11,7 +11,7 @@ import pytest
 from decimal import Decimal
 from datetime import datetime
 
-from src.swing_analysis.hierarchical_detector import HierarchicalDetector, PendingPivot
+from src.swing_analysis.hierarchical_detector import HierarchicalDetector, PendingOrigin
 from src.swing_analysis.types import Bar
 from src.data.ohlc_loader import load_ohlc
 
@@ -39,7 +39,7 @@ class TestPendingPivotOverwrite:
         - Bar 0: High = 100 (sets initial bear pivot)
         - Bar 1: Inside bar with High = 98 (lower high - should NOT overwrite bear pivot)
 
-        Expected: pending_pivots['bear'].price should remain 100
+        Expected: pending_origins['bear'].price should remain 100
         """
         detector = HierarchicalDetector()
 
@@ -47,21 +47,21 @@ class TestPendingPivotOverwrite:
         bar0 = make_bar(0, 95.0, 100.0, 90.0, 97.0)
         detector.process_bar(bar0)
 
-        assert detector.state.pending_pivots['bear'] is not None
-        assert detector.state.pending_pivots['bear'].price == Decimal('100')
-        assert detector.state.pending_pivots['bear'].bar_index == 0
+        assert detector.state.pending_origins['bear'] is not None
+        assert detector.state.pending_origins['bear'].price == Decimal('100')
+        assert detector.state.pending_origins['bear'].bar_index == 0
 
         # Bar 1: Inside bar (LH, HL) - doesn't create legs, doesn't overwrite bear pivot
         bar1 = make_bar(1, 97.0, 98.0, 92.0, 95.0)
         detector.process_bar(bar1)
 
         # Bear pivot should still be 100 from bar 0
-        assert detector.state.pending_pivots['bear'].price == Decimal('100')
-        assert detector.state.pending_pivots['bear'].bar_index == 0
+        assert detector.state.pending_origins['bear'].price == Decimal('100')
+        assert detector.state.pending_origins['bear'].bar_index == 0
 
         # Bull pivot should also remain at 90 (higher low doesn't overwrite)
-        assert detector.state.pending_pivots['bull'].price == Decimal('90')
-        assert detector.state.pending_pivots['bull'].bar_index == 0
+        assert detector.state.pending_origins['bull'].price == Decimal('90')
+        assert detector.state.pending_origins['bull'].bar_index == 0
 
     def test_bull_pivot_not_overwritten_by_higher_low(self):
         """
@@ -71,7 +71,7 @@ class TestPendingPivotOverwrite:
         - Bar 0: Low = 90 (sets initial bull pivot)
         - Bar 1: Inside bar with Low = 92 (higher low - should NOT overwrite bull pivot)
 
-        Expected: pending_pivots['bull'].price should remain 90
+        Expected: pending_origins['bull'].price should remain 90
         """
         detector = HierarchicalDetector()
 
@@ -79,20 +79,20 @@ class TestPendingPivotOverwrite:
         bar0 = make_bar(0, 95.0, 100.0, 90.0, 97.0)
         detector.process_bar(bar0)
 
-        assert detector.state.pending_pivots['bull'] is not None
-        assert detector.state.pending_pivots['bull'].price == Decimal('90')
+        assert detector.state.pending_origins['bull'] is not None
+        assert detector.state.pending_origins['bull'].price == Decimal('90')
 
         # Bar 1: Inside bar (LH, HL) - doesn't create legs, doesn't overwrite bull pivot
         bar1 = make_bar(1, 97.0, 98.0, 92.0, 95.0)
         detector.process_bar(bar1)
 
         # Bull pivot should still be 90 from bar 0
-        assert detector.state.pending_pivots['bull'].price == Decimal('90')
-        assert detector.state.pending_pivots['bull'].bar_index == 0
+        assert detector.state.pending_origins['bull'].price == Decimal('90')
+        assert detector.state.pending_origins['bull'].bar_index == 0
 
         # Bear pivot should also remain at 100 (lower high doesn't overwrite)
-        assert detector.state.pending_pivots['bear'].price == Decimal('100')
-        assert detector.state.pending_pivots['bear'].bar_index == 0
+        assert detector.state.pending_origins['bear'].price == Decimal('100')
+        assert detector.state.pending_origins['bear'].bar_index == 0
 
     def test_bear_pivot_updated_when_higher(self):
         """Bear pivot should be updated when bar.high > existing pivot."""
@@ -102,15 +102,15 @@ class TestPendingPivotOverwrite:
         bar0 = make_bar(0, 95.0, 100.0, 90.0, 97.0)
         detector.process_bar(bar0)
 
-        assert detector.state.pending_pivots['bear'].price == Decimal('100')
+        assert detector.state.pending_origins['bear'].price == Decimal('100')
 
         # Bar 1: Higher high (Type 2-Bull) - SHOULD update bear pivot
         bar1 = make_bar(1, 97.0, 105.0, 92.0, 103.0)
         detector.process_bar(bar1)
 
         # Bear pivot should be updated to 105
-        assert detector.state.pending_pivots['bear'].price == Decimal('105')
-        assert detector.state.pending_pivots['bear'].bar_index == 1
+        assert detector.state.pending_origins['bear'].price == Decimal('105')
+        assert detector.state.pending_origins['bear'].bar_index == 1
 
     def test_bull_pivot_updated_when_lower(self):
         """Bull pivot should be updated when bar.low < existing pivot."""
@@ -120,15 +120,15 @@ class TestPendingPivotOverwrite:
         bar0 = make_bar(0, 95.0, 100.0, 90.0, 97.0)
         detector.process_bar(bar0)
 
-        assert detector.state.pending_pivots['bull'].price == Decimal('90')
+        assert detector.state.pending_origins['bull'].price == Decimal('90')
 
         # Bar 1: Lower low (Type 2-Bear) - SHOULD update bull pivot
         bar1 = make_bar(1, 97.0, 98.0, 85.0, 86.0)
         detector.process_bar(bar1)
 
         # Bull pivot should be updated to 85
-        assert detector.state.pending_pivots['bull'].price == Decimal('85')
-        assert detector.state.pending_pivots['bull'].bar_index == 1
+        assert detector.state.pending_origins['bull'].price == Decimal('85')
+        assert detector.state.pending_origins['bull'].bar_index == 1
 
     def test_inside_bar_preserves_extreme_pivots(self):
         """
@@ -151,10 +151,10 @@ class TestPendingPivotOverwrite:
         detector.process_bar(bar1)
 
         # Both pivots should remain from bar 0
-        assert detector.state.pending_pivots['bear'].price == Decimal('100')
-        assert detector.state.pending_pivots['bear'].bar_index == 0
-        assert detector.state.pending_pivots['bull'].price == Decimal('90')
-        assert detector.state.pending_pivots['bull'].bar_index == 0
+        assert detector.state.pending_origins['bear'].price == Decimal('100')
+        assert detector.state.pending_origins['bear'].bar_index == 0
+        assert detector.state.pending_origins['bull'].price == Decimal('90')
+        assert detector.state.pending_origins['bull'].bar_index == 0
 
     def test_outside_bar_updates_both_if_extreme(self):
         """
@@ -171,10 +171,10 @@ class TestPendingPivotOverwrite:
         detector.process_bar(bar1)
 
         # Both pivots should be updated
-        assert detector.state.pending_pivots['bear'].price == Decimal('110')
-        assert detector.state.pending_pivots['bear'].bar_index == 1
-        assert detector.state.pending_pivots['bull'].price == Decimal('80')
-        assert detector.state.pending_pivots['bull'].bar_index == 1
+        assert detector.state.pending_origins['bear'].price == Decimal('110')
+        assert detector.state.pending_origins['bear'].bar_index == 1
+        assert detector.state.pending_origins['bull'].price == Decimal('80')
+        assert detector.state.pending_origins['bull'].bar_index == 1
 
 
 class TestRealDataPivotMismatch:

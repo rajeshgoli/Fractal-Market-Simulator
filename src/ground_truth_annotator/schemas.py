@@ -3,6 +3,7 @@ Pydantic models for the Replay View API.
 
 All request/response schemas for replay endpoints.
 """
+from __future__ import annotations
 
 from typing import Dict, List, Optional
 
@@ -177,6 +178,8 @@ class ReplayAdvanceRequest(BaseModel):
     calibration_bar_count: int
     current_bar_index: int
     advance_by: int = 1
+    include_aggregated_bars: Optional[List[str]] = None  # Scales to include (e.g., ["S", "M"])
+    include_dag_state: bool = False  # Whether to include DAG state
 
 
 class ReplayBarResponse(BaseModel):
@@ -213,6 +216,14 @@ class ReplaySwingState(BaseModel):
     S: List[CalibrationSwingResponse] = []
 
 
+class AggregatedBarsResponse(BaseModel):
+    """Aggregated bars by scale for chart display."""
+    S: Optional[List[BarResponse]] = None
+    M: Optional[List[BarResponse]] = None
+    L: Optional[List[BarResponse]] = None
+    XL: Optional[List[BarResponse]] = None
+
+
 class ReplayAdvanceResponse(BaseModel):
     """Response from advance endpoint."""
     new_bars: List[ReplayBarResponse]
@@ -221,6 +232,9 @@ class ReplayAdvanceResponse(BaseModel):
     current_bar_index: int
     current_price: float
     end_of_data: bool
+    # Optional fields for batched playback (reduces API calls)
+    aggregated_bars: Optional[AggregatedBarsResponse] = None
+    dag_state: Optional["DagStateResponse"] = None
 
 
 # ============================================================================
@@ -267,8 +281,8 @@ class DagFeedbackOrigin(BaseModel):
     bar_index: int
 
 
-class DagFeedbackPivot(BaseModel):
-    """A pending pivot captured in feedback snapshot."""
+class DagFeedbackPendingOrigin(BaseModel):
+    """A pending origin captured in feedback snapshot."""
     price: float
     bar_index: int
 
@@ -277,7 +291,7 @@ class DagContext(BaseModel):
     """DAG mode-specific context with full leg/origin/pivot data for debugging."""
     active_legs: List[DagFeedbackLeg] = []
     orphaned_origins: Optional[Dict[str, List[DagFeedbackOrigin]]] = None
-    pending_pivots: Optional[Dict[str, Optional[DagFeedbackPivot]]] = None
+    pending_origins: Optional[Dict[str, Optional[DagFeedbackPendingOrigin]]] = None
 
 
 class PlaybackFeedbackSnapshot(BaseModel):
@@ -516,8 +530,12 @@ class DagOrphanedOrigin(BaseModel):
     bar_index: int
 
 
-class DagPendingPivot(BaseModel):
-    """A potential defended pivot awaiting temporal confirmation."""
+class DagPendingOrigin(BaseModel):
+    """A potential origin for a new leg awaiting temporal confirmation.
+
+    For bull legs: tracks LOWs (bull origin = where upward move starts)
+    For bear legs: tracks HIGHs (bear origin = where downward move starts)
+    """
     price: float
     bar_index: int
     direction: str  # "bull" or "bear"
@@ -537,5 +555,5 @@ class DagStateResponse(BaseModel):
     """
     active_legs: List[DagLegResponse]
     orphaned_origins: Dict[str, List[DagOrphanedOrigin]]
-    pending_pivots: Dict[str, Optional[DagPendingPivot]]
+    pending_origins: Dict[str, Optional[DagPendingOrigin]]
     leg_counts: DagLegCounts

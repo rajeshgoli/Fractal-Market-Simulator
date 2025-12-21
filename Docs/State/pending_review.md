@@ -1,20 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 1
 
-**Last Review:** 2025-12-19
+**Last Review:** 2025-12-20
 
 ---
 
 ## Pending Changes
 
-- **#197** — Fix incorrect pivot/origin terminology in leg creation code
-- **#196** — Clear orphaned origins when new leg uses that origin
-- **#195** — Fix TYPE_2_BEAR and TYPE_1 creating legs with inverted direction
-- **#194** — Skip creating dominated legs that would be pruned at turn
-- **#193** — Pending pivot overwrite bug: preserve extreme pivots for correct leg pivot/origin matching
-- **#192** — Leg pivot extension: ensure pivot_index always matches pivot_price location
-- **#190** — Turn prune tie-breaking: keep earliest pivot bar when ranges are equal
+- **#199** — Fix orphaned origin marker positions (bull below, bear above)
 
 ---
 
@@ -22,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 20 | #190-#197 — Pivot/origin semantics cascade + #198 architectural audit | All Accepted; design sound post-#197 |
 | Dec 19 | #187-#189, #183, UX fixes (10 changes) — Temporal causality, sidebar unification, feedback snapshots | All Accepted |
 | Dec 19 | #125, #180-#182, #185, #186 — DAG refinements + UX fixes (6 issues) | All Accepted |
 | Dec 19 | #168-#172, #179 — DAG Visualization Mode (6 issues) | All Accepted |

@@ -155,8 +155,8 @@ class TestSwingFormation:
         """Bull swing forms when price rises from low to formation threshold.
 
         Bull legs are created in TYPE_2_BULL (HH, HL) with:
-        - pivot = previous LOW (from pending_pivots['bull'])
-        - origin = current HIGH
+        - origin = previous LOW (from pending_origins['bull'])
+        - pivot = current HIGH
 
         The sequence is:
         1. Low is established (pending pivot for bull)
@@ -1925,13 +1925,13 @@ class TestSameBarLegPrevention:
 
     def test_strict_inequality_prevents_same_bar_on_equal_indices(self):
         """Verify strict inequality logic: <= was the bug, < is the fix."""
-        from src.swing_analysis.hierarchical_detector import PendingPivot
+        from src.swing_analysis.hierarchical_detector import PendingOrigin
 
         # Simulate the scenario from issue #189
-        pending_bear = PendingPivot(
+        pending_bear = PendingOrigin(
             price=Decimal("100"), bar_index=5, direction='bear', source='high'
         )
-        pending_bull = PendingPivot(
+        pending_bull = PendingOrigin(
             price=Decimal("95"), bar_index=5, direction='bull', source='low'
         )
 
@@ -2007,34 +2007,34 @@ class TestLegCreationCleansUpState:
                 f"Orphans at bar 5: {orphan_at_bar_5}"
             )
 
-    def test_pending_pivots_cleared_after_leg_creation(self):
+    def test_pending_origins_cleared_after_leg_creation(self):
         """
-        Pending pivots are cleared when a leg is created from them (#197 fix).
+        Pending origins are cleared when a leg is created from them (#197 fix).
 
-        After the terminology fix (#197):
+        After the terminology fix (#197, #200):
         - Bear leg: origin_price = HIGH (where downward move started), pivot_price = LOW
         - Bull leg: origin_price = LOW (where upward move started), pivot_price = HIGH
-        - pending_pivots['bear'] tracks HIGHs (potential bear origins)
-        - pending_pivots['bull'] tracks LOWs (potential bull origins)
+        - pending_origins['bear'] tracks HIGHs (potential bear origins)
+        - pending_origins['bull'] tracks LOWs (potential bull origins)
 
-        When a leg is created from a pending pivot, that pending pivot is cleared.
-        However, subsequent bar processing may set a NEW pending pivot, so we check
-        that the pending pivot (if any) is different from the one used for the leg.
+        When a leg is created from a pending origin, that pending origin is cleared.
+        However, subsequent bar processing may set a NEW pending origin, so we check
+        that the pending origin (if any) is different from the one used for the leg.
         """
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
 
-        # Create a sequence that forms a bear leg from a pending bear pivot
+        # Create a sequence that forms a bear leg from a pending bear origin
         bars = [
             make_bar(0, 100.0, 105.0, 95.0, 102.0),  # Initial
-            make_bar(1, 102.0, 110.0, 100.0, 108.0),  # TYPE_2_BULL - creates pending bear pivot at 110
-            make_bar(2, 108.0, 108.5, 98.0, 100.0),  # TYPE_2_BEAR (LH, LL) - creates bear leg from pending pivot at 110
+            make_bar(1, 102.0, 110.0, 100.0, 108.0),  # TYPE_2_BULL - creates pending bear origin at 110
+            make_bar(2, 108.0, 108.5, 98.0, 100.0),  # TYPE_2_BEAR (LH, LL) - creates bear leg from pending origin at 110
         ]
 
         for bar in bars:
             detector.process_bar(bar)
 
-        # Check if bear leg was created with origin at 110 (pending bear pivot)
+        # Check if bear leg was created with origin at 110 (pending bear origin)
         # After #197 fix: bear leg origin = HIGH (where downward move started)
         bear_legs = [leg for leg in detector.state.active_legs if leg.direction == 'bear']
         bear_legs_with_origin_at_110 = [
@@ -2044,14 +2044,14 @@ class TestLegCreationCleansUpState:
         # Verify a bear leg was created with origin at 110
         assert len(bear_legs_with_origin_at_110) > 0, "Bear leg should be created with origin at 110"
 
-        # Verify the original pending pivot at 110 was cleared (#197 fix)
-        # After leg creation, the pending pivot may be updated to a new value (bar 2 high = 108.5)
+        # Verify the original pending origin at 110 was cleared (#197 fix)
+        # After leg creation, the pending origin may be updated to a new value (bar 2 high = 108.5)
         # but it should NOT still be at 110 (which was consumed by the leg)
-        pending_bear = detector.state.pending_pivots.get('bear')
+        pending_bear = detector.state.pending_origins.get('bear')
         if pending_bear is not None:
-            # If there's a pending pivot, it should be from a later bar, not the consumed one
+            # If there's a pending origin, it should be from a later bar, not the consumed one
             assert pending_bear.price != Decimal("110"), (
-                f"Pending bear pivot at 110 should be cleared after leg creation. "
+                f"Pending bear origin at 110 should be cleared after leg creation. "
                 f"Found: {pending_bear}"
             )
 
@@ -2060,7 +2060,7 @@ class TestLegCreationCleansUpState:
         A price/bar should not appear in multiple places simultaneously:
         - active leg origin
         - orphaned_origins
-        - pending_pivots
+        - pending_origins
 
         This is the core invariant that issue #196 violates.
         """
@@ -2100,16 +2100,14 @@ class TestLegCreationCleansUpState:
                     all_locations[origin_key] = []
                 all_locations[origin_key].append(f"orphaned_origins:{direction}")
 
-        # Check pending pivots (for origin-like usage)
+        # Check pending origins
         for direction in ['bull', 'bear']:
-            pending = detector.state.pending_pivots.get(direction)
+            pending = detector.state.pending_origins.get(direction)
             if pending:
-                # For bull pending pivot, the price could become a bear leg origin
-                # For bear pending pivot, the price could become a bull leg origin
                 origin_key = (pending.price, pending.bar_index)
                 if origin_key not in all_locations:
                     all_locations[origin_key] = []
-                all_locations[origin_key].append(f"pending_pivots:{direction}")
+                all_locations[origin_key].append(f"pending_origins:{direction}")
 
         # Find any duplicates - a price/bar should not appear as both:
         # 1. Active leg origin AND orphaned origin of same direction

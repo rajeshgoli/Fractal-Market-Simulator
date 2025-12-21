@@ -159,14 +159,14 @@ class TestDominatedLegSkipping:
         origin comparison - leg with lower origin is better (larger range).
 
         Scenario:
-        - Bar 0: Establishes pending_pivots['bull'] at low=90
+        - Bar 0: Establishes pending_origins['bull'] at low=90
         - Bar 1: Type 2-Bull, creates bull leg with origin=90 (LOW), pivot=102 (HIGH)
         - Bar 2: Continue uptrend, pending bull origin would be 92 (higher than 90)
         - Any new bull leg with origin=92 would be dominated by leg with origin=90
         """
         detector = HierarchicalDetector()
 
-        # Bar 0: Initial bar - establishes pending_pivots['bull'] at 90
+        # Bar 0: Initial bar - establishes pending_origins['bull'] at 90
         bar0 = make_bar(0, 95.0, 100.0, 90.0, 97.0)
         detector.process_bar(bar0)
 
@@ -214,8 +214,8 @@ class TestDominatedLegSkipping:
         origin comparison - leg with higher origin is better (larger range).
 
         Scenario:
-        - Bar 0: Establishes pending_pivots['bear'] at high=100
-        - Bar 1: Type 2-Bull updates pending_pivots['bear'] to 102
+        - Bar 0: Establishes pending_origins['bear'] at high=100
+        - Bar 1: Type 2-Bull updates pending_origins['bear'] to 102
         - Bar 2: Type 2-Bear creates bear leg with origin=102 (HIGH), pivot=85 (LOW)
         - Any new bear leg with origin < 102 would be dominated
         """
@@ -225,7 +225,7 @@ class TestDominatedLegSkipping:
         bar0 = make_bar(0, 95.0, 100.0, 90.0, 97.0)
         detector.process_bar(bar0)
 
-        # Bar 1: Type 2-Bull (HH, HL) - updates pending_pivots['bear'] to 102
+        # Bar 1: Type 2-Bull (HH, HL) - updates pending_origins['bear'] to 102
         bar1 = make_bar(1, 97.0, 102.0, 92.0, 101.0)
         events1 = detector.process_bar(bar1)
 
@@ -265,19 +265,19 @@ class TestDominatedLegSkipping:
         origin comparison - leg with lower origin is better (larger range).
 
         Scenario:
-        - Bar 0: Establishes pending_pivots['bull'] at low=100
-        - Bar 1: Dip to make new low at 95 (pending_pivots['bull'] updates to 95)
+        - Bar 0: Establishes pending_origins['bull'] at low=100
+        - Bar 1: Dip to make new low at 95 (pending_origins['bull'] updates to 95)
         - Bar 2: Type 2-Bull creates bull leg with origin=95 (best LOW), pivot=115 (HIGH)
         - Verify the better origin (95) was used
         """
         detector = HierarchicalDetector()
 
-        # Bar 0: Initial bar - establishes pending_pivots['bull'] at 100
+        # Bar 0: Initial bar - establishes pending_origins['bull'] at 100
         bar0 = make_bar(0, 102.0, 110.0, 100.0, 108.0)
         detector.process_bar(bar0)
 
         # Bar 1: Price dips to make lower low at 95
-        # This updates pending_pivots['bull'] to 95
+        # This updates pending_origins['bull'] to 95
         bar1 = make_bar(1, 108.0, 109.0, 95.0, 100.0)
         detector.process_bar(bar1)
 

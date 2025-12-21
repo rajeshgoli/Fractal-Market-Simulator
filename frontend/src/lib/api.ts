@@ -117,6 +117,14 @@ export interface ReplaySwingState {
   S: CalibrationData['active_swings_by_scale']['S'];
 }
 
+// Aggregated bars by scale (for batched playback)
+export interface AggregatedBarsResponse {
+  S?: BarData[];
+  M?: BarData[];
+  L?: BarData[];
+  XL?: BarData[];
+}
+
 export interface ReplayAdvanceResponse {
   new_bars: ReplayBarData[];
   events: ReplayEvent[];
@@ -124,23 +132,44 @@ export interface ReplayAdvanceResponse {
   current_bar_index: number;
   current_price: number;
   end_of_data: boolean;
+  // Optional fields for batched playback
+  aggregated_bars?: AggregatedBarsResponse;
+  dag_state?: DagStateResponse;
+}
+
+export interface ReplayAdvanceRequest {
+  calibration_bar_count: number;
+  current_bar_index: number;
+  advance_by?: number;
+  include_aggregated_bars?: string[];  // Scales to include (e.g., ["S", "M"])
+  include_dag_state?: boolean;
 }
 
 export async function advanceReplay(
   calibrationBarCount: number,
   currentBarIndex: number,
-  advanceBy: number = 1
+  advanceBy: number = 1,
+  includeAggregatedBars?: string[],
+  includeDagState?: boolean
 ): Promise<ReplayAdvanceResponse> {
+  const requestBody: ReplayAdvanceRequest = {
+    calibration_bar_count: calibrationBarCount,
+    current_bar_index: currentBarIndex,
+    advance_by: advanceBy,
+  };
+  if (includeAggregatedBars) {
+    requestBody.include_aggregated_bars = includeAggregatedBars;
+  }
+  if (includeDagState) {
+    requestBody.include_dag_state = includeDagState;
+  }
+
   const response = await fetch(`${API_BASE}/replay/advance`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      calibration_bar_count: calibrationBarCount,
-      current_bar_index: currentBarIndex,
-      advance_by: advanceBy,
-    }),
+    body: JSON.stringify(requestBody),
   });
   if (!response.ok) {
     throw new Error(`Failed to advance replay: ${response.statusText}`);
@@ -212,7 +241,7 @@ export interface PlaybackFeedbackSnapshot {
       bull: { price: number; bar_index: number }[];
       bear: { price: number; bar_index: number }[];
     };
-    pending_pivots: {
+    pending_origins: {
       bull: { price: number; bar_index: number } | null;
       bear: { price: number; bar_index: number } | null;
     };
@@ -269,7 +298,7 @@ export interface DagOrphanedOrigin {
   bar_index: number;
 }
 
-export interface DagPendingPivot {
+export interface DagPendingOrigin {
   price: number;
   bar_index: number;
   direction: 'bull' | 'bear';
@@ -282,9 +311,9 @@ export interface DagStateResponse {
     bull: DagOrphanedOrigin[];
     bear: DagOrphanedOrigin[];
   };
-  pending_pivots: {
-    bull: DagPendingPivot | null;
-    bear: DagPendingPivot | null;
+  pending_origins: {
+    bull: DagPendingOrigin | null;
+    bear: DagPendingOrigin | null;
   };
   leg_counts: {
     bull: number;

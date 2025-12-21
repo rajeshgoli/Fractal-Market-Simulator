@@ -122,15 +122,19 @@ class Leg:
 
 
 @dataclass
-class PendingPivot:
+class PendingOrigin:
     """
-    A potential defended pivot awaiting temporal confirmation.
+    A potential origin for a new leg awaiting temporal confirmation.
 
-    Created when a bar establishes a new extreme. Confirmed when
-    subsequent bar establishes temporal ordering.
+    Created when a bar establishes a new extreme that could be the starting
+    point (origin) of a future leg. Confirmed when subsequent bar establishes
+    temporal ordering.
+
+    For bull legs: tracks LOWs (bull origin = where upward move starts)
+    For bear legs: tracks HIGHs (bear origin = where downward move starts)
 
     Attributes:
-        price: The pivot price
+        price: The origin price (LOW for bull, HIGH for bear)
         bar_index: Bar index where this was established
         direction: What leg type this could start ('bull' or 'bear')
         source: Which price component ('high', 'low', 'open', 'close')
@@ -161,7 +165,7 @@ class DetectorState:
         # DAG-based algorithm state:
         prev_bar: Previous bar for type classification.
         active_legs: Currently tracked legs (bull and bear can coexist).
-        pending_pivots: Potential pivots awaiting temporal confirmation.
+        pending_origins: Potential origins for new legs awaiting temporal confirmation.
         price_high_water: Highest price seen since last leg modification.
         price_low_water: Lowest price seen since last leg modification.
     """
@@ -178,7 +182,7 @@ class DetectorState:
     # DAG-based algorithm state
     prev_bar: Optional[Bar] = None
     active_legs: List[Leg] = field(default_factory=list)
-    pending_pivots: Dict[str, Optional[PendingPivot]] = field(
+    pending_origins: Dict[str, Optional[PendingOrigin]] = field(
         default_factory=lambda: {'bull': None, 'bear': None}
     )
     price_high_water: Optional[Decimal] = None
@@ -215,18 +219,18 @@ class DetectorState:
                 "swing_id": leg.swing_id,
             })
 
-        # Serialize pending pivots
-        pending_pivots_data = {}
-        for direction, pivot in self.pending_pivots.items():
-            if pivot:
-                pending_pivots_data[direction] = {
-                    "price": str(pivot.price),
-                    "bar_index": pivot.bar_index,
-                    "direction": pivot.direction,
-                    "source": pivot.source,
+        # Serialize pending origins
+        pending_origins_data = {}
+        for direction, origin in self.pending_origins.items():
+            if origin:
+                pending_origins_data[direction] = {
+                    "price": str(origin.price),
+                    "bar_index": origin.bar_index,
+                    "direction": origin.direction,
+                    "source": origin.source,
                 }
             else:
-                pending_pivots_data[direction] = None
+                pending_origins_data[direction] = None
 
         # Serialize prev_bar
         prev_bar_data = None
@@ -265,7 +269,7 @@ class DetectorState:
             # DAG state
             "prev_bar": prev_bar_data,
             "active_legs": legs_data,
-            "pending_pivots": pending_pivots_data,
+            "pending_origins": pending_origins_data,
             "price_high_water": str(self.price_high_water) if self.price_high_water is not None else None,
             "price_low_water": str(self.price_low_water) if self.price_low_water is not None else None,
             # Orphaned origins (#163)
@@ -329,17 +333,17 @@ class DetectorState:
             )
             active_legs.append(leg)
 
-        # Deserialize pending pivots
-        pending_pivots: Dict[str, Optional[PendingPivot]] = {'bull': None, 'bear': None}
-        pending_pivots_data = data.get("pending_pivots", {})
+        # Deserialize pending origins
+        pending_origins: Dict[str, Optional[PendingOrigin]] = {'bull': None, 'bear': None}
+        pending_origins_data = data.get("pending_origins", {})
         for direction in ['bull', 'bear']:
-            pivot_data = pending_pivots_data.get(direction)
-            if pivot_data:
-                pending_pivots[direction] = PendingPivot(
-                    price=Decimal(pivot_data["price"]),
-                    bar_index=pivot_data["bar_index"],
-                    direction=pivot_data["direction"],
-                    source=pivot_data["source"],
+            origin_data = pending_origins_data.get(direction)
+            if origin_data:
+                pending_origins[direction] = PendingOrigin(
+                    price=Decimal(origin_data["price"]),
+                    bar_index=origin_data["bar_index"],
+                    direction=origin_data["direction"],
+                    source=origin_data["source"],
                 )
 
         # Deserialize prev_bar
@@ -381,7 +385,7 @@ class DetectorState:
             # DAG state
             prev_bar=prev_bar,
             active_legs=active_legs,
-            pending_pivots=pending_pivots,
+            pending_origins=pending_origins,
             price_high_water=Decimal(price_high_water) if price_high_water is not None else None,
             price_low_water=Decimal(price_low_water) if price_low_water is not None else None,
             orphaned_origins=orphaned_origins,
@@ -618,13 +622,13 @@ class HierarchicalDetector:
         bar_high = Decimal(str(bar.high))
         bar_low = Decimal(str(bar.low))
 
-        # Set pending pivots at bar extremes
-        # High could be a defended pivot for future bear swings
-        self.state.pending_pivots['bear'] = PendingPivot(
+        # Set pending origins at bar extremes
+        # High could be origin for future bear legs (bear origin = HIGH)
+        self.state.pending_origins['bear'] = PendingOrigin(
             price=bar_high, bar_index=bar.index, direction='bear', source='high'
         )
-        # Low could be a defended pivot for future bull swings
-        self.state.pending_pivots['bull'] = PendingPivot(
+        # Low could be origin for future bull legs (bull origin = LOW)
+        self.state.pending_origins['bull'] = PendingOrigin(
             price=bar_low, bar_index=bar.index, direction='bull', source='low'
         )
 
@@ -651,9 +655,9 @@ class HierarchicalDetector:
 
         # Type 2-Bull confirms temporal order: prev_low → bar_high
         # This creates a BEAR swing structure (low origin → high pivot)
-        # Start new bear leg from prev_low if we have a pending pivot
-        if self.state.pending_pivots.get('bear'):
-            pending = self.state.pending_pivots['bear']
+        # Start new bear leg from prev_low if we have a pending origin
+        if self.state.pending_origins.get('bear'):
+            pending = self.state.pending_origins['bear']
             # Create new bear leg: prev_high (defended) → prev_low (origin) extended by bar
             # Actually, for bear swing: high is defended pivot, low is origin
             # Type 2-Bull tells us prev_low came before bar_high
@@ -661,11 +665,11 @@ class HierarchicalDetector:
             # But we need price to retrace DOWN to form a bear swing
             pass  # Bear swings form differently
 
-        # Check if we can start a bull leg from the pending bull pivot
+        # Check if we can start a bull leg from the pending bull origin
         # prev_low is the origin (starting point) for a bull swing extending up
         # Only create if there isn't already a bull leg with the same origin
-        if self.state.pending_pivots.get('bull'):
-            pending = self.state.pending_pivots['bull']
+        if self.state.pending_origins.get('bull'):
+            pending = self.state.pending_origins['bull']
             # Check if we already have a bull leg from this origin
             existing_bull_leg = any(
                 leg.direction == 'bull' and leg.status == 'active'
@@ -690,8 +694,8 @@ class HierarchicalDetector:
                 self.state.active_legs.append(new_leg)
                 # Clean up orphaned origins (#196)
                 self._clean_up_after_leg_creation(new_leg)
-                # Clear pending pivot after leg creation (#197)
-                self.state.pending_pivots['bull'] = None
+                # Clear pending origin after leg creation (#197)
+                self.state.pending_origins['bull'] = None
                 # Emit LegCreatedEvent (#168)
                 events.append(LegCreatedEvent(
                     bar_index=bar.index,
@@ -705,17 +709,17 @@ class HierarchicalDetector:
                     pivot_index=new_leg.pivot_index,
                 ))
 
-        # Update pending pivots only if more extreme
-        # Bear pivot: only update if this high is higher (tracking swing highs)
-        existing_bear = self.state.pending_pivots.get('bear')
-        if existing_bear is None or bar_high > existing_bear.price:
-            self.state.pending_pivots['bear'] = PendingPivot(
+        # Update pending origins only if more extreme AND not worse than active leg origins (#200)
+        # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
+        existing_bear = self.state.pending_origins.get('bear')
+        if (existing_bear is None or bar_high > existing_bear.price) and self._should_track_pending_origin('bear', bar_high):
+            self.state.pending_origins['bear'] = PendingOrigin(
                 price=bar_high, bar_index=bar.index, direction='bear', source='high'
             )
-        # Bull pivot: only update if this low is lower (tracking swing lows)
-        existing_bull = self.state.pending_pivots.get('bull')
-        if existing_bull is None or bar_low < existing_bull.price:
-            self.state.pending_pivots['bull'] = PendingPivot(
+        # Bull origin: only update if this low is lower (tracking swing lows for bull legs)
+        existing_bull = self.state.pending_origins.get('bull')
+        if (existing_bull is None or bar_low < existing_bull.price) and self._should_track_pending_origin('bull', bar_low):
+            self.state.pending_origins['bull'] = PendingOrigin(
                 price=bar_low, bar_index=bar.index, direction='bull', source='low'
             )
 
@@ -753,8 +757,8 @@ class HierarchicalDetector:
 
         # Start new bear leg for potential bear swing
         # (tracking downward movement for possible bear retracement later)
-        if self.state.pending_pivots.get('bear'):
-            pending = self.state.pending_pivots['bear']
+        if self.state.pending_origins.get('bear'):
+            pending = self.state.pending_origins['bear']
             # Only create if we don't already have a bear leg with this origin
             existing_bear_leg = any(
                 leg.direction == 'bear' and leg.status == 'active'
@@ -778,8 +782,8 @@ class HierarchicalDetector:
                 self.state.active_legs.append(new_bear_leg)
                 # Clean up orphaned origins (#196)
                 self._clean_up_after_leg_creation(new_bear_leg)
-                # Clear pending pivot after leg creation (#197)
-                self.state.pending_pivots['bear'] = None
+                # Clear pending origin after leg creation (#197)
+                self.state.pending_origins['bear'] = None
                 # Emit LegCreatedEvent (#168)
                 events.append(LegCreatedEvent(
                     bar_index=bar.index,
@@ -793,17 +797,17 @@ class HierarchicalDetector:
                     pivot_index=new_bear_leg.pivot_index,
                 ))
 
-        # Update pending pivots only if more extreme
-        # Bull pivot: only update if this low is lower (tracking swing lows)
-        existing_bull = self.state.pending_pivots.get('bull')
-        if existing_bull is None or bar_low < existing_bull.price:
-            self.state.pending_pivots['bull'] = PendingPivot(
+        # Update pending origins only if more extreme AND not worse than active leg origins (#200)
+        # Bull origin: only update if this low is lower (tracking swing lows for bull legs)
+        existing_bull = self.state.pending_origins.get('bull')
+        if (existing_bull is None or bar_low < existing_bull.price) and self._should_track_pending_origin('bull', bar_low):
+            self.state.pending_origins['bull'] = PendingOrigin(
                 price=bar_low, bar_index=bar.index, direction='bull', source='low'
             )
-        # Bear pivot: only update if this high is higher (tracking swing highs)
-        existing_bear = self.state.pending_pivots.get('bear')
-        if existing_bear is None or bar_high > existing_bear.price:
-            self.state.pending_pivots['bear'] = PendingPivot(
+        # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
+        existing_bear = self.state.pending_origins.get('bear')
+        if (existing_bear is None or bar_high > existing_bear.price) and self._should_track_pending_origin('bear', bar_high):
+            self.state.pending_origins['bear'] = PendingOrigin(
                 price=bar_high, bar_index=bar.index, direction='bear', source='high'
             )
 
@@ -826,13 +830,13 @@ class HierarchicalDetector:
         - prev_bar.H came before bar.L (can establish bear swing structure)
         - prev_bar.L came before bar.H (can establish bull swing structure)
 
-        We should create legs from pending pivots if they haven't been consumed yet.
+        We should create legs from pending origins if they haven't been consumed yet.
         """
         events: List[SwingEvent] = []
         prev_bar = self.state.prev_bar
         if prev_bar:
-            pending_bear = self.state.pending_pivots.get('bear')  # High pivot
-            pending_bull = self.state.pending_pivots.get('bull')  # Low pivot
+            pending_bear = self.state.pending_origins.get('bear')  # High origin (for bear legs)
+            pending_bull = self.state.pending_origins.get('bull')  # Low origin (for bull legs)
 
             # Create bear leg if HIGH came before LOW (price moved down)
             # Bear swing: origin=HIGH (starting point), pivot=LOW (defended extreme)
@@ -855,9 +859,9 @@ class HierarchicalDetector:
                     self.state.active_legs.append(new_bear_leg)
                     # Clean up orphaned origins (#196)
                     self._clean_up_after_leg_creation(new_bear_leg)
-                    # Clear pending pivots after leg creation (#197)
-                    self.state.pending_pivots['bear'] = None
-                    self.state.pending_pivots['bull'] = None
+                    # Clear pending origins after leg creation (#197)
+                    self.state.pending_origins['bear'] = None
+                    self.state.pending_origins['bull'] = None
                     # Emit LegCreatedEvent (#168)
                     events.append(LegCreatedEvent(
                         bar_index=bar.index,
@@ -892,9 +896,9 @@ class HierarchicalDetector:
                     self.state.active_legs.append(new_bull_leg)
                     # Clean up orphaned origins (#196)
                     self._clean_up_after_leg_creation(new_bull_leg)
-                    # Clear pending pivots after leg creation (#197)
-                    self.state.pending_pivots['bull'] = None
-                    self.state.pending_pivots['bear'] = None
+                    # Clear pending origins after leg creation (#197)
+                    self.state.pending_origins['bull'] = None
+                    self.state.pending_origins['bear'] = None
                     # Emit LegCreatedEvent (#168)
                     events.append(LegCreatedEvent(
                         bar_index=bar.index,
@@ -908,17 +912,17 @@ class HierarchicalDetector:
                         pivot_index=new_bull_leg.pivot_index,
                     ))
 
-            # Update pending pivots only if more extreme
-            # Bear pivot: only update if this high is higher (tracking swing highs)
-            existing_bear = self.state.pending_pivots.get('bear')
-            if existing_bear is None or bar_high > existing_bear.price:
-                self.state.pending_pivots['bear'] = PendingPivot(
+            # Update pending origins only if more extreme AND not worse than active leg origins (#200)
+            # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
+            existing_bear = self.state.pending_origins.get('bear')
+            if (existing_bear is None or bar_high > existing_bear.price) and self._should_track_pending_origin('bear', bar_high):
+                self.state.pending_origins['bear'] = PendingOrigin(
                     price=bar_high, bar_index=bar.index, direction='bear', source='high'
                 )
-            # Bull pivot: only update if this low is lower (tracking swing lows)
-            existing_bull = self.state.pending_pivots.get('bull')
-            if existing_bull is None or bar_low < existing_bull.price:
-                self.state.pending_pivots['bull'] = PendingPivot(
+            # Bull origin: only update if this low is lower (tracking swing lows for bull legs)
+            existing_bull = self.state.pending_origins.get('bull')
+            if (existing_bull is None or bar_low < existing_bull.price) and self._should_track_pending_origin('bull', bar_low):
+                self.state.pending_origins['bull'] = PendingOrigin(
                     price=bar_low, bar_index=bar.index, direction='bull', source='low'
                 )
 
@@ -961,17 +965,17 @@ class HierarchicalDetector:
 
         # Note: Leg origin extension now handled by _extend_leg_origins (#188)
 
-        # Update pending pivots only if more extreme
-        # Bull pivot: only update if this low is lower (tracking swing lows)
-        existing_bull = self.state.pending_pivots.get('bull')
-        if existing_bull is None or bar_low < existing_bull.price:
-            self.state.pending_pivots['bull'] = PendingPivot(
+        # Update pending origins only if more extreme AND not worse than active leg origins (#200)
+        # Bull origin: only update if this low is lower (tracking swing lows for bull legs)
+        existing_bull = self.state.pending_origins.get('bull')
+        if (existing_bull is None or bar_low < existing_bull.price) and self._should_track_pending_origin('bull', bar_low):
+            self.state.pending_origins['bull'] = PendingOrigin(
                 price=bar_low, bar_index=bar.index, direction='bull', source='low'
             )
-        # Bear pivot: only update if this high is higher (tracking swing highs)
-        existing_bear = self.state.pending_pivots.get('bear')
-        if existing_bear is None or bar_high > existing_bear.price:
-            self.state.pending_pivots['bear'] = PendingPivot(
+        # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
+        existing_bear = self.state.pending_origins.get('bear')
+        if (existing_bear is None or bar_high > existing_bear.price) and self._should_track_pending_origin('bear', bar_high):
+            self.state.pending_origins['bear'] = PendingOrigin(
                 price=bar_high, bar_index=bar.index, direction='bear', source='high'
             )
 
@@ -1618,6 +1622,26 @@ class HierarchicalDetector:
 
         return events
 
+    def _should_track_pending_origin(self, direction: str, price: Decimal) -> bool:
+        """
+        Check if we should track this as a pending origin (#200).
+
+        Returns False if an active leg already has a better origin:
+        - For bull: active bull leg with origin_price <= price (lower origin is better)
+        - For bear: active bear leg with origin_price >= price (higher origin is better)
+
+        When an active leg has a better origin, tracking a worse pending origin
+        is pointless - if the leg survives, the pending origin won't be used;
+        if the leg is invalidated, the orphaned origin is still better.
+        """
+        for leg in self.state.active_legs:
+            if leg.direction == direction and leg.status == 'active':
+                if direction == 'bull' and leg.origin_price <= price:
+                    return False  # Active bull leg has lower/equal origin
+                elif direction == 'bear' and leg.origin_price >= price:
+                    return False  # Active bear leg has higher/equal origin
+        return True
+
     def _clean_up_after_leg_creation(self, leg: Leg) -> None:
         """
         Clean up orphaned origins after leg creation (#196).
@@ -1626,8 +1650,8 @@ class HierarchicalDetector:
         leg's origin (same direction). An origin is no longer "orphaned" if an
         active leg uses it.
 
-        Note: Pending pivots are NOT cleared here because they track "the most
-        extreme value for potential pivots" and may be used for multiple legs.
+        Note: Pending origins are NOT cleared here because they track "the most
+        extreme value for potential origins" and may be used for multiple legs.
         They are only replaced when a more extreme value appears.
 
         Args:
