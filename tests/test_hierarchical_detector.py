@@ -12,7 +12,7 @@ from typing import List
 
 import pandas as pd
 
-from src.swing_analysis.hierarchical_detector import (
+from src.swing_analysis.dag import (
     HierarchicalDetector,
     DetectorState,
     calibrate,
@@ -1250,7 +1250,7 @@ class TestTurnPruning:
     def test_turn_prune_emits_leg_pruned_event(self):
         """LegPrunedEvent with reason='turn_prune' is emitted for non-largest legs."""
         from src.swing_analysis.events import LegPrunedEvent
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
         from decimal import Decimal
 
         config = SwingConfig.default()
@@ -1298,7 +1298,7 @@ class TestTurnPruning:
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
         # Call _prune_legs_on_turn directly
-        events = detector._prune_legs_on_turn('bull', bar, timestamp)
+        events = detector._pruner.prune_legs_on_turn(detector.state, 'bull', bar, timestamp)
 
         # Should have pruned 2 legs (leg2 and leg3), keeping leg1 (largest range)
         assert len(events) == 2
@@ -1312,7 +1312,7 @@ class TestTurnPruning:
 
     def test_10pct_rule_preserves_multi_origin_structure(self):
         """Legs from different origins are preserved even if small."""
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
         from decimal import Decimal
         from datetime import datetime
 
@@ -1345,7 +1345,7 @@ class TestTurnPruning:
         bar = make_bar(20, 5090.0, 5095.0, 5080.0, 5085.0)
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
-        events = detector._prune_legs_on_turn('bull', bar, timestamp)
+        events = detector._pruner.prune_legs_on_turn(detector.state, 'bull', bar, timestamp)
 
         # Both legs preserved - different origins, each is largest in its group
         assert len(events) == 0
@@ -1354,7 +1354,7 @@ class TestTurnPruning:
 
     def test_subtree_prune_removes_contained_small_origins(self):
         """Subtree prune removes origins contained within larger origin if < 10%. Fixed for #197."""
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
         from src.swing_analysis.events import LegPrunedEvent
         from decimal import Decimal
         from datetime import datetime
@@ -1392,7 +1392,7 @@ class TestTurnPruning:
         bar = make_bar(20, 5090.0, 5095.0, 5080.0, 5085.0)
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
-        events = detector._prune_legs_on_turn('bull', bar, timestamp)
+        events = detector._pruner.prune_legs_on_turn(detector.state, 'bull', bar, timestamp)
 
         # leg2 should be pruned (subtree_prune) because it's:
         # 1. Contained within leg1's range
@@ -1406,7 +1406,7 @@ class TestTurnPruning:
 
     def test_single_leg_not_pruned(self):
         """A single leg should not be pruned (nothing to compare against)."""
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
         from decimal import Decimal
         from datetime import datetime
 
@@ -1426,7 +1426,7 @@ class TestTurnPruning:
         bar = make_bar(15, 5090.0, 5095.0, 5080.0, 5085.0)
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
-        events = detector._prune_legs_on_turn('bull', bar, timestamp)
+        events = detector._pruner.prune_legs_on_turn(detector.state, 'bull', bar, timestamp)
 
         # No pruning should occur
         assert len(events) == 0
@@ -1434,7 +1434,7 @@ class TestTurnPruning:
 
     def test_legs_with_different_origins_not_grouped(self):
         """Legs with different origins are not grouped together for pruning."""
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
         from decimal import Decimal
         from datetime import datetime
 
@@ -1464,7 +1464,7 @@ class TestTurnPruning:
         bar = make_bar(20, 5090.0, 5095.0, 5080.0, 5085.0)
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
-        events = detector._prune_legs_on_turn('bull', bar, timestamp)
+        events = detector._pruner.prune_legs_on_turn(detector.state, 'bull', bar, timestamp)
 
         # No pruning - each origin group has only one leg
         assert len(events) == 0
@@ -1472,7 +1472,7 @@ class TestTurnPruning:
 
     def test_active_swing_immunity(self):
         """Legs with active swings are never pruned, even if < 10% of largest."""
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
         from src.swing_analysis.swing_node import SwingNode
         from decimal import Decimal
         from datetime import datetime
@@ -1520,7 +1520,7 @@ class TestTurnPruning:
         bar = make_bar(15, 5090.0, 5095.0, 5080.0, 5085.0)
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
-        events = detector._prune_legs_on_turn('bull', bar, timestamp)
+        events = detector._pruner.prune_legs_on_turn(detector.state, 'bull', bar, timestamp)
 
         # No pruning - leg2 has an active swing (immune)
         assert len(events) == 0
@@ -1537,7 +1537,7 @@ class TestTurnPruning:
 
         Both have identical range so there's a tie. Should keep leg1 (bar 39).
         """
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
         from src.swing_analysis.events import LegPrunedEvent
         from decimal import Decimal
         from datetime import datetime
@@ -1575,7 +1575,7 @@ class TestTurnPruning:
         bar = make_bar(62, 4425.0, 4430.0, 4420.0, 4425.0)
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
-        events = detector._prune_legs_on_turn('bear', bar, timestamp)
+        events = detector._pruner.prune_legs_on_turn(detector.state, 'bear', bar, timestamp)
 
         # leg2 should be pruned (later pivot), leg1 kept (earlier pivot)
         assert len(events) == 1
@@ -1611,7 +1611,7 @@ class TestLegOriginExtension:
         When bar has higher high but equal low, it's classified as Type 1
         (inside bar), but bull leg pivots should still extend.
         """
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -1661,7 +1661,7 @@ class TestLegOriginExtension:
         When bar has equal high but lower low, it's classified as Type 1
         (inside bar), but bear leg pivots should still extend.
         """
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -1701,7 +1701,7 @@ class TestLegOriginExtension:
 
     def test_bull_leg_pivot_extended_on_type2_bull(self):
         """Bull leg pivots extend on Type 2-Bull bars (HH+HL). Fixed for #197."""
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -1736,7 +1736,7 @@ class TestLegOriginExtension:
 
     def test_bear_leg_pivot_extended_on_type2_bear(self):
         """Bear leg pivots extend on Type 2-Bear bars (LH+LL). Fixed for #197."""
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -1771,7 +1771,7 @@ class TestLegOriginExtension:
 
     def test_both_legs_pivot_extend_on_type3(self):
         """Both bull and bear leg pivots extend on Type 3 bars (HH+LL). Fixed for #197."""
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -1818,7 +1818,7 @@ class TestLegOriginExtension:
 
     def test_pivot_not_extended_if_not_new_extreme(self):
         """Pivot should not change if bar doesn't make new extreme. Fixed for #197."""
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -1925,7 +1925,7 @@ class TestSameBarLegPrevention:
 
     def test_strict_inequality_prevents_same_bar_on_equal_indices(self):
         """Verify strict inequality logic: <= was the bug, < is the fix."""
-        from src.swing_analysis.hierarchical_detector import PendingOrigin
+        from src.swing_analysis.dag import PendingOrigin
 
         # Simulate the scenario from issue #189
         pending_bear = PendingOrigin(
@@ -2141,7 +2141,7 @@ class TestBidirectionalDomination:
         Directly tests _prune_dominated_legs_in_turn with controlled setup.
         """
         from src.swing_analysis.events import LegPrunedEvent
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -2177,7 +2177,7 @@ class TestBidirectionalDomination:
         bar = make_bar(10, 110.0, 115.0, 108.0, 112.0)
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
-        events = detector._prune_dominated_legs_in_turn(new_leg, bar, timestamp)
+        events = detector._pruner.prune_dominated_legs_in_turn(detector.state, new_leg, bar, timestamp)
 
         # leg1 should be pruned because its origin (100) is worse than new_leg's origin (95)
         assert len(events) == 1, f"Expected 1 prune event, got {len(events)}"
@@ -2196,7 +2196,7 @@ class TestBidirectionalDomination:
         Directly tests _prune_dominated_legs_in_turn with controlled setup.
         """
         from src.swing_analysis.events import LegPrunedEvent
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -2231,7 +2231,7 @@ class TestBidirectionalDomination:
         bar = make_bar(10, 92.0, 95.0, 90.0, 91.0)
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
-        events = detector._prune_dominated_legs_in_turn(new_leg, bar, timestamp)
+        events = detector._pruner.prune_dominated_legs_in_turn(detector.state, new_leg, bar, timestamp)
 
         # leg1 should be pruned because its origin (105) is worse than new_leg's origin (112)
         assert len(events) == 1, f"Expected 1 prune event, got {len(events)}"
@@ -2251,7 +2251,7 @@ class TestBidirectionalDomination:
 
         Directly tests _prune_dominated_legs_in_turn.
         """
-        from src.swing_analysis.hierarchical_detector import Leg
+        from src.swing_analysis.dag import Leg
 
         config = SwingConfig.default()
         detector = HierarchicalDetector(config)
@@ -2297,7 +2297,7 @@ class TestBidirectionalDomination:
         bar = make_bar(18, 120.0, 125.0, 118.0, 122.0)
         timestamp = datetime.fromtimestamp(bar.timestamp)
 
-        events = detector._prune_dominated_legs_in_turn(new_leg, bar, timestamp)
+        events = detector._pruner.prune_dominated_legs_in_turn(detector.state, new_leg, bar, timestamp)
 
         # BOTH legs with worse origins should be pruned (100 and 105)
         # Turn boundaries are NOT respected for pruning

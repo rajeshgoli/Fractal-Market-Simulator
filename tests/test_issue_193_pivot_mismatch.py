@@ -11,7 +11,7 @@ import pytest
 from decimal import Decimal
 from datetime import datetime
 
-from src.swing_analysis.hierarchical_detector import HierarchicalDetector, PendingOrigin
+from src.swing_analysis.dag import HierarchicalDetector, PendingOrigin
 from src.swing_analysis.types import Bar
 from src.data.ohlc_loader import load_ohlc
 

@@ -12,7 +12,7 @@ import pytest
 from decimal import Decimal
 from typing import List
 
-from src.swing_analysis.hierarchical_detector import (
+from src.swing_analysis.dag import (
     HierarchicalDetector,
     calibrate,
     Leg,

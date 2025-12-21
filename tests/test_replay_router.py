@@ -13,7 +13,7 @@ from typing import List
 
 from src.swing_analysis.types import Bar
 from src.swing_analysis.swing_node import SwingNode
-from src.swing_analysis.hierarchical_detector import HierarchicalDetector, calibrate
+from src.swing_analysis.dag import HierarchicalDetector, calibrate
 from src.swing_analysis.swing_config import SwingConfig
 from src.ground_truth_annotator.routers.replay import (
     _depth_to_scale,

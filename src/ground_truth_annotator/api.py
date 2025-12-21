@@ -23,7 +23,7 @@ from .schemas import BarResponse
 from ..data.ohlc_loader import load_ohlc
 from ..swing_analysis.bar_aggregator import BarAggregator
 from ..swing_analysis.types import Bar
-from ..swing_analysis.hierarchical_detector import HierarchicalDetector
+from ..swing_analysis.dag import LegDetector, HierarchicalDetector
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +46,8 @@ class AppState:
     playback_index: Optional[int] = None
     calibration_bar_count: Optional[int] = None
     playback_feedback_storage: Optional[PlaybackFeedbackStorage] = None
-    # Hierarchical detector for incremental processing
-    hierarchical_detector: Optional[HierarchicalDetector] = None
+    # Leg detector for incremental processing
+    hierarchical_detector: Optional[LegDetector] = None
     # Visualization mode: 'calibration' or 'dag'
     mode: str = "calibration"
 

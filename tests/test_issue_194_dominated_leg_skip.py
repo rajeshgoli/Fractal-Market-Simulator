@@ -14,7 +14,7 @@ import pytest
 from decimal import Decimal
 from datetime import datetime
 
-from src.swing_analysis.hierarchical_detector import HierarchicalDetector, Leg
+from src.swing_analysis.dag import HierarchicalDetector, Leg
 from src.swing_analysis.types import Bar
 from src.swing_analysis.events import LegCreatedEvent
 
@@ -39,7 +39,7 @@ class TestWouldLegBeDominated:
         detector = HierarchicalDetector()
 
         # No existing legs
-        assert not detector._would_leg_be_dominated('bull', Decimal('100'))
+        assert not detector._pruner.would_leg_be_dominated(detector.state, 'bull', Decimal('100'))
 
     def test_bull_leg_dominated_by_lower_origin(self):
         """Bull leg is dominated when existing leg has lower (better) origin."""
@@ -59,10 +59,10 @@ class TestWouldLegBeDominated:
         detector.state.active_legs.append(existing_leg)
 
         # New leg with origin at 100 would be dominated (95 <= 100)
-        assert detector._would_leg_be_dominated('bull', Decimal('100'))
+        assert detector._pruner.would_leg_be_dominated(detector.state, 'bull', Decimal('100'))
 
         # New leg with origin at 90 would NOT be dominated (95 > 90)
-        assert not detector._would_leg_be_dominated('bull', Decimal('90'))
+        assert not detector._pruner.would_leg_be_dominated(detector.state, 'bull', Decimal('90'))
 
     def test_bull_leg_dominated_by_equal_origin(self):
         """Bull leg is dominated when existing leg has equal origin."""
@@ -81,7 +81,7 @@ class TestWouldLegBeDominated:
         detector.state.active_legs.append(existing_leg)
 
         # Equal origin means dominated
-        assert detector._would_leg_be_dominated('bull', Decimal('100'))
+        assert detector._pruner.would_leg_be_dominated(detector.state, 'bull', Decimal('100'))
 
     def test_bear_leg_dominated_by_higher_origin(self):
         """Bear leg is dominated when existing leg has higher (better) origin."""
@@ -101,10 +101,10 @@ class TestWouldLegBeDominated:
         detector.state.active_legs.append(existing_leg)
 
         # New leg with origin at 100 would be dominated (105 >= 100)
-        assert detector._would_leg_be_dominated('bear', Decimal('100'))
+        assert detector._pruner.would_leg_be_dominated(detector.state, 'bear', Decimal('100'))
 
         # New leg with origin at 110 would NOT be dominated (105 < 110)
-        assert not detector._would_leg_be_dominated('bear', Decimal('110'))
+        assert not detector._pruner.would_leg_be_dominated(detector.state, 'bear', Decimal('110'))
 
     def test_inactive_legs_not_considered(self):
         """Only active legs can dominate."""
@@ -125,7 +125,7 @@ class TestWouldLegBeDominated:
         detector.state.active_legs.append(stale_leg)
 
         # New leg is NOT dominated because stale leg doesn't count
-        assert not detector._would_leg_be_dominated('bull', Decimal('100'))
+        assert not detector._pruner.would_leg_be_dominated(detector.state, 'bull', Decimal('100'))
 
     def test_different_direction_not_considered(self):
         """Bear legs don't dominate bull legs and vice versa."""
@@ -145,7 +145,7 @@ class TestWouldLegBeDominated:
         detector.state.active_legs.append(bear_leg)
 
         # Bull leg is NOT dominated by bear leg
-        assert not detector._would_leg_be_dominated('bull', Decimal('100'))
+        assert not detector._pruner.would_leg_be_dominated(detector.state, 'bull', Decimal('100'))
 
 
 class TestDominatedLegSkipping:

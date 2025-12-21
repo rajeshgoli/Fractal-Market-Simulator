@@ -19,8 +19,9 @@ from decimal import Decimal
 import pandas as pd
 
 from .swing_node import SwingNode
-from .hierarchical_detector import (
-    HierarchicalDetector,
+from .dag import (
+    LegDetector,
+    HierarchicalDetector,  # Backward compatibility alias
     calibrate,
     calibrate_from_dataframe,
     dataframe_to_bars,

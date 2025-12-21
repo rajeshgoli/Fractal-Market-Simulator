@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.swing_analysis.hierarchical_detector import (
+from src.swing_analysis.dag import (
     HierarchicalDetector,
     calibrate,
     dataframe_to_bars,

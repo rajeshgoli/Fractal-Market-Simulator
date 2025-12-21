@@ -1,5 +1,5 @@
 """
-Replay router using HierarchicalDetector.
+Replay router using LegDetector.
 
 Provides endpoints for Replay View functionality:
 - GET /api/swings/windowed - Get windowed swing detection
@@ -7,7 +7,7 @@ Provides endpoints for Replay View functionality:
 - POST /api/replay/advance - Advance playback
 - POST /api/playback/feedback - Submit playback feedback
 
-Uses HierarchicalDetector for incremental swing detection with hierarchical
+Uses LegDetector for incremental swing detection with hierarchical
 parent relationships. Maintains backward compatibility with legacy S/M/L/XL
 scale format by mapping depth to scale.
 """
@@ -17,8 +17,9 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ...swing_analysis.hierarchical_detector import (
-    HierarchicalDetector,
+from ...swing_analysis.dag import (
+    LegDetector,
+    HierarchicalDetector,  # Backward compatibility alias
     calibrate,
 )
 from ...swing_analysis.swing_config import SwingConfig
@@ -79,7 +80,7 @@ SCALE_TO_MINUTES = {"S": 5, "M": 15, "L": 60, "XL": 240}
 # Global cache for replay state
 _replay_cache: Dict[str, Any] = {
     "last_bar_index": -1,
-    "detector": None,  # HierarchicalDetector instance
+    "detector": None,  # LegDetector instance
     "calibration_bar_count": 0,
     "calibration_events": [],  # Events from calibration
     "reference_layer": None,  # ReferenceLayer for filtering and invalidation
@@ -151,7 +152,7 @@ def _swing_node_to_calibration_response(
     Convert SwingNode to CalibrationSwingResponse.
 
     Args:
-        swing: SwingNode from HierarchicalDetector.
+        swing: SwingNode from LegDetector.
         is_active: Whether swing is currently active.
         rank: Swing rank by size.
         scale_thresholds: Optional thresholds for scale assignment.
@@ -213,7 +214,7 @@ def _event_to_response(
     Convert SwingEvent to ReplayEventResponse.
 
     Args:
-        event: SwingEvent from HierarchicalDetector.
+        event: SwingEvent from LegDetector.
         swing: Optional SwingNode for context.
         scale_thresholds: Optional thresholds for scale assignment.
 
@@ -657,7 +658,7 @@ async def get_windowed_swings(
     """
     Run swing detection on bars[0:bar_end] and return top N swings.
 
-    Uses HierarchicalDetector for detection.
+    Uses LegDetector for detection.
     """
     from ..api import get_state
 
@@ -736,7 +737,7 @@ async def calibrate_replay(
     bar_count: int = Query(10000, description="Number of bars for calibration window"),
 ):
     """
-    Run calibration for Replay View using HierarchicalDetector.
+    Run calibration for Replay View using LegDetector.
 
     Processes the first N bars and returns detected swings grouped by hierarchy
     depth with tree statistics. Also maintains legacy scale-based grouping for
@@ -761,7 +762,7 @@ async def calibrate_replay(
         logger.info("DAG mode: initializing detector with 0 bars for incremental build")
         config = SwingConfig.default()
         ref_layer = ReferenceLayer(config)
-        detector = HierarchicalDetector(config)
+        detector = LegDetector(config)
 
         # Initialize cache for incremental advance
         _replay_cache["detector"] = detector
@@ -817,7 +818,7 @@ async def calibrate_replay(
     logger.info(f"Running calibration on {actual_bar_count} bars...")
     calibrate_start = time.time()
 
-    # Run calibration using HierarchicalDetector with Reference layer (#175)
+    # Run calibration using LegDetector with Reference layer (#175)
     # This ensures tolerance-based invalidation and completion are applied
     # during calibration, not just at response time.
     calibration_bars = s.source_bars[:actual_bar_count]
@@ -1196,12 +1197,12 @@ def _build_aggregated_bars(
     return result
 
 
-def _build_dag_state(detector: HierarchicalDetector) -> DagStateResponse:
+def _build_dag_state(detector: LegDetector) -> DagStateResponse:
     """
     Build DAG state response from detector.
 
     Args:
-        detector: The HierarchicalDetector instance.
+        detector: The LegDetector instance.
 
     Returns:
         DagStateResponse with current DAG state.

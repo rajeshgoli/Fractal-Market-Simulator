@@ -27,7 +27,13 @@ src/
 │   ├── swing_config.py             # SwingConfig, DirectionConfig
 │   ├── swing_node.py               # SwingNode hierarchical structure
 │   ├── events.py                   # SwingEvent types
-│   ├── hierarchical_detector.py    # Incremental detector with process_bar()
+│   ├── dag/                        # DAG-based leg detection (modularized)
+│   │   ├── __init__.py             # Re-exports: LegDetector, calibrate, etc.
+│   │   ├── leg_detector.py         # LegDetector (main class, formerly HierarchicalDetector)
+│   │   ├── leg.py                  # Leg, PendingOrigin dataclasses
+│   │   ├── state.py                # BarType, DetectorState
+│   │   ├── leg_pruner.py           # LegPruner (pruning algorithms)
+│   │   └── calibrate.py            # calibrate, calibrate_from_dataframe, dataframe_to_bars
 │   ├── adapters.py                 # Legacy compatibility: SwingNode ↔ ReferenceSwing, detect_swings_compat
 │   ├── level_calculator.py         # Fibonacci level computation
 │   ├── reference_frame.py          # Oriented coordinate system for ratios
@@ -82,13 +88,17 @@ scripts/                            # Dev utilities
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           SWING ANALYSIS                                     │
 │                                                                              │
-│   hierarchical_detector.py ─────────────────────────────────────────────┐   │
-│   └── HierarchicalDetector.process_bar() ──► SwingNode + SwingEvent     │   │
+│   dag/leg_detector.py ──────────────────────────────────────────────────┐   │
+│   └── LegDetector.process_bar() ───────────► SwingNode + SwingEvent     │   │
+│   dag/calibrate.py                                                      │   │
 │   └── calibrate() ─────────────────────────► (detector, events)         │   │
 │            │                                                             │   │
 │            │ uses                                                        │   │
 │            ▼                                                             │   │
-│   adapters.py ─────────► detect_swings_compat(), ReferenceSwing          │   │
+│   dag/leg_pruner.py ────► LegPruner (pruning algorithms)                │   │
+│   dag/leg.py ───────────► Leg, PendingOrigin dataclasses                │   │
+│   dag/state.py ─────────► BarType, DetectorState                        │   │
+│   adapters.py ──────────► detect_swings_compat(), ReferenceSwing         │   │
 │   level_calculator.py ──► Fibonacci levels                               │   │
 │   reference_frame.py ───► Price ↔ ratio conversion                       │   │
 │   bar_aggregator.py ────► Multi-timeframe OHLC                           │   │
@@ -244,17 +254,30 @@ metrics = get_file_metrics("data.csv")
 
 ### Swing Detection
 
-**File:** `src/swing_analysis/hierarchical_detector.py`
+**Directory:** `src/swing_analysis/dag/`
 
-Incremental swing detector with hierarchical model. Replaces both batch and incremental detectors with a single `process_bar()` entry point. Calibration is just a loop calling `process_bar()` — no special batch logic.
+Modular DAG-based leg detection with incremental swing formation. The main entry points are `LegDetector.process_bar()` for incremental detection and `calibrate()` for batch processing.
+
+**Module structure:**
+| Module | Purpose |
+|--------|---------|
+| `leg_detector.py` | LegDetector class (main entry point) |
+| `leg.py` | Leg, PendingOrigin dataclasses |
+| `state.py` | BarType enum, DetectorState for persistence |
+| `leg_pruner.py` | LegPruner with pruning algorithms |
+| `calibrate.py` | calibrate, calibrate_from_dataframe, dataframe_to_bars |
 
 ```python
-from src.swing_analysis.hierarchical_detector import (
-    HierarchicalDetector,
+from src.swing_analysis.dag import (
+    LegDetector,
+    HierarchicalDetector,  # Backward compatibility alias
     DetectorState,
     calibrate,
     calibrate_from_dataframe,
     dataframe_to_bars,
+    Leg,
+    PendingOrigin,
+    LegPruner,
 )
 from src.swing_analysis.swing_config import SwingConfig
 
@@ -288,7 +311,7 @@ detector, events = calibrate(bars, config)
 
 # Option 6: Process bars incrementally
 config = SwingConfig.default()
-detector = HierarchicalDetector(config)
+detector = LegDetector(config)
 for bar in bars:
     events = detector.process_bar(bar)
     for event in events:
@@ -302,7 +325,7 @@ state = detector.get_state()
 state_dict = state.to_dict()  # JSON-serializable
 
 restored_state = DetectorState.from_dict(state_dict)
-detector2 = HierarchicalDetector.from_state(restored_state, config)
+detector2 = LegDetector.from_state(restored_state, config)
 ```
 
 **Calibration functions:**
@@ -445,7 +468,7 @@ from src.swing_analysis.reference_layer import (
     InvalidationResult,
     CompletionResult,
 )
-from src.swing_analysis.hierarchical_detector import calibrate
+from src.swing_analysis.dag import calibrate
 from src.swing_analysis.swing_config import SwingConfig
 
 # Get swings from DAG
@@ -752,7 +775,7 @@ python -m src.ground_truth_annotator.main --data test.csv --port 8001
 
 ### Replay View API
 
-The replay view backend (`src/ground_truth_annotator/`) uses HierarchicalDetector for incremental swing detection with Reference layer filtering:
+The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for incremental swing detection with Reference layer filtering:
 
 ```python
 # Config: GET /api/config
@@ -782,7 +805,7 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
 ┌─────────────────────────────────────────────────────────────────┐
 │                     API Request Flow                             │
 │                                                                  │
-│  1. calibrate(bars) ─────► HierarchicalDetector                 │
+│  1. calibrate(bars) ─────► LegDetector                          │
 │                              │                                   │
 │                              ▼                                   │
 │  2. detector.get_active_swings() ────► Raw DAG swings           │
@@ -800,7 +823,10 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
 **Key files:**
 - `src/ground_truth_annotator/routers/replay.py` - API endpoints
 - `src/swing_analysis/reference_layer.py` - Filtering logic
-- `src/swing_analysis/hierarchical_detector.py` - DAG algorithm
+- `src/swing_analysis/dag/` - DAG algorithm (modularized)
+  - `leg_detector.py` - LegDetector main class
+  - `leg_pruner.py` - Pruning algorithms
+  - `calibrate.py` - Batch processing
 
 ### Feedback System
 

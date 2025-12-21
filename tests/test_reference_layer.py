@@ -510,7 +510,7 @@ class TestCalibrateWithRefLayer:
 
     def test_calibrate_with_ref_layer_emits_invalidation_events(self):
         """calibrate() with ref_layer emits Reference layer invalidation events."""
-        from src.swing_analysis.hierarchical_detector import calibrate
+        from src.swing_analysis.dag import calibrate
         from src.swing_analysis.events import SwingFormedEvent, SwingInvalidatedEvent
 
         # Create bars that form a swing and then invalidate it
@@ -542,7 +542,7 @@ class TestCalibrateWithRefLayer:
 
     def test_calibrate_without_ref_layer_no_ref_layer_events(self):
         """calibrate() without ref_layer does not emit Reference layer events."""
-        from src.swing_analysis.hierarchical_detector import calibrate
+        from src.swing_analysis.dag import calibrate
         from src.swing_analysis.events import SwingInvalidatedEvent
 
         bars = [
@@ -571,7 +571,7 @@ class TestCalibrateWithRefLayer:
 
     def test_calibrate_with_ref_layer_applies_completion(self):
         """calibrate() with ref_layer applies completion rules to small swings."""
-        from src.swing_analysis.hierarchical_detector import calibrate
+        from src.swing_analysis.dag import calibrate
         from src.swing_analysis.events import SwingCompletedEvent, SwingFormedEvent
 
         # Create bars that form nested swings where the small one reaches 2×
@@ -601,7 +601,7 @@ class TestCalibrateWithRefLayer:
     def test_calibrate_from_dataframe_with_ref_layer(self):
         """calibrate_from_dataframe() properly passes ref_layer to calibrate()."""
         import pandas as pd
-        from src.swing_analysis.hierarchical_detector import calibrate_from_dataframe
+        from src.swing_analysis.dag import calibrate_from_dataframe
         from src.swing_analysis.events import SwingInvalidatedEvent
 
         data = {
@@ -624,7 +624,7 @@ class TestCalibrateWithRefLayer:
 
     def test_ref_layer_invalidation_reason_prefix(self):
         """Reference layer invalidation events have 'reference_layer:' reason prefix."""
-        from src.swing_analysis.hierarchical_detector import calibrate
+        from src.swing_analysis.dag import calibrate
         from src.swing_analysis.events import SwingInvalidatedEvent, SwingFormedEvent
 
         # Create a scenario where we can verify the invalidation reason format

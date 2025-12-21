@@ -103,7 +103,7 @@ class ReferenceLayer:
     Filters and annotates DAG output to produce trading references.
 
     The Reference layer applies semantic rules to the structural swings
-    produced by the DAG (HierarchicalDetector). It does not modify the
+    produced by the DAG (LegDetector). It does not modify the
     DAG's internal state — it operates on snapshots of DAG output.
 
     Key operations:
@@ -125,7 +125,7 @@ class ReferenceLayer:
 
     Example:
         >>> from swing_analysis.reference_layer import ReferenceLayer
-        >>> from swing_analysis.hierarchical_detector import calibrate
+        >>> from swing_analysis.dag import calibrate
         >>>
         >>> # Get swings from DAG
         >>> detector, events = calibrate(bars)

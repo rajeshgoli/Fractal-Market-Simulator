@@ -9,8 +9,19 @@ from .swing_state_manager import SwingStateManager, ScaleConfig
 from .event_detector import EventDetector, ActiveSwing, StructuralEvent
 from .reference_frame import ReferenceFrame
 
-# Hierarchical detector (new architecture)
-from .hierarchical_detector import HierarchicalDetector, calibrate
+# DAG-based leg detector (modularized architecture)
+from .dag import (
+    LegDetector,
+    HierarchicalDetector,  # Backward compatibility alias
+    calibrate,
+    calibrate_from_dataframe,
+    dataframe_to_bars,
+    Leg,
+    PendingOrigin,
+    DetectorState,
+    BarType,
+    LegPruner,
+)
 from .swing_node import SwingNode
 from .swing_config import SwingConfig
 

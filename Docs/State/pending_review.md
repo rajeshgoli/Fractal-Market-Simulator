@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 8
 
 **Last Review:** 2025-12-20
 
@@ -13,6 +13,9 @@
 - **#202** — Turn-scoped domination check for nested swing detection after directional reversals
 - **#203** — Rework leg staleness/pruning: proximity-based consolidation + extended visibility for invalidated legs
 - **#204** — UI improvements: expandable legs list + observation attachments
+- **#205** — Bidirectional domination: prune worse legs when better origin found
+- **#206** — Modularize hierarchical_detector.py into dag/ subdirectory
+- **#207** — Fix cross-turn domination pruning in #205
 
 ---
 

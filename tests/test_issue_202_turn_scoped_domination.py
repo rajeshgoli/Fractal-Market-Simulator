@@ -12,7 +12,7 @@ import pytest
 from decimal import Decimal
 from datetime import datetime
 
-from src.swing_analysis.hierarchical_detector import HierarchicalDetector, Leg
+from src.swing_analysis.dag import HierarchicalDetector, Leg
 from src.swing_analysis.types import Bar
 from src.swing_analysis.events import LegCreatedEvent
 
@@ -248,7 +248,7 @@ class TestTurnScopedDomination:
         state_dict = detector.state.to_dict()
 
         # Restore
-        from src.swing_analysis.hierarchical_detector import DetectorState
+        from src.swing_analysis.dag import DetectorState
         restored_state = DetectorState.from_dict(state_dict)
 
         # Verify restored state

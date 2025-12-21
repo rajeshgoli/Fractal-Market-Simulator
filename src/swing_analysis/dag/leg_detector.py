@@ -1,5 +1,5 @@
 """
-DAG-Based Swing Detector (Structural Layer)
+DAG-Based Leg Detector (Structural Layer)
 
 The DAG layer is responsible for structural tracking of price extremas. It processes
 one bar at a time via process_bar() and emits events for swing formation and Fib
@@ -24,405 +24,61 @@ See Docs/Working/DAG_spec.md for full specification.
 See Docs/Working/Performance_question.md for design rationale.
 """
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
-from typing import List, Dict, Tuple, Optional, Callable, Set, Literal
+from typing import List, Dict, Tuple, Optional, TYPE_CHECKING
 
-import pandas as pd
-
-from .swing_config import SwingConfig, DirectionConfig
-from .swing_node import SwingNode
-from .events import (
+from ..swing_config import SwingConfig
+from ..swing_node import SwingNode
+from ..reference_frame import ReferenceFrame
+from ..types import Bar
+from ..events import (
     SwingEvent,
     SwingFormedEvent,
     SwingInvalidatedEvent,
-    SwingCompletedEvent,
     LevelCrossEvent,
     LegCreatedEvent,
     LegPrunedEvent,
     LegInvalidatedEvent,
 )
-from .reference_frame import ReferenceFrame
-from .types import Bar
+from .leg import Leg, PendingOrigin
+from .state import DetectorState, BarType
+from .leg_pruner import LegPruner
 
-# Import ReferenceLayer for type hints (avoid circular import)
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from .reference_layer import ReferenceLayer
+    from ..reference_layer import ReferenceLayer
 
 
 # Fibonacci levels to track for level cross events
 FIB_LEVELS = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.382, 1.5, 1.618, 2.0]
 
 
-class BarType(Enum):
+class LegDetector:
     """
-    Classification of bar relationships for temporal ordering.
+    DAG-based leg detector for the structural layer.
 
-    Type 1: Inside bar (LH, HL) - bar contained within previous
-    Type 2-Bull: Trending up (HH, HL) - higher high and higher low
-    Type 2-Bear: Trending down (LH, LL) - lower high and lower low
-    Type 3: Outside bar (HH, LL) - engulfing, high volatility
-    """
-    TYPE_1 = "inside"
-    TYPE_2_BULL = "bull"
-    TYPE_2_BEAR = "bear"
-    TYPE_3 = "outside"
-
-
-@dataclass
-class Leg:
-    """
-    A directional price movement with known temporal ordering.
-
-    Terminology:
-    - Origin: Where the move started (fixed starting point)
-    - Pivot: The defended extreme where price may turn (extends as leg grows)
-
-    Bull leg: origin at LOW → pivot at HIGH (upward movement)
-    Bear leg: origin at HIGH → pivot at LOW (downward movement)
-
-    Attributes:
-        direction: 'bull' or 'bear'
-        origin_price: Where the move originated (fixed starting point)
-        origin_index: Bar index where origin was established
-        pivot_price: Current defended extreme (extends as leg grows)
-        pivot_index: Bar index of current pivot
-        retracement_pct: Current retracement percentage toward origin
-        formed: Whether 38.2% threshold has been reached
-        parent_leg_id: ID of parent leg if this is a child
-        status: 'active', 'stale', or 'invalidated'
-        bar_count: Number of bars since leg started
-        gap_count: Number of gap bars in this leg
-        last_modified_bar: Bar index when leg was last modified
-        price_at_creation: Price when leg was created (for staleness)
-    """
-    direction: Literal['bull', 'bear']
-    origin_price: Decimal
-    origin_index: int
-    pivot_price: Decimal
-    pivot_index: int
-    retracement_pct: Decimal = Decimal("0")
-    formed: bool = False
-    parent_leg_id: Optional[str] = None
-    status: Literal['active', 'stale', 'invalidated'] = 'active'
-    bar_count: int = 0
-    gap_count: int = 0
-    last_modified_bar: int = 0
-    price_at_creation: Decimal = Decimal("0")
-    leg_id: str = field(default_factory=lambda: SwingNode.generate_id())
-    swing_id: Optional[str] = None  # Set when leg forms into swing (#174)
-
-    @property
-    def range(self) -> Decimal:
-        """Absolute range of the leg."""
-        return abs(self.origin_price - self.pivot_price)
-
-
-@dataclass
-class PendingOrigin:
-    """
-    A potential origin for a new leg awaiting temporal confirmation.
-
-    Created when a bar establishes a new extreme that could be the starting
-    point (origin) of a future leg. Confirmed when subsequent bar establishes
-    temporal ordering.
-
-    For bull legs: tracks LOWs (bull origin = where upward move starts)
-    For bear legs: tracks HIGHs (bear origin = where downward move starts)
-
-    Attributes:
-        price: The origin price (LOW for bull, HIGH for bear)
-        bar_index: Bar index where this was established
-        direction: What leg type this could start ('bull' or 'bear')
-        source: Which price component ('high', 'low', 'open', 'close')
-    """
-    price: Decimal
-    bar_index: int
-    direction: Literal['bull', 'bear']
-    source: Literal['high', 'low', 'open', 'close']
-
-
-@dataclass
-class DetectorState:
-    """
-    Serializable state for pause/resume.
-
-    Contains all information needed to resume detection from a saved point.
-    Can be serialized to JSON for persistence.
-
-    Attributes:
-        active_swings: List of currently active swing nodes.
-        last_bar_index: Most recent bar index processed.
-        fib_levels_crossed: Map of swing_id -> last Fib level for cross tracking.
-        all_swing_ranges: List of all swing ranges seen, for big swing calculation.
-        _cached_big_threshold_bull: Cached big swing threshold for bull swings.
-        _cached_big_threshold_bear: Cached big swing threshold for bear swings.
-        _threshold_valid: Whether the cached thresholds are valid.
-
-        # DAG-based algorithm state:
-        prev_bar: Previous bar for type classification.
-        active_legs: Currently tracked legs (bull and bear can coexist).
-        pending_origins: Potential origins for new legs awaiting temporal confirmation.
-    """
-
-    active_swings: List[SwingNode] = field(default_factory=list)
-    last_bar_index: int = -1
-    fib_levels_crossed: Dict[str, float] = field(default_factory=dict)
-    all_swing_ranges: List[Decimal] = field(default_factory=list)
-    # Cached big swing thresholds (performance optimization #155)
-    _cached_big_threshold_bull: Optional[Decimal] = None
-    _cached_big_threshold_bear: Optional[Decimal] = None
-    _threshold_valid: bool = False
-
-    # DAG-based algorithm state
-    prev_bar: Optional[Bar] = None
-    active_legs: List[Leg] = field(default_factory=list)
-    pending_origins: Dict[str, Optional[PendingOrigin]] = field(
-        default_factory=lambda: {'bull': None, 'bear': None}
-    )
-
-    # Orphaned origins (#163): preserved origins from invalidated legs
-    # Format: direction -> List[(origin_price, origin_bar_index)]
-    # When a leg is invalidated, its origin is preserved here for potential
-    # sibling swing formation with the same defended pivot.
-    orphaned_origins: Dict[str, List[Tuple[Decimal, int]]] = field(
-        default_factory=lambda: {'bull': [], 'bear': []}
-    )
-
-    # Turn tracking (#202): Track when each direction's turn started
-    # The domination check should only apply within a turn, not across turns.
-    # When a turn changes (e.g., TYPE_2_BEAR -> TYPE_2_BULL), the bull turn restarts.
-    last_turn_bar: Dict[str, int] = field(
-        default_factory=lambda: {'bull': -1, 'bear': -1}
-    )
-    prev_bar_type: Optional[str] = None  # 'bull', 'bear', or None
-
-    def to_dict(self) -> Dict:
-        """Convert to dictionary for JSON serialization."""
-        # Serialize active legs
-        legs_data = []
-        for leg in self.active_legs:
-            legs_data.append({
-                "direction": leg.direction,
-                "pivot_price": str(leg.pivot_price),
-                "pivot_index": leg.pivot_index,
-                "origin_price": str(leg.origin_price),
-                "origin_index": leg.origin_index,
-                "retracement_pct": str(leg.retracement_pct),
-                "formed": leg.formed,
-                "parent_leg_id": leg.parent_leg_id,
-                "status": leg.status,
-                "bar_count": leg.bar_count,
-                "gap_count": leg.gap_count,
-                "last_modified_bar": leg.last_modified_bar,
-                "price_at_creation": str(leg.price_at_creation),
-                "leg_id": leg.leg_id,
-                "swing_id": leg.swing_id,
-            })
-
-        # Serialize pending origins
-        pending_origins_data = {}
-        for direction, origin in self.pending_origins.items():
-            if origin:
-                pending_origins_data[direction] = {
-                    "price": str(origin.price),
-                    "bar_index": origin.bar_index,
-                    "direction": origin.direction,
-                    "source": origin.source,
-                }
-            else:
-                pending_origins_data[direction] = None
-
-        # Serialize prev_bar
-        prev_bar_data = None
-        if self.prev_bar:
-            prev_bar_data = {
-                "index": self.prev_bar.index,
-                "timestamp": self.prev_bar.timestamp,
-                "open": self.prev_bar.open,
-                "high": self.prev_bar.high,
-                "low": self.prev_bar.low,
-                "close": self.prev_bar.close,
-            }
-
-        return {
-            "active_swings": [
-                {
-                    "swing_id": s.swing_id,
-                    "high_bar_index": s.high_bar_index,
-                    "high_price": str(s.high_price),
-                    "low_bar_index": s.low_bar_index,
-                    "low_price": str(s.low_price),
-                    "direction": s.direction,
-                    "status": s.status,
-                    "formed_at_bar": s.formed_at_bar,
-                    "parent_ids": [p.swing_id for p in s.parents],
-                }
-                for s in self.active_swings
-            ],
-            "last_bar_index": self.last_bar_index,
-            "fib_levels_crossed": self.fib_levels_crossed,
-            "all_swing_ranges": [str(r) for r in self.all_swing_ranges],
-            # Cache fields (will be recomputed on restore, but included for completeness)
-            "_cached_big_threshold_bull": str(self._cached_big_threshold_bull) if self._cached_big_threshold_bull is not None else None,
-            "_cached_big_threshold_bear": str(self._cached_big_threshold_bear) if self._cached_big_threshold_bear is not None else None,
-            "_threshold_valid": self._threshold_valid,
-            # DAG state
-            "prev_bar": prev_bar_data,
-            "active_legs": legs_data,
-            "pending_origins": pending_origins_data,
-            # Note: price_high_water/price_low_water removed in #203 (staleness removal)
-            # Orphaned origins (#163)
-            "orphaned_origins": {
-                direction: [(str(price), idx) for price, idx in origins]
-                for direction, origins in self.orphaned_origins.items()
-            },
-            # Turn tracking (#202)
-            "last_turn_bar": self.last_turn_bar,
-            "prev_bar_type": self.prev_bar_type,
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict) -> "DetectorState":
-        """Create from dictionary."""
-        # First pass: create all swing nodes without parent links
-        swing_map: Dict[str, SwingNode] = {}
-        parent_map: Dict[str, List[str]] = {}
-
-        for swing_data in data.get("active_swings", []):
-            swing = SwingNode(
-                swing_id=swing_data["swing_id"],
-                high_bar_index=swing_data["high_bar_index"],
-                high_price=Decimal(swing_data["high_price"]),
-                low_bar_index=swing_data["low_bar_index"],
-                low_price=Decimal(swing_data["low_price"]),
-                direction=swing_data["direction"],
-                status=swing_data["status"],
-                formed_at_bar=swing_data["formed_at_bar"],
-            )
-            swing_map[swing.swing_id] = swing
-            parent_map[swing.swing_id] = swing_data.get("parent_ids", [])
-
-        # Second pass: link parents
-        for swing_id, parent_ids in parent_map.items():
-            swing = swing_map[swing_id]
-            for parent_id in parent_ids:
-                if parent_id in swing_map:
-                    swing.add_parent(swing_map[parent_id])
-
-        # Restore cache fields if present (they'll be recomputed on first use anyway)
-        cached_bull = data.get("_cached_big_threshold_bull")
-        cached_bear = data.get("_cached_big_threshold_bear")
-
-        # Deserialize active legs
-        active_legs = []
-        for leg_data in data.get("active_legs", []):
-            leg = Leg(
-                direction=leg_data["direction"],
-                pivot_price=Decimal(leg_data["pivot_price"]),
-                pivot_index=leg_data["pivot_index"],
-                origin_price=Decimal(leg_data["origin_price"]),
-                origin_index=leg_data["origin_index"],
-                retracement_pct=Decimal(leg_data.get("retracement_pct", "0")),
-                formed=leg_data.get("formed", False),
-                parent_leg_id=leg_data.get("parent_leg_id"),
-                status=leg_data.get("status", "active"),
-                bar_count=leg_data.get("bar_count", 0),
-                gap_count=leg_data.get("gap_count", 0),
-                last_modified_bar=leg_data.get("last_modified_bar", 0),
-                price_at_creation=Decimal(leg_data.get("price_at_creation", "0")),
-                leg_id=leg_data.get("leg_id", SwingNode.generate_id()),
-                swing_id=leg_data.get("swing_id"),
-            )
-            active_legs.append(leg)
-
-        # Deserialize pending origins
-        pending_origins: Dict[str, Optional[PendingOrigin]] = {'bull': None, 'bear': None}
-        pending_origins_data = data.get("pending_origins", {})
-        for direction in ['bull', 'bear']:
-            origin_data = pending_origins_data.get(direction)
-            if origin_data:
-                pending_origins[direction] = PendingOrigin(
-                    price=Decimal(origin_data["price"]),
-                    bar_index=origin_data["bar_index"],
-                    direction=origin_data["direction"],
-                    source=origin_data["source"],
-                )
-
-        # Deserialize prev_bar
-        prev_bar = None
-        prev_bar_data = data.get("prev_bar")
-        if prev_bar_data:
-            prev_bar = Bar(
-                index=prev_bar_data["index"],
-                timestamp=prev_bar_data["timestamp"],
-                open=prev_bar_data["open"],
-                high=prev_bar_data["high"],
-                low=prev_bar_data["low"],
-                close=prev_bar_data["close"],
-            )
-
-        # Deserialize orphaned origins (#163)
-        orphaned_origins_raw = data.get("orphaned_origins", {'bull': [], 'bear': []})
-        orphaned_origins: Dict[str, List[Tuple[Decimal, int]]] = {'bull': [], 'bear': []}
-        for direction in ['bull', 'bear']:
-            origins_list = orphaned_origins_raw.get(direction, [])
-            orphaned_origins[direction] = [
-                (Decimal(price), idx) for price, idx in origins_list
-            ]
-
-        # Turn tracking (#202)
-        last_turn_bar = data.get("last_turn_bar", {'bull': -1, 'bear': -1})
-        prev_bar_type = data.get("prev_bar_type")
-
-        return cls(
-            active_swings=list(swing_map.values()),
-            last_bar_index=data.get("last_bar_index", -1),
-            fib_levels_crossed=data.get("fib_levels_crossed", {}),
-            all_swing_ranges=[
-                Decimal(r) for r in data.get("all_swing_ranges", [])
-            ],
-            _cached_big_threshold_bull=Decimal(cached_bull) if cached_bull is not None else None,
-            _cached_big_threshold_bear=Decimal(cached_bear) if cached_bear is not None else None,
-            _threshold_valid=data.get("_threshold_valid", False),
-            # DAG state
-            prev_bar=prev_bar,
-            active_legs=active_legs,
-            pending_origins=pending_origins,
-            # Note: price_high_water/price_low_water removed in #203
-            orphaned_origins=orphaned_origins,
-            # Turn tracking (#202)
-            last_turn_bar=last_turn_bar,
-            prev_bar_type=prev_bar_type,
-        )
-
-
-class HierarchicalDetector:
-    """
-    Incremental swing detector with hierarchical model.
+    Detects and tracks legs incrementally. Forms swings when legs
+    reach the formation threshold (default 38.2% retracement).
 
     Processes one bar at a time via process_bar(). Calibration is just
-    a loop calling process_bar() — no special batch logic.
+    a loop calling process_bar() - no special batch logic.
 
     Key design principles:
-    1. No lookahead — Algorithm only sees current and past bars
-    2. Single code path — Calibration will just call this in a loop
-    3. Independent invalidation — Each swing checks its own defended pivot
-    4. DAG hierarchy — Swings can have multiple parents for structural context
+    1. No lookahead - Algorithm only sees current and past bars
+    2. Single code path - Calibration will just call this in a loop
+    3. Independent invalidation - Each swing checks its own defended pivot
+    4. DAG hierarchy - Swings can have multiple parents for structural context
 
     Example:
         >>> config = SwingConfig.default()
-        >>> detector = HierarchicalDetector(config)
+        >>> detector = LegDetector(config)
         >>> for bar in bars:
         ...     events = detector.process_bar(bar)
         ...     for event in events:
         ...         print(event.event_type, event.swing_id)
         >>> state = detector.get_state()
         >>> # Resume later
-        >>> detector2 = HierarchicalDetector.from_state(state, config)
+        >>> detector2 = LegDetector.from_state(state, config)
     """
 
     def __init__(self, config: SwingConfig = None):
@@ -435,6 +91,7 @@ class HierarchicalDetector:
         """
         self.config = config or SwingConfig.default()
         self.state = DetectorState()
+        self._pruner = LegPruner(self.config)
 
     def _classify_bar_type(self, bar: Bar, prev_bar: Bar) -> BarType:
         """
@@ -475,124 +132,6 @@ class HierarchicalDetector:
         else:  # lower_high and higher_low (inside bar)
             return BarType.TYPE_1
 
-    def _would_leg_be_dominated(self, direction: str, origin_price: Decimal) -> bool:
-        """
-        Check if a new leg would be dominated by an existing leg (#194).
-
-        A leg is dominated if an existing active leg of the same direction has
-        a better or equal origin. Since all legs of the same direction converge
-        to the same pivot (via _extend_leg_pivots), the leg with the best
-        origin will always have the largest range and survive turn pruning.
-
-        Creating dominated legs is wasteful - they will be pruned at turn.
-
-        IMPORTANT (#202): This check only applies within a single turn.
-        Legs from previous turns (origin_index < last_turn_bar) don't dominate
-        legs in the current turn. This allows nested subtrees to form after
-        directional reversals.
-
-        Args:
-            direction: 'bull' or 'bear'
-            origin_price: The origin price of the potential new leg
-
-        Returns:
-            True if an existing leg dominates (new leg would be pruned)
-        """
-        # Get the turn boundary - only legs from current turn can dominate
-        turn_start = self.state.last_turn_bar.get(direction, -1)
-
-        for leg in self.state.active_legs:
-            if leg.direction != direction or leg.status != 'active':
-                continue
-            # #202: Skip legs from previous turns - they don't dominate current turn
-            if leg.origin_index < turn_start:
-                continue
-            # Bull: lower origin is better (origin=LOW, larger range)
-            # Bear: higher origin is better (origin=HIGH, larger range)
-            if direction == 'bull' and leg.origin_price <= origin_price:
-                return True
-            if direction == 'bear' and leg.origin_price >= origin_price:
-                return True
-        return False
-
-    def _prune_dominated_legs_in_turn(
-        self, new_leg: Leg, bar: Bar, timestamp: datetime
-    ) -> List[LegPrunedEvent]:
-        """
-        Prune existing legs dominated by a newly created leg (#204).
-
-        When a new leg is created with a better origin than existing legs,
-        those worse legs should be pruned. This is the reverse of
-        _would_leg_be_dominated - that prevents creating worse legs, this removes
-        existing worse legs when a better one is found.
-
-        For trading: having a leg with origin 2 points worse means stop losses
-        would be placed incorrectly, potentially getting stopped out on noise.
-
-        Note: This prunes ALL dominated legs regardless of turn boundaries.
-        Turn boundaries are respected for leg CREATION (to allow nested structure),
-        but not for pruning (to consolidate origins within the same move).
-
-        Immunity: Legs that have formed into active swings are never pruned.
-
-        Args:
-            new_leg: The newly created leg with a better origin
-            bar: Current bar (for event metadata)
-            timestamp: Timestamp for events
-
-        Returns:
-            List of LegPrunedEvent for pruned legs
-        """
-        events: List[LegPrunedEvent] = []
-        direction = new_leg.direction
-        new_origin = new_leg.origin_price
-
-        # Build set of active swing IDs for immunity check
-        active_swing_ids = {
-            swing.swing_id for swing in self.state.active_swings
-            if swing.status == 'active'
-        }
-
-        pruned_leg_ids: Set[str] = set()
-
-        for leg in self.state.active_legs:
-            if leg.leg_id == new_leg.leg_id:
-                continue  # Don't prune self
-            if leg.direction != direction or leg.status != 'active':
-                continue
-            # Active swing immunity - legs with active swings are never pruned
-            if leg.swing_id and leg.swing_id in active_swing_ids:
-                continue
-
-            # Check if this leg is dominated by new_leg
-            # Bull: lower origin is better, so prune if existing origin > new origin
-            # Bear: higher origin is better, so prune if existing origin < new origin
-            is_dominated = False
-            if direction == 'bull' and leg.origin_price > new_origin:
-                is_dominated = True
-            if direction == 'bear' and leg.origin_price < new_origin:
-                is_dominated = True
-
-            if is_dominated:
-                leg.status = 'pruned'
-                pruned_leg_ids.add(leg.leg_id)
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id="",
-                    leg_id=leg.leg_id,
-                    reason="dominated_in_turn",
-                ))
-
-        # Remove pruned legs from active_legs
-        if pruned_leg_ids:
-            self.state.active_legs = [
-                leg for leg in self.state.active_legs
-                if leg.leg_id not in pruned_leg_ids
-            ]
-
-        return events
-
     def _extend_leg_pivots(self, bar: Bar, bar_high: Decimal, bar_low: Decimal) -> None:
         """
         Extend leg pivots when price makes new extremes (#188, #197).
@@ -601,8 +140,8 @@ class HierarchicalDetector:
         - Origin: Where the move started (fixed, does NOT extend)
         - Pivot: Current defended extreme (extends as leg grows)
 
-        Bull leg: origin at LOW (fixed) → pivot at HIGH (extends on new highs)
-        Bear leg: origin at HIGH (fixed) → pivot at LOW (extends on new lows)
+        Bull leg: origin at LOW (fixed) -> pivot at HIGH (extends on new highs)
+        Bear leg: origin at HIGH (fixed) -> pivot at LOW (extends on new lows)
 
         This fixes the bug where bars with HH+EL (higher high, equal low) or
         EH+LL (equal high, lower low) were classified as Type 1 and didn't
@@ -634,7 +173,7 @@ class HierarchicalDetector:
         Update DAG state with new bar using streaming leg tracking.
 
         This is the core of the O(n log k) algorithm. Instead of generating
-        O(k²) candidate pairs, we track active legs and update them as bars
+        O(k^2) candidate pairs, we track active legs and update them as bars
         arrive.
 
         Args:
@@ -717,7 +256,7 @@ class HierarchicalDetector:
             if leg.status == 'active':
                 leg.bar_count += 1
 
-        # Check 3× extension pruning for invalidated legs (#203)
+        # Check 3x extension pruning for invalidated legs (#203)
         extension_prune_events = self._check_extension_prune(bar, timestamp)
         events.extend(extension_prune_events)
 
@@ -762,29 +301,15 @@ class HierarchicalDetector:
         Process Type 2-Bull bar (HH, HL - trending up).
 
         Establishes temporal order: prev_bar.L occurred before bar.H.
-        This confirms a BEAR swing structure: prev_bar.L → bar.H (low origin → high pivot).
+        This confirms a BEAR swing structure: prev_bar.L -> bar.H (low origin -> high pivot).
 
         Also extends any existing bull legs (tracking upward movement).
         """
         events: List[SwingEvent] = []
 
         # Prune bear legs on turn (#181): Type 2-Bull signals turn, prune redundant bear legs
-        turn_prune_events = self._prune_legs_on_turn('bear', bar, timestamp)
+        turn_prune_events = self._pruner.prune_legs_on_turn(self.state, 'bear', bar, timestamp)
         events.extend(turn_prune_events)
-
-        # Note: Bull leg origin extension now handled by _extend_leg_origins (#188)
-
-        # Type 2-Bull confirms temporal order: prev_low → bar_high
-        # This creates a BEAR swing structure (low origin → high pivot)
-        # Start new bear leg from prev_low if we have a pending origin
-        if self.state.pending_origins.get('bear'):
-            pending = self.state.pending_origins['bear']
-            # Create new bear leg: prev_high (defended) → prev_low (origin) extended by bar
-            # Actually, for bear swing: high is defended pivot, low is origin
-            # Type 2-Bull tells us prev_low came before bar_high
-            # So we now have potential bear structure: new bar_high (pivot) ← prev_low (origin)
-            # But we need price to retrace DOWN to form a bear swing
-            pass  # Bear swings form differently
 
         # Check if we can start a bull leg from the pending bull origin
         # prev_low is the origin (starting point) for a bull swing extending up
@@ -798,11 +323,11 @@ class HierarchicalDetector:
                 for leg in self.state.active_legs
             )
             # Skip if dominated by existing leg with better origin (#194)
-            if self._would_leg_be_dominated('bull', pending.price):
+            if self._pruner.would_leg_be_dominated(self.state, 'bull', pending.price):
                 existing_bull_leg = True
             # Pivot extension handled by _extend_leg_pivots (#188)
             if not existing_bull_leg:
-                # Create new bull leg: origin at LOW → pivot at HIGH
+                # Create new bull leg: origin at LOW -> pivot at HIGH
                 new_leg = Leg(
                     direction='bull',
                     origin_price=pending.price,  # LOW - where upward move started
@@ -830,7 +355,7 @@ class HierarchicalDetector:
                     pivot_index=new_leg.pivot_index,
                 ))
                 # Prune existing legs dominated by this better origin (#204)
-                events.extend(self._prune_dominated_legs_in_turn(new_leg, bar, timestamp))
+                events.extend(self._pruner.prune_dominated_legs_in_turn(self.state, new_leg, bar, timestamp))
 
         # Update pending origins only if more extreme AND not worse than active leg origins (#200)
         # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
@@ -873,10 +398,8 @@ class HierarchicalDetector:
         events: List[SwingEvent] = []
 
         # Prune bull legs on turn (#181): Type 2-Bear signals turn, prune redundant bull legs
-        turn_prune_events = self._prune_legs_on_turn('bull', bar, timestamp)
+        turn_prune_events = self._pruner.prune_legs_on_turn(self.state, 'bull', bar, timestamp)
         events.extend(turn_prune_events)
-
-        # Note: Bear leg pivot extension now handled by _extend_leg_pivots (#188)
 
         # Start new bear leg for potential bear swing
         # (tracking downward movement for possible bear retracement later)
@@ -889,7 +412,7 @@ class HierarchicalDetector:
                 for leg in self.state.active_legs
             )
             # Skip if dominated by existing leg with better origin (#194)
-            if self._would_leg_be_dominated('bear', pending.price):
+            if self._pruner.would_leg_be_dominated(self.state, 'bear', pending.price):
                 existing_bear_leg = True
             # Pivot extension handled by _extend_leg_pivots (#188)
             if not existing_bear_leg:
@@ -920,7 +443,7 @@ class HierarchicalDetector:
                     pivot_index=new_bear_leg.pivot_index,
                 ))
                 # Prune existing legs dominated by this better origin (#204)
-                events.extend(self._prune_dominated_legs_in_turn(new_bear_leg, bar, timestamp))
+                events.extend(self._pruner.prune_dominated_legs_in_turn(self.state, new_bear_leg, bar, timestamp))
 
         # Update pending origins only if more extreme AND not worse than active leg origins (#200)
         # Bull origin: only update if this low is lower (tracking swing lows for bull legs)
@@ -971,7 +494,7 @@ class HierarchicalDetector:
                 # If HIGH came before LOW, this is a BEAR structure
                 # Skip if dominated by existing leg with better origin (#194)
                 if (pending_bear.bar_index < pending_bull.bar_index
-                    and not self._would_leg_be_dominated('bear', pending_bear.price)):
+                    and not self._pruner.would_leg_be_dominated(self.state, 'bear', pending_bear.price)):
                     new_bear_leg = Leg(
                         direction='bear',
                         origin_price=pending_bear.price,  # HIGH - where downward move started
@@ -1000,7 +523,7 @@ class HierarchicalDetector:
                         pivot_index=new_bear_leg.pivot_index,
                     ))
                     # Prune existing legs dominated by this better origin (#204)
-                    events.extend(self._prune_dominated_legs_in_turn(new_bear_leg, bar, timestamp))
+                    events.extend(self._pruner.prune_dominated_legs_in_turn(self.state, new_bear_leg, bar, timestamp))
 
             # Create bull leg if LOW came before HIGH (price moved up)
             # Bull swing: origin=LOW (starting point), pivot=HIGH (defended extreme)
@@ -1010,7 +533,7 @@ class HierarchicalDetector:
                 # If LOW came before HIGH, this is a BULL structure
                 # Skip if dominated by existing leg with better origin (#194)
                 if (pending_bull.bar_index < pending_bear.bar_index
-                    and not self._would_leg_be_dominated('bull', pending_bull.price)):
+                    and not self._pruner.would_leg_be_dominated(self.state, 'bull', pending_bull.price)):
                     new_bull_leg = Leg(
                         direction='bull',
                         origin_price=pending_bull.price,  # LOW - where upward move started
@@ -1039,7 +562,7 @@ class HierarchicalDetector:
                         pivot_index=new_bull_leg.pivot_index,
                     ))
                     # Prune existing legs dominated by this better origin (#204)
-                    events.extend(self._prune_dominated_legs_in_turn(new_bull_leg, bar, timestamp))
+                    events.extend(self._pruner.prune_dominated_legs_in_turn(self.state, new_bull_leg, bar, timestamp))
 
             # Update pending origins only if more extreme AND not worse than active leg origins (#200)
             # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
@@ -1091,8 +614,6 @@ class HierarchicalDetector:
         Keep both branches until decisive resolution.
         """
         events: List[SwingEvent] = []
-
-        # Note: Leg origin extension now handled by _extend_leg_origins (#188)
 
         # Update pending origins only if more extreme AND not worse than active leg origins (#200)
         # Bull origin: only update if this low is lower (tracking swing lows for bull legs)
@@ -1211,15 +732,15 @@ class HierarchicalDetector:
         """
         Create a SwingNode from a formed leg and add to active swings.
 
-        No separation check needed at formation — DAG pruning (10% rule) already
+        No separation check needed at formation - DAG pruning (10% rule) already
         ensures surviving origins are sufficiently separated (#163).
 
         Returns:
             SwingFormedEvent or None if swing already exists
         """
         # Create SwingNode
-        # Bull leg: origin at LOW → pivot at HIGH
-        # Bear leg: origin at HIGH → pivot at LOW
+        # Bull leg: origin at LOW -> pivot at HIGH
+        # Bear leg: origin at HIGH -> pivot at LOW
         if leg.direction == 'bull':
             swing = SwingNode(
                 swing_id=SwingNode.generate_id(),
@@ -1331,7 +852,7 @@ class HierarchicalDetector:
             if ratio < formation_threshold:
                 continue
 
-            # No separation check needed — 10% pruning already ensures
+            # No separation check needed - 10% pruning already ensures
             # orphaned origins are sufficiently separated (#163)
 
             # Check if this exact swing already exists
@@ -1354,8 +875,8 @@ class HierarchicalDetector:
                 continue
 
             # Create the sibling swing
-            # Bull: origin at LOW → pivot at HIGH
-            # Bear: origin at HIGH → pivot at LOW
+            # Bull: origin at LOW -> pivot at HIGH
+            # Bear: origin at HIGH -> pivot at LOW
             if leg.direction == 'bull':
                 swing = SwingNode(
                     swing_id=SwingNode.generate_id(),
@@ -1426,7 +947,7 @@ class HierarchicalDetector:
         - Its origin is preserved as an "orphaned origin" for sibling swing formation (#163)
         - If the leg formed into a swing, that swing is also invalidated (#174)
 
-        Invalidated legs remain visible until 3× extension prune (#203).
+        Invalidated legs remain visible until 3x extension prune (#203).
 
         Returns:
             List of LegInvalidatedEvent and SwingInvalidatedEvent for any
@@ -1499,15 +1020,15 @@ class HierarchicalDetector:
                         break
 
         # NOTE: Invalidated legs are NOT removed here (#203)
-        # They remain visible until 3× extension prune in _check_extension_prune()
+        # They remain visible until 3x extension prune in _check_extension_prune()
 
         return events
 
     def _check_extension_prune(self, bar: Bar, timestamp: datetime) -> List[LegPrunedEvent]:
         """
-        Prune invalidated legs that have reached 3× extension (#203).
+        Prune invalidated legs that have reached 3x extension (#203).
 
-        Invalidated legs remain visible until price moves 3× their range
+        Invalidated legs remain visible until price moves 3x their range
         beyond the origin. This allows them to serve as counter-trend references.
 
         Returns:
@@ -1554,337 +1075,6 @@ class HierarchicalDetector:
 
         # Remove pruned legs
         self.state.active_legs = [leg for leg in self.state.active_legs if leg.status != 'stale']
-
-        return events
-
-    def _prune_legs_on_turn(
-        self, direction: str, bar: Bar, timestamp: datetime
-    ) -> List[LegPrunedEvent]:
-        """
-        Prune legs with recursive 10% rule, multi-origin preservation, and proximity consolidation.
-
-        1. Group legs by origin
-        2. For each origin group: keep ONLY the largest (prune others)
-           - On tie, keep earliest pivot bar (#190)
-        3. Recursive 10% across origins: prune small contained origins (#185)
-        4. Proximity consolidation: prune legs within threshold of survivors (#203)
-        5. Active swing immunity: legs with active swings are never pruned
-
-        This preserves nested structure while compressing noise.
-
-        Args:
-            direction: 'bull' or 'bear' - which legs to prune
-            bar: Current bar (for event metadata)
-            timestamp: Timestamp for events
-
-        Returns:
-            List of LegPrunedEvent for pruned legs
-        """
-        from collections import defaultdict
-
-        events: List[LegPrunedEvent] = []
-
-        # Get active legs of the specified direction
-        legs = [
-            leg for leg in self.state.active_legs
-            if leg.direction == direction and leg.status == 'active'
-        ]
-
-        if len(legs) <= 1:
-            return events  # Nothing to prune
-
-        # Build set of active swing IDs for immunity check
-        active_swing_ids = {
-            swing.swing_id for swing in self.state.active_swings
-            if swing.status == 'active'
-        }
-
-        # Group by origin (same origin_price and origin_index)
-        origin_groups: Dict[Tuple[Decimal, int], List[Leg]] = defaultdict(list)
-        for leg in legs:
-            key = (leg.origin_price, leg.origin_index)
-            origin_groups[key].append(leg)
-
-        pruned_leg_ids: Set[str] = set()
-
-        # Step 1: Within each origin group, keep ONLY the largest
-        # (Prune all others except those with active swings)
-        best_per_origin: Dict[Tuple[Decimal, int], Leg] = {}
-
-        for origin_key, group in origin_groups.items():
-            # Find the largest in this origin group; on tie, keep earliest pivot (fixes #190)
-            largest = max(group, key=lambda l: (l.range, -l.pivot_index))
-            best_per_origin[origin_key] = largest
-
-            if len(group) <= 1:
-                continue
-
-            # Prune all legs except the largest (old behavior from #181)
-            for leg in group:
-                if leg.leg_id == largest.leg_id:
-                    continue
-                # Active swing immunity: never prune legs with active swings
-                if leg.swing_id and leg.swing_id in active_swing_ids:
-                    continue
-                leg.status = 'pruned'
-                pruned_leg_ids.add(leg.leg_id)
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id="",
-                    leg_id=leg.leg_id,
-                    reason="turn_prune",
-                ))
-
-        # Step 2: Recursive 10% across origins (subtree pruning)
-        # Apply 10% rule to prune small origin groups whose best leg is
-        # contained within a larger origin's best leg range
-        events.extend(self._apply_recursive_subtree_prune(
-            direction, bar, timestamp, best_per_origin, pruned_leg_ids, active_swing_ids
-        ))
-
-        # Step 3: Proximity-based consolidation (#203)
-        # Prune legs that are too similar to survivors (within relative difference threshold)
-        events.extend(self._apply_proximity_prune(
-            direction, bar, timestamp, best_per_origin, pruned_leg_ids, active_swing_ids
-        ))
-
-        # Remove pruned legs from active_legs
-        self.state.active_legs = [
-            leg for leg in self.state.active_legs
-            if leg.leg_id not in pruned_leg_ids
-        ]
-
-        return events
-
-    def _apply_recursive_subtree_prune(
-        self,
-        direction: str,
-        bar: Bar,
-        timestamp: datetime,
-        best_per_origin: Dict[Tuple[Decimal, int], "Leg"],
-        pruned_leg_ids: Set[str],
-        active_swing_ids: Set[str],
-    ) -> List[LegPrunedEvent]:
-        """
-        Apply recursive 10% rule across origin groups (#185).
-
-        For each origin's best leg, check if smaller origins are contained
-        within its range. If a contained origin's best leg is <10% of the
-        parent, prune all legs from that origin.
-
-        Active swing immunity: Legs with active swings are never pruned.
-        If an origin has any active swings, the entire origin is immune.
-
-        This creates fractal compression: detailed near active zone, sparse further back.
-
-        Args:
-            direction: 'bull' or 'bear'
-            bar: Current bar
-            timestamp: Timestamp for events
-            best_per_origin: Dict mapping origin -> best leg for that origin
-            pruned_leg_ids: Set to track pruned leg IDs (mutated)
-            active_swing_ids: Set of swing IDs that are currently active
-
-        Returns:
-            List of LegPrunedEvent for pruned legs with reason="subtree_prune"
-        """
-        events: List[LegPrunedEvent] = []
-        prune_threshold = Decimal(str(self.config.subtree_prune_threshold))
-
-        # Skip subtree pruning if threshold is 0 (disabled)
-        if prune_threshold == 0:
-            return events
-
-        # Sort origins by their best leg's range (descending)
-        sorted_origins = sorted(
-            best_per_origin.items(),
-            key=lambda x: x[1].range,
-            reverse=True
-        )
-
-        # Track surviving origins
-        pruned_origins: Set[Tuple[Decimal, int]] = set()
-
-        # Build map of origins with active swings (immune from subtree pruning)
-        immune_origins: Set[Tuple[Decimal, int]] = set()
-        for leg in self.state.active_legs:
-            if leg.direction == direction and leg.swing_id and leg.swing_id in active_swing_ids:
-                immune_origins.add((leg.origin_price, leg.origin_index))
-
-        for i, (parent_origin, parent_leg) in enumerate(sorted_origins):
-            if parent_origin in pruned_origins:
-                continue
-
-            parent_threshold = prune_threshold * parent_leg.range
-
-            # Check smaller origins for containment
-            for child_origin, child_leg in sorted_origins[i + 1:]:
-                if child_origin in pruned_origins:
-                    continue
-                if child_leg.leg_id in pruned_leg_ids:
-                    continue
-                # Active swing immunity: don't prune origins with active swings
-                if child_origin in immune_origins:
-                    continue
-
-                # Check if child is contained within parent's range
-                if direction == 'bull':
-                    # Bull: origin=LOW, pivot=HIGH
-                    # Contained if child's origin >= parent's origin (both LOWs)
-                    # and child's pivot <= parent's pivot (both HIGHs)
-                    in_range = (child_leg.origin_price >= parent_leg.origin_price and
-                                child_leg.pivot_price <= parent_leg.pivot_price)
-                else:
-                    # Bear: origin=HIGH, pivot=LOW
-                    # Contained if child's origin <= parent's origin (both HIGHs)
-                    # and child's pivot >= parent's pivot (both LOWs)
-                    in_range = (child_leg.origin_price <= parent_leg.origin_price and
-                                child_leg.pivot_price >= parent_leg.pivot_price)
-
-                # If contained and < 10% of parent, prune
-                if in_range and child_leg.range < parent_threshold:
-                    pruned_origins.add(child_origin)
-
-                    # Prune all legs from this origin (except those with active swings)
-                    for leg in self.state.active_legs:
-                        if leg.leg_id in pruned_leg_ids:
-                            continue
-                        if leg.direction != direction:
-                            continue
-                        if (leg.origin_price, leg.origin_index) == child_origin:
-                            # Active swing immunity check
-                            if leg.swing_id and leg.swing_id in active_swing_ids:
-                                continue
-                            leg.status = 'pruned'
-                            pruned_leg_ids.add(leg.leg_id)
-                            events.append(LegPrunedEvent(
-                                bar_index=bar.index,
-                                timestamp=timestamp,
-                                swing_id="",
-                                leg_id=leg.leg_id,
-                                reason="subtree_prune",
-                            ))
-
-        return events
-
-    def _apply_proximity_prune(
-        self,
-        direction: str,
-        bar: Bar,
-        timestamp: datetime,
-        best_per_origin: Dict[Tuple[Decimal, int], "Leg"],
-        pruned_leg_ids: Set[str],
-        active_swing_ids: Set[str],
-    ) -> List[LegPrunedEvent]:
-        """
-        Apply proximity-based consolidation (#203).
-
-        Prunes legs that are too similar to larger survivors.
-        Uses relative difference: |range_a - range_b| / max(range_a, range_b)
-
-        Algorithm:
-        1. Sort remaining legs by range (descending)
-        2. Keep first (largest) as survivor
-        3. For each remaining leg:
-           - If relative_diff(leg, nearest_survivor) < threshold: prune
-           - Else: add to survivors
-
-        Uses bisect for O(log N) nearest-neighbor lookup in sorted survivor list.
-
-        Active swing immunity: Legs with active swings are never pruned.
-
-        Args:
-            direction: 'bull' or 'bear'
-            bar: Current bar
-            timestamp: Timestamp for events
-            best_per_origin: Dict mapping origin -> best leg for that origin
-            pruned_leg_ids: Set to track pruned leg IDs (mutated)
-            active_swing_ids: Set of swing IDs that are currently active
-
-        Returns:
-            List of LegPrunedEvent for pruned legs with reason="proximity_prune"
-        """
-        import bisect
-
-        events: List[LegPrunedEvent] = []
-        prune_threshold = Decimal(str(self.config.proximity_prune_threshold))
-
-        # Skip proximity pruning if threshold is 0 (disabled)
-        if prune_threshold == 0:
-            return events
-
-        # Get remaining legs (not already pruned)
-        remaining_legs = [
-            leg for origin, leg in best_per_origin.items()
-            if leg.leg_id not in pruned_leg_ids
-        ]
-
-        if len(remaining_legs) <= 1:
-            return events
-
-        # Sort by range descending
-        remaining_legs.sort(key=lambda l: l.range, reverse=True)
-
-        # Track survivors as (range, leg) for binary search
-        # survivor_ranges is kept sorted ascending for bisect
-        survivor_ranges: List[Decimal] = []
-        survivor_legs: List[Leg] = []
-
-        # First leg (largest) is always a survivor
-        first_leg = remaining_legs[0]
-        survivor_ranges.append(first_leg.range)
-        survivor_legs.append(first_leg)
-
-        # Process remaining legs
-        for leg in remaining_legs[1:]:
-            if leg.leg_id in pruned_leg_ids:
-                continue
-
-            # Active swing immunity
-            if leg.swing_id and leg.swing_id in active_swing_ids:
-                # Immune legs become survivors
-                pos = bisect.bisect_left(survivor_ranges, leg.range)
-                survivor_ranges.insert(pos, leg.range)
-                survivor_legs.insert(pos, leg)
-                continue
-
-            # Find nearest survivor using binary search
-            pos = bisect.bisect_left(survivor_ranges, leg.range)
-
-            # Check neighbors (pos-1 and pos) to find nearest
-            min_rel_diff = Decimal("1.0")  # Max possible relative diff
-
-            if pos > 0:
-                left_range = survivor_ranges[pos - 1]
-                rel_diff = abs(leg.range - left_range) / max(leg.range, left_range)
-                if rel_diff < min_rel_diff:
-                    min_rel_diff = rel_diff
-
-            if pos < len(survivor_ranges):
-                right_range = survivor_ranges[pos]
-                rel_diff = abs(leg.range - right_range) / max(leg.range, right_range)
-                if rel_diff < min_rel_diff:
-                    min_rel_diff = rel_diff
-
-            # If too close to a survivor, prune
-            if min_rel_diff < prune_threshold:
-                leg.status = 'pruned'
-                pruned_leg_ids.add(leg.leg_id)
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id="",
-                    leg_id=leg.leg_id,
-                    reason="proximity_prune",
-                ))
-            else:
-                # This leg is distinct, add to survivors
-                # Insert at correct position to maintain sorted order
-                bisect.insort(survivor_ranges, leg.range)
-                # Find position again for leg insertion
-                new_pos = bisect.bisect_left(survivor_ranges, leg.range)
-                survivor_legs.insert(new_pos, leg)
 
         return events
 
@@ -1956,7 +1146,7 @@ class HierarchicalDetector:
         For each direction:
         1. Current low (for bull) / high (for bear) is working 0
         2. For all orphaned 1s: calculate range from that 1 to working 0
-        3. If any two orphaned 1s are within 10% of the larger range → prune the smaller
+        3. If any two orphaned 1s are within 10% of the larger range -> prune the smaller
         4. As 0 extends, threshold grows, naturally eliminating noise
 
         This ensures only structurally significant origins survive for sibling
@@ -2016,7 +1206,7 @@ class HierarchicalDetector:
         Process a single bar. Returns events generated.
 
         Uses DAG-based streaming algorithm for O(n log k) complexity.
-        This replaces the previous O(n × k³) candidate pairing approach.
+        This replaces the previous O(n x k^3) candidate pairing approach.
 
         Order of operations:
         1. Check invalidations of formed swings (independent per swing)
@@ -2173,7 +1363,7 @@ class HierarchicalDetector:
     @classmethod
     def from_state(
         cls, state: DetectorState, config: SwingConfig = None
-    ) -> "HierarchicalDetector":
+    ) -> "LegDetector":
         """
         Restore from serialized state.
 
@@ -2182,197 +1372,12 @@ class HierarchicalDetector:
             config: SwingConfig to use (defaults to default config).
 
         Returns:
-            HierarchicalDetector initialized with the given state.
+            LegDetector initialized with the given state.
         """
         detector = cls(config)
         detector.state = state
         return detector
 
 
-def calibrate(
-    bars: List[Bar],
-    config: SwingConfig = None,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
-    ref_layer: Optional["ReferenceLayer"] = None,
-) -> Tuple["HierarchicalDetector", List[SwingEvent]]:
-    """
-    Run detection on historical bars.
-
-    This is process_bar() in a loop — guarantees identical behavior
-    to incremental playback.
-
-    When a ReferenceLayer is provided, invalidation and completion checks
-    are applied after each bar according to the Reference layer rules
-    (tolerance-based invalidation for big swings, 2× completion for small swings).
-    See Docs/Working/DAG_spec.md for the pipeline integration spec.
-
-    Args:
-        bars: Historical bars to process.
-        config: Detection configuration (defaults to SwingConfig.default()).
-        progress_callback: Optional callback(current, total) for progress reporting.
-        ref_layer: Optional ReferenceLayer for tolerance-based invalidation and
-            completion. If provided, swings are pruned according to Reference
-            layer rules during calibration (not just at response time).
-
-    Returns:
-        Tuple of (detector with state, all events generated).
-
-    Example:
-        >>> bars = [Bar(index=i, ...) for i in range(1000)]
-        >>> detector, events = calibrate(bars)
-        >>> print(f"Found {len(detector.get_active_swings())} active swings")
-        >>> # Continue processing new bars
-        >>> new_events = detector.process_bar(new_bar)
-
-        >>> # With progress callback
-        >>> def on_progress(current, total):
-        ...     print(f"Processing bar {current}/{total}")
-        >>> detector, events = calibrate(bars, progress_callback=on_progress)
-
-        >>> # With Reference layer for tolerance-based invalidation
-        >>> from swing_analysis.reference_layer import ReferenceLayer
-        >>> ref_layer = ReferenceLayer(config)
-        >>> detector, events = calibrate(bars, ref_layer=ref_layer)
-    """
-    config = config or SwingConfig.default()
-
-    detector = HierarchicalDetector(config)
-    all_events: List[SwingEvent] = []
-    total = len(bars)
-
-    for i, bar in enumerate(bars):
-        # Create timestamp for events
-        timestamp = datetime.fromtimestamp(bar.timestamp) if bar.timestamp else datetime.now()
-
-        # 1. Process bar for DAG events (formation, structural invalidation, level cross)
-        events = detector.process_bar(bar)
-        all_events.extend(events)
-
-        # 2. Apply Reference layer invalidation/completion if provided (#175)
-        if ref_layer is not None:
-            active_swings = detector.get_active_swings()
-
-            # Check invalidation (tolerance-based rules)
-            invalidated = ref_layer.update_invalidation_on_bar(active_swings, bar)
-            for swing, result in invalidated:
-                swing.invalidate()
-                all_events.append(SwingInvalidatedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id=swing.swing_id,
-                    reason=f"reference_layer:{result.reason}",
-                ))
-
-            # Check completion (2× for small swings, big swings never complete)
-            completed = ref_layer.update_completion_on_bar(active_swings, bar)
-            for swing, result in completed:
-                swing.complete()
-                all_events.append(SwingCompletedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id=swing.swing_id,
-                    completion_price=result.completion_price,
-                ))
-
-        if progress_callback:
-            progress_callback(i + 1, total)
-
-    return detector, all_events
-
-
-def dataframe_to_bars(df: pd.DataFrame) -> List[Bar]:
-    """
-    Convert DataFrame with OHLC columns to Bar list.
-
-    Handles various column naming conventions commonly used in market data.
-
-    Args:
-        df: DataFrame with OHLC columns. Expects columns like:
-            - open/Open, high/High, low/Low, close/Close
-            - Optional: timestamp/date/time
-
-    Returns:
-        List of Bar objects suitable for process_bar() or calibrate().
-
-    Example:
-        >>> df = pd.read_csv("market_data.csv")
-        >>> bars = dataframe_to_bars(df)
-        >>> detector, events = calibrate(bars)
-    """
-    bars = []
-
-    # Normalize column names to lowercase for consistent access
-    col_map = {c.lower(): c for c in df.columns}
-
-    for idx, row in df.iterrows():
-        # Get timestamp - try various column names
-        timestamp = None
-        for ts_col in ["timestamp", "time", "date", "datetime"]:
-            if ts_col in col_map:
-                ts_value = row[col_map[ts_col]]
-                # Convert to Unix timestamp if needed
-                if isinstance(ts_value, (int, float)):
-                    timestamp = float(ts_value)
-                elif hasattr(ts_value, "timestamp"):
-                    timestamp = ts_value.timestamp()
-                break
-
-        # Default timestamp if not found
-        if timestamp is None:
-            timestamp = 1700000000 + len(bars) * 60  # Generate sequential timestamps
-
-        # Get OHLC values
-        open_price = float(row[col_map.get("open", "open")])
-        high_price = float(row[col_map.get("high", "high")])
-        low_price = float(row[col_map.get("low", "low")])
-        close_price = float(row[col_map.get("close", "close")])
-
-        bars.append(
-            Bar(
-                index=idx if isinstance(idx, int) else len(bars),
-                timestamp=int(timestamp),
-                open=open_price,
-                high=high_price,
-                low=low_price,
-                close=close_price,
-            )
-        )
-
-    return bars
-
-
-def calibrate_from_dataframe(
-    df: pd.DataFrame,
-    config: SwingConfig = None,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
-    ref_layer: Optional["ReferenceLayer"] = None,
-) -> Tuple["HierarchicalDetector", List[SwingEvent]]:
-    """
-    Convenience wrapper for DataFrame input.
-
-    Converts DataFrame to Bar list and runs calibration.
-
-    Args:
-        df: DataFrame with OHLC columns (open, high, low, close).
-        config: Detection configuration (defaults to SwingConfig.default()).
-        progress_callback: Optional callback(current, total) for progress reporting.
-        ref_layer: Optional ReferenceLayer for tolerance-based invalidation and
-            completion. If provided, swings are pruned according to Reference
-            layer rules during calibration (not just at response time).
-
-    Returns:
-        Tuple of (detector with state, all events generated).
-
-    Example:
-        >>> import pandas as pd
-        >>> df = pd.read_csv("ES-5m.csv")
-        >>> detector, events = calibrate_from_dataframe(df)
-        >>> print(f"Detected {len(detector.get_active_swings())} active swings")
-
-        >>> # With Reference layer for tolerance-based invalidation
-        >>> from swing_analysis.reference_layer import ReferenceLayer
-        >>> ref_layer = ReferenceLayer()
-        >>> detector, events = calibrate_from_dataframe(df, ref_layer=ref_layer)
-    """
-    bars = dataframe_to_bars(df)
-    return calibrate(bars, config, progress_callback, ref_layer)
+# Backward compatibility alias
+HierarchicalDetector = LegDetector
