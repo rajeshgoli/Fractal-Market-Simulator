@@ -334,10 +334,9 @@ class PlaybackFeedbackSnapshot(BaseModel):
     # Mode-specific context
     replay_context: Optional[ReplayContext] = None
     dag_context: Optional[DagContext] = None
-    # Attachments (legs, orphaned origins, pending origins highlighted by user)
+    # Attachments (legs, pending origins highlighted by user)
     attachments: Optional[List[Union[
         FeedbackAttachmentLeg,
-        FeedbackAttachmentOrphanedOrigin,
         FeedbackAttachmentPendingOrigin
     ]]] = None
 
