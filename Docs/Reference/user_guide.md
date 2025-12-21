@@ -468,6 +468,20 @@ Hover over any item in the Current Structure Panel to highlight it on the charts
 
 This provides immediate visual feedback for reasoning about the algorithm's internal state.
 
+### Chart Leg Interaction
+
+You can interact with legs directly on the chart (not just in the panel):
+
+| Action | Effect |
+|--------|--------|
+| **Hover** near a leg line | Leg highlights (same effect as panel hover) - shows it's "pickable" |
+| **Single-click** on a leg | Scrolls the Current Structure Panel to that leg and highlights it with a blue focus ring |
+| **Double-click** on a leg | Attaches the leg to your current observation (same as clicking in panel) |
+
+**Why this is useful:** When a leg is visually prominent on the chart but buried in a long list in the panel, you can click it directly on the chart to find it. The panel auto-expands if needed to show the focused leg.
+
+**Pick threshold:** Legs are pickable when your cursor is within 15 pixels of the leg line.
+
 ### Leg Event Types
 
 | Event | Description |

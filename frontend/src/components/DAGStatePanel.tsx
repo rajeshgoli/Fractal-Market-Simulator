@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { DagStateResponse, DagLeg, DagOrphanedOrigin, DagPendingOrigin } from '../lib/api';
 import { LegEvent, HighlightedDagItem } from '../types';
 import { GitBranch, Circle, Target, History, ChevronDown, Paperclip } from 'lucide-react';
@@ -19,6 +19,8 @@ interface DAGStatePanelProps {
   attachedItems?: AttachableItem[];
   onAttachItem?: (item: AttachableItem) => void;
   onDetachItem?: (item: AttachableItem) => void;
+  // Focus support (from chart click)
+  focusedLegId?: string | null;
 }
 
 // Format price for display
@@ -54,21 +56,26 @@ const getStatusStyle = (status: string): string => {
 interface LegItemProps {
   leg: DagLeg;
   isHighlighted?: boolean;
+  isFocused?: boolean;
   isAttached?: boolean;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onClick?: () => void;
+  innerRef?: React.Ref<HTMLDivElement>;
 }
 
-const LegItem: React.FC<LegItemProps> = ({ leg, isHighlighted, isAttached, onMouseEnter, onMouseLeave, onClick }) => (
+const LegItem: React.FC<LegItemProps> = ({ leg, isHighlighted, isFocused, isAttached, onMouseEnter, onMouseLeave, onClick, innerRef }) => (
   <div
+    ref={innerRef}
     className={`text-xs p-2 rounded border transition-all duration-150 cursor-pointer ${
       isAttached
         ? 'border-trading-purple ring-2 ring-trading-purple/50'
+        : isFocused
+        ? 'border-trading-blue ring-2 ring-trading-blue/70 bg-trading-blue/20 scale-[1.02]'
         : isHighlighted
         ? 'border-trading-blue ring-2 ring-trading-blue/50 scale-[1.02]'
         : 'border-app-border/50 hover:border-app-border'
-    } ${getDirectionBg(leg.direction)}`}
+    } ${!isFocused ? getDirectionBg(leg.direction) : ''}`}
     onMouseEnter={onMouseEnter}
     onMouseLeave={onMouseLeave}
     onClick={onClick}
@@ -162,11 +169,37 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
   attachedItems,
   onAttachItem,
   onDetachItem,
+  focusedLegId,
 }) => {
   // Expansion state for each section
   const [legsLimit, setLegsLimit] = useState(6);
   const [bullOriginsLimit, setBullOriginsLimit] = useState(4);
   const [bearOriginsLimit, setBearOriginsLimit] = useState(4);
+
+  // Refs for leg items to enable scroll-into-view
+  const legRefsMap = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Scroll to focused leg when focusedLegId changes
+  useEffect(() => {
+    if (!focusedLegId || !dagState) return;
+
+    // Find the leg index to check if we need to expand the list
+    const legIndex = dagState.active_legs.findIndex(leg => leg.leg_id === focusedLegId);
+    if (legIndex === -1) return;
+
+    // Expand the list if the focused leg is hidden
+    if (legIndex >= legsLimit) {
+      setLegsLimit(legIndex + 1);
+    }
+
+    // Scroll to the leg element after a brief delay to allow render
+    setTimeout(() => {
+      const element = legRefsMap.current.get(focusedLegId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 50);
+  }, [focusedLegId, dagState, legsLimit]);
 
   // Toggle attachment for an item
   const handleItemClick = (item: AttachableItem, identifier: string) => {
@@ -234,10 +267,18 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
                   key={leg.leg_id}
                   leg={leg}
                   isHighlighted={highlightedItem?.type === 'leg' && highlightedItem.id === leg.leg_id}
+                  isFocused={focusedLegId === leg.leg_id}
                   isAttached={isItemAttached(attachedItems, 'leg', leg.leg_id)}
                   onMouseEnter={() => onHoverItem?.({ type: 'leg', id: leg.leg_id, direction: leg.direction })}
                   onMouseLeave={() => onHoverItem?.(null)}
                   onClick={() => handleItemClick({ type: 'leg', data: leg }, leg.leg_id)}
+                  innerRef={(el) => {
+                    if (el) {
+                      legRefsMap.current.set(leg.leg_id, el);
+                    } else {
+                      legRefsMap.current.delete(leg.leg_id);
+                    }
+                  }}
                 />
               ))
             )}

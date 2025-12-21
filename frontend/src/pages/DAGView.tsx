@@ -103,6 +103,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   // Hover highlighting state for DAG items
   const [highlightedDagItem, setHighlightedDagItem] = useState<HighlightedDagItem | null>(null);
 
+  // Focus state for chart-clicked leg (scrolls panel to leg)
+  const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
+
   // Linger toggle state (for DAG mode, default OFF for continuous observation)
   const [lingerEnabled, setLingerEnabled] = useState(false);
 
@@ -154,6 +157,37 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   const handleClearAttachments = useCallback(() => {
     setAttachedItems([]);
   }, []);
+
+  // Handle leg hover from chart - update highlight state
+  const handleChartLegHover = useCallback((legId: string | null) => {
+    if (legId) {
+      const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+      if (leg) {
+        setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
+      }
+    } else {
+      setHighlightedDagItem(null);
+    }
+  }, [dagState]);
+
+  // Handle leg click from chart - focus in panel
+  const handleChartLegClick = useCallback((legId: string) => {
+    const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+    if (leg) {
+      // Set focus to scroll panel to this leg
+      setFocusedLegId(legId);
+      // Also highlight it
+      setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
+    }
+  }, [dagState]);
+
+  // Handle leg double-click from chart - attach
+  const handleChartLegDoubleClick = useCallback((legId: string) => {
+    const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+    if (leg) {
+      handleAttachItem({ type: 'leg', data: leg });
+    }
+  }, [dagState, handleAttachItem]);
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -751,6 +785,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             bars={chart1Bars}
             currentPosition={currentPlaybackPosition}
             highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
+            onLegHover={handleChartLegHover}
+            onLegClick={handleChartLegClick}
+            onLegDoubleClick={handleChartLegDoubleClick}
           />
           <LegOverlay
             chart={chart2Ref.current}
@@ -759,6 +796,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             bars={chart2Bars}
             currentPosition={currentPlaybackPosition}
             highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
+            onLegHover={handleChartLegHover}
+            onLegClick={handleChartLegClick}
+            onLegDoubleClick={handleChartLegDoubleClick}
           />
 
           {/* Orphaned Origins Overlays - render markers for preserved pivots (#182) */}
@@ -870,6 +910,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
               attachedItems={attachedItems}
               onAttachItem={handleAttachItem}
               onDetachItem={handleDetachItem}
+              focusedLegId={focusedLegId}
             />
           </div>
         </main>

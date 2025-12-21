@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 10
 
 **Last Review:** 2025-12-20
 
@@ -17,6 +17,7 @@
 - **#206** — Modularize hierarchical_detector.py into dag/ subdirectory
 - **#207** — Fix cross-turn domination pruning in #205
 - **#208** — Prune legs when pivot breached beyond threshold + engulfed detection
+- **#211** — Chart leg interaction: hover/click/double-click legs on chart to highlight, scroll-to-panel, or attach
 
 ---
 

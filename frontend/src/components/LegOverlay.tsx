@@ -9,6 +9,38 @@ interface LegOverlayProps {
   bars: BarData[];
   currentPosition: number;
   highlightedLegId?: string;
+  onLegHover?: (legId: string | null) => void;
+  onLegClick?: (legId: string) => void;
+  onLegDoubleClick?: (legId: string) => void;
+}
+
+/**
+ * Calculate the distance from a point to a line segment.
+ * Returns the perpendicular distance if the projection falls on the segment,
+ * otherwise returns the distance to the nearest endpoint.
+ */
+function distanceToLineSegment(
+  px: number, py: number,  // point
+  x1: number, y1: number,  // segment start
+  x2: number, y2: number   // segment end
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lengthSq = dx * dx + dy * dy;
+
+  if (lengthSq === 0) {
+    // Segment is a point
+    return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+  }
+
+  // Project point onto line, clamped to segment
+  let t = ((px - x1) * dx + (py - y1) * dy) / lengthSq;
+  t = Math.max(0, Math.min(1, t));
+
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+
+  return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2);
 }
 
 /**
@@ -54,10 +86,20 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
   bars,
   currentPosition,
   highlightedLegId,
+  onLegHover,
+  onLegClick,
+  onLegDoubleClick,
 }) => {
   // Track created line series so we can remove them on update
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lineSeriesRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
+
+  // Track last click time for double-click detection
+  const lastClickTimeRef = useRef<number>(0);
+  const lastClickLegRef = useRef<string | null>(null);
+
+  // Track current hovered leg to avoid redundant callbacks
+  const currentHoveredLegRef = useRef<string | null>(null);
 
   // Clear all existing line series
   const clearLineSeries = useCallback(() => {
@@ -151,6 +193,149 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       return null;
     }
   }, [chart, series, getTimestampForIndex]);
+
+  // Find the nearest visible leg to a given price/time position
+  // Returns leg_id if within pick threshold, null otherwise
+  const findNearestLeg = useCallback((time: number, price: number): string | null => {
+    if (!chart || !series || bars.length === 0) return null;
+
+    // Get visible legs
+    const visibleLegs = legs.filter(leg => leg.pivot_index <= currentPosition);
+    if (visibleLegs.length === 0) return null;
+
+    // Convert time to logical coordinate for distance calculation
+    const timeScale = chart.timeScale();
+
+    // Convert click position to pixel coordinates using series API
+    const clickX = timeScale.timeToCoordinate(time as Time);
+    const clickY = series.priceToCoordinate(price);
+
+    if (clickX === null || clickY === null) return null;
+
+    // Threshold in pixels for picking a leg (generous for usability)
+    const PICK_THRESHOLD_PX = 15;
+
+    let nearestLeg: string | null = null;
+    let nearestDistance = Infinity;
+
+    for (const leg of visibleLegs) {
+      const originTime = getTimestampForIndex(leg.origin_index);
+      const pivotTime = getTimestampForIndex(leg.pivot_index);
+
+      if (originTime === null || pivotTime === null) continue;
+
+      // Convert leg endpoints to pixel coordinates using series API
+      const originX = timeScale.timeToCoordinate(originTime as Time);
+      const originY = series.priceToCoordinate(leg.origin_price);
+      const pivotX = timeScale.timeToCoordinate(pivotTime as Time);
+      const pivotY = series.priceToCoordinate(leg.pivot_price);
+
+      if (originX === null || originY === null || pivotX === null || pivotY === null) continue;
+
+      // Calculate distance from click to leg line segment in pixels
+      const distance = distanceToLineSegment(
+        clickX, clickY,
+        originX, originY,
+        pivotX, pivotY
+      );
+
+      if (distance < nearestDistance && distance <= PICK_THRESHOLD_PX) {
+        nearestDistance = distance;
+        nearestLeg = leg.leg_id;
+      }
+    }
+
+    return nearestLeg;
+  }, [chart, series, legs, bars, currentPosition, getTimestampForIndex]);
+
+  // Handle hover detection via crosshair move
+  useEffect(() => {
+    if (!chart || !series || !onLegHover) return;
+
+    const handleCrosshairMove = (param: { time?: Time; point?: { x: number; y: number }; seriesData?: Map<unknown, unknown> }) => {
+      if (!param.time || !param.point) {
+        // Mouse left chart area
+        if (currentHoveredLegRef.current !== null) {
+          currentHoveredLegRef.current = null;
+          onLegHover(null);
+        }
+        return;
+      }
+
+      // Get price at cursor position using series API
+      const price = series.coordinateToPrice(param.point.y);
+      if (price === null) return;
+
+      const hoveredLeg = findNearestLeg(param.time as number, price);
+
+      // Only emit if changed
+      if (hoveredLeg !== currentHoveredLegRef.current) {
+        currentHoveredLegRef.current = hoveredLeg;
+        onLegHover(hoveredLeg);
+      }
+    };
+
+    chart.subscribeCrosshairMove(handleCrosshairMove);
+
+    return () => {
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
+    };
+  }, [chart, series, onLegHover, findNearestLeg]);
+
+  // Handle click detection
+  useEffect(() => {
+    if (!chart || !series || (!onLegClick && !onLegDoubleClick)) return;
+
+    const chartElement = chart.chartElement();
+
+    const handleClick = (event: MouseEvent) => {
+      // Get time and price from click position
+      const rect = chartElement.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      const timeScale = chart.timeScale();
+
+      const time = timeScale.coordinateToTime(x);
+      const price = series.coordinateToPrice(y);
+
+      if (time === null || price === null) return;
+
+      const clickedLeg = findNearestLeg(time as number, price);
+      if (!clickedLeg) return;
+
+      const now = Date.now();
+      const DOUBLE_CLICK_THRESHOLD = 300; // ms
+
+      // Check for double-click
+      if (
+        lastClickLegRef.current === clickedLeg &&
+        now - lastClickTimeRef.current < DOUBLE_CLICK_THRESHOLD
+      ) {
+        // Double-click detected
+        onLegDoubleClick?.(clickedLeg);
+        lastClickTimeRef.current = 0;
+        lastClickLegRef.current = null;
+      } else {
+        // Single click - delay to see if it becomes a double-click
+        lastClickTimeRef.current = now;
+        lastClickLegRef.current = clickedLeg;
+
+        // Fire single-click after threshold if no second click
+        setTimeout(() => {
+          if (lastClickLegRef.current === clickedLeg && now === lastClickTimeRef.current) {
+            onLegClick?.(clickedLeg);
+          }
+        }, DOUBLE_CLICK_THRESHOLD);
+      }
+    };
+
+    chartElement.addEventListener('click', handleClick);
+
+    return () => {
+      chartElement.removeEventListener('click', handleClick);
+    };
+  }, [chart, series, onLegClick, onLegDoubleClick, findNearestLeg]);
 
   // Update line series when legs or bars change
   useEffect(() => {
