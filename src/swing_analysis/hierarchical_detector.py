@@ -1611,7 +1611,11 @@ class HierarchicalDetector:
             List of LegPrunedEvent for pruned legs with reason="subtree_prune"
         """
         events: List[LegPrunedEvent] = []
-        prune_threshold = Decimal("0.1")
+        prune_threshold = Decimal(str(self.config.subtree_prune_threshold))
+
+        # Skip subtree pruning if threshold is 0 (disabled)
+        if prune_threshold == 0:
+            return events
 
         # Sort origins by their best leg's range (descending)
         sorted_origins = sorted(
@@ -1759,9 +1763,14 @@ class HierarchicalDetector:
         This ensures only structurally significant origins survive for sibling
         swing formation.
         """
+        prune_threshold = Decimal(str(self.config.subtree_prune_threshold))
+
+        # Skip origin pruning if threshold is 0 (disabled)
+        if prune_threshold == 0:
+            return
+
         bar_low = Decimal(str(bar.low))
         bar_high = Decimal(str(bar.high))
-        prune_threshold = Decimal("0.1")
 
         for direction in ['bull', 'bear']:
             origins = self.state.orphaned_origins[direction]

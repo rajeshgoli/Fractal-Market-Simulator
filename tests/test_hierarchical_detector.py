@@ -852,7 +852,7 @@ class TestSiblingSwingDetection:
 
     def test_orphaned_origins_pruned_by_10_percent(self):
         """Orphaned origins within 10% of each other are pruned."""
-        config = SwingConfig.default()
+        config = SwingConfig.default().with_subtree_prune(0.1)
         detector = HierarchicalDetector(config)
 
         # Manually add orphaned origins to test pruning
@@ -1359,7 +1359,7 @@ class TestTurnPruning:
         from decimal import Decimal
         from datetime import datetime
 
-        config = SwingConfig.default()
+        config = SwingConfig.default().with_subtree_prune(0.1)
         detector = HierarchicalDetector(config)
 
         # Create two origin groups where one is contained within the other

@@ -281,7 +281,12 @@ ref_layer = ReferenceLayer(config)
 detector, events = calibrate(bars, config, ref_layer=ref_layer)
 # Events now include Reference layer invalidation/completion events
 
-# Option 5: Process bars incrementally
+# Option 5: Configure subtree pruning threshold
+# Default is 0.0 (disabled). Set to 0.1 for 10% pruning of small legs/origins.
+config = SwingConfig.default().with_subtree_prune(0.1)
+detector, events = calibrate(bars, config)
+
+# Option 6: Process bars incrementally
 config = SwingConfig.default()
 detector = HierarchicalDetector(config)
 for bar in bars:
@@ -363,9 +368,9 @@ When a leg is invalidated, its origin is preserved as an "orphaned origin" for p
 
 Orphaned origins are managed with two cleanup mechanisms:
 1. **Leg creation cleanup (#196)**: When a new leg is created, any orphaned origin matching the leg's origin (same price and bar index) is removed. An origin can't be both "orphaned" and "in use" by an active leg.
-2. **10% pruning**: Each bar, origins within 10% of the larger range (measured from origin to current working pivot) are pruned. This keeps the list sparse while preserving structurally significant origins.
+2. **Subtree pruning**: Each bar, origins within the configured threshold of the larger range (measured from origin to current working pivot) are pruned. This keeps the list sparse while preserving structurally significant origins. Controlled by `subtree_prune_threshold` (default: 0.0 = disabled).
 
-**Recursive 10% pruning (#185):**
+**Recursive subtree pruning (#185):**
 
 During strong trends, the DAG creates many parallel legs with different origins all converging to the same pivot (the defended extreme extends with price). When a directional turn is detected (Type 2-Bear bar for bull legs, Type 2-Bull bar for bear legs), we apply two-stage pruning:
 
@@ -374,11 +379,12 @@ During strong trends, the DAG creates many parallel legs with different origins 
 2. For each group: keep ONLY the leg with the largest range
 3. Emit `LegPrunedEvent` with `reason="turn_prune"` for discarded legs
 
-**Step 2: Cross-origin subtree pruning (10% rule)**
+**Step 2: Cross-origin subtree pruning (configurable threshold)**
 1. Sort remaining origins by their best leg's range (descending)
 2. For each origin's best leg, check if smaller origins are "contained" within its range
-3. If a contained origin's best leg is < 10% of the parent, prune all legs from that origin
+3. If a contained origin's best leg is < threshold of the parent, prune all legs from that origin
 4. Emit `LegPrunedEvent` with `reason="subtree_prune"` for discarded legs
+5. Threshold controlled by `SwingConfig.subtree_prune_threshold` (default: 0.0 = disabled, set to 0.1 for 10%)
 
 **Active swing immunity:**
 Legs that have formed into active swings are never pruned. If an origin has any active swings, the entire origin is immune from pruning.

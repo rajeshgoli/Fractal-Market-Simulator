@@ -58,6 +58,9 @@ class SwingConfig:
         staleness_threshold: Multiplier for staleness pruning (default 2.0).
             A swing is pruned as stale when price moves N × its range
             without the swing changing. Higher values = more conservative pruning.
+        subtree_prune_threshold: Threshold for pruning small legs/origins (default 0.0).
+            Legs/origins smaller than this fraction of a containing parent are pruned.
+            0.0 disables pruning, 0.1 would prune legs < 10% of parent.
 
     Example:
         >>> config = SwingConfig.default()
@@ -72,6 +75,7 @@ class SwingConfig:
     bear: DirectionConfig = field(default_factory=DirectionConfig)
     lookback_bars: int = 50
     staleness_threshold: float = 2.0
+    subtree_prune_threshold: float = 0.0
 
     @classmethod
     def default(cls) -> "SwingConfig":
@@ -85,6 +89,7 @@ class SwingConfig:
             "bear": asdict(self.bear),
             "lookback_bars": self.lookback_bars,
             "staleness_threshold": self.staleness_threshold,
+            "subtree_prune_threshold": self.subtree_prune_threshold,
         }
 
     def to_json(self) -> str:
@@ -101,6 +106,7 @@ class SwingConfig:
             bear=DirectionConfig(**bear_data) if bear_data else DirectionConfig(),
             lookback_bars=data.get("lookback_bars", 50),
             staleness_threshold=data.get("staleness_threshold", 2.0),
+            subtree_prune_threshold=data.get("subtree_prune_threshold", 0.0),
         )
 
     @classmethod
@@ -128,6 +134,7 @@ class SwingConfig:
             bear=self.bear,
             lookback_bars=self.lookback_bars,
             staleness_threshold=self.staleness_threshold,
+            subtree_prune_threshold=self.subtree_prune_threshold,
         )
 
     def with_bear(self, **kwargs: Any) -> "SwingConfig":
@@ -143,6 +150,7 @@ class SwingConfig:
             bear=DirectionConfig(**bear_dict),
             lookback_bars=self.lookback_bars,
             staleness_threshold=self.staleness_threshold,
+            subtree_prune_threshold=self.subtree_prune_threshold,
         )
 
     def with_lookback(self, lookback_bars: int) -> "SwingConfig":
@@ -156,6 +164,7 @@ class SwingConfig:
             bear=self.bear,
             lookback_bars=lookback_bars,
             staleness_threshold=self.staleness_threshold,
+            subtree_prune_threshold=self.subtree_prune_threshold,
         )
 
     def with_staleness(self, staleness_threshold: float) -> "SwingConfig":
@@ -169,4 +178,23 @@ class SwingConfig:
             bear=self.bear,
             lookback_bars=self.lookback_bars,
             staleness_threshold=staleness_threshold,
+            subtree_prune_threshold=self.subtree_prune_threshold,
+        )
+
+    def with_subtree_prune(self, subtree_prune_threshold: float) -> "SwingConfig":
+        """
+        Create a new config with modified subtree prune threshold.
+
+        Since SwingConfig is frozen, this creates a new instance.
+
+        Args:
+            subtree_prune_threshold: Fraction threshold for pruning small legs/origins.
+                0.0 disables pruning, 0.1 prunes legs < 10% of parent.
+        """
+        return SwingConfig(
+            bull=self.bull,
+            bear=self.bear,
+            lookback_bars=self.lookback_bars,
+            staleness_threshold=self.staleness_threshold,
+            subtree_prune_threshold=subtree_prune_threshold,
         )
