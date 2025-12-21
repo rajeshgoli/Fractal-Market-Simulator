@@ -124,7 +124,7 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
   if (isLoading) {
     return (
       <div className="h-full bg-app-secondary border-t border-app-border flex items-center justify-center">
-        <div className="text-app-muted text-sm">Loading DAG state...</div>
+        <div className="text-app-muted text-sm">Loading market structure...</div>
       </div>
     );
   }
@@ -132,7 +132,7 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
   if (!dagState) {
     return (
       <div className="h-full bg-app-secondary border-t border-app-border flex items-center justify-center">
-        <div className="text-app-muted text-sm">No DAG state available</div>
+        <div className="text-app-muted text-sm">No market structure available</div>
       </div>
     );
   }
@@ -145,7 +145,7 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
       <div className="flex items-center gap-3 px-4 py-2 border-b border-app-border bg-app-bg/40">
         <div className="flex items-center gap-2 text-app-text font-semibold tracking-wider uppercase">
           <GitBranch size={16} className="text-trading-purple" />
-          <span>DAG Internal State</span>
+          <span>Current Structure</span>
         </div>
         <div className="h-4 w-px bg-app-border mx-2"></div>
         <div className="flex gap-3 text-xs">

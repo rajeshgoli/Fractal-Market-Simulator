@@ -1,6 +1,6 @@
 # Product Direction
 
-**Last Updated:** December 20, 2025 (PM4)
+**Last Updated:** December 20, 2025 (PM7)
 **Owner:** Product
 
 ---
@@ -9,41 +9,30 @@
 
 **Ship reliable, performant swing detection that correctly identifies the valid swings defined in `Docs/Reference/valid_swings.md`.**
 
-Validation session Dec 19-20 uncovered a structural bug in pivot tracking. Now focused on **fixing #193** before further validation.
-
 ---
 
-## P0: Pivot Mismatch Bug
+## Current Phase: User Testing
 
-| Issue | Problem | Priority |
-|-------|---------|----------|
-| #193 | Bear leg pivot doesn't match bull leg origin at swing extrema | **P0** |
+DAG visualization complete. Now in **active user testing** phase using the Replay View to validate swing detection behavior against real ES data.
 
-### #193: Pending Pivot Overwrite Bug
+**Status:** Testing uncovered leg creation bugs. Fixes in progress.
 
-**Problem:** When a bull leg terminates at a swing high (e.g., 4436.75), the subsequent bear leg should start from that same extrema. Currently, the pending pivot is unconditionally overwritten by each bar's high, so bear legs start from a later, lower high (e.g., 4435.25).
+**Active issues:** See [GitHub Issues](https://github.com/rajeshgoli/Fractal-Market-Simulator/issues) for current bugs. Issues are filed and resolved rapidly during this phase — GitHub is the source of truth.
 
-**Root cause:** In `hierarchical_detector.py`, pending pivots are overwritten on every bar type:
-```python
-self.state.pending_pivots['bear'] = PendingPivot(
-    price=bar_high, bar_index=bar.index, ...
-)
-```
-
-**Fix direction:** Only update pending pivot if new extrema is more extreme (higher high for bear pivot, lower low for bull pivot).
+**Test data:** `test_data/es-5m.csv` at various offsets. Observations captured in `ground_truth/playback_feedback.json`.
 
 ---
 
 ## Completed: DAG Visualization Mode (#167)
 
-**Status:** Complete. Validation session Dec 19-20 confirmed it works.
+**Status:** Complete. Enables visual validation of DAG algorithm.
 
-| Issue | Feature | Status |
-|-------|---------|--------|
-| #185 | Recursive 10% pruning | Done |
-| #186 | Per-chart timeframe aggregation | Done |
-| #168-#172 | DAG state API, panel, visualization | Done |
-| #179-#182 | Incremental playback, pruning, orphans | Done |
+| Feature | Status |
+|---------|--------|
+| Recursive 10% pruning (#185) | Done |
+| Per-chart timeframe aggregation (#186) | Done |
+| DAG state API, panel, visualization (#168-#172) | Done |
+| Incremental playback, pruning, orphans (#179-#182) | Done |
 
 ---
 
@@ -69,7 +58,7 @@ From `Docs/Reference/valid_swings.md` — ES as of Dec 18, 2025:
 | **L6** | 1=6929, 0=6771 | Detected |
 | **L7** | 1=6882, 0=6770 | Pending validation |
 
-Full validation blocked by #193 — pivot mismatch affects all swing structure.
+Full validation blocked until current leg creation bugs are fixed.
 
 ---
 
@@ -79,8 +68,8 @@ Full validation blocked by #193 — pivot mismatch affects all swing structure.
 |-----------|--------|
 | <5s for 10K bars | Done (#158) |
 | 100K window loads in frontend | Done (#158) |
-| Valid swings (L1-L7) detected | Blocked by #193 |
-| Sibling swings with same 0 detected | Blocked by #193 |
+| Valid swings (L1-L7) detected | Blocked by open issues |
+| Sibling swings with same 0 detected | Blocked by open issues |
 | Parent-child relationships correct | Done (#158) |
 | Visual validation of DAG behavior | Done (#167) |
 | Multi-timeframe chart view | Done (#186) |
@@ -90,9 +79,9 @@ Full validation blocked by #193 — pivot mismatch affects all swing structure.
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- #193 fixed — pivot mismatch resolved
+- All open leg creation bugs fixed
 - L1-L7 validation complete
-- Unexpected detection behavior observed
+- Unexpected detection behavior observed during testing
 
 ---
 

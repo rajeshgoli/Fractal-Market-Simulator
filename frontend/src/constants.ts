@@ -37,6 +37,8 @@ export const PLAYBACK_SPEEDS = [
   { value: 5, label: '5x' },
   { value: 10, label: '10x' },
   { value: 20, label: '20x' },
+  { value: 50, label: '50x' },
+  { value: 100, label: '100x' },
 ] as const;
 
 export const LINGER_DURATION_MS = 30000; // 30 seconds

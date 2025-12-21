@@ -32,13 +32,20 @@ Read in order:
 
 ## Current Phase: L1-L7 Validation
 
-### Temporal Causality — FIXED
+### Pivot/Origin Semantics — FIXED
 
-**#189 resolved:** Same-bar legs no longer created. Strict inequality in `_process_type1()` ensures legs only form when origin and pivot are from different bars.
+**#188-#197 resolved:** The terminology cascade has been fixed. All code now correctly enforces:
+
+| Leg Type | Origin | Pivot | Temporal Order |
+|----------|--------|-------|----------------|
+| Bull | LOW (move started) | HIGH (defended extreme) | origin_index < pivot_index |
+| Bear | HIGH (move started) | LOW (defended extreme) | origin_index < pivot_index |
+
+**#198 architectural audit completed:** Type classification, symmetric frames, and semantic enforcement reviewed. Conclusion: current design is sound. See `Docs/Working/arch_audit.md`.
 
 ### Next: Validate L1-L7 Detection
 
-With temporal causality enforced, L1-L7 validation can proceed:
+With semantics enforced, L1-L7 validation can proceed:
 
 | Label | Structure | Expected Status |
 |-------|-----------|-----------------|
@@ -143,6 +150,7 @@ With temporal causality enforced, L1-L7 validation can proceed:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 20 | #190-#197, #198 — Pivot/origin semantics fixes + architectural audit | All Accepted; design sound |
 | Dec 19 | #187-#189, #183, UX fixes (10 changes) — Temporal causality fix, sidebar unification | All Accepted |
 | Dec 19 | #125, #180-#182, #185, #186 — DAG refinements + UX fixes (6 issues) | All Accepted |
 | Dec 19 | #168-#172, #179 — DAG Visualization Mode (6 issues) | All Accepted |

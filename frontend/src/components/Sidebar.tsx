@@ -337,7 +337,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-4 border-b border-app-border">
           <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
             <Filter size={14} />
-            {mode === 'dag' ? 'DAG Events' : 'Linger Events'}
+            {mode === 'dag' ? 'Structure Events' : 'Linger Events'}
           </h2>
         </div>
 
@@ -422,7 +422,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-4 border-t border-app-border">
           <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
             <GitBranch size={14} />
-            DAG State
+            Market Structure
           </h2>
           <div className="space-y-1.5 text-xs">
             <div className="flex justify-between">

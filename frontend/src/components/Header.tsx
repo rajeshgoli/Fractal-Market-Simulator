@@ -65,9 +65,9 @@ export const Header: React.FC<HeaderProps> = ({
     },
     {
       id: 'dag' as ViewMode,
-      label: 'DAG View',
+      label: 'Market structure view',
       icon: <GitBranch size={16} />,
-      description: 'Watch the DAG build in real-time',
+      description: 'View market structure as it forms',
     },
   ];
 
@@ -136,7 +136,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Title */}
         <div className="flex items-center gap-2">
           <Monitor className="text-trading-blue" size={18} />
-          <h1 className="font-bold tracking-wide text-sm">MARKET REPLAY</h1>
+          <h1 className="font-bold tracking-wide text-sm">MARKET STRUCTURE ANALYSIS</h1>
         </div>
 
         {/* Calibration Status Badge */}

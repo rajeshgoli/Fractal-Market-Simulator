@@ -1,5 +1,764 @@
 {
   "schema_version": 1,
   "playback_sessions": [],
-  "sessions": {}
+  "sessions": {
+    "test_data/es-5m.csv": {
+      "session_id": "e128d124-c88f-485c-be3d-1fcd36a14d12",
+      "data_file": "test_data/es-5m.csv",
+      "offset": 1172207,
+      "started_at": "2025-12-20T19:57:51.250741+00:00",
+      "observations": [
+        {
+          "observation_id": "157432e0-5dc6-4f1b-8bfe-273dd11b8d8f",
+          "text": "Can you explain why we have pending bull pivot at 4408.50\n@11\nSource: low here? I don't understand this. ",
+          "playback_bar": 157,
+          "created_at": "2025-12-20T23:52:10.039739+00:00",
+          "snapshot": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 157,
+            "current_bar_index": 157,
+            "calibration_bar_count": 0,
+            "swings_found": {
+              "XL": 0,
+              "L": 0,
+              "M": 0,
+              "S": 0
+            },
+            "swings_invalidated": 4,
+            "swings_completed": 1,
+            "event_context": null,
+            "mode": "dag",
+            "replay_context": null,
+            "dag_context": {
+              "active_legs": [
+                {
+                  "leg_id": "fb268ba3",
+                  "direction": "bull",
+                  "pivot_price": 4436.75,
+                  "pivot_index": 32,
+                  "origin_price": 4407.25,
+                  "origin_index": 10,
+                  "range": 29.5
+                },
+                {
+                  "leg_id": "8c43a3ac",
+                  "direction": "bear",
+                  "pivot_price": 4422.25,
+                  "pivot_index": 53,
+                  "origin_price": 4436.75,
+                  "origin_index": 32,
+                  "range": 14.5
+                }
+              ],
+              "orphaned_origins": {
+                "bull": [
+                  {
+                    "price": 4413.75,
+                    "bar_index": 3
+                  }
+                ],
+                "bear": [
+                  {
+                    "price": 4419.25,
+                    "bar_index": 5
+                  }
+                ]
+              },
+              "pending_pivots": {
+                "bull": {
+                  "price": 4408.5,
+                  "bar_index": 11
+                },
+                "bear": {
+                  "price": 4434.75,
+                  "bar_index": 35
+                }
+              }
+            }
+          }
+        },
+        {
+          "observation_id": "b4d9ce84-c080-44d6-a716-0e5f2848dadc",
+          "text": "Why don't I see a bull leg from  4422.25? ",
+          "playback_bar": 234,
+          "created_at": "2025-12-20T23:55:57.923573+00:00",
+          "snapshot": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 234,
+            "current_bar_index": 234,
+            "calibration_bar_count": 0,
+            "swings_found": {
+              "XL": 0,
+              "L": 0,
+              "M": 0,
+              "S": 0
+            },
+            "swings_invalidated": 4,
+            "swings_completed": 1,
+            "event_context": null,
+            "mode": "dag",
+            "replay_context": null,
+            "dag_context": {
+              "active_legs": [
+                {
+                  "leg_id": "fb268ba3",
+                  "direction": "bull",
+                  "pivot_price": 4437.0,
+                  "pivot_index": 219,
+                  "origin_price": 4407.25,
+                  "origin_index": 10,
+                  "range": 29.75
+                },
+                {
+                  "leg_id": "8c43a3ac",
+                  "direction": "bear",
+                  "pivot_price": 4422.25,
+                  "pivot_index": 53,
+                  "origin_price": 4436.75,
+                  "origin_index": 32,
+                  "range": 14.5
+                },
+                {
+                  "leg_id": "111ddb3c",
+                  "direction": "bear",
+                  "pivot_price": 4432.0,
+                  "pivot_index": 222,
+                  "origin_price": 4437.0,
+                  "origin_index": 219,
+                  "range": 5.0
+                }
+              ],
+              "orphaned_origins": {
+                "bull": [
+                  {
+                    "price": 4413.75,
+                    "bar_index": 3
+                  }
+                ],
+                "bear": [
+                  {
+                    "price": 4419.25,
+                    "bar_index": 5
+                  }
+                ]
+              },
+              "pending_pivots": {
+                "bull": {
+                  "price": 4408.5,
+                  "bar_index": 11
+                },
+                "bear": {
+                  "price": 4436.25,
+                  "bar_index": 232
+                }
+              }
+            }
+          }
+        },
+        {
+          "observation_id": "d2091ed5-4bee-4ebf-bea2-5f2219c68d0e",
+          "text": "Note about issue #202",
+          "playback_bar": 14,
+          "created_at": "2025-12-21T00:39:11.870225+00:00",
+          "snapshot": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 14,
+            "current_bar_index": 14,
+            "calibration_bar_count": 0,
+            "swings_found": {
+              "XL": 0,
+              "L": 0,
+              "M": 0,
+              "S": 0
+            },
+            "swings_invalidated": 3,
+            "swings_completed": 0,
+            "event_context": null,
+            "mode": "dag",
+            "replay_context": null,
+            "dag_context": {
+              "active_legs": [
+                {
+                  "leg_id": "8f4def1d",
+                  "direction": "bear",
+                  "pivot_price": 4407.25,
+                  "pivot_index": 10,
+                  "origin_price": 4419.25,
+                  "origin_index": 5,
+                  "range": 12.0
+                },
+                {
+                  "leg_id": "6863aadf",
+                  "direction": "bear",
+                  "pivot_price": 4407.25,
+                  "pivot_index": 10,
+                  "origin_price": 4413.75,
+                  "origin_index": 9,
+                  "range": 6.5
+                },
+                {
+                  "leg_id": "8febd2b5",
+                  "direction": "bull",
+                  "pivot_price": 4415.75,
+                  "pivot_index": 13,
+                  "origin_price": 4407.25,
+                  "origin_index": 10,
+                  "range": 8.5
+                },
+                {
+                  "leg_id": "af3f24bd",
+                  "direction": "bull",
+                  "pivot_price": 4415.75,
+                  "pivot_index": 13,
+                  "origin_price": 4408.5,
+                  "origin_index": 11,
+                  "range": 7.25
+                }
+              ],
+              "orphaned_origins": {
+                "bull": [
+                  {
+                    "price": 4413.75,
+                    "bar_index": 3
+                  }
+                ],
+                "bear": []
+              },
+              "pending_origins": {
+                "bull": null,
+                "bear": {
+                  "price": 4415.75,
+                  "bar_index": 13
+                }
+              }
+            }
+          }
+        },
+        {
+          "observation_id": "db61960e-31a5-414d-8742-9c1eaa57b242",
+          "text": "I would expect a bull leg here from the bottom of the large bull candle. That low is lower than the other two. Can you trace why it isn't detected? I suspect it has to do with the fact that the low occured in this giant bull candle so no bear leg formed. ",
+          "playback_bar": 270,
+          "created_at": "2025-12-21T02:15:45.783038+00:00",
+          "snapshot": {
+            "state": "paused",
+            "window_offset": 1172207,
+            "bars_since_calibration": 270,
+            "current_bar_index": 270,
+            "calibration_bar_count": 0,
+            "swings_found": {
+              "XL": 0,
+              "L": 0,
+              "M": 0,
+              "S": 0
+            },
+            "swings_invalidated": 61,
+            "swings_completed": 20,
+            "event_context": null,
+            "mode": "dag",
+            "replay_context": null,
+            "dag_context": {
+              "active_legs": [
+                {
+                  "leg_id": "c149a0c4",
+                  "direction": "bull",
+                  "pivot_price": 4487.25,
+                  "pivot_index": 269,
+                  "origin_price": 4407.25,
+                  "origin_index": 10,
+                  "range": 80.0
+                },
+                {
+                  "leg_id": "27abca02",
+                  "direction": "bull",
+                  "pivot_price": 4487.25,
+                  "pivot_index": 269,
+                  "origin_price": 4422.25,
+                  "origin_index": 53,
+                  "range": 65.0
+                },
+                {
+                  "leg_id": "beb04d55",
+                  "direction": "bull",
+                  "pivot_price": 4487.25,
+                  "pivot_index": 269,
+                  "origin_price": 4425.0,
+                  "origin_index": 179,
+                  "range": 62.25
+                },
+                {
+                  "leg_id": "0ab604c1",
+                  "direction": "bull",
+                  "pivot_price": 4487.25,
+                  "pivot_index": 269,
+                  "origin_price": 4426.25,
+                  "origin_index": 191,
+                  "range": 61.0
+                },
+                {
+                  "leg_id": "78627da0",
+                  "direction": "bull",
+                  "pivot_price": 4487.25,
+                  "pivot_index": 269,
+                  "origin_price": 4424.5,
+                  "origin_index": 260,
+                  "range": 62.75
+                },
+                {
+                  "leg_id": "58a2ad0e",
+                  "direction": "bull",
+                  "pivot_price": 4487.25,
+                  "pivot_index": 269,
+                  "origin_price": 4427.25,
+                  "origin_index": 264,
+                  "range": 60.0
+                }
+              ],
+              "orphaned_origins": {
+                "bull": [
+                  {
+                    "price": 4432.0,
+                    "bar_index": 222
+                  }
+                ],
+                "bear": [
+                  {
+                    "price": 4419.25,
+                    "bar_index": 5
+                  },
+                  {
+                    "price": 4428.75,
+                    "bar_index": 258
+                  },
+                  {
+                    "price": 4434.5,
+                    "bar_index": 67
+                  }
+                ]
+              },
+              "pending_origins": {
+                "bull": {
+                  "price": 4420.25,
+                  "bar_index": 269
+                },
+                "bear": {
+                  "price": 4487.25,
+                  "bar_index": 269
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "resolved_observations": [
+    {
+      "observation_id": "9ada6b78-c4d1-4d02-a6a0-08db57de2ab4",
+      "text": "The bear origin is correctly located at 4419.25, but it's shown below the candle, which is confusing. ",
+      "playback_bar": 25,
+      "created_at": "2025-12-20T23:43:03.256064+00:00",
+      "resolved_at": "2025-12-20T23:55:00.000000+00:00",
+      "resolution": "Fixed in #199. Orphaned origin markers had bull/bear positions swapped. Bull origins (at LOWs) now render below bar, bear origins (at HIGHs) now render above bar.",
+      "issues_filed": [
+        "#199"
+      ],
+      "snapshot": {
+        "state": "paused",
+        "window_offset": 1172207,
+        "bars_since_calibration": 25,
+        "current_bar_index": 25,
+        "calibration_bar_count": 0,
+        "swings_found": {
+          "XL": 0,
+          "L": 0,
+          "M": 0,
+          "S": 0
+        },
+        "swings_invalidated": 4,
+        "swings_completed": 1,
+        "event_context": null,
+        "mode": "dag",
+        "replay_context": null,
+        "dag_context": {
+          "active_legs": [
+            {
+              "leg_id": "fb268ba3",
+              "direction": "bull",
+              "pivot_price": 4424.5,
+              "pivot_index": 25,
+              "origin_price": 4407.25,
+              "origin_index": 10,
+              "range": 17.25
+            }
+          ],
+          "orphaned_origins": {
+            "bull": [
+              {
+                "price": 4413.75,
+                "bar_index": 3
+              }
+            ],
+            "bear": [
+              {
+                "price": 4419.25,
+                "bar_index": 5
+              }
+            ]
+          },
+          "pending_pivots": {
+            "bull": {
+              "price": 4408.5,
+              "bar_index": 11
+            },
+            "bear": {
+              "price": 4424.5,
+              "bar_index": 25
+            }
+          }
+        }
+      }
+    },
+    {
+      "observation_id": "8690e517-75b6-4b44-9cb7-4bed05711ad1",
+      "text": "Why is it detecting a bull leg here, when only a bear exists: BULL\nactive\nPivot: 4413.75\nOrigin: 4416.25\nRetr: 50.0%\nBars: 1",
+      "playback_bar": 3,
+      "created_at": "2025-12-20T19:57:51.251813+00:00",
+      "resolved_at": "2025-12-20T21:00:00.000000+00:00",
+      "resolution": "Filed as #195 (TYPE_2_BEAR temporal inversion). Root cause: TYPE_2_BEAR creates bull leg with HIGH->LOW order, should be bear.",
+      "issues_filed": [
+        "#195"
+      ],
+      "snapshot": {
+        "state": "paused",
+        "window_offset": 1172207,
+        "bars_since_calibration": 3,
+        "current_bar_index": 3,
+        "calibration_bar_count": 0,
+        "swings_found": {
+          "XL": 0,
+          "L": 0,
+          "M": 0,
+          "S": 0
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0,
+        "event_context": null,
+        "mode": "dag",
+        "replay_context": null,
+        "dag_context": {
+          "active_legs": [
+            {
+              "leg_id": "2075ccaa",
+              "direction": "bull",
+              "pivot_price": 4413.75,
+              "pivot_index": 3,
+              "origin_price": 4416.25,
+              "origin_index": 0,
+              "range": 2.5
+            },
+            {
+              "leg_id": "0db8d459",
+              "direction": "bear",
+              "pivot_price": 4416.25,
+              "pivot_index": 0,
+              "origin_price": 4413.75,
+              "origin_index": 3,
+              "range": 2.5
+            }
+          ],
+          "orphaned_origins": {
+            "bull": [],
+            "bear": []
+          },
+          "pending_pivots": {
+            "bull": {
+              "price": 4413.75,
+              "bar_index": 3
+            },
+            "bear": {
+              "price": 4416.25,
+              "bar_index": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "observation_id": "8c4f9942-c1bb-4fb2-8f8c-6cb317dfa17a",
+      "text": "Why is 4419.25 still an orphaned origin and a pending pivot? There is a bull leg here currently. Am I misunderstanding the algo?",
+      "playback_bar": 6,
+      "created_at": "2025-12-20T20:32:18.824476+00:00",
+      "resolved_at": "2025-12-20T21:00:00.000000+00:00",
+      "resolution": "Filed as #196 (state cleanup on leg creation). Root cause: When new legs are created, orphaned_origins and pending_pivots aren't cleared even when they match the new leg's origin/pivot.",
+      "issues_filed": [
+        "#196"
+      ],
+      "snapshot": {
+        "state": "paused",
+        "window_offset": 1172207,
+        "bars_since_calibration": 6,
+        "current_bar_index": 6,
+        "calibration_bar_count": 0,
+        "swings_found": {
+          "XL": 0,
+          "L": 0,
+          "M": 0,
+          "S": 0
+        },
+        "swings_invalidated": 2,
+        "swings_completed": 0,
+        "event_context": null,
+        "mode": "dag",
+        "replay_context": null,
+        "dag_context": {
+          "active_legs": [
+            {
+              "leg_id": "895e947a",
+              "direction": "bull",
+              "pivot_price": 4409.0,
+              "pivot_index": 6,
+              "origin_price": 4419.25,
+              "origin_index": 5,
+              "range": 10.25
+            },
+            {
+              "leg_id": "c32bc035",
+              "direction": "bear",
+              "pivot_price": 4419.25,
+              "pivot_index": 5,
+              "origin_price": 4409.0,
+              "origin_index": 6,
+              "range": 10.25
+            }
+          ],
+          "orphaned_origins": {
+            "bull": [
+              {
+                "price": 4419.25,
+                "bar_index": 5
+              }
+            ],
+            "bear": [
+              {
+                "price": 4411.25,
+                "bar_index": 5
+              }
+            ]
+          },
+          "pending_pivots": {
+            "bull": {
+              "price": 4409.0,
+              "bar_index": 6
+            },
+            "bear": {
+              "price": 4419.25,
+              "bar_index": 5
+            }
+          }
+        }
+      }
+    },
+    {
+      "observation_id": "c4b5ab24-6e40-4da0-be73-d17869247694",
+      "text": "This was supposed to be fixed in #196? Why do I still see orphaned origin and bear pivot at 4419.25? ",
+      "playback_bar": 6,
+      "created_at": "2025-12-20T21:10:15.474941+00:00",
+      "resolved_at": "2025-12-20T21:20:00.000000+00:00",
+      "resolution": "Not a bug. #196 fix works correctly. Orphaned origin was re-added when bull leg was invalidated (per #163 sibling swing logic). The bull leg that used 4419.25 as origin got invalidated (swings_invalidated: 2), triggering line 1331-1332 which preserves origins for sibling swing formation. The bear leg's pivot at 4419.25 doesn't clear bull orphaned origins because pivot != origin.",
+      "issues_filed": [],
+      "snapshot": {
+        "state": "paused",
+        "window_offset": 1172207,
+        "bars_since_calibration": 6,
+        "current_bar_index": 6,
+        "calibration_bar_count": 0,
+        "swings_found": {
+          "XL": 0,
+          "L": 0,
+          "M": 0,
+          "S": 0
+        },
+        "swings_invalidated": 2,
+        "swings_completed": 0,
+        "event_context": null,
+        "mode": "dag",
+        "replay_context": null,
+        "dag_context": {
+          "active_legs": [
+            {
+              "leg_id": "ad35fa16",
+              "direction": "bear",
+              "pivot_price": 4419.25,
+              "pivot_index": 5,
+              "origin_price": 4409.0,
+              "origin_index": 6,
+              "range": 10.25
+            }
+          ],
+          "orphaned_origins": {
+            "bull": [
+              {
+                "price": 4419.25,
+                "bar_index": 5
+              }
+            ],
+            "bear": [
+              {
+                "price": 4411.25,
+                "bar_index": 5
+              }
+            ]
+          },
+          "pending_pivots": {
+            "bull": {
+              "price": 4409.0,
+              "bar_index": 6
+            },
+            "bear": {
+              "price": 4419.25,
+              "bar_index": 5
+            }
+          }
+        }
+      }
+    },
+    {
+      "observation_id": "7ee7f044-82e6-4b76-899f-602736672432",
+      "text": "I see a bull leg BULL\nactive\nPivot: 4409.00\nOrigin: 4419.25\nRetr: 29.3%\nBars: 1 --> Wasn't this fixed in 195?",
+      "playback_bar": 7,
+      "created_at": "2025-12-20T21:15:43.880442+00:00",
+      "resolved_at": "2025-12-20T22:30:00.000000+00:00",
+      "resolution": "Fixed in commit 95b4ef0. The original #195 fix only addressed TYPE_2_BEAR. TYPE_1 (inside bar) had the same direction inversion bug: creating 'bull' legs when HIGH\u2192LOW structure occurred (should be bear). The fix swaps directions in _process_type1 to match price structure.",
+      "issues_filed": [
+        "#195"
+      ],
+      "snapshot": {
+        "state": "paused",
+        "window_offset": 1172207,
+        "bars_since_calibration": 7,
+        "current_bar_index": 7,
+        "calibration_bar_count": 0,
+        "swings_found": {
+          "XL": 0,
+          "L": 0,
+          "M": 0,
+          "S": 0
+        },
+        "swings_invalidated": 2,
+        "swings_completed": 0,
+        "event_context": null,
+        "mode": "dag",
+        "replay_context": null,
+        "dag_context": {
+          "active_legs": [
+            {
+              "leg_id": "f57949cf",
+              "direction": "bear",
+              "pivot_price": 4419.25,
+              "pivot_index": 5,
+              "origin_price": 4409.0,
+              "origin_index": 6,
+              "range": 10.25
+            },
+            {
+              "leg_id": "6570c3ce",
+              "direction": "bull",
+              "pivot_price": 4409.0,
+              "pivot_index": 6,
+              "origin_price": 4419.25,
+              "origin_index": 5,
+              "range": 10.25
+            }
+          ],
+          "orphaned_origins": {
+            "bull": [],
+            "bear": [
+              {
+                "price": 4411.25,
+                "bar_index": 5
+              }
+            ]
+          },
+          "pending_pivots": {
+            "bull": {
+              "price": 4409.0,
+              "bar_index": 6
+            },
+            "bear": {
+              "price": 4419.25,
+              "bar_index": 5
+            }
+          }
+        }
+      }
+    },
+    {
+      "observation_id": "a217b5db-a629-459a-81e9-783e21cf8707",
+      "text": "At the 10:10 candle, the bear leg gets invalidated. Can you explain why ( don't think it 2xed visually here). Also the 2 orphaned origins seem wrong. First they are both bear, but they'd be a bull origin not bear being at the lows. Second, there is a valid bull leg from 4407.25, it isn't orphaned. ",
+      "playback_bar": 26,
+      "created_at": "2025-12-20T22:20:24.476257+00:00",
+      "resolved_at": "2025-12-20T22:45:00.000000+00:00",
+      "resolution": "Filed as #197. Root cause: Code has pivot/origin assignment backwards in leg creation. Bear legs are created with pivot=HIGH and origin=LOW, but correct semantics are origin=HIGH (where move started) and pivot=LOW (defended extreme). This causes orphaned origins to be stored at wrong price levels (LOWs instead of HIGHs for bear legs). Also identified: pending pivots not cleared after leg creation.",
+      "issues_filed": [
+        "#197"
+      ],
+      "snapshot": {
+        "state": "paused",
+        "window_offset": 1172207,
+        "bars_since_calibration": 26,
+        "current_bar_index": 26,
+        "calibration_bar_count": 0,
+        "swings_found": {
+          "XL": 0,
+          "L": 0,
+          "M": 0,
+          "S": 0
+        },
+        "swings_invalidated": 3,
+        "swings_completed": 1,
+        "event_context": null,
+        "mode": "dag",
+        "replay_context": null,
+        "dag_context": {
+          "active_legs": [
+            {
+              "leg_id": "9ac67f10",
+              "direction": "bull",
+              "pivot_price": 4407.25,
+              "pivot_index": 10,
+              "origin_price": 4424.5,
+              "origin_index": 25,
+              "range": 17.25
+            }
+          ],
+          "orphaned_origins": {
+            "bull": [],
+            "bear": [
+              {
+                "price": 4407.25,
+                "bar_index": 10
+              },
+              {
+                "price": 4411.25,
+                "bar_index": 5
+              }
+            ]
+          },
+          "pending_pivots": {
+            "bull": {
+              "price": 4407.25,
+              "bar_index": 10
+            },
+            "bear": {
+              "price": 4424.5,
+              "bar_index": 25
+            }
+          }
+        }
+      }
+    }
+  ]
 }

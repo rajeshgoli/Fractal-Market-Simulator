@@ -309,18 +309,17 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     }, []),
   });
 
-  // Handler to refresh aggregated bars after playback advance
-  // Backend now controls visibility via playback_index, so we re-fetch to get updated bars
-  const handleRefreshAggregatedBars = useCallback(async () => {
-    try {
-      const [bars1, bars2] = await Promise.all([
-        fetchBars(chart1Aggregation),
-        fetchBars(chart2Aggregation),
-      ]);
-      setChart1Bars(bars1);
-      setChart2Bars(bars2);
-    } catch (err) {
-      console.error('Failed to refresh aggregated bars:', err);
+  // Handler for aggregated bars from API response (replaces separate fetchBars calls)
+  const handleAggregatedBarsChange = useCallback((aggBars: import('../lib/api').AggregatedBarsResponse) => {
+    const scaleToAggKey = { 'S': 'S', 'M': 'M', 'L': 'L', 'XL': 'XL' } as const;
+    const chart1Key = scaleToAggKey[chart1Aggregation as keyof typeof scaleToAggKey];
+    const chart2Key = scaleToAggKey[chart2Aggregation as keyof typeof scaleToAggKey];
+
+    if (chart1Key && aggBars[chart1Key]) {
+      setChart1Bars(aggBars[chart1Key]!);
+    }
+    if (chart2Key && aggBars[chart2Key]) {
+      setChart2Bars(aggBars[chart2Key]!);
     }
   }, [chart1Aggregation, chart2Aggregation]);
 
@@ -333,6 +332,8 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     filters: lingerEvents,
     enabledScales: displayConfig.enabledScales,
     lingerEnabled,  // Whether to pause on events
+    // Request aggregated bars for both chart scales
+    chartAggregationScales: [chart1Aggregation, chart2Aggregation],
     onNewBars: useCallback((newBars: BarData[]) => {
       // Append new bars to source bars for chart display
       setSourceBars(prev => [...prev, ...newBars]);
@@ -342,7 +343,7 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
         syncChartsToPositionRef.current(lastBar.index);
       }
     }, []),
-    onRefreshAggregatedBars: handleRefreshAggregatedBars,
+    onAggregatedBarsChange: handleAggregatedBarsChange,
   });
 
   // Compute highlighted swing for linger state (from forward playback or legacy playback)

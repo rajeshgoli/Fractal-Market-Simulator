@@ -36,7 +36,7 @@ Don't interview:
 
 ## State Doc: product_direction.md
 
-Single file, always current, overwrite on update:
+Single file, always current, overwrite on update. **Reserved for epic-level updates**, not individual bug tracking.
 
 ```markdown
 # Product Direction
@@ -46,18 +46,40 @@ Single file, always current, overwrite on update:
 ## Current Objective
 [Single most important next thing]
 
-## Why This Is Highest Leverage
-[Reasoning]
+## Current Phase
+[e.g., "User Testing" — indicates what mode we're in]
 
 ## Success Criteria
 [Concrete, testable outcomes]
 
-## Usability Criteria
-[What makes the tool fit-for-purpose]
-
 ## Checkpoint Trigger
 [When user should invoke Product]
 ```
+
+**What belongs here:**
+- Current objective and phase
+- Completed epics/milestones
+- Success criteria and validation status
+- Checkpoint triggers
+
+**What does NOT belong here:**
+- Individual bug descriptions (use GitHub Issues)
+- Detailed root cause analysis (use interview_notes.md)
+- Technical implementation details (Architect's domain)
+
+## User Testing Phase
+
+When `product_direction.md` indicates "User Testing" phase:
+
+1. **GitHub Issues is source of truth** — Bugs are filed and resolved rapidly. Check `gh issue list` for current state, not product_direction.md
+2. **Don't enumerate bugs in product_direction.md** — Just note "Testing uncovered bugs. See GitHub Issues."
+3. **Feedback flow:**
+   - User reports observation → Product diagnoses with user → File GitHub issue → Move feedback to resolved in JSON
+   - Screenshots go to `ground_truth/screenshots/archive/` when resolved
+4. **Update product_direction.md only for:**
+   - Phase changes (e.g., "User Testing complete, moving to...")
+   - Epic completion
+   - Major pivot in direction
 
 ## Reference Documents
 

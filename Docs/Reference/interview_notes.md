@@ -4,6 +4,86 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 20, 2025 - State Cleanup on Leg Creation
+
+**Context:** Continued DAG validation at offset 1172207. User observed same price appearing in multiple state locations.
+
+### Observation
+
+User feedback: "Why is 4419.25 still an orphaned origin and a pending pivot? There is a bull leg here currently."
+
+At bar 6, 4419.25 @ bar 5 appeared in THREE places:
+1. Bull leg origin (active)
+2. `orphaned_origins['bull']`
+3. `pending_pivots['bear']`
+
+### User Insight
+
+> "This doesn't explain why it's in pending bear pivot (isn't that also confirmed when the bear leg formed)?"
+
+The user correctly identified that "pending" implies unused, but the pivot had already been used to create a leg.
+
+### Root Cause
+
+Two cleanup failures when creating new legs:
+
+**Bug A:** At bar 5, a bull leg was invalidated, adding its origin (4419.25 @ bar 5) to orphaned_origins. At bar 6, a NEW bull leg was created with the same origin, but orphaned_origins wasn't cleared.
+
+**Bug B:** When a bear leg was created using `pending_pivots['bear']` (4419.25 @ bar 5), the pending pivot wasn't cleared. It only gets replaced by a MORE EXTREME value.
+
+### Issue Filed
+
+**#196** — Leg creation doesn't clear orphaned origins or pending pivots
+
+---
+
+## December 20, 2025 - TYPE_2_BEAR Temporal Inversion Bug
+
+**Context:** DAG validation at offset 1172207 in `test_data/es-5m.csv`. User observed bull leg where only bear price movement occurred.
+
+### Observation
+
+User feedback: "Why is it detecting a bull leg here, when only a bear exists?"
+
+At bar 3, the DAG showed:
+```
+Bull leg:
+  pivot: 4413.75 @ bar 3 (LOW)
+  origin: 4416.25 @ bar 0 (HIGH)
+```
+
+Price action was clearly bearish:
+```
+Bar 0: H=4416.25, L=4414.25
+Bar 1: H=4416.00, L=4414.25 (TYPE_1)
+Bar 2: H=4415.75, L=4414.25 (TYPE_1)
+Bar 3: H=4415.25, L=4413.75 (TYPE_2_BEAR)
+```
+
+### User Insight
+
+> "Not visually — this is temporally wrong. If high came before the low, how can it be a bull leg?"
+
+This cut to the core issue: bull = LOW→HIGH (temporally), bear = HIGH→LOW. The observed leg has HIGH (bar 0) → LOW (bar 3), which is a bear structure labeled "bull."
+
+### Root Cause
+
+Asymmetry in leg creation between `_process_type2_bull` and `_process_type2_bear`:
+
+| | TYPE_2_BULL | TYPE_2_BEAR |
+|---|---|---|
+| pivot | `pending_pivots['bull']` (past LOW) | `bar_low` (current) |
+| origin | `bar_high` (current) | `pending_pivots['bear']` (past HIGH) |
+| Temporal | LOW→HIGH ✓ | HIGH→LOW ✗ |
+
+TYPE_2_BEAR uses `pending_pivots['bear']` (HIGH) as origin, creating inverted temporal order.
+
+### Issue Filed
+
+**#195** — TYPE_2_BEAR creates bull leg with inverted temporal order
+
+---
+
 ## December 20, 2025 - Leg Bar Index Mismatch Bug
 
 **Context:** Continued DAG validation. User observed leg data with incorrect bar indices.
