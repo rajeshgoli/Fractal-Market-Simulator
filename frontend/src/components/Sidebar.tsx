@@ -2,8 +2,9 @@ import React, { useState, useCallback, useRef, RefObject } from 'react';
 import { toPng } from 'html-to-image';
 import { EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban } from 'lucide-react';
-import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent } from '../lib/api';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X } from 'lucide-react';
+import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent, DagLeg } from '../lib/api';
+import { AttachableItem } from './DAGStatePanel';
 
 // Linger event configuration for mode-specific toggles
 export interface LingerEventConfig {
@@ -133,6 +134,10 @@ interface SidebarProps {
 
   // Linger enabled state - controls visibility of event filters
   lingerEnabled?: boolean;
+
+  // Attachment support
+  attachedItems: AttachableItem[];
+  onDetachItem: (item: AttachableItem) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -159,6 +164,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   dagContext,
   screenshotTargetRef,
   lingerEnabled = true,
+  attachedItems,
+  onDetachItem,
 }) => {
   const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
   const [feedbackText, setFeedbackText] = useState('');
@@ -241,6 +248,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
         };
       }
 
+      // Add attachments if any
+      if (attachedItems && attachedItems.length > 0) {
+        snapshot.attachments = attachedItems.map(item => {
+          if (item.type === 'leg') {
+            const leg = item.data as DagLeg;
+            return {
+              type: 'leg' as const,
+              leg_id: leg.leg_id,
+              direction: leg.direction,
+              pivot_price: leg.pivot_price,
+              origin_price: leg.origin_price,
+              pivot_index: leg.pivot_index,
+              origin_index: leg.origin_index,
+            };
+          } else if (item.type === 'orphaned_origin') {
+            const origin = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear' };
+            return {
+              type: 'orphaned_origin' as const,
+              direction: origin.direction,
+              price: origin.price,
+              bar_index: origin.bar_index,
+            };
+          } else {
+            const pending = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear'; source: string };
+            return {
+              type: 'pending_origin' as const,
+              direction: pending.direction,
+              price: pending.price,
+              bar_index: pending.bar_index,
+              source: pending.source,
+            };
+          }
+        });
+      }
+
       // Capture screenshot if target ref is available
       let screenshotData: string | undefined;
       if (screenshotTargetRef?.current) {
@@ -270,7 +312,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext, screenshotTargetRef]);
+  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext, screenshotTargetRef, attachedItems]);
 
   const handleInputFocus = useCallback(() => {
     // Pause linger timer if lingering
@@ -488,6 +530,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
             <MessageSquare size={14} />
             Observation
+            {attachedItems && attachedItems.length > 0 && (
+              <span className="flex items-center gap-1 text-trading-purple">
+                <Paperclip size={10} />
+                <span className="text-[10px] font-normal normal-case">{attachedItems.length}/5</span>
+              </span>
+            )}
             {hasAutopaused && (
               <span className="flex items-center gap-1 text-trading-orange">
                 <Pause size={10} />
@@ -495,6 +543,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
             )}
           </h2>
+
+          {/* Attached Items Display */}
+          {attachedItems && attachedItems.length > 0 && (
+            <div className="mb-3 space-y-1">
+              {attachedItems.map((item, idx) => {
+                let label = '';
+                let colorClass = '';
+                if (item.type === 'leg') {
+                  const leg = item.data as DagLeg;
+                  label = `${leg.direction.toUpperCase()} Leg @${leg.pivot_index}`;
+                  colorClass = leg.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
+                } else if (item.type === 'orphaned_origin') {
+                  const origin = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear' };
+                  label = `${origin.direction.toUpperCase()} Orphan @${origin.bar_index}`;
+                  colorClass = origin.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
+                } else {
+                  const pending = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear' };
+                  label = `${pending.direction.toUpperCase()} Pending @${pending.bar_index}`;
+                  colorClass = pending.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
+                }
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between text-xs bg-trading-purple/10 rounded px-2 py-1 border border-trading-purple/30"
+                  >
+                    <span className={colorClass}>{label}</span>
+                    <button
+                      onClick={() => onDetachItem(item)}
+                      className="text-app-muted hover:text-trading-bear transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div className="space-y-2">
             <textarea
               ref={inputRef}

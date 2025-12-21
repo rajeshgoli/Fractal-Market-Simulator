@@ -5,7 +5,7 @@ import { Sidebar, REPLAY_LINGER_EVENTS, LingerEventConfig } from '../components/
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { ExplanationPanel } from '../components/ExplanationPanel';
-import { DAGStatePanel } from '../components/DAGStatePanel';
+import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
 import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
@@ -226,6 +226,45 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
   const [dagState, setDagState] = useState<DagStateResponse | null>(null);
   const [recentLegEvents, setRecentLegEvents] = useState<LegEvent[]>([]);
   const [isDagLoading, setIsDagLoading] = useState(false);
+
+  // Feedback attachment state (max 5 items)
+  const [attachedItems, setAttachedItems] = useState<AttachableItem[]>([]);
+
+  const handleAttachItem = useCallback((item: AttachableItem) => {
+    setAttachedItems(prev => {
+      if (prev.length >= 5) return prev; // Max 5 attachments
+      // Check if already attached
+      const isDuplicate = prev.some(existing => {
+        if (existing.type !== item.type) return false;
+        if (item.type === 'leg') {
+          return (existing.data as { leg_id: string }).leg_id === (item.data as { leg_id: string }).leg_id;
+        } else if (item.type === 'orphaned_origin') {
+          const e = existing.data as { bar_index: number; direction: string };
+          const n = item.data as { bar_index: number; direction: string };
+          return e.bar_index === n.bar_index && e.direction === n.direction;
+        } else {
+          return (existing.data as { direction: string }).direction === (item.data as { direction: string }).direction;
+        }
+      });
+      if (isDuplicate) return prev;
+      return [...prev, item];
+    });
+  }, []);
+
+  const handleDetachItem = useCallback((item: AttachableItem) => {
+    setAttachedItems(prev => prev.filter(existing => {
+      if (existing.type !== item.type) return true;
+      if (item.type === 'leg') {
+        return (existing.data as { leg_id: string }).leg_id !== (item.data as { leg_id: string }).leg_id;
+      } else if (item.type === 'orphaned_origin') {
+        const e = existing.data as { bar_index: number; direction: string };
+        const n = item.data as { bar_index: number; direction: string };
+        return !(e.bar_index === n.bar_index && e.direction === n.direction);
+      } else {
+        return (existing.data as { direction: string }).direction !== (item.data as { direction: string }).direction;
+      }
+    }));
+  }, []);
 
   // Use hook to filter and rank swings based on display config
   // filteredActiveSwings is limited by activeSwingCount (for chart display)
@@ -1212,6 +1251,8 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
             onPausePlayback={forwardPlayback.pause}
             screenshotTargetRef={mainContentRef}
             lingerEnabled={lingerEnabled}
+            attachedItems={attachedItems}
+            onDetachItem={handleDetachItem}
           />
         </div>
 
@@ -1317,6 +1358,9 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
                 dagState={dagState}
                 recentLegEvents={recentLegEvents}
                 isLoading={isDagLoading}
+                attachedItems={attachedItems}
+                onAttachItem={handleAttachItem}
+                onDetachItem={handleDetachItem}
               />
             ) : (
               <ExplanationPanel

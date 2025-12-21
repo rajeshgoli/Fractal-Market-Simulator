@@ -4,7 +4,7 @@ import { Header } from '../components/Header';
 import { Sidebar, DAG_LINGER_EVENTS, LingerEventConfig, DagContext } from '../components/Sidebar';
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
-import { DAGStatePanel } from '../components/DAGStatePanel';
+import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
 import { LegOverlay } from '../components/LegOverlay';
 import { OrphanedOriginsOverlay } from '../components/OrphanedOriginsOverlay';
 import { PendingOriginsOverlay } from '../components/PendingOriginsOverlay';
@@ -111,6 +111,45 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
 
   // Linger event toggles (DAG-specific events)
   const [lingerEvents, setLingerEvents] = useState<LingerEventConfig[]>(DAG_LINGER_EVENTS);
+
+  // Feedback attachment state (max 5 items)
+  const [attachedItems, setAttachedItems] = useState<AttachableItem[]>([]);
+
+  const handleAttachItem = useCallback((item: AttachableItem) => {
+    setAttachedItems(prev => {
+      if (prev.length >= 5) return prev; // Max 5 attachments
+      // Check if already attached
+      const isDuplicate = prev.some(existing => {
+        if (existing.type !== item.type) return false;
+        if (item.type === 'leg') {
+          return (existing.data as { leg_id: string }).leg_id === (item.data as { leg_id: string }).leg_id;
+        } else if (item.type === 'orphaned_origin') {
+          const e = existing.data as { bar_index: number; direction: string };
+          const n = item.data as { bar_index: number; direction: string };
+          return e.bar_index === n.bar_index && e.direction === n.direction;
+        } else {
+          return (existing.data as { direction: string }).direction === (item.data as { direction: string }).direction;
+        }
+      });
+      if (isDuplicate) return prev;
+      return [...prev, item];
+    });
+  }, []);
+
+  const handleDetachItem = useCallback((item: AttachableItem) => {
+    setAttachedItems(prev => prev.filter(existing => {
+      if (existing.type !== item.type) return true;
+      if (item.type === 'leg') {
+        return (existing.data as { leg_id: string }).leg_id !== (item.data as { leg_id: string }).leg_id;
+      } else if (item.type === 'orphaned_origin') {
+        const e = existing.data as { bar_index: number; direction: string };
+        const n = item.data as { bar_index: number; direction: string };
+        return !(e.bar_index === n.bar_index && e.direction === n.direction);
+      } else {
+        return (existing.data as { direction: string }).direction !== (item.data as { direction: string }).direction;
+      }
+    }));
+  }, []);
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -681,6 +720,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             dagContext={dagContext}
             screenshotTargetRef={mainContentRef}
             lingerEnabled={lingerEnabled}
+            attachedItems={attachedItems}
+            onDetachItem={handleDetachItem}
           />
         </div>
 
@@ -821,6 +862,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
               isLoading={isDagLoading}
               onHoverItem={setHighlightedDagItem}
               highlightedItem={highlightedDagItem}
+              attachedItems={attachedItems}
+              onAttachItem={handleAttachItem}
+              onDetachItem={handleDetachItem}
             />
           </div>
         </main>

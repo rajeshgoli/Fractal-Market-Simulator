@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-20
 
@@ -12,6 +12,7 @@
 - **#200** — Rename pending_pivots to pending_origins + skip redundant tracking
 - **#202** — Turn-scoped domination check for nested swing detection after directional reversals
 - **#203** — Rework leg staleness/pruning: proximity-based consolidation + extended visibility for invalidated legs
+- **#204** — UI improvements: expandable legs list + observation attachments
 
 ---
 

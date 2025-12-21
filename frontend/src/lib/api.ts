@@ -246,7 +246,15 @@ export interface PlaybackFeedbackSnapshot {
       bear: { price: number; bar_index: number } | null;
     };
   };
+  // Attached items for focused feedback (max 5)
+  attachments?: FeedbackAttachment[];
 }
+
+// Attachment types for feedback
+export type FeedbackAttachment =
+  | { type: 'leg'; leg_id: string; direction: 'bull' | 'bear'; pivot_price: number; origin_price: number; pivot_index: number; origin_index: number }
+  | { type: 'orphaned_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number }
+  | { type: 'pending_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number; source: string };
 
 export interface PlaybackFeedbackResponse {
   success: boolean;
