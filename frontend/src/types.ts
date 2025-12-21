@@ -325,7 +325,7 @@ export const LEG_STATUS_STYLES: Record<LegStatus, {
   active: {
     lineStyle: 'solid',
     opacity: 0.7,
-    color: { bull: '#3B82F6', bear: '#EF4444' },  // Blue / Red
+    color: { bull: '#22C55E', bear: '#EF4444' },  // Green / Red (matches candle colors)
   },
   stale: {
     lineStyle: 'dashed',
@@ -334,8 +334,8 @@ export const LEG_STATUS_STYLES: Record<LegStatus, {
   },
   invalidated: {
     lineStyle: 'dotted',
-    opacity: 0.3,
-    color: { bull: '#6B7280', bear: '#6B7280' },  // Gray for both
+    opacity: 0.5,
+    color: { bull: '#22C55E', bear: '#EF4444' },  // Same direction colors, dotted
   },
 };
 

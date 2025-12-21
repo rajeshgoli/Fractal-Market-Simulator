@@ -43,9 +43,9 @@ function getLineStyleValue(status: 'active' | 'stale' | 'invalidated'): LineStyl
  * - A line from (origin_index, origin_price) to (pivot_index, pivot_price)
  *
  * Visual treatment (#203):
- * - Active legs: Solid lines, blue (bull) / red (bear), 70% opacity
+ * - Active legs: Solid lines, green (bull) / red (bear), 70% opacity
  * - Stale legs: Dashed lines, yellow, 50% opacity
- * - Invalidated legs: Dotted lines, gray, 30% opacity (shown until 3× extension prune)
+ * - Invalidated legs: Dotted lines, same direction colors, 50% opacity (shown until 3× extension prune)
  */
 export const LegOverlay: React.FC<LegOverlayProps> = ({
   chart,
