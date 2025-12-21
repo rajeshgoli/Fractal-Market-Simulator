@@ -47,7 +47,8 @@ function dagLegToActiveLeg(leg: DagLeg): ActiveLeg {
     formed: leg.formed,
     status: leg.status,
     bar_count: leg.bar_count,
-    impulse: leg.impulse,
+    impulsiveness: leg.impulsiveness,
+    spikiness: leg.spikiness,
   };
 }
 
