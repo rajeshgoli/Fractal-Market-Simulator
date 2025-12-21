@@ -407,17 +407,21 @@ class LegPruner:
         active_swing_ids: Set[str],
     ) -> List[LegPrunedEvent]:
         """
-        Apply proximity-based consolidation (#203).
+        Apply proximity-based consolidation (#203, #208).
 
-        Prunes legs that are too similar to larger survivors.
-        Uses relative difference: |range_a - range_b| / max(range_a, range_b)
+        Prunes legs that are too similar to larger survivors within the same
+        pivot group. Legs with different pivots represent different swing
+        highs/lows and should NOT be consolidated just because they have
+        similar ranges.
 
         Algorithm:
-        1. Sort remaining legs by range (descending)
-        2. Keep first (largest) as survivor
-        3. For each remaining leg:
-           - If relative_diff(leg, nearest_survivor) < threshold: prune
-           - Else: add to survivors
+        1. Group remaining legs by pivot (pivot_price, pivot_index)
+        2. Within each pivot group:
+           a. Sort by range (descending)
+           b. Keep first (largest) as survivor
+           c. For each remaining leg:
+              - If relative_diff(leg, nearest_survivor) < threshold: prune
+              - Else: add to survivors
 
         Uses bisect for O(log N) nearest-neighbor lookup in sorted survivor list.
 
@@ -451,67 +455,72 @@ class LegPruner:
         if len(remaining_legs) <= 1:
             return events
 
-        # Sort by range descending
-        remaining_legs.sort(key=lambda l: l.range, reverse=True)
+        # Group legs by pivot - legs with different pivots track different swing points
+        # and should NOT be consolidated based on range similarity alone
+        pivot_groups: Dict[Tuple[Decimal, int], List[Leg]] = defaultdict(list)
+        for leg in remaining_legs:
+            pivot_key = (leg.pivot_price, leg.pivot_index)
+            pivot_groups[pivot_key].append(leg)
 
-        # Track survivors as (range, leg) for binary search
-        # survivor_ranges is kept sorted ascending for bisect
-        survivor_ranges: List[Decimal] = []
-        survivor_legs: List[Leg] = []
+        # Process each pivot group independently
+        for pivot_key, legs_in_group in pivot_groups.items():
+            if len(legs_in_group) <= 1:
+                continue  # Nothing to prune in single-leg groups
 
-        # First leg (largest) is always a survivor
-        first_leg = remaining_legs[0]
-        survivor_ranges.append(first_leg.range)
-        survivor_legs.append(first_leg)
+            # Sort by range descending within this pivot group
+            legs_in_group.sort(key=lambda l: l.range, reverse=True)
 
-        # Process remaining legs
-        for leg in remaining_legs[1:]:
-            if leg.leg_id in pruned_leg_ids:
-                continue
+            # Track survivors as (range, leg) for binary search
+            # survivor_ranges is kept sorted ascending for bisect
+            survivor_ranges: List[Decimal] = []
 
-            # Active swing immunity
-            if leg.swing_id and leg.swing_id in active_swing_ids:
-                # Immune legs become survivors
+            # First leg (largest) is always a survivor
+            first_leg = legs_in_group[0]
+            survivor_ranges.append(first_leg.range)
+
+            # Process remaining legs in this pivot group
+            for leg in legs_in_group[1:]:
+                if leg.leg_id in pruned_leg_ids:
+                    continue
+
+                # Active swing immunity
+                if leg.swing_id and leg.swing_id in active_swing_ids:
+                    # Immune legs become survivors
+                    pos = bisect.bisect_left(survivor_ranges, leg.range)
+                    survivor_ranges.insert(pos, leg.range)
+                    continue
+
+                # Find nearest survivor using binary search
                 pos = bisect.bisect_left(survivor_ranges, leg.range)
-                survivor_ranges.insert(pos, leg.range)
-                survivor_legs.insert(pos, leg)
-                continue
 
-            # Find nearest survivor using binary search
-            pos = bisect.bisect_left(survivor_ranges, leg.range)
+                # Check neighbors (pos-1 and pos) to find nearest
+                min_rel_diff = Decimal("1.0")  # Max possible relative diff
 
-            # Check neighbors (pos-1 and pos) to find nearest
-            min_rel_diff = Decimal("1.0")  # Max possible relative diff
+                if pos > 0:
+                    left_range = survivor_ranges[pos - 1]
+                    rel_diff = abs(leg.range - left_range) / max(leg.range, left_range)
+                    if rel_diff < min_rel_diff:
+                        min_rel_diff = rel_diff
 
-            if pos > 0:
-                left_range = survivor_ranges[pos - 1]
-                rel_diff = abs(leg.range - left_range) / max(leg.range, left_range)
-                if rel_diff < min_rel_diff:
-                    min_rel_diff = rel_diff
+                if pos < len(survivor_ranges):
+                    right_range = survivor_ranges[pos]
+                    rel_diff = abs(leg.range - right_range) / max(leg.range, right_range)
+                    if rel_diff < min_rel_diff:
+                        min_rel_diff = rel_diff
 
-            if pos < len(survivor_ranges):
-                right_range = survivor_ranges[pos]
-                rel_diff = abs(leg.range - right_range) / max(leg.range, right_range)
-                if rel_diff < min_rel_diff:
-                    min_rel_diff = rel_diff
-
-            # If too close to a survivor, prune
-            if min_rel_diff < prune_threshold:
-                leg.status = 'pruned'
-                pruned_leg_ids.add(leg.leg_id)
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id="",
-                    leg_id=leg.leg_id,
-                    reason="proximity_prune",
-                ))
-            else:
-                # This leg is distinct, add to survivors
-                # Insert at correct position to maintain sorted order
-                bisect.insort(survivor_ranges, leg.range)
-                # Find position again for leg insertion
-                new_pos = bisect.bisect_left(survivor_ranges, leg.range)
-                survivor_legs.insert(new_pos, leg)
+                # If too close to a survivor in same pivot group, prune
+                if min_rel_diff < prune_threshold:
+                    leg.status = 'pruned'
+                    pruned_leg_ids.add(leg.leg_id)
+                    events.append(LegPrunedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id="",
+                        leg_id=leg.leg_id,
+                        reason="proximity_prune",
+                    ))
+                else:
+                    # This leg is distinct, add to survivors
+                    bisect.insort(survivor_ranges, leg.range)
 
         return events
