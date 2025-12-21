@@ -294,6 +294,7 @@ export interface DagLeg {
   formed: boolean;
   status: 'active' | 'stale' | 'invalidated';
   bar_count: number;
+  impulse: number;  // Points per bar (range / bar_count) - measures move intensity (#236)
 }
 
 export interface DagPendingOrigin {

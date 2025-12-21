@@ -1194,6 +1194,7 @@ def _build_dag_state(detector: LegDetector) -> DagStateResponse:
             formed=leg.formed,
             status=leg.status,
             bar_count=leg.bar_count,
+            impulse=leg.impulse,
         )
         for leg in state.active_legs
     ]
@@ -1318,6 +1319,7 @@ async def get_dag_state():
             formed=leg.formed,
             status=leg.status,
             bar_count=leg.bar_count,
+            impulse=leg.impulse,
         )
         for leg in state.active_legs
     ]

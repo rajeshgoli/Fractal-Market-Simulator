@@ -546,6 +546,7 @@ class DagLegResponse(BaseModel):
     formed: bool
     status: str  # "active", "stale", or "invalidated"
     bar_count: int
+    impulse: float  # Points per bar (range / bar_count) - measures move intensity (#236)
 
 
 class DagPendingOrigin(BaseModel):

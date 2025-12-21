@@ -42,9 +42,9 @@ class TestConfigParameters:
         assert config.pivot_breach_threshold == 0.10
 
     def test_engulfed_breach_threshold_default(self):
-        """engulfed_breach_threshold should default to 0.20 (20%)."""
+        """engulfed_breach_threshold should default to 0.0 (strict deletion per #236)."""
         config = DirectionConfig()
-        assert config.engulfed_breach_threshold == 0.20
+        assert config.engulfed_breach_threshold == 0.0
 
     def test_custom_pivot_breach_threshold(self):
         """DirectionConfig should accept custom pivot_breach_threshold."""
@@ -61,9 +61,9 @@ class TestConfigParameters:
         config = SwingConfig.default()
 
         assert config.bull.pivot_breach_threshold == 0.10
-        assert config.bull.engulfed_breach_threshold == 0.20
+        assert config.bull.engulfed_breach_threshold == 0.0  # Strict deletion per #236
         assert config.bear.pivot_breach_threshold == 0.10
-        assert config.bear.engulfed_breach_threshold == 0.20
+        assert config.bear.engulfed_breach_threshold == 0.0  # Strict deletion per #236
 
 
 class TestPivotBreachDetection:

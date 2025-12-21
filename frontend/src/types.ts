@@ -320,6 +320,7 @@ export interface ActiveLeg {
   formed: boolean;
   status: LegStatus;
   bar_count: number;
+  impulse: number;  // Points per bar (range / bar_count) - measures move intensity (#236)
 }
 
 // Leg visual style configuration

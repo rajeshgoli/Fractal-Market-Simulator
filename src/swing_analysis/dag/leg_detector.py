@@ -52,6 +52,27 @@ if TYPE_CHECKING:
 FIB_LEVELS = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.382, 1.5, 1.618, 2.0]
 
 
+def _calculate_impulse(range_value: Decimal, origin_index: int, pivot_index: int) -> float:
+    """
+    Calculate impulse score (points per bar) for a leg (#236).
+
+    Impulse measures the intensity of a price move: high-impulse moves
+    are sharp and fast, low-impulse moves are slow and gradual.
+
+    Args:
+        range_value: Absolute price range of the leg (|origin - pivot|)
+        origin_index: Bar index where the leg originated
+        pivot_index: Bar index of the current pivot
+
+    Returns:
+        Impulse as points per bar. Returns 0.0 if bar_count is 0.
+    """
+    bar_count = abs(pivot_index - origin_index)
+    if bar_count == 0:
+        return 0.0
+    return float(range_value) / bar_count
+
+
 class LegDetector:
     """
     DAG-based leg detector for the structural layer.
@@ -162,6 +183,8 @@ class LegDetector:
                     leg.pivot_price = bar_high
                     leg.pivot_index = bar.index
                     leg.last_modified_bar = bar.index
+                    # Recalculate impulse when pivot extends (#236)
+                    leg.impulse = _calculate_impulse(leg.range, leg.origin_index, leg.pivot_index)
 
         # Extend bear leg pivots on new lows (only if origin not breached #208)
         for leg in self.state.active_legs:
@@ -170,6 +193,8 @@ class LegDetector:
                     leg.pivot_price = bar_low
                     leg.pivot_index = bar.index
                     leg.last_modified_bar = bar.index
+                    # Recalculate impulse when pivot extends (#236)
+                    leg.impulse = _calculate_impulse(leg.range, leg.origin_index, leg.pivot_index)
 
     def _update_breach_tracking(self, bar_high: Decimal, bar_low: Decimal) -> None:
         """
@@ -402,6 +427,7 @@ class LegDetector:
             # Pivot extension handled by _extend_leg_pivots (#188)
             if not existing_bull_leg:
                 # Create new bull leg: origin at LOW -> pivot at HIGH
+                leg_range = abs(bar_high - pending.price)
                 new_leg = Leg(
                     direction='bull',
                     origin_price=pending.price,  # LOW - where upward move started
@@ -410,6 +436,7 @@ class LegDetector:
                     pivot_index=bar.index,
                     price_at_creation=bar_close,
                     last_modified_bar=bar.index,
+                    impulse=_calculate_impulse(leg_range, pending.bar_index, bar.index),
                 )
                 self.state.active_legs.append(new_leg)
                 # Clear pending origin after leg creation (#197)
@@ -488,6 +515,7 @@ class LegDetector:
                 existing_bear_leg = True
             # Pivot extension handled by _extend_leg_pivots (#188)
             if not existing_bear_leg:
+                leg_range = abs(pending.price - bar_low)
                 new_bear_leg = Leg(
                     direction='bear',
                     origin_price=pending.price,  # HIGH - where downward move started
@@ -496,6 +524,7 @@ class LegDetector:
                     pivot_index=bar.index,
                     price_at_creation=bar_close,
                     last_modified_bar=bar.index,
+                    impulse=_calculate_impulse(leg_range, pending.bar_index, bar.index),
                 )
                 self.state.active_legs.append(new_bear_leg)
                 # Clear pending origin after leg creation (#197)
@@ -565,6 +594,7 @@ class LegDetector:
                 # Skip if dominated by existing leg with better origin (#194)
                 if (pending_bear.bar_index < pending_bull.bar_index
                     and not self._pruner.would_leg_be_dominated(self.state, 'bear', pending_bear.price)):
+                    leg_range = abs(pending_bear.price - pending_bull.price)
                     new_bear_leg = Leg(
                         direction='bear',
                         origin_price=pending_bear.price,  # HIGH - where downward move started
@@ -573,6 +603,7 @@ class LegDetector:
                         pivot_index=pending_bull.bar_index,
                         price_at_creation=bar_close,
                         last_modified_bar=bar.index,
+                        impulse=_calculate_impulse(leg_range, pending_bear.bar_index, pending_bull.bar_index),
                     )
                     self.state.active_legs.append(new_bear_leg)
                     # Clear pending origins after leg creation (#197)
@@ -602,6 +633,7 @@ class LegDetector:
                 # Skip if dominated by existing leg with better origin (#194)
                 if (pending_bull.bar_index < pending_bear.bar_index
                     and not self._pruner.would_leg_be_dominated(self.state, 'bull', pending_bull.price)):
+                    leg_range = abs(pending_bear.price - pending_bull.price)
                     new_bull_leg = Leg(
                         direction='bull',
                         origin_price=pending_bull.price,  # LOW - where upward move started
@@ -610,6 +642,7 @@ class LegDetector:
                         pivot_index=pending_bear.bar_index,
                         price_at_creation=bar_close,
                         last_modified_bar=bar.index,
+                        impulse=_calculate_impulse(leg_range, pending_bull.bar_index, pending_bear.bar_index),
                     )
                     self.state.active_legs.append(new_bull_leg)
                     # Clear pending origins after leg creation (#197)

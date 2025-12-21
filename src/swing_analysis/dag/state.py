@@ -98,6 +98,7 @@ class DetectorState:
                 "price_at_creation": str(leg.price_at_creation),
                 "leg_id": leg.leg_id,
                 "swing_id": leg.swing_id,
+                "impulse": leg.impulse,
             })
 
         # Serialize pending origins
@@ -208,6 +209,7 @@ class DetectorState:
                 price_at_creation=Decimal(leg_data.get("price_at_creation", "0")),
                 leg_id=leg_data.get("leg_id", SwingNode.generate_id()),
                 swing_id=leg_data.get("swing_id"),
+                impulse=leg_data.get("impulse", 0.0),
             )
             active_legs.append(leg)
 

@@ -38,7 +38,8 @@ class DirectionConfig:
         pivot_breach_threshold: Fraction of leg range beyond pivot that
             triggers pruning of formed legs. Default 0.10 (10%) (#208).
         engulfed_breach_threshold: Combined breach fraction (origin + pivot)
-            that marks a leg as engulfed and deletes it. Default 0.20 (#208).
+            that marks a leg as engulfed and deletes it. Default 0.0 (strict
+            deletion while collecting impulse data for threshold tuning) (#236).
     """
     formation_fib: float = 0.287
     self_separation: float = 0.10
@@ -48,7 +49,7 @@ class DirectionConfig:
     child_swing_tolerance: float = 0.10
     invalidation_threshold: float = 0.382
     pivot_breach_threshold: float = 0.10
-    engulfed_breach_threshold: float = 0.20
+    engulfed_breach_threshold: float = 0.0  # Strict: any engulfed leg is deleted (#236)
 
 
 @dataclass(frozen=True)

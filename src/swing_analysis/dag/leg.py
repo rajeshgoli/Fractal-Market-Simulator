@@ -58,6 +58,7 @@ class Leg:
     swing_id: Optional[str] = None  # Set when leg forms into swing (#174)
     max_origin_breach: Optional[Decimal] = None  # Max breach beyond origin (None if never breached)
     max_pivot_breach: Optional[Decimal] = None  # Max breach beyond pivot (None if never breached)
+    impulse: float = 0.0  # Points per bar (range / bar_count) - measures move intensity (#236)
 
     @property
     def range(self) -> Decimal:
