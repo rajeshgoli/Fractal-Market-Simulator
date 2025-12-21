@@ -238,10 +238,6 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
         if (existing.type !== item.type) return false;
         if (item.type === 'leg') {
           return (existing.data as { leg_id: string }).leg_id === (item.data as { leg_id: string }).leg_id;
-        } else if (item.type === 'orphaned_origin') {
-          const e = existing.data as { bar_index: number; direction: string };
-          const n = item.data as { bar_index: number; direction: string };
-          return e.bar_index === n.bar_index && e.direction === n.direction;
         } else {
           return (existing.data as { direction: string }).direction === (item.data as { direction: string }).direction;
         }
@@ -256,10 +252,6 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
       if (existing.type !== item.type) return true;
       if (item.type === 'leg') {
         return (existing.data as { leg_id: string }).leg_id !== (item.data as { leg_id: string }).leg_id;
-      } else if (item.type === 'orphaned_origin') {
-        const e = existing.data as { bar_index: number; direction: string };
-        const n = item.data as { bar_index: number; direction: string };
-        return !(e.bar_index === n.bar_index && e.direction === n.direction);
       } else {
         return (existing.data as { direction: string }).direction !== (item.data as { direction: string }).direction;
       }

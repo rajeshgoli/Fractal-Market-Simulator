@@ -3,7 +3,6 @@ Leg pruning logic for the DAG layer.
 
 Handles all pruning operations:
 - Turn pruning: consolidate legs on direction change
-- Subtree pruning: apply 10% rule across origin groups
 - Proximity pruning: consolidate similar-sized legs
 - Domination pruning: prune legs with worse origins
 - Breach pruning: prune formed legs when pivot is breached (#208)
@@ -189,14 +188,13 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Prune legs with recursive 10% rule, multi-origin preservation, and proximity consolidation.
+        Prune legs with multi-origin preservation and proximity consolidation.
 
         1. Group legs by origin
         2. For each origin group: keep ONLY the largest (prune others)
            - On tie, keep earliest pivot bar (#190)
-        3. Recursive 10% across origins: prune small contained origins (#185)
-        4. Proximity consolidation: prune legs within threshold of survivors (#203)
-        5. Active swing immunity: legs with active swings are never pruned
+        3. Proximity consolidation: prune legs within threshold of survivors (#203)
+        4. Active swing immunity: legs with active swings are never pruned
 
         This preserves nested structure while compressing noise.
 
@@ -263,14 +261,7 @@ class LegPruner:
                     reason="turn_prune",
                 ))
 
-        # Step 2: Recursive 10% across origins (subtree pruning)
-        # Apply 10% rule to prune small origin groups whose best leg is
-        # contained within a larger origin's best leg range
-        events.extend(self._apply_recursive_subtree_prune(
-            state, direction, bar, timestamp, best_per_origin, pruned_leg_ids, active_swing_ids
-        ))
-
-        # Step 3: Proximity-based consolidation (#203)
+        # Step 2: Proximity-based consolidation (#203)
         # Prune legs that are too similar to survivors (within relative difference threshold)
         events.extend(self._apply_proximity_prune(
             state, direction, bar, timestamp, best_per_origin, pruned_leg_ids, active_swing_ids
@@ -281,119 +272,6 @@ class LegPruner:
             leg for leg in state.active_legs
             if leg.leg_id not in pruned_leg_ids
         ]
-
-        return events
-
-    def _apply_recursive_subtree_prune(
-        self,
-        state: DetectorState,
-        direction: str,
-        bar: Bar,
-        timestamp: datetime,
-        best_per_origin: Dict[Tuple[Decimal, int], Leg],
-        pruned_leg_ids: Set[str],
-        active_swing_ids: Set[str],
-    ) -> List[LegPrunedEvent]:
-        """
-        Apply recursive 10% rule across origin groups (#185).
-
-        For each origin's best leg, check if smaller origins are contained
-        within its range. If a contained origin's best leg is <10% of the
-        parent, prune all legs from that origin.
-
-        Active swing immunity: Legs with active swings are never pruned.
-        If an origin has any active swings, the entire origin is immune.
-
-        This creates fractal compression: detailed near active zone, sparse further back.
-
-        Args:
-            state: Current detector state
-            direction: 'bull' or 'bear'
-            bar: Current bar
-            timestamp: Timestamp for events
-            best_per_origin: Dict mapping origin -> best leg for that origin
-            pruned_leg_ids: Set to track pruned leg IDs (mutated)
-            active_swing_ids: Set of swing IDs that are currently active
-
-        Returns:
-            List of LegPrunedEvent for pruned legs with reason="subtree_prune"
-        """
-        events: List[LegPrunedEvent] = []
-        prune_threshold = Decimal(str(self.config.subtree_prune_threshold))
-
-        # Skip subtree pruning if threshold is 0 (disabled)
-        if prune_threshold == 0:
-            return events
-
-        # Sort origins by their best leg's range (descending)
-        sorted_origins = sorted(
-            best_per_origin.items(),
-            key=lambda x: x[1].range,
-            reverse=True
-        )
-
-        # Track surviving origins
-        pruned_origins: Set[Tuple[Decimal, int]] = set()
-
-        # Build map of origins with active swings (immune from subtree pruning)
-        immune_origins: Set[Tuple[Decimal, int]] = set()
-        for leg in state.active_legs:
-            if leg.direction == direction and leg.swing_id and leg.swing_id in active_swing_ids:
-                immune_origins.add((leg.origin_price, leg.origin_index))
-
-        for i, (parent_origin, parent_leg) in enumerate(sorted_origins):
-            if parent_origin in pruned_origins:
-                continue
-
-            parent_threshold = prune_threshold * parent_leg.range
-
-            # Check smaller origins for containment
-            for child_origin, child_leg in sorted_origins[i + 1:]:
-                if child_origin in pruned_origins:
-                    continue
-                if child_leg.leg_id in pruned_leg_ids:
-                    continue
-                # Active swing immunity: don't prune origins with active swings
-                if child_origin in immune_origins:
-                    continue
-
-                # Check if child is contained within parent's range
-                if direction == 'bull':
-                    # Bull: origin=LOW, pivot=HIGH
-                    # Contained if child's origin >= parent's origin (both LOWs)
-                    # and child's pivot <= parent's pivot (both HIGHs)
-                    in_range = (child_leg.origin_price >= parent_leg.origin_price and
-                                child_leg.pivot_price <= parent_leg.pivot_price)
-                else:
-                    # Bear: origin=HIGH, pivot=LOW
-                    # Contained if child's origin <= parent's origin (both HIGHs)
-                    # and child's pivot >= parent's pivot (both LOWs)
-                    in_range = (child_leg.origin_price <= parent_leg.origin_price and
-                                child_leg.pivot_price >= parent_leg.pivot_price)
-
-                # If contained and < 10% of parent, prune
-                if in_range and child_leg.range < parent_threshold:
-                    pruned_origins.add(child_origin)
-
-                    # Prune all legs from this origin (except those with active swings)
-                    for leg in state.active_legs:
-                        if leg.leg_id in pruned_leg_ids:
-                            continue
-                        if leg.direction != direction:
-                            continue
-                        if (leg.origin_price, leg.origin_index) == child_origin:
-                            # Active swing immunity check
-                            if leg.swing_id and leg.swing_id in active_swing_ids:
-                                continue
-                            leg.status = 'pruned'
-                            pruned_leg_ids.add(leg.leg_id)
-                            events.append(LegPrunedEvent(
-                                bar_index=bar.index,
-                                timestamp=timestamp,
-                                swing_id="",
-                                leg_id=leg.leg_id,
-                                reason="subtree_prune",
-                            ))
 
         return events
 

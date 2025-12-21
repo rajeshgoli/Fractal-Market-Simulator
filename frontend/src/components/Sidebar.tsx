@@ -235,10 +235,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             origin_index: leg.origin_index,
             range: leg.range,
           })),
-          orphaned_origins: {
-            bull: dagContext.orphanedOrigins.bull.map(o => ({ price: o.price, bar_index: o.bar_index })),
-            bear: dagContext.orphanedOrigins.bear.map(o => ({ price: o.price, bar_index: o.bar_index })),
-          },
           pending_origins: {
             bull: dagContext.pendingOrigins.bull
               ? { price: dagContext.pendingOrigins.bull.price, bar_index: dagContext.pendingOrigins.bull.bar_index }
@@ -263,14 +259,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               origin_price: leg.origin_price,
               pivot_index: leg.pivot_index,
               origin_index: leg.origin_index,
-            };
-          } else if (item.type === 'orphaned_origin') {
-            const origin = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear' };
-            return {
-              type: 'orphaned_origin' as const,
-              direction: origin.direction,
-              price: origin.price,
-              bar_index: origin.bar_index,
             };
           } else {
             const pending = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear'; source: string };
@@ -557,10 +545,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const leg = item.data as DagLeg;
                   label = `${leg.direction.toUpperCase()} Leg @${leg.pivot_index}`;
                   colorClass = leg.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
-                } else if (item.type === 'orphaned_origin') {
-                  const origin = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear' };
-                  label = `${origin.direction.toUpperCase()} Orphan @${origin.bar_index}`;
-                  colorClass = origin.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
                 } else {
                   const pending = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear' };
                   label = `${pending.direction.toUpperCase()} Pending @${pending.bar_index}`;

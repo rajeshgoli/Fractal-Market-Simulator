@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { DagStateResponse, DagLeg, DagOrphanedOrigin, DagPendingOrigin } from '../lib/api';
+import { DagStateResponse, DagLeg, DagPendingOrigin } from '../lib/api';
 import { LegEvent, HighlightedDagItem } from '../types';
 import { GitBranch, Circle, Target, History, ChevronDown, Paperclip } from 'lucide-react';
 
 // Types for attachable items
 export type AttachableItem =
   | { type: 'leg'; data: DagLeg }
-  | { type: 'orphaned_origin'; data: DagOrphanedOrigin & { direction: 'bull' | 'bear' } }
   | { type: 'pending_origin'; data: DagPendingOrigin };
 
 interface DAGStatePanelProps {
@@ -150,9 +149,6 @@ const isItemAttached = (
     if (item.type !== type) return false;
     if (type === 'leg') {
       return (item.data as DagLeg).leg_id === identifier;
-    } else if (type === 'orphaned_origin') {
-      const data = item.data as DagOrphanedOrigin & { direction: 'bull' | 'bear' };
-      return `${data.direction}-${data.bar_index}` === identifier;
     } else if (type === 'pending_origin') {
       return (item.data as DagPendingOrigin).direction === identifier;
     }
@@ -172,9 +168,8 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
   focusedLegId,
 }) => {
   // Expansion state for each section
-  const [legsLimit, setLegsLimit] = useState(6);
-  const [bullOriginsLimit, setBullOriginsLimit] = useState(4);
-  const [bearOriginsLimit, setBearOriginsLimit] = useState(4);
+  const [bullLegsLimit, setBullLegsLimit] = useState(6);
+  const [bearLegsLimit, setBearLegsLimit] = useState(6);
 
   // Refs for leg items to enable scroll-into-view
   const legRefsMap = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -183,13 +178,18 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
   useEffect(() => {
     if (!focusedLegId || !dagState) return;
 
-    // Find the leg index to check if we need to expand the list
-    const legIndex = dagState.active_legs.findIndex(leg => leg.leg_id === focusedLegId);
-    if (legIndex === -1) return;
+    // Find the leg to check direction and expand appropriate list
+    const leg = dagState.active_legs.find(l => l.leg_id === focusedLegId);
+    if (!leg) return;
+
+    const directionLegs = dagState.active_legs.filter(l => l.direction === leg.direction);
+    const legIndex = directionLegs.findIndex(l => l.leg_id === focusedLegId);
 
     // Expand the list if the focused leg is hidden
-    if (legIndex >= legsLimit) {
-      setLegsLimit(legIndex + 1);
+    if (leg.direction === 'bull' && legIndex >= bullLegsLimit) {
+      setBullLegsLimit(legIndex + 1);
+    } else if (leg.direction === 'bear' && legIndex >= bearLegsLimit) {
+      setBearLegsLimit(legIndex + 1);
     }
 
     // Scroll to the leg element after a brief delay to allow render
@@ -199,7 +199,7 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
         element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     }, 50);
-  }, [focusedLegId, dagState, legsLimit]);
+  }, [focusedLegId, dagState, bullLegsLimit, bearLegsLimit]);
 
   // Toggle attachment for an item
   const handleItemClick = (item: AttachableItem, identifier: string) => {
@@ -227,7 +227,9 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
     );
   }
 
-  const { active_legs, orphaned_origins, pending_origins, leg_counts } = dagState;
+  const { active_legs, pending_origins, leg_counts } = dagState;
+  const bullLegs = active_legs.filter(leg => leg.direction === 'bull');
+  const bearLegs = active_legs.filter(leg => leg.direction === 'bear');
 
   return (
     <div className="h-full bg-app-secondary border-t border-app-border flex flex-col font-sans text-sm">
@@ -250,19 +252,19 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
 
       {/* Content Grid */}
       <div className="flex-1 grid grid-cols-4 divide-x divide-app-border/50 overflow-hidden">
-        {/* Column 1: Active Legs */}
+        {/* Column 1: Bull Legs */}
         <div className="p-3 flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 mb-2">
-            <Circle size={12} className="text-trading-blue" />
-            <span className="text-xs text-app-muted font-medium uppercase tracking-wider">
-              Active Legs
+            <Circle size={12} className="text-trading-bull" />
+            <span className="text-xs text-trading-bull font-medium uppercase tracking-wider">
+              Bull Legs
             </span>
           </div>
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-            {active_legs.length === 0 ? (
-              <div className="text-xs text-app-muted italic">No active legs</div>
+            {bullLegs.length === 0 ? (
+              <div className="text-xs text-app-muted italic">No bull legs</div>
             ) : (
-              active_legs.slice(0, legsLimit).map((leg) => (
+              bullLegs.slice(0, bullLegsLimit).map((leg) => (
                 <LegItem
                   key={leg.leg_id}
                   leg={leg}
@@ -282,109 +284,59 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
                 />
               ))
             )}
-            {active_legs.length > legsLimit && (
+            {bullLegs.length > bullLegsLimit && (
               <button
-                onClick={() => setLegsLimit(prev => prev + 10)}
+                onClick={() => setBullLegsLimit(prev => prev + 10)}
                 className="w-full text-xs text-trading-blue hover:text-trading-blue/80 text-center py-2 border border-dashed border-app-border rounded hover:border-trading-blue/50 transition-colors flex items-center justify-center gap-1"
               >
                 <ChevronDown size={12} />
-                +{active_legs.length - legsLimit} more
+                +{bullLegs.length - bullLegsLimit} more
               </button>
             )}
           </div>
         </div>
 
-        {/* Column 2: Orphaned Origins */}
+        {/* Column 2: Bear Legs */}
         <div className="p-3 flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 mb-2">
-            <Target size={12} className="text-trading-orange" />
-            <span className="text-xs text-app-muted font-medium uppercase tracking-wider">
-              Orphaned Origins
+            <Circle size={12} className="text-trading-bear" />
+            <span className="text-xs text-trading-bear font-medium uppercase tracking-wider">
+              Bear Legs
             </span>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-            {/* Bull Origins */}
-            <div>
-              <span className="text-[10px] text-trading-bull uppercase block mb-1">Bull</span>
-              {orphaned_origins.bull.length === 0 ? (
-                <span className="text-xs text-app-muted italic">None</span>
-              ) : (
-                <div className="space-y-1">
-                  {orphaned_origins.bull.slice(0, bullOriginsLimit).map((origin, idx) => {
-                    const originId = `bull-${origin.bar_index}`;
-                    const isHighlighted = highlightedItem?.type === 'orphaned_origin' && highlightedItem.id === `bull-${idx}`;
-                    const isAttached = isItemAttached(attachedItems, 'orphaned_origin', originId);
-                    return (
-                      <div
-                        key={idx}
-                        className={`text-xs bg-trading-bull/10 rounded px-2 py-1 flex justify-between cursor-pointer transition-all duration-150 ${
-                          isAttached ? 'ring-2 ring-trading-purple/50' : isHighlighted ? 'ring-2 ring-trading-bull/50 scale-[1.02]' : 'hover:bg-trading-bull/20'
-                        }`}
-                        onMouseEnter={() => onHoverItem?.({ type: 'orphaned_origin', id: `bull-${idx}`, direction: 'bull' })}
-                        onMouseLeave={() => onHoverItem?.(null)}
-                        onClick={() => handleItemClick({ type: 'orphaned_origin', data: { ...origin, direction: 'bull' } }, originId)}
-                      >
-                        <span className="font-mono flex items-center gap-1">
-                          {isAttached && <Paperclip size={10} className="text-trading-purple" />}
-                          {formatPrice(origin.price)}
-                        </span>
-                        <span className="text-app-muted">@{origin.bar_index}</span>
-                      </div>
-                    );
-                  })}
-                  {orphaned_origins.bull.length > bullOriginsLimit && (
-                    <button
-                      onClick={() => setBullOriginsLimit(prev => prev + 10)}
-                      className="w-full text-[10px] text-trading-blue hover:text-trading-blue/80 text-center py-1 border border-dashed border-app-border rounded hover:border-trading-blue/50 transition-colors flex items-center justify-center gap-1"
-                    >
-                      <ChevronDown size={10} />
-                      +{orphaned_origins.bull.length - bullOriginsLimit} more
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            {/* Bear Origins */}
-            <div>
-              <span className="text-[10px] text-trading-bear uppercase block mb-1">Bear</span>
-              {orphaned_origins.bear.length === 0 ? (
-                <span className="text-xs text-app-muted italic">None</span>
-              ) : (
-                <div className="space-y-1">
-                  {orphaned_origins.bear.slice(0, bearOriginsLimit).map((origin, idx) => {
-                    const originId = `bear-${origin.bar_index}`;
-                    const isHighlighted = highlightedItem?.type === 'orphaned_origin' && highlightedItem.id === `bear-${idx}`;
-                    const isAttached = isItemAttached(attachedItems, 'orphaned_origin', originId);
-                    return (
-                      <div
-                        key={idx}
-                        className={`text-xs bg-trading-bear/10 rounded px-2 py-1 flex justify-between cursor-pointer transition-all duration-150 ${
-                          isAttached ? 'ring-2 ring-trading-purple/50' : isHighlighted ? 'ring-2 ring-trading-bear/50 scale-[1.02]' : 'hover:bg-trading-bear/20'
-                        }`}
-                        onMouseEnter={() => onHoverItem?.({ type: 'orphaned_origin', id: `bear-${idx}`, direction: 'bear' })}
-                        onMouseLeave={() => onHoverItem?.(null)}
-                        onClick={() => handleItemClick({ type: 'orphaned_origin', data: { ...origin, direction: 'bear' } }, originId)}
-                      >
-                        <span className="font-mono flex items-center gap-1">
-                          {isAttached && <Paperclip size={10} className="text-trading-purple" />}
-                          {formatPrice(origin.price)}
-                        </span>
-                        <span className="text-app-muted">@{origin.bar_index}</span>
-                      </div>
-                    );
-                  })}
-                  {orphaned_origins.bear.length > bearOriginsLimit && (
-                    <button
-                      onClick={() => setBearOriginsLimit(prev => prev + 10)}
-                      className="w-full text-[10px] text-trading-blue hover:text-trading-blue/80 text-center py-1 border border-dashed border-app-border rounded hover:border-trading-blue/50 transition-colors flex items-center justify-center gap-1"
-                    >
-                      <ChevronDown size={10} />
-                      +{orphaned_origins.bear.length - bearOriginsLimit} more
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+            {bearLegs.length === 0 ? (
+              <div className="text-xs text-app-muted italic">No bear legs</div>
+            ) : (
+              bearLegs.slice(0, bearLegsLimit).map((leg) => (
+                <LegItem
+                  key={leg.leg_id}
+                  leg={leg}
+                  isHighlighted={highlightedItem?.type === 'leg' && highlightedItem.id === leg.leg_id}
+                  isFocused={focusedLegId === leg.leg_id}
+                  isAttached={isItemAttached(attachedItems, 'leg', leg.leg_id)}
+                  onMouseEnter={() => onHoverItem?.({ type: 'leg', id: leg.leg_id, direction: leg.direction })}
+                  onMouseLeave={() => onHoverItem?.(null)}
+                  onClick={() => handleItemClick({ type: 'leg', data: leg }, leg.leg_id)}
+                  innerRef={(el) => {
+                    if (el) {
+                      legRefsMap.current.set(leg.leg_id, el);
+                    } else {
+                      legRefsMap.current.delete(leg.leg_id);
+                    }
+                  }}
+                />
+              ))
+            )}
+            {bearLegs.length > bearLegsLimit && (
+              <button
+                onClick={() => setBearLegsLimit(prev => prev + 10)}
+                className="w-full text-xs text-trading-blue hover:text-trading-blue/80 text-center py-2 border border-dashed border-app-border rounded hover:border-trading-blue/50 transition-colors flex items-center justify-center gap-1"
+              >
+                <ChevronDown size={12} />
+                +{bearLegs.length - bearLegsLimit} more
+              </button>
+            )}
           </div>
         </div>
 

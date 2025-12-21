@@ -283,7 +283,7 @@ export interface CalibrationDataHierarchical extends CalibrationData {
  * Represents an item hovered in the DAG State Panel for chart highlighting.
  */
 export interface HighlightedDagItem {
-  type: 'leg' | 'orphaned_origin' | 'pending_origin';
+  type: 'leg' | 'pending_origin';
   id: string;  // leg_id or origin key (e.g., "bull-0")
   direction: 'bull' | 'bear';
 }

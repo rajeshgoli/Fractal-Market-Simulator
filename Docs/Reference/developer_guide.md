@@ -304,12 +304,7 @@ ref_layer = ReferenceLayer(config)
 detector, events = calibrate(bars, config, ref_layer=ref_layer)
 # Events now include Reference layer invalidation/completion events
 
-# Option 5: Configure subtree pruning threshold
-# Default is 0.0 (disabled). Set to 0.1 for 10% pruning of small legs/origins.
-config = SwingConfig.default().with_subtree_prune(0.1)
-detector, events = calibrate(bars, config)
-
-# Option 6: Process bars incrementally
+# Option 5: Process bars incrementally
 config = SwingConfig.default()
 detector = LegDetector(config)
 for bar in bars:
@@ -350,7 +345,6 @@ The pipeline order per bar:
 - **Independent invalidation** — Each swing checks its own defended pivot (no cascade)
 - **DAG hierarchy** — Swings can have multiple parents for structural context
 - **Multi-TF optimization** — Uses higher-timeframe bars (1h, 4h, 1d) as candidates for O(1) candidate pairs vs O(lookback²)
-- **Sibling swing detection** — Orphaned origins from invalidated legs are preserved and can form sibling swings sharing the same defended pivot (#163)
 - **Directional leg creation** — Bull legs are only created in TYPE_2_BULL (HH, HL) and bear legs only in TYPE_2_BEAR (LH, LL). This ensures correct temporal order: origin_index < pivot_index for all legs (#195, #197)
 - **Leg terminology** — Origin is where the move started (fixed), Pivot is the defended extreme (extends). Bull leg: origin=LOW, pivot=HIGH. Bear leg: origin=HIGH, pivot=LOW (#197)
 
@@ -362,7 +356,7 @@ The pipeline order per bar:
 | `SwingCompletedEvent` | Price reaches 2.0 extension target |
 | `LevelCrossEvent` | Price crosses Fib level boundary |
 | `LegCreatedEvent` | New candidate leg is created (pre-formation) |
-| `LegPrunedEvent` | Leg is removed (reasons: `turn_prune`, `subtree_prune`, `proximity_prune`, `extension_prune`) |
+| `LegPrunedEvent` | Leg is removed (reasons: `turn_prune`, `proximity_prune`, `breach_prune`, `extension_prune`) |
 | `LegInvalidatedEvent` | Leg breaches invalidation threshold (configurable, default 0.382) |
 
 **Tolerance rules (Rule 2.2):**
@@ -370,48 +364,18 @@ The pipeline order per bar:
 - Children of big swings: basic tolerance (0.10)
 - Others: no tolerance (absolute)
 
-**Sibling swing detection (orphaned origins):**
+**Turn pruning:**
 
-When a leg is invalidated, its origin is preserved as an "orphaned origin" for potential sibling swing formation. This enables detection of swings like L2, L4, L5, L7 from `valid_swings.md` that share the same defended pivot but have different origins.
+During strong trends, the DAG creates many parallel legs with different origins all converging to the same pivot (the defended extreme extends with price). When a directional turn is detected (Type 2-Bear bar for bull legs, Type 2-Bull bar for bear legs), we apply turn pruning:
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Orphaned Origins Flow                         │
-│                                                                  │
-│  1. Leg forms: origin=5837, pivot=5525                          │
-│  2. Price drops below invalidation threshold                    │
-│  3. Leg invalidated → origin 5837 preserved as orphaned         │
-│  4. Price continues to 4832, reverses                           │
-│  5. New leg forms: origin=6166, pivot=4832                      │
-│  6. At formation: also check orphaned origins                   │
-│     → Sibling swing (5837→4832) forms alongside (6166→4832)     │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-Orphaned origins are managed with two cleanup mechanisms:
-1. **Leg creation cleanup (#196)**: When a new leg is created, any orphaned origin matching the leg's origin (same price and bar index) is removed. An origin can't be both "orphaned" and "in use" by an active leg.
-2. **Subtree pruning**: Each bar, origins within the configured threshold of the larger range (measured from origin to current working pivot) are pruned. This keeps the list sparse while preserving structurally significant origins. Controlled by `subtree_prune_threshold` (default: 0.0 = disabled).
-
-**Recursive subtree pruning (#185):**
-
-During strong trends, the DAG creates many parallel legs with different origins all converging to the same pivot (the defended extreme extends with price). When a directional turn is detected (Type 2-Bear bar for bull legs, Type 2-Bull bar for bear legs), we apply two-stage pruning:
-
-**Step 1: Within-origin pruning (turn_prune)**
+**Within-origin pruning (turn_prune)**
 1. Group active legs by direction that share the same origin (price and index)
 2. For each group: keep ONLY the leg with the largest range
 3. Emit `LegPrunedEvent` with `reason="turn_prune"` for discarded legs
 
-**Step 2: Cross-origin subtree pruning (configurable threshold)**
-1. Sort remaining origins by their best leg's range (descending)
-2. For each origin's best leg, check if smaller origins are "contained" within its range
-3. If a contained origin's best leg is < threshold of the parent, prune all legs from that origin
-4. Emit `LegPrunedEvent` with `reason="subtree_prune"` for discarded legs
-5. Threshold controlled by `SwingConfig.subtree_prune_threshold` (default: 0.0 = disabled, set to 0.1 for 10%)
+**Proximity-based consolidation (#203)**
 
-**Step 3: Proximity-based consolidation (#203)**
-
-After subtree pruning, legs within a configurable relative difference threshold are consolidated:
+After turn pruning, legs within a configurable relative difference threshold are consolidated:
 1. Sort remaining legs by range (descending)
 2. Keep first (largest) as survivor
 3. For each remaining leg: if relative_diff(leg, nearest_survivor) < threshold, prune
@@ -516,7 +480,7 @@ for swing, result in completed:
 | `update_invalidation_on_bar(swings, bar)` | Batch invalidation check |
 | `update_completion_on_bar(swings, bar)` | Batch completion check |
 
-*Note: Separation filtering (Rules 4.1, 4.2) has been removed (#164). The DAG handles separation at formation time via 10% pruning of orphaned origins.*
+*Note: Separation filtering (Rules 4.1, 4.2) has been removed (#164). The DAG handles separation at formation time via proximity and breach pruning.*
 
 **Invalidation thresholds (Rule 2.2):**
 | Swing Size | Touch Tolerance | Close Tolerance |
@@ -792,8 +756,7 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 # DAG State: GET /api/dag/state
 # Returns internal leg-level state for DAG visualization:
 # - active_legs: currently tracked legs (pre-formation candidates)
-# - orphaned_origins: preserved origins for sibling swing detection
-# - pending_pivots: potential pivots awaiting confirmation
+# - pending_origins: potential origins awaiting confirmation for each direction
 # - leg_counts: count by direction (bull/bear)
 ```
 
@@ -841,7 +804,6 @@ The feedback system captures user observations with rich context snapshots:
 ```typescript
 type FeedbackAttachment =
   | { type: 'leg'; leg_id: string; direction: 'bull' | 'bear'; pivot_price: number; origin_price: number; ... }
-  | { type: 'orphaned_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number }
   | { type: 'pending_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number; source: string };
 ```
 

@@ -9,7 +9,7 @@ Read in order:
 
 **Core architectural decisions:**
 - Hierarchical swing model (SwingNode DAG) — replaces S/M/L/XL buckets
-- Single incremental algorithm (HierarchicalDetector.process_bar())
+- Single incremental algorithm (LegDetector.process_bar())
 - Fibonacci-based structural analysis (0.382 formation/invalidation)
 - Resolution-agnostic (1m to 1mo)
 - SwingConfig centralizes all detection parameters
@@ -20,13 +20,15 @@ Read in order:
 - **DAG/Reference separation:** Structural tracking vs semantic filtering
 - **Rules by construction:** Temporal ordering from bar relationships (Type 1/2/3)
 - **Strict inter-bar causality:** Legs only form when pivots are from different bars (#189)
-- **Sibling detection:** Orphaned origins with recursive 10% pruning
-- **Turn pruning:** Within-origin (keep largest) + cross-origin (10% subtree) + active swing immunity
+- **Turn pruning:** Within-origin (keep largest) + active swing immunity
+- **Modular DAG layer:** dag/ subdirectory with LegDetector, LegPruner, state, calibrate, leg modules (#206)
+- **Structure-driven pruning:** Proximity consolidation (5%), pivot breach (10%), engulfed (20%) (#203, #208)
 
 **Known debt:**
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
 - #177 — Minor: missing `invalidated_at_bar` field, AppState/cache duplication
-- `SwingConfig.lookback_bars` — vestigial from pre-DAG architecture, unused by HierarchicalDetector (cleanup candidate)
+- `SwingConfig.lookback_bars` — vestigial from pre-DAG architecture, unused by LegDetector (cleanup candidate)
+- `SwingConfig.staleness_threshold` — DEPRECATED, kept for backward compat only
 
 ---
 
@@ -65,22 +67,25 @@ With semantics enforced, L1-L7 validation can proceed:
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| HierarchicalDetector | **Complete** | O(n log k), 4.06s for 10K bars |
+| LegDetector (dag/) | **Complete** | O(n log k), modularized into 5 modules |
+| LegPruner (dag/) | **Complete** | Handles all pruning: domination, proximity, breach, engulfed |
 | Temporal Causality | **Fixed** | Strict inter-bar ordering (#189) |
 | Leg Origin Updates | **Fixed** | Origins update on price extensions (#188) |
-| SwingConfig | Complete | Centralizes all parameters |
+| SwingConfig | Complete | Centralizes all parameters including new thresholds |
 | SwingNode | Complete | DAG hierarchy model |
 | ReferenceFrame | Complete | Central coordinate abstraction |
 | ReferenceLayer | Complete | Tolerance/completion rules |
-| Sibling Detection | Complete | Orphaned origins + recursive 10% pruning |
-| Turn Pruning | Complete | Within-origin + cross-origin + immunity |
+| Turn Pruning | Complete | Within-origin pruning + active swing immunity |
+| Pivot Breach Pruning | Complete | 10% threshold with replacement leg (#208) |
+| Engulfed Detection | Complete | 20% combined breach deletes leg (#208) |
+| Proximity Consolidation | Complete | 5% relative difference consolidation (#203) |
 | Compatibility Adapter | Complete | SwingNode ↔ ReferenceSwing |
 | Replay View | Complete | Tree-based UI, forward playback |
-| DAG Visualization | Complete | Leg/origin visualization, hover highlighting |
+| DAG Visualization | Complete | Leg/origin visualization, hover highlighting, chart interaction |
 | Discretization | Complete | Accepts SwingNode via adapter |
 | V2 API Schemas | Complete | HierarchicalSwingResponse, etc. |
 | Legacy Detectors | Deleted | #153 completed cleanup |
-| Test Suite | Healthy | 628 tests passing |
+| Test Suite | Healthy | 693 tests passing |
 | Documentation | Current | Both guides updated |
 
 ---
@@ -101,13 +106,15 @@ With semantics enforced, L1-L7 validation can proceed:
 - **Single algorithm:** process_bar() for both calibration and playback
 - **Fibonacci levels:** Extended grid for discretization (16 levels)
 - **Resolution-agnostic:** 1m to 1mo source data supported
-- **Performance target:** <5s for 10K bars ✅ ACHIEVED (4.06s)
+- **Performance target:** <5s for 10K bars (achieved: 4.06s)
 - **Lean codebase:** 4 modules (data, swing_analysis, discretization, ground_truth_annotator)
 - **Backend-controlled boundaries:** Backend owns data visibility
 - **DAG/Reference separation:** DAG tracks structural extremas; Reference layer defines "good reference" semantics
 - **Rules by construction:** Temporal ordering enforced by bar relationships, not post-hoc filtering
 - **Strict inter-bar causality:** Legs require pivots from different bars (#189)
 - **Fractal compression:** Recursive 10% pruning creates detail near active zone, sparse further back
+- **Modular design:** dag/ subdirectory with clear separation of concerns (#206)
+- **Configurable thresholds:** All pruning/breach thresholds centralized in SwingConfig
 
 ---
 
@@ -150,13 +157,14 @@ With semantics enforced, L1-L7 validation can proceed:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
-| Dec 20 | #190-#197, #198 — Pivot/origin semantics fixes + architectural audit | All Accepted; design sound |
+| Dec 21 | #199-#208, #211 — Modularization, pruning redesign, UX enhancements (10 issues) | All Accepted |
+| Dec 20 | #190-#197, #198 — Pivot/origin semantics fixes + architectural audit | All Accepted |
 | Dec 19 | #187-#189, #183, UX fixes (10 changes) — Temporal causality fix, sidebar unification | All Accepted |
 | Dec 19 | #125, #180-#182, #185, #186 — DAG refinements + UX fixes (6 issues) | All Accepted |
 | Dec 19 | #168-#172, #179 — DAG Visualization Mode (6 issues) | All Accepted |
 | Dec 19 | #158-#175 — DAG algorithm rewrite + Reference layer (9 issues) | All Accepted |
 | Dec 19 | #152, #153, #155, #157 — Performance optimization + cleanup | All Accepted |
-| Dec 18 | #142-#151 — Swing Detection Rewrite (10 issues) | All Accepted; #154 performance issue identified |
+| Dec 18 | #142-#151 — Swing Detection Rewrite (10 issues) | All Accepted |
 | Dec 18 | Swing Detection Rewrite Spec | Approved; implementation plan created |
 | Dec 18 | #138, #140 (Phase 1) — Endpoint optimization, pre-formation protection | All Accepted |
 | Dec 18 | #130-#136 — Navigation, stats, API modularization | All Accepted |

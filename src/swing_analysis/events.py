@@ -296,18 +296,19 @@ class LegPrunedEvent(SwingEvent):
     """
     Emitted when a leg is removed due to staleness or pruning rules.
 
-    Legs are pruned when they become stale (price has moved 2x the leg's range
-    without the leg changing), or when turn pruning / subtree pruning applies (#185).
-
     Prune reasons:
     - "staleness": Leg hasn't changed in 10 bars while price moved 2x its range
     - "turn_prune": Leg is not the largest in its origin group (on directional turn)
-    - "subtree_prune": Origin's best leg is <10% of a containing parent leg
+    - "proximity_prune": Leg is too similar to a larger survivor
+    - "dominated_in_turn": Leg has a worse origin than another leg in the same turn
+    - "extension_prune": Invalidated leg has reached 3x extension
+    - "pivot_breach": Formed leg's pivot was breached beyond threshold
+    - "engulfed": Leg's origin was breached and pivot threshold exceeded
 
     Attributes:
         event_type: Always "LEG_PRUNED".
         leg_id: Unique identifier for the pruned leg.
-        reason: Why pruned ("staleness", "turn_prune", or "subtree_prune").
+        reason: Why the leg was pruned.
 
     Example:
         >>> from datetime import datetime
@@ -316,7 +317,7 @@ class LegPrunedEvent(SwingEvent):
         ...     timestamp=datetime.now(),
         ...     swing_id="",
         ...     leg_id="leg_abc123",
-        ...     reason="staleness",
+        ...     reason="turn_prune",
         ... )
         >>> event.event_type
         'LEG_PRUNED'
@@ -324,7 +325,7 @@ class LegPrunedEvent(SwingEvent):
 
     event_type: Literal["LEG_PRUNED"] = field(default="LEG_PRUNED", init=False)
     leg_id: str = ""
-    reason: str = ""  # 'staleness', 'turn_prune', 'subtree_prune'
+    reason: str = ""
 
 
 @dataclass
@@ -333,8 +334,7 @@ class LegInvalidatedEvent(SwingEvent):
     Emitted when a leg falls below 0.382 threshold (decisive invalidation).
 
     A leg is invalidated when price moves 38.2% of the leg's range beyond the
-    defended pivot. When a leg is invalidated, its origin is preserved as an
-    orphaned origin for potential sibling swing formation.
+    defended pivot.
 
     Attributes:
         event_type: Always "LEG_INVALIDATED".

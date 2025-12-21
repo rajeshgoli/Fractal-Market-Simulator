@@ -65,9 +65,6 @@ class SwingConfig:
         bear: Configuration for bear swing detection.
         lookback_bars: Number of bars to look back for candidate extrema.
         staleness_threshold: DEPRECATED - No longer used after #203.
-        subtree_prune_threshold: Threshold for pruning small legs/origins (default 0.0).
-            Legs/origins smaller than this fraction of a containing parent are pruned.
-            0.0 disables pruning, 0.1 would prune legs < 10% of parent.
         proximity_prune_threshold: Threshold for proximity-based leg consolidation (#203).
             Legs within this relative difference of each other are consolidated.
             Default 0.05 (5%). Set to 0.0 to disable.
@@ -88,7 +85,6 @@ class SwingConfig:
     bear: DirectionConfig = field(default_factory=DirectionConfig)
     lookback_bars: int = 50
     staleness_threshold: float = 2.0  # DEPRECATED: kept for backwards compatibility
-    subtree_prune_threshold: float = 0.0
     proximity_prune_threshold: float = 0.05
     stale_extension_threshold: float = 3.0
 
@@ -104,7 +100,6 @@ class SwingConfig:
             "bear": asdict(self.bear),
             "lookback_bars": self.lookback_bars,
             "staleness_threshold": self.staleness_threshold,
-            "subtree_prune_threshold": self.subtree_prune_threshold,
             "proximity_prune_threshold": self.proximity_prune_threshold,
             "stale_extension_threshold": self.stale_extension_threshold,
         }
@@ -123,7 +118,6 @@ class SwingConfig:
             bear=DirectionConfig(**bear_data) if bear_data else DirectionConfig(),
             lookback_bars=data.get("lookback_bars", 50),
             staleness_threshold=data.get("staleness_threshold", 2.0),
-            subtree_prune_threshold=data.get("subtree_prune_threshold", 0.0),
             proximity_prune_threshold=data.get("proximity_prune_threshold", 0.05),
             stale_extension_threshold=data.get("stale_extension_threshold", 3.0),
         )
@@ -153,7 +147,6 @@ class SwingConfig:
             bear=self.bear,
             lookback_bars=self.lookback_bars,
             staleness_threshold=self.staleness_threshold,
-            subtree_prune_threshold=self.subtree_prune_threshold,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
         )
@@ -171,7 +164,6 @@ class SwingConfig:
             bear=DirectionConfig(**bear_dict),
             lookback_bars=self.lookback_bars,
             staleness_threshold=self.staleness_threshold,
-            subtree_prune_threshold=self.subtree_prune_threshold,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
         )
@@ -187,7 +179,6 @@ class SwingConfig:
             bear=self.bear,
             lookback_bars=lookback_bars,
             staleness_threshold=self.staleness_threshold,
-            subtree_prune_threshold=self.subtree_prune_threshold,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
         )
@@ -205,27 +196,6 @@ class SwingConfig:
             bear=self.bear,
             lookback_bars=self.lookback_bars,
             staleness_threshold=staleness_threshold,
-            subtree_prune_threshold=self.subtree_prune_threshold,
-            proximity_prune_threshold=self.proximity_prune_threshold,
-            stale_extension_threshold=self.stale_extension_threshold,
-        )
-
-    def with_subtree_prune(self, subtree_prune_threshold: float) -> "SwingConfig":
-        """
-        Create a new config with modified subtree prune threshold.
-
-        Since SwingConfig is frozen, this creates a new instance.
-
-        Args:
-            subtree_prune_threshold: Fraction threshold for pruning small legs/origins.
-                0.0 disables pruning, 0.1 prunes legs < 10% of parent.
-        """
-        return SwingConfig(
-            bull=self.bull,
-            bear=self.bear,
-            lookback_bars=self.lookback_bars,
-            staleness_threshold=self.staleness_threshold,
-            subtree_prune_threshold=subtree_prune_threshold,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
         )
@@ -246,7 +216,6 @@ class SwingConfig:
             bear=self.bear,
             lookback_bars=self.lookback_bars,
             staleness_threshold=self.staleness_threshold,
-            subtree_prune_threshold=self.subtree_prune_threshold,
             proximity_prune_threshold=proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
         )
@@ -266,7 +235,6 @@ class SwingConfig:
             bear=self.bear,
             lookback_bars=self.lookback_bars,
             staleness_threshold=self.staleness_threshold,
-            subtree_prune_threshold=self.subtree_prune_threshold,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=stale_extension_threshold,
         )

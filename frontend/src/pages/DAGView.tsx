@@ -6,7 +6,6 @@ import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
 import { LegOverlay } from '../components/LegOverlay';
-import { OrphanedOriginsOverlay } from '../components/OrphanedOriginsOverlay';
 import { PendingOriginsOverlay } from '../components/PendingOriginsOverlay';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import {
@@ -126,10 +125,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         if (existing.type !== item.type) return false;
         if (item.type === 'leg') {
           return (existing.data as { leg_id: string }).leg_id === (item.data as { leg_id: string }).leg_id;
-        } else if (item.type === 'orphaned_origin') {
-          const e = existing.data as { bar_index: number; direction: string };
-          const n = item.data as { bar_index: number; direction: string };
-          return e.bar_index === n.bar_index && e.direction === n.direction;
         } else {
           return (existing.data as { direction: string }).direction === (item.data as { direction: string }).direction;
         }
@@ -144,10 +139,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
       if (existing.type !== item.type) return true;
       if (item.type === 'leg') {
         return (existing.data as { leg_id: string }).leg_id !== (item.data as { leg_id: string }).leg_id;
-      } else if (item.type === 'orphaned_origin') {
-        const e = existing.data as { bar_index: number; direction: string };
-        const n = item.data as { bar_index: number; direction: string };
-        return !(e.bar_index === n.bar_index && e.direction === n.direction);
       } else {
         return (existing.data as { direction: string }).direction !== (item.data as { direction: string }).direction;
       }
@@ -376,16 +367,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         origin_index: leg.origin_index,
         range: Math.abs(leg.origin_price - leg.pivot_price),
       })),
-      orphanedOrigins: {
-        bull: (dagState.orphaned_origins.bull || []).map(o => ({
-          price: o.price,
-          bar_index: o.bar_index,
-        })),
-        bear: (dagState.orphaned_origins.bear || []).map(o => ({
-          price: o.price,
-          bar_index: o.bar_index,
-        })),
-      },
       pendingOrigins: {
         bull: dagState.pending_origins.bull
           ? { price: dagState.pending_origins.bull.price, bar_index: dagState.pending_origins.bull.bar_index }
@@ -799,32 +780,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             onLegHover={handleChartLegHover}
             onLegClick={handleChartLegClick}
             onLegDoubleClick={handleChartLegDoubleClick}
-          />
-
-          {/* Orphaned Origins Overlays - render markers for preserved pivots (#182) */}
-          <OrphanedOriginsOverlay
-            markersPlugin={markers1Ref.current}
-            bullOrigins={dagState?.orphaned_origins.bull ?? []}
-            bearOrigins={dagState?.orphaned_origins.bear ?? []}
-            bars={chart1Bars}
-            currentPosition={currentPlaybackPosition}
-            highlightedOrigin={
-              highlightedDagItem?.type === 'orphaned_origin'
-                ? { direction: highlightedDagItem.direction, index: parseInt(highlightedDagItem.id.split('-')[1]) }
-                : undefined
-            }
-          />
-          <OrphanedOriginsOverlay
-            markersPlugin={markers2Ref.current}
-            bullOrigins={dagState?.orphaned_origins.bull ?? []}
-            bearOrigins={dagState?.orphaned_origins.bear ?? []}
-            bars={chart2Bars}
-            currentPosition={currentPlaybackPosition}
-            highlightedOrigin={
-              highlightedDagItem?.type === 'orphaned_origin'
-                ? { direction: highlightedDagItem.direction, index: parseInt(highlightedDagItem.id.split('-')[1]) }
-                : undefined
-            }
           />
 
           {/* Pending Origins Overlays - render price lines for highlighted pending origins */}

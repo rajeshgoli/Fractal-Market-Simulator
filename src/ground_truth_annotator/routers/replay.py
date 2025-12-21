@@ -60,7 +60,6 @@ from ..schemas import (
     CalibrationResponseHierarchical,
     # DAG state models (Issue #169)
     DagLegResponse,
-    DagOrphanedOrigin,
     DagPendingOrigin,
     DagLegCounts,
     DagStateResponse,
@@ -1225,14 +1224,6 @@ def _build_dag_state(detector: LegDetector) -> DagStateResponse:
         for leg in state.active_legs
     ]
 
-    orphaned_origins = {
-        direction: [
-            DagOrphanedOrigin(price=float(price), bar_index=idx)
-            for price, idx in origins
-        ]
-        for direction, origins in state.orphaned_origins.items()
-    }
-
     pending_origins = {
         direction: DagPendingOrigin(
             price=float(origin.price),
@@ -1250,7 +1241,6 @@ def _build_dag_state(detector: LegDetector) -> DagStateResponse:
 
     return DagStateResponse(
         active_legs=active_legs,
-        orphaned_origins=orphaned_origins,
         pending_origins=pending_origins,
         leg_counts=leg_counts,
     )
@@ -1327,7 +1317,6 @@ async def get_dag_state():
 
     Exposes leg-level state from the detector for debugging and DAG visualization:
     - active_legs: Currently tracked legs (pre-formation candidate swings)
-    - orphaned_origins: Preserved origins from invalidated legs for sibling detection
     - pending_origins: Potential origins for new legs awaiting temporal confirmation
     - leg_counts: Count of legs by direction
     """
@@ -1359,15 +1348,6 @@ async def get_dag_state():
         for leg in state.active_legs
     ]
 
-    # Convert orphaned origins
-    orphaned_origins = {
-        direction: [
-            DagOrphanedOrigin(price=float(price), bar_index=idx)
-            for price, idx in origins
-        ]
-        for direction, origins in state.orphaned_origins.items()
-    }
-
     # Convert pending origins
     pending_origins = {
         direction: DagPendingOrigin(
@@ -1387,7 +1367,6 @@ async def get_dag_state():
 
     return DagStateResponse(
         active_legs=active_legs,
-        orphaned_origins=orphaned_origins,
         pending_origins=pending_origins,
         leg_counts=leg_counts,
     )

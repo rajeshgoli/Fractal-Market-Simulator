@@ -10,7 +10,6 @@ level crosses.
 - Swing formation detection
 - Level cross event tracking
 - Parent-child relationship assignment
-- Orphaned origin preservation for sibling detection
 
 **This layer does NOT handle (see reference_layer.py):**
 - Swing invalidation (tolerance-based rules)
@@ -338,9 +337,6 @@ class LegDetector:
         extension_prune_events = self._check_extension_prune(bar, timestamp)
         events.extend(extension_prune_events)
 
-        # Prune orphaned origins (#163)
-        self._prune_orphaned_origins(bar)
-
         # Store current bar as previous for next iteration
         self.state.prev_bar = bar
 
@@ -416,8 +412,6 @@ class LegDetector:
                     last_modified_bar=bar.index,
                 )
                 self.state.active_legs.append(new_leg)
-                # Clean up orphaned origins (#196)
-                self._clean_up_after_leg_creation(new_leg)
                 # Clear pending origin after leg creation (#197)
                 self.state.pending_origins['bull'] = None
                 # Emit LegCreatedEvent (#168)
@@ -504,8 +498,6 @@ class LegDetector:
                     last_modified_bar=bar.index,
                 )
                 self.state.active_legs.append(new_bear_leg)
-                # Clean up orphaned origins (#196)
-                self._clean_up_after_leg_creation(new_bear_leg)
                 # Clear pending origin after leg creation (#197)
                 self.state.pending_origins['bear'] = None
                 # Emit LegCreatedEvent (#168)
@@ -583,8 +575,6 @@ class LegDetector:
                         last_modified_bar=bar.index,
                     )
                     self.state.active_legs.append(new_bear_leg)
-                    # Clean up orphaned origins (#196)
-                    self._clean_up_after_leg_creation(new_bear_leg)
                     # Clear pending origins after leg creation (#197)
                     self.state.pending_origins['bear'] = None
                     self.state.pending_origins['bull'] = None
@@ -622,8 +612,6 @@ class LegDetector:
                         last_modified_bar=bar.index,
                     )
                     self.state.active_legs.append(new_bull_leg)
-                    # Clean up orphaned origins (#196)
-                    self._clean_up_after_leg_creation(new_bull_leg)
                     # Clear pending origins after leg creation (#197)
                     self.state.pending_origins['bull'] = None
                     self.state.pending_origins['bear'] = None
@@ -754,11 +742,6 @@ class LegDetector:
                 event = self._form_swing_from_leg(leg, bar, timestamp)
                 if event:
                     events.append(event)
-                    # Form sibling swings from orphaned origins (#163)
-                    sibling_events = self._form_sibling_swings_from_orphaned_origins(
-                        leg, bar, timestamp, check_price
-                    )
-                    events.extend(sibling_events)
 
         return events
 
@@ -794,13 +777,6 @@ class LegDetector:
                 event = self._form_swing_from_leg(leg, bar, timestamp)
                 if event:
                     events.append(event)
-                    # Form sibling swings from orphaned origins (#163)
-                    # Use close price for formation check (consistent with other formations)
-                    close_price = Decimal(str(bar.close))
-                    sibling_events = self._form_sibling_swings_from_orphaned_origins(
-                        leg, bar, timestamp, close_price
-                    )
-                    events.extend(sibling_events)
 
         return events
 
@@ -869,147 +845,6 @@ class LegDetector:
             parent_ids=[p.swing_id for p in parents],
         )
 
-    def _form_sibling_swings_from_orphaned_origins(
-        self, leg: Leg, bar: Bar, timestamp: datetime, close_price: Decimal
-    ) -> List[SwingFormedEvent]:
-        """
-        Form sibling swings from orphaned origins that share the same defended pivot (#163).
-
-        When a leg forms, check if any orphaned origins can also form valid swings
-        with the same defended pivot. This enables detection of nested swings like
-        L2, L4, L5, L7 from valid_swings.md.
-
-        Args:
-            leg: The leg that just formed (provides the defended pivot)
-            bar: Current bar
-            timestamp: Event timestamp
-            close_price: Current close price for formation check
-
-        Returns:
-            List of SwingFormedEvent for any sibling swings formed
-        """
-        events: List[SwingFormedEvent] = []
-        config = self.config.bull if leg.direction == 'bull' else self.config.bear
-        formation_threshold = Decimal(str(config.formation_fib))
-
-        # Get orphaned origins for this direction
-        orphaned = self.state.orphaned_origins.get(leg.direction, [])
-        if not orphaned:
-            return events
-
-        # After terminology fix (#197):
-        # - Bull leg: origin=LOW, pivot=HIGH
-        # - Bear leg: origin=HIGH, pivot=LOW
-        # - Orphaned bull origins are at LOWs (where upward moves started)
-        # - Orphaned bear origins are at HIGHs (where downward moves started)
-        # Sibling swings share the same PIVOT (defended extreme) with different origins
-        pivot_price = leg.pivot_price
-        pivot_index = leg.pivot_index
-
-        # Track which origins we successfully used (to remove them)
-        used_origins: List[Tuple[Decimal, int]] = []
-
-        for origin_price, origin_index in orphaned:
-            # Origin must be temporally before pivot
-            if origin_index >= pivot_index:
-                continue
-
-            # Calculate swing range
-            swing_range = abs(origin_price - pivot_price)
-            if swing_range == 0:
-                continue
-
-            # Check formation threshold
-            # Bull: origin=LOW (orphaned), pivot=HIGH, ratio = (close - origin) / range
-            # Bear: origin=HIGH (orphaned), pivot=LOW, ratio = (origin - close) / range
-            if leg.direction == 'bull':
-                ratio = (close_price - origin_price) / swing_range
-            else:
-                ratio = (origin_price - close_price) / swing_range
-
-            if ratio < formation_threshold:
-                continue
-
-            # No separation check needed - 10% pruning already ensures
-            # orphaned origins are sufficiently separated (#163)
-
-            # Check if this exact swing already exists
-            swing_exists = False
-            for swing in self.state.active_swings:
-                if swing.direction != leg.direction:
-                    continue
-                # Bull: origin at low_bar_index, pivot at high_bar_index
-                # Bear: origin at high_bar_index, pivot at low_bar_index
-                if leg.direction == 'bull':
-                    if swing.low_bar_index == origin_index and swing.high_bar_index == pivot_index:
-                        swing_exists = True
-                        break
-                else:
-                    if swing.high_bar_index == origin_index and swing.low_bar_index == pivot_index:
-                        swing_exists = True
-                        break
-
-            if swing_exists:
-                continue
-
-            # Create the sibling swing
-            # Bull: origin at LOW -> pivot at HIGH
-            # Bear: origin at HIGH -> pivot at LOW
-            if leg.direction == 'bull':
-                swing = SwingNode(
-                    swing_id=SwingNode.generate_id(),
-                    low_bar_index=origin_index,  # orphaned origin is at LOW
-                    low_price=origin_price,
-                    high_bar_index=pivot_index,  # pivot is at HIGH
-                    high_price=pivot_price,
-                    direction="bull",
-                    status="active",
-                    formed_at_bar=bar.index,
-                )
-            else:
-                swing = SwingNode(
-                    swing_id=SwingNode.generate_id(),
-                    high_bar_index=origin_index,  # orphaned origin is at HIGH
-                    high_price=origin_price,
-                    low_bar_index=pivot_index,  # pivot is at LOW
-                    low_price=pivot_price,
-                    direction="bear",
-                    status="active",
-                    formed_at_bar=bar.index,
-                )
-
-            # Find parents
-            parents = self._find_parents(swing)
-            for parent in parents:
-                swing.add_parent(parent)
-
-            # Add to active swings
-            self.state.active_swings.append(swing)
-
-            # Initialize level tracking
-            self.state.fib_levels_crossed[swing.swing_id] = self._find_level_band(float(ratio))
-
-            events.append(SwingFormedEvent(
-                bar_index=bar.index,
-                timestamp=timestamp,
-                swing_id=swing.swing_id,
-                high_bar_index=swing.high_bar_index,
-                high_price=swing.high_price,
-                low_bar_index=swing.low_bar_index,
-                low_price=swing.low_price,
-                direction=swing.direction,
-                parent_ids=[p.swing_id for p in parents],
-            ))
-
-            used_origins.append((origin_price, origin_index))
-
-        # Remove used orphaned origins
-        for origin in used_origins:
-            if origin in self.state.orphaned_origins[leg.direction]:
-                self.state.orphaned_origins[leg.direction].remove(origin)
-
-        return events
-
     def _check_leg_invalidations(
         self, bar: Bar, timestamp: datetime, bar_high: Decimal, bar_low: Decimal
     ) -> List[SwingEvent]:
@@ -1022,7 +857,6 @@ class LegDetector:
 
         When a leg is invalidated:
         - Its status is set to 'invalidated' but it remains in active_legs (#203)
-        - Its origin is preserved as an "orphaned origin" for sibling swing formation (#163)
         - If the leg formed into a swing, that swing is also invalidated (#174)
 
         Invalidated legs remain visible until 3x extension prune (#203).
@@ -1067,14 +901,8 @@ class LegDetector:
                     invalidated_legs.append(leg)
                     invalidation_prices[leg.leg_id] = bar_high
 
-        # Preserve origins from invalidated legs (#163)
-        # These can form sibling swings with the same defended pivot later
+        # Emit events for invalidated legs
         for leg in invalidated_legs:
-            origin_tuple = (leg.origin_price, leg.origin_index)
-            # Add to orphaned origins if not already present
-            if origin_tuple not in self.state.orphaned_origins[leg.direction]:
-                self.state.orphaned_origins[leg.direction].append(origin_tuple)
-
             # Emit LegInvalidatedEvent (#168)
             events.append(LegInvalidatedEvent(
                 bar_index=bar.index,
@@ -1195,89 +1023,6 @@ class LegDetector:
                 elif direction == 'bear' and leg.origin_price >= price:
                     return False  # Active bear leg has higher/equal origin
         return True
-
-    def _clean_up_after_leg_creation(self, leg: Leg) -> None:
-        """
-        Clean up orphaned origins after leg creation (#196).
-
-        When a new leg is created, remove orphaned origins that match the new
-        leg's origin (same direction). An origin is no longer "orphaned" if an
-        active leg uses it.
-
-        Note: Pending origins are NOT cleared here because they track "the most
-        extreme value for potential origins" and may be used for multiple legs.
-        They are only replaced when a more extreme value appears.
-
-        Args:
-            leg: The newly created leg
-        """
-        # Bug A fix: Remove matching orphaned origins
-        # An origin is no longer "orphaned" if an active leg uses it
-        origin_tuple = (leg.origin_price, leg.origin_index)
-        if origin_tuple in self.state.orphaned_origins.get(leg.direction, []):
-            self.state.orphaned_origins[leg.direction].remove(origin_tuple)
-
-    def _prune_orphaned_origins(self, bar: Bar) -> None:
-        """
-        Apply 10% pruning to orphaned origins each bar (#163).
-
-        For each direction:
-        1. Current low (for bull) / high (for bear) is working 0
-        2. For all orphaned 1s: calculate range from that 1 to working 0
-        3. If any two orphaned 1s are within 10% of the larger range -> prune the smaller
-        4. As 0 extends, threshold grows, naturally eliminating noise
-
-        This ensures only structurally significant origins survive for sibling
-        swing formation.
-        """
-        prune_threshold = Decimal(str(self.config.subtree_prune_threshold))
-
-        # Skip origin pruning if threshold is 0 (disabled)
-        if prune_threshold == 0:
-            return
-
-        bar_low = Decimal(str(bar.low))
-        bar_high = Decimal(str(bar.high))
-
-        for direction in ['bull', 'bear']:
-            origins = self.state.orphaned_origins[direction]
-            if not origins:
-                continue
-
-            # Working 0 is the current extreme in direction of defended pivot
-            # Bull: defended pivot is LOW, so working 0 = current low
-            # Bear: defended pivot is HIGH, so working 0 = current high
-            working_0 = bar_low if direction == 'bull' else bar_high
-
-            # Sort origins: for bull, highest first; for bear, lowest first
-            # (we want to prefer origins that create larger ranges)
-            sorted_origins = sorted(
-                origins,
-                key=lambda x: x[0],  # sort by price
-                reverse=(direction == 'bull')
-            )
-
-            survivors: List[Tuple[Decimal, int]] = []
-            for origin_price, origin_idx in sorted_origins:
-                # Calculate range from this origin to working 0
-                current_range = abs(origin_price - working_0)
-                if current_range == 0:
-                    continue
-
-                # Calculate threshold: 10% of current range
-                threshold = prune_threshold * current_range
-
-                # Check if this origin is sufficiently separated from survivors
-                is_separated = True
-                for survivor_price, _ in survivors:
-                    if abs(origin_price - survivor_price) < threshold:
-                        is_separated = False
-                        break
-
-                if is_separated:
-                    survivors.append((origin_price, origin_idx))
-
-            self.state.orphaned_origins[direction] = survivors
 
     def process_bar(self, bar: Bar) -> List[SwingEvent]:
         """

@@ -237,10 +237,6 @@ export interface PlaybackFeedbackSnapshot {
       origin_index: number;
       range: number;
     }[];
-    orphaned_origins: {
-      bull: { price: number; bar_index: number }[];
-      bear: { price: number; bar_index: number }[];
-    };
     pending_origins: {
       bull: { price: number; bar_index: number } | null;
       bear: { price: number; bar_index: number } | null;
@@ -253,7 +249,6 @@ export interface PlaybackFeedbackSnapshot {
 // Attachment types for feedback
 export type FeedbackAttachment =
   | { type: 'leg'; leg_id: string; direction: 'bull' | 'bear'; pivot_price: number; origin_price: number; pivot_index: number; origin_index: number }
-  | { type: 'orphaned_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number }
   | { type: 'pending_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number; source: string };
 
 export interface PlaybackFeedbackResponse {
@@ -301,11 +296,6 @@ export interface DagLeg {
   bar_count: number;
 }
 
-export interface DagOrphanedOrigin {
-  price: number;
-  bar_index: number;
-}
-
 export interface DagPendingOrigin {
   price: number;
   bar_index: number;
@@ -315,10 +305,6 @@ export interface DagPendingOrigin {
 
 export interface DagStateResponse {
   active_legs: DagLeg[];
-  orphaned_origins: {
-    bull: DagOrphanedOrigin[];
-    bear: DagOrphanedOrigin[];
-  };
   pending_origins: {
     bull: DagPendingOrigin | null;
     bear: DagPendingOrigin | null;

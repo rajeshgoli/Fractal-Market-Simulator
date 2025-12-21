@@ -290,7 +290,6 @@ class DagFeedbackPendingOrigin(BaseModel):
 class DagContext(BaseModel):
     """DAG mode-specific context with full leg/origin/pivot data for debugging."""
     active_legs: List[DagFeedbackLeg] = []
-    orphaned_origins: Optional[Dict[str, List[DagFeedbackOrigin]]] = None
     pending_origins: Optional[Dict[str, Optional[DagFeedbackPendingOrigin]]] = None
 
 
@@ -308,14 +307,6 @@ class FeedbackAttachmentLeg(BaseModel):
     origin_price: float
     pivot_index: int
     origin_index: int
-
-
-class FeedbackAttachmentOrphanedOrigin(BaseModel):
-    """An orphaned origin attachment in feedback."""
-    type: str = "orphaned_origin"
-    direction: str  # "bull" or "bear"
-    price: float
-    bar_index: int
 
 
 class FeedbackAttachmentPendingOrigin(BaseModel):
@@ -563,12 +554,6 @@ class DagLegResponse(BaseModel):
     bar_count: int
 
 
-class DagOrphanedOrigin(BaseModel):
-    """An orphaned origin preserved for sibling swing detection."""
-    price: float
-    bar_index: int
-
-
 class DagPendingOrigin(BaseModel):
     """A potential origin for a new leg awaiting temporal confirmation.
 
@@ -593,6 +578,5 @@ class DagStateResponse(BaseModel):
     Exposes internal detector state for debugging and visualization.
     """
     active_legs: List[DagLegResponse]
-    orphaned_origins: Dict[str, List[DagOrphanedOrigin]]
     pending_origins: Dict[str, Optional[DagPendingOrigin]]
     leg_counts: DagLegCounts

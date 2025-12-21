@@ -8,7 +8,7 @@ the bar type classification enum.
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Optional
 
 from ..swing_node import SwingNode
 from ..types import Bar
@@ -67,14 +67,6 @@ class DetectorState:
     active_legs: List[Leg] = field(default_factory=list)
     pending_origins: Dict[str, Optional[PendingOrigin]] = field(
         default_factory=lambda: {'bull': None, 'bear': None}
-    )
-
-    # Orphaned origins (#163): preserved origins from invalidated legs
-    # Format: direction -> List[(origin_price, origin_bar_index)]
-    # When a leg is invalidated, its origin is preserved here for potential
-    # sibling swing formation with the same defended pivot.
-    orphaned_origins: Dict[str, List[Tuple[Decimal, int]]] = field(
-        default_factory=lambda: {'bull': [], 'bear': []}
     )
 
     # Turn tracking (#202): Track when each direction's turn started
@@ -160,11 +152,6 @@ class DetectorState:
             "active_legs": legs_data,
             "pending_origins": pending_origins_data,
             # Note: price_high_water/price_low_water removed in #203 (staleness removal)
-            # Orphaned origins (#163)
-            "orphaned_origins": {
-                direction: [(str(price), idx) for price, idx in origins]
-                for direction, origins in self.orphaned_origins.items()
-            },
             # Turn tracking (#202)
             "last_turn_bar": self.last_turn_bar,
             "prev_bar_type": self.prev_bar_type,
@@ -250,15 +237,6 @@ class DetectorState:
                 close=prev_bar_data["close"],
             )
 
-        # Deserialize orphaned origins (#163)
-        orphaned_origins_raw = data.get("orphaned_origins", {'bull': [], 'bear': []})
-        orphaned_origins: Dict[str, List[Tuple[Decimal, int]]] = {'bull': [], 'bear': []}
-        for direction in ['bull', 'bear']:
-            origins_list = orphaned_origins_raw.get(direction, [])
-            orphaned_origins[direction] = [
-                (Decimal(price), idx) for price, idx in origins_list
-            ]
-
         # Turn tracking (#202)
         last_turn_bar = data.get("last_turn_bar", {'bull': -1, 'bear': -1})
         prev_bar_type = data.get("prev_bar_type")
@@ -277,8 +255,6 @@ class DetectorState:
             prev_bar=prev_bar,
             active_legs=active_legs,
             pending_origins=pending_origins,
-            # Note: price_high_water/price_low_water removed in #203
-            orphaned_origins=orphaned_origins,
             # Turn tracking (#202)
             last_turn_bar=last_turn_bar,
             prev_bar_type=prev_bar_type,

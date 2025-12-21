@@ -257,8 +257,8 @@ During playback, a "Show Stats" toggle appears in the sidebar. When enabled, it 
 During playback, tab buttons appear above the bottom panel allowing you to switch between:
 - **Swings**: The default swing explanation panel showing formed swings and details
 - **Current Structure**: Algorithm state visualization showing:
-  - **Active Legs**: Pre-formation candidate legs with pivot/origin prices and retracement percentages
-  - **Orphaned Origins**: Preserved origins from invalidated legs awaiting sibling swing formation
+  - **Bull Legs**: Active bull legs with pivot/origin prices and retracement percentages
+  - **Bear Legs**: Active bear legs with pivot/origin prices and retracement percentages
   - **Pending Pivots**: Potential pivots awaiting confirmation for each direction
   - **Recent Events**: Log of leg lifecycle events (created, pruned, invalidated)
 
@@ -331,7 +331,7 @@ The feedback input is always visible during playback (not just during linger eve
 When using Market Structure View or the Current Structure Panel, you can attach specific items to your observation for precise feedback:
 
 **How to attach:**
-1. Click on any item in the Current Structure Panel (leg, orphaned origin, or pending origin)
+1. Click on any item in the Current Structure Panel (leg or pending origin)
 2. A purple ring highlights the attached item
 3. The item appears in the Observation panel with a paperclip icon
 4. Up to 5 items can be attached per observation
@@ -339,7 +339,7 @@ When using Market Structure View or the Current Structure Panel, you can attach 
 **Attached items show:**
 - In the panel item: Purple ring border and paperclip icon
 - In the Observation section: Badge showing "X/5" count
-- Listed below the header with direction (BULL/BEAR), type (Leg/Orphan/Pending), and bar index
+- Listed below the header with direction (BULL/BEAR), type (Leg/Pending), and bar index
 
 **To detach:**
 - Click the X button next to the attachment in the Observation section
@@ -430,31 +430,20 @@ Each leg shows a single line connecting:
 - **Origin point**: The swing origin extremum (where the move started)
 - **Pivot point**: The defended pivot price (where the retracement reversed)
 
-### Orphaned Origin Markers
-
-Orphaned origins (preserved pivots from invalidated legs) are visualized as **circular markers** on both charts:
-
-| Direction | Appearance | Position |
-|-----------|------------|----------|
-| Bull origins | Faded blue circle (40% opacity) | Above bar at origin bar index |
-| Bear origins | Faded red circle (40% opacity) | Below bar at origin bar index |
-
-These markers help you see *where* preserved pivots are in relation to current price action. Orphaned origins can form sibling swings when price revisits the same defended pivot with a new origin point.
-
 ### Current Structure Panel
 
 The Current Structure Panel is always visible in this mode (no toggle needed). It shows:
 
 | Column | Description |
 |--------|-------------|
-| Active Legs | Currently tracked pre-formation candidates with pivot/origin prices, retracement %, bar count |
-| Orphaned Origins | Preserved origins from invalidated legs awaiting sibling swing formation |
+| Bull Legs | Active bull legs with pivot/origin prices, retracement %, bar count |
+| Bear Legs | Active bear legs with pivot/origin prices, retracement %, bar count |
 | Pending Origins | Potential origins awaiting confirmation for bull and bear directions |
 | Recent Events | Log of leg lifecycle events (LEG_CREATED, LEG_PRUNED, LEG_INVALIDATED) |
 
-**Expandable Lists:** When lists have more items than can display, a clickable "+N more" button appears. Click to load 10 additional items. This applies to Active Legs and both Bull/Bear Orphaned Origins columns.
+**Expandable Lists:** When lists have more items than can display, a clickable "+N more" button appears. Click to load 10 additional items.
 
-**Attachments:** Click any leg, orphaned origin, or pending origin to "attach" it to your current observation. This is useful for referencing specific items when capturing feedback. See [Observation Attachments](#observation-attachments) below.
+**Attachments:** Click any leg or pending origin to "attach" it to your current observation. This is useful for referencing specific items when capturing feedback. See [Observation Attachments](#observation-attachments) below.
 
 ### Hover Highlighting
 
@@ -463,7 +452,6 @@ Hover over any item in the Current Structure Panel to highlight it on the charts
 | Item Type | Hover Effect |
 |-----------|--------------|
 | Active Leg | Leg line becomes thicker (4px) with full opacity; panel item shows blue ring |
-| Orphaned Origin | Origin marker becomes larger (2x size) with full opacity; panel item shows colored ring |
 | Pending Pivot | Horizontal dashed price line appears at pivot price; panel item shows colored ring |
 
 This provides immediate visual feedback for reasoning about the algorithm's internal state.
@@ -521,4 +509,4 @@ In Market Structure View, all playback controls are functional:
 
 - **Algorithm debugging**: Watch how legs form, get pruned, and eventually become swings
 - **Understanding swing formation**: See why certain price patterns form swings and others don't
-- **Orphaned origins**: Observe how preserved origins from invalidated legs enable sibling swing detection
+- **Pruning behavior**: Observe how proximity and breach pruning keep the leg count manageable

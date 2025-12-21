@@ -1,23 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 10
+**Unreviewed Change Count:** 1
 
-**Last Review:** 2025-12-20
+**Last Review:** 2025-12-21
 
 ---
 
 ## Pending Changes
 
-- **#199** — Fix orphaned origin marker positions (bull below, bear above)
-- **#200** — Rename pending_pivots to pending_origins + skip redundant tracking
-- **#202** — Turn-scoped domination check for nested swing detection after directional reversals
-- **#203** — Rework leg staleness/pruning: proximity-based consolidation + extended visibility for invalidated legs
-- **#204** — UI improvements: expandable legs list + observation attachments
-- **#205** — Bidirectional domination: prune worse legs when better origin found
-- **#206** — Modularize hierarchical_detector.py into dag/ subdirectory
-- **#207** — Fix cross-turn domination pruning in #205
-- **#208** — Prune legs when pivot breached beyond threshold + engulfed detection
-- **#211** — Chart leg interaction: hover/click/double-click legs on chart to highlight, scroll-to-panel, or attach
+- **#210** — Remove orphaned_origins and subtree_prune (epic with 6 subissues #212-#217)
 
 ---
 
@@ -25,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 21 | #199-#208, #211 — Modularization, pruning redesign, UX enhancements (10 issues) | All Accepted |
 | Dec 20 | #190-#197 — Pivot/origin semantics cascade + #198 architectural audit | All Accepted; design sound post-#197 |
 | Dec 19 | #187-#189, #183, UX fixes (10 changes) — Temporal causality, sidebar unification, feedback snapshots | All Accepted |
 | Dec 19 | #125, #180-#182, #185, #186 — DAG refinements + UX fixes (6 issues) | All Accepted |
