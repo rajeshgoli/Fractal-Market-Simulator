@@ -4,6 +4,54 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 21, 2025 - Impulsiveness & Spikiness Scores Design
+
+**Context:** User reflected on #236 (raw impulse field) and proposed two trader-interpretable metrics.
+
+### User Insight
+
+Raw `impulse` (points/bars) isn't useful on its own—"what does that really mean?" Two separate concepts needed:
+
+**1. Impulsiveness (0-100)**
+- Percentile rank against all formed legs
+- Scale-agnostic: what's impulsive at 1000 pts differs from 4000 pts
+- Self-calibrating over time
+
+**2. Spikiness (raw %)**
+- Measures whether move was spike-driven or evenly distributed
+- Formula: `(mean - median) / mean * 100` of per-bar contributions
+- Per-bar contribution (bull): `bar.close - prev_bar.high`
+- Scale-independent: 50% concentration means the same at any price level
+
+### Key Design Decisions
+
+**Live legs only:** Both metrics updated for legs where `max_origin_breach is None`. Once a leg stops being live, scores freeze—no retroactive updates.
+
+**Why:** Actionable during formation. Impulsive + low-spikiness leg = trend continuation signal, potentially tradeable with stop at entry.
+
+**Population for ranking:** All formed legs (no size threshold). Long tail doesn't hurt—tiny legs naturally cluster at low impulsiveness.
+
+**Spikiness interpretation:**
+- Positive = spiky (outlier bars pulled mean above median)
+- Near zero = smooth (evenly distributed)
+- Negative = anti-spiky (unusually uniform—rare but meaningful)
+
+**Why not normalize spikiness to 0-100?** Impulsiveness needs normalization because it's scale-dependent. Spikiness is already scale-independent via the division by mean.
+
+### Terminology
+
+User proposed "live legs" for legs that can still grow (`max_origin_breach is None`).
+
+### Raw impulse retained
+
+Raw `impulse` field stays as internal input to percentile calculation—just hidden from UI.
+
+### Epic Filed
+
+**#241** with subissues #242-#247 for sequential implementation.
+
+---
+
 ## December 20, 2025 - State Cleanup on Leg Creation
 
 **Context:** Continued DAG validation at offset 1172207. User observed same price appearing in multiple state locations.

@@ -1,6 +1,6 @@
 # Product Direction
 
-**Last Updated:** December 20, 2025 (PM7)
+**Last Updated:** December 21, 2025 (PM8)
 **Owner:** Product
 
 ---
@@ -20,6 +20,23 @@ DAG visualization complete. Now in **active user testing** phase using the Repla
 **Active issues:** See [GitHub Issues](https://github.com/rajeshgoli/Fractal-Market-Simulator/issues) for current bugs. Issues are filed and resolved rapidly during this phase — GitHub is the source of truth.
 
 **Test data:** `test_data/es-5m.csv` at various offsets. Observations captured in `ground_truth/playback_feedback.json`.
+
+---
+
+## Upcoming: Impulsiveness & Spikiness Scores (#241)
+
+**Status:** Epic filed, ready for engineering.
+
+Refines raw `impulse` (points/bars) into two trader-interpretable metrics:
+
+| Metric | Formula | Range | Meaning |
+|--------|---------|-------|---------|
+| **Impulsiveness** | Percentile rank vs formed legs | 0-100 | How impulsive relative to history |
+| **Spikiness** | Moment-based skewness → sigmoid | 0-100 | Spike-driven (>50) vs smooth (<50) |
+
+**Use case:** Impulsive + low-spikiness leg in formation = trend continuation signal.
+
+**Subissues:** #242-#247 (execute sequentially, atomic commit)
 
 ---
 
