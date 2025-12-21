@@ -432,10 +432,16 @@ The Current Structure Panel is always visible in this mode (no toggle needed). I
 
 | Column | Description |
 |--------|-------------|
-| Bull Legs | Active bull legs with pivot/origin prices, retracement %, bar count, impulse |
-| Bear Legs | Active bear legs with pivot/origin prices, retracement %, bar count, impulse |
+| Bull Legs | Active bull legs with pivot/origin prices, retracement %, bar count, impulsiveness, spikiness |
+| Bear Legs | Active bear legs with pivot/origin prices, retracement %, bar count, impulsiveness, spikiness |
 | Pending Origins | Potential origins awaiting confirmation for bull and bear directions |
 | Recent Events | Log of leg lifecycle events (LEG_CREATED, LEG_PRUNED, LEG_INVALIDATED) |
+
+**Leg Metrics:**
+| Metric | Range | Description |
+|--------|-------|-------------|
+| Impls (Impulsiveness) | 0-100% | Percentile rank of move intensity vs all formed legs. 90%+ = very impulsive, 10%- = gradual |
+| Spiky (Spikiness) | 0-100% | Distribution of move contribution. 50% = neutral, 90%+ = spike-driven, 10%- = evenly distributed |
 
 **Expandable Lists:** When lists have more items than can display, a clickable "+N more" button appears. Click to load 10 additional items.
 

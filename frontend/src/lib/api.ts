@@ -294,7 +294,12 @@ export interface DagLeg {
   formed: boolean;
   status: 'active' | 'stale' | 'invalidated';
   bar_count: number;
-  impulse: number;  // Points per bar (range / bar_count) - measures move intensity (#236)
+  // Impulsiveness (0-100): Percentile rank of raw impulse vs all formed legs (#241)
+  // More interpretable than raw impulse - 90+ is very impulsive, 10- is gradual
+  impulsiveness: number | null;
+  // Spikiness (0-100): Sigmoid-normalized skewness of bar contributions (#241)
+  // 50 = neutral, 90+ = spike-driven, 10- = evenly distributed
+  spikiness: number | null;
 }
 
 export interface DagPendingOrigin {

@@ -107,9 +107,17 @@ const LegItem: React.FC<LegItemProps> = ({ leg, isHighlighted, isFocused, isAtta
         <span className="text-[10px] uppercase">Bars:</span>{' '}
         <span className="font-mono">{leg.bar_count}</span>
       </div>
-      <div className="col-span-2">
-        <span className="text-[10px] uppercase">Impulse:</span>{' '}
-        <span className="font-mono">{leg.impulse.toFixed(2)} pts/bar</span>
+      <div>
+        <span className="text-[10px] uppercase">Impls:</span>{' '}
+        <span className="font-mono">
+          {leg.impulsiveness !== null ? `${leg.impulsiveness.toFixed(0)}%` : 'N/A'}
+        </span>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase">Spiky:</span>{' '}
+        <span className="font-mono">
+          {leg.spikiness !== null ? `${leg.spikiness.toFixed(0)}%` : 'N/A'}
+        </span>
       </div>
     </div>
   </div>

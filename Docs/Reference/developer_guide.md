@@ -260,6 +260,17 @@ Modular DAG-based leg detection with incremental swing formation. The main entry
 | `leg_pruner.py` | LegPruner with pruning algorithms |
 | `calibrate.py` | calibrate, calibrate_from_dataframe, dataframe_to_bars |
 
+**Leg metrics (#241):**
+| Field | Type | Description |
+|-------|------|-------------|
+| `impulse` | `float` | Raw intensity (points/bar) - internal only, not exposed in API |
+| `impulsiveness` | `float | None` | Percentile rank (0-100) of impulse vs all formed legs |
+| `spikiness` | `float | None` | Sigmoid-normalized skewness (0-100) of bar contributions |
+
+- **Impulsiveness** measures how fast a move is relative to the historical population. Calculated using bisect for O(log n) percentile lookup against `DetectorState.formed_leg_impulses`.
+- **Spikiness** measures whether the move was spike-driven or evenly distributed. Uses running moments (n, sum_x, sum_x2, sum_x3) for O(1) per-bar updates.
+- Both are updated only for "live" legs (where `max_origin_breach is None`). Once a leg's origin is breached, values are frozen.
+
 ```python
 from src.swing_analysis.dag import (
     LegDetector,

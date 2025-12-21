@@ -23,6 +23,7 @@ See Docs/Working/DAG_spec.md for full specification.
 See Docs/Working/Performance_question.md for design rationale.
 """
 
+import bisect
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Dict, Tuple, Optional, TYPE_CHECKING
@@ -71,6 +72,81 @@ def _calculate_impulse(range_value: Decimal, origin_index: int, pivot_index: int
     if bar_count == 0:
         return 0.0
     return float(range_value) / bar_count
+
+
+def _calculate_impulsiveness(raw_impulse: float, formed_impulses: List[float]) -> Optional[float]:
+    """
+    Calculate impulsiveness (0-100) as percentile rank of raw impulse (#241, #243).
+
+    Uses binary search for O(log n) percentile lookup against sorted population.
+
+    Args:
+        raw_impulse: Raw impulse value (points per bar)
+        formed_impulses: Sorted list of impulse values from all formed legs
+
+    Returns:
+        Percentile rank (0-100) or None if population is empty.
+    """
+    if not formed_impulses:
+        return None
+
+    # Find position where raw_impulse would be inserted
+    position = bisect.bisect_left(formed_impulses, raw_impulse)
+
+    # Percentile = (count of values below) / total * 100
+    return (position / len(formed_impulses)) * 100
+
+
+def _calculate_spikiness(n: int, sum_x: float, sum_x2: float, sum_x3: float) -> Optional[float]:
+    """
+    Calculate spikiness (0-100) from running moments using Fisher's skewness (#241, #244).
+
+    Spikiness measures whether the move was spike-driven or evenly distributed:
+    - 50 = neutral (symmetric distribution)
+    - 70+ = moderately spiky
+    - 90+ = very spiky (outlier bars drove the move)
+    - 30- = moderately smooth
+    - 10- = very smooth (evenly distributed)
+
+    Uses sigmoid normalization: spikiness = 100 / (1 + exp(-skewness))
+
+    Args:
+        n: Number of bar contributions tracked
+        sum_x: Sum of contributions
+        sum_x2: Sum of squared contributions
+        sum_x3: Sum of cubed contributions
+
+    Returns:
+        Spikiness (0-100) or None if n < 3 (skewness undefined).
+    """
+    import math
+
+    # Need at least 3 samples for meaningful skewness
+    if n < 3:
+        return None
+
+    # Calculate mean and variance from moments
+    mean = sum_x / n
+    variance = (sum_x2 / n) - mean * mean
+
+    # Guard against near-zero variance (would cause division by zero)
+    if variance < 1e-10:
+        return 50.0  # Neutral if all contributions are identical
+
+    std_dev = math.sqrt(variance)
+
+    # Calculate third central moment for skewness
+    # E[(X - μ)³] = E[X³] - 3μE[X²] + 2μ³
+    third_moment = (sum_x3 / n) - 3 * mean * (sum_x2 / n) + 2 * mean ** 3
+
+    # Fisher's skewness = third_moment / std_dev³
+    skewness = third_moment / (std_dev ** 3)
+
+    # Sigmoid normalization to 0-100 range
+    # This maps any skewness value to a bounded 0-100 scale
+    spikiness = 100 / (1 + math.exp(-skewness))
+
+    return spikiness
 
 
 class LegDetector:
@@ -854,6 +930,9 @@ class LegDetector:
         # Link leg to swing (#174)
         leg.swing_id = swing.swing_id
 
+        # Record impulse in formed population for percentile ranking (#241, #242)
+        bisect.insort(self.state.formed_leg_impulses, leg.impulse)
+
         # Find parents
         parents = self._find_parents(swing)
         for parent in parents:
@@ -1089,7 +1168,90 @@ class LegDetector:
         dag_events = self._update_dag_state(bar, timestamp)
         events.extend(dag_events)
 
+        # 5. Update running moments and spikiness for live legs (#241, #244)
+        # Must happen after _update_dag_state where bar_count is incremented
+        self._update_leg_moments_and_spikiness(bar)
+
+        # 6. Update impulsiveness for all live legs (#241, #243)
+        # Live legs have max_origin_breach=None (origin not yet violated)
+        self._update_live_leg_impulsiveness()
+
         return events
+
+    def _update_live_leg_impulsiveness(self) -> None:
+        """
+        Update impulsiveness for all live legs (#241, #243).
+
+        A leg is "live" if its origin has never been breached (max_origin_breach is None).
+        Once a leg stops being live, its impulsiveness is frozen and not updated.
+
+        Impulsiveness is the percentile rank (0-100) of the leg's raw impulse
+        against all formed legs in the population.
+        """
+        for leg in self.state.active_legs:
+            # Only update live legs (origin never breached)
+            if leg.max_origin_breach is not None:
+                continue
+
+            # Calculate impulsiveness as percentile rank
+            leg.impulsiveness = _calculate_impulsiveness(
+                leg.impulse,
+                self.state.formed_leg_impulses
+            )
+
+    def _update_leg_moments_and_spikiness(self, bar: 'Bar') -> None:
+        """
+        Update running moments and spikiness for all live legs (#241, #244).
+
+        Per-bar contribution:
+        - Bull leg: contribution = bar.close - prev_bar.high
+        - Bear leg: contribution = prev_bar.low - bar.close
+
+        Skips the first bar after leg creation (no prev_bar baseline).
+        Only updates live legs (max_origin_breach is None).
+
+        Args:
+            bar: Current bar being processed.
+        """
+        if self.state.prev_bar is None:
+            return
+
+        prev_high = float(self.state.prev_bar.high)
+        prev_low = float(self.state.prev_bar.low)
+        bar_close = float(bar.close)
+
+        for leg in self.state.active_legs:
+            # Only update live legs
+            if leg.max_origin_breach is not None:
+                continue
+
+            # Skip first bar of leg (no contribution baseline)
+            # bar_count is incremented AFTER this runs, so bar_count >= 1 means
+            # we have at least one prior bar in this leg
+            if leg.bar_count < 1:
+                continue
+
+            # Calculate contribution based on direction
+            if leg.direction == 'bull':
+                # Bull: how much did this bar advance beyond prev high?
+                contribution = bar_close - prev_high
+            else:
+                # Bear: how much did this bar drop below prev low?
+                contribution = prev_low - bar_close
+
+            # Update running moments
+            leg._moment_n += 1
+            leg._moment_sum_x += contribution
+            leg._moment_sum_x2 += contribution * contribution
+            leg._moment_sum_x3 += contribution * contribution * contribution
+
+            # Recalculate spikiness from updated moments
+            leg.spikiness = _calculate_spikiness(
+                leg._moment_n,
+                leg._moment_sum_x,
+                leg._moment_sum_x2,
+                leg._moment_sum_x3
+            )
 
     def _check_level_crosses(
         self, bar: Bar, timestamp: datetime

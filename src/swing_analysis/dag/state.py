@@ -51,6 +51,11 @@ class DetectorState:
         prev_bar: Previous bar for type classification.
         active_legs: Currently tracked legs (bull and bear can coexist).
         pending_origins: Potential origins for new legs awaiting temporal confirmation.
+
+        # Population tracking for percentile ranking (#241, #242):
+        formed_leg_impulses: Sorted list of impulse values from all formed legs.
+            Used for O(log n) percentile lookup. Includes pruned/engulfed legs
+            since they were formed at some point.
     """
 
     active_swings: List[SwingNode] = field(default_factory=list)
@@ -77,6 +82,10 @@ class DetectorState:
     )
     prev_bar_type: Optional[str] = None  # 'bull', 'bear', or None
 
+    # Population tracking for impulsiveness percentile ranking (#241, #242)
+    # Kept sorted for O(log n) percentile lookup using bisect
+    formed_leg_impulses: List[float] = field(default_factory=list)
+
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization."""
         # Serialize active legs
@@ -99,6 +108,12 @@ class DetectorState:
                 "leg_id": leg.leg_id,
                 "swing_id": leg.swing_id,
                 "impulse": leg.impulse,
+                "impulsiveness": leg.impulsiveness,
+                "spikiness": leg.spikiness,
+                "_moment_n": leg._moment_n,
+                "_moment_sum_x": leg._moment_sum_x,
+                "_moment_sum_x2": leg._moment_sum_x2,
+                "_moment_sum_x3": leg._moment_sum_x3,
             })
 
         # Serialize pending origins
@@ -156,6 +171,8 @@ class DetectorState:
             # Turn tracking (#202)
             "last_turn_bar": self.last_turn_bar,
             "prev_bar_type": self.prev_bar_type,
+            # Population tracking (#241, #242)
+            "formed_leg_impulses": self.formed_leg_impulses,
         }
 
     @classmethod
@@ -210,6 +227,12 @@ class DetectorState:
                 leg_id=leg_data.get("leg_id", SwingNode.generate_id()),
                 swing_id=leg_data.get("swing_id"),
                 impulse=leg_data.get("impulse", 0.0),
+                impulsiveness=leg_data.get("impulsiveness"),
+                spikiness=leg_data.get("spikiness"),
+                _moment_n=leg_data.get("_moment_n", 0),
+                _moment_sum_x=leg_data.get("_moment_sum_x", 0.0),
+                _moment_sum_x2=leg_data.get("_moment_sum_x2", 0.0),
+                _moment_sum_x3=leg_data.get("_moment_sum_x3", 0.0),
             )
             active_legs.append(leg)
 
@@ -243,6 +266,9 @@ class DetectorState:
         last_turn_bar = data.get("last_turn_bar", {'bull': -1, 'bear': -1})
         prev_bar_type = data.get("prev_bar_type")
 
+        # Population tracking (#241, #242)
+        formed_leg_impulses = data.get("formed_leg_impulses", [])
+
         return cls(
             active_swings=list(swing_map.values()),
             last_bar_index=data.get("last_bar_index", -1),
@@ -260,4 +286,6 @@ class DetectorState:
             # Turn tracking (#202)
             last_turn_bar=last_turn_bar,
             prev_bar_type=prev_bar_type,
+            # Population tracking (#241, #242)
+            formed_leg_impulses=formed_leg_impulses,
         )

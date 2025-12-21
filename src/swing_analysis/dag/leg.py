@@ -59,6 +59,18 @@ class Leg:
     max_origin_breach: Optional[Decimal] = None  # Max breach beyond origin (None if never breached)
     max_pivot_breach: Optional[Decimal] = None  # Max breach beyond pivot (None if never breached)
     impulse: float = 0.0  # Points per bar (range / bar_count) - measures move intensity (#236)
+    # Impulsiveness (0-100): Percentile rank of raw impulse against all formed legs (#241, #243)
+    # Updated for live legs (max_origin_breach is None), frozen when leg stops being live
+    impulsiveness: Optional[float] = None
+    # Spikiness (0-100): Sigmoid-normalized skewness of bar contributions (#241, #244)
+    # 50 = neutral (symmetric), 90+ = very spiky, 10- = very smooth
+    spikiness: Optional[float] = None
+    # Running moments for incremental spikiness calculation (#244)
+    # These are O(1) space per leg and allow O(1) updates per bar
+    _moment_n: int = 0  # Number of contributions tracked
+    _moment_sum_x: float = 0.0  # Sum of contributions
+    _moment_sum_x2: float = 0.0  # Sum of squared contributions
+    _moment_sum_x3: float = 0.0  # Sum of cubed contributions
 
     @property
     def range(self) -> Decimal:
