@@ -515,6 +515,84 @@ class HierarchicalDetector:
                 return True
         return False
 
+    def _prune_dominated_legs_in_turn(
+        self, new_leg: Leg, bar: Bar, timestamp: datetime
+    ) -> List[LegPrunedEvent]:
+        """
+        Prune existing legs dominated by a newly created leg (#204).
+
+        When a new leg is created with a better origin than existing legs,
+        those worse legs should be pruned. This is the reverse of
+        _would_leg_be_dominated - that prevents creating worse legs, this removes
+        existing worse legs when a better one is found.
+
+        For trading: having a leg with origin 2 points worse means stop losses
+        would be placed incorrectly, potentially getting stopped out on noise.
+
+        Note: This prunes ALL dominated legs regardless of turn boundaries.
+        Turn boundaries are respected for leg CREATION (to allow nested structure),
+        but not for pruning (to consolidate origins within the same move).
+
+        Immunity: Legs that have formed into active swings are never pruned.
+
+        Args:
+            new_leg: The newly created leg with a better origin
+            bar: Current bar (for event metadata)
+            timestamp: Timestamp for events
+
+        Returns:
+            List of LegPrunedEvent for pruned legs
+        """
+        events: List[LegPrunedEvent] = []
+        direction = new_leg.direction
+        new_origin = new_leg.origin_price
+
+        # Build set of active swing IDs for immunity check
+        active_swing_ids = {
+            swing.swing_id for swing in self.state.active_swings
+            if swing.status == 'active'
+        }
+
+        pruned_leg_ids: Set[str] = set()
+
+        for leg in self.state.active_legs:
+            if leg.leg_id == new_leg.leg_id:
+                continue  # Don't prune self
+            if leg.direction != direction or leg.status != 'active':
+                continue
+            # Active swing immunity - legs with active swings are never pruned
+            if leg.swing_id and leg.swing_id in active_swing_ids:
+                continue
+
+            # Check if this leg is dominated by new_leg
+            # Bull: lower origin is better, so prune if existing origin > new origin
+            # Bear: higher origin is better, so prune if existing origin < new origin
+            is_dominated = False
+            if direction == 'bull' and leg.origin_price > new_origin:
+                is_dominated = True
+            if direction == 'bear' and leg.origin_price < new_origin:
+                is_dominated = True
+
+            if is_dominated:
+                leg.status = 'pruned'
+                pruned_leg_ids.add(leg.leg_id)
+                events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id="",
+                    leg_id=leg.leg_id,
+                    reason="dominated_in_turn",
+                ))
+
+        # Remove pruned legs from active_legs
+        if pruned_leg_ids:
+            self.state.active_legs = [
+                leg for leg in self.state.active_legs
+                if leg.leg_id not in pruned_leg_ids
+            ]
+
+        return events
+
     def _extend_leg_pivots(self, bar: Bar, bar_high: Decimal, bar_low: Decimal) -> None:
         """
         Extend leg pivots when price makes new extremes (#188, #197).
@@ -751,6 +829,8 @@ class HierarchicalDetector:
                     pivot_price=new_leg.pivot_price,
                     pivot_index=new_leg.pivot_index,
                 ))
+                # Prune existing legs dominated by this better origin (#204)
+                events.extend(self._prune_dominated_legs_in_turn(new_leg, bar, timestamp))
 
         # Update pending origins only if more extreme AND not worse than active leg origins (#200)
         # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
@@ -839,6 +919,8 @@ class HierarchicalDetector:
                     pivot_price=new_bear_leg.pivot_price,
                     pivot_index=new_bear_leg.pivot_index,
                 ))
+                # Prune existing legs dominated by this better origin (#204)
+                events.extend(self._prune_dominated_legs_in_turn(new_bear_leg, bar, timestamp))
 
         # Update pending origins only if more extreme AND not worse than active leg origins (#200)
         # Bull origin: only update if this low is lower (tracking swing lows for bull legs)
@@ -917,6 +999,8 @@ class HierarchicalDetector:
                         pivot_price=new_bear_leg.pivot_price,
                         pivot_index=new_bear_leg.pivot_index,
                     ))
+                    # Prune existing legs dominated by this better origin (#204)
+                    events.extend(self._prune_dominated_legs_in_turn(new_bear_leg, bar, timestamp))
 
             # Create bull leg if LOW came before HIGH (price moved up)
             # Bull swing: origin=LOW (starting point), pivot=HIGH (defended extreme)
@@ -954,6 +1038,8 @@ class HierarchicalDetector:
                         pivot_price=new_bull_leg.pivot_price,
                         pivot_index=new_bull_leg.pivot_index,
                     ))
+                    # Prune existing legs dominated by this better origin (#204)
+                    events.extend(self._prune_dominated_legs_in_turn(new_bull_leg, bar, timestamp))
 
             # Update pending origins only if more extreme AND not worse than active leg origins (#200)
             # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
