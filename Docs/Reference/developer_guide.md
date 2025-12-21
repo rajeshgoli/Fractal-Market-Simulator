@@ -659,7 +659,8 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `LegOverlay.tsx` | Leg visualization for DAG mode |
 | `PlaybackControls.tsx` | Play/pause/step transport |
 | `ExplanationPanel.tsx` | Calibration report and swing details |
-| `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots) |
+| `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |
+| `Sidebar.tsx` | Event filters, feedback input, attachment display |
 | `usePlayback.ts` | Legacy playback (calibration scrubbing) |
 | `useForwardPlayback.ts` | Forward-only playback after calibration |
 | `useSwingDisplay.ts` | Scale filtering and swing ranking |
@@ -800,6 +801,28 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
 - `src/ground_truth_annotator/routers/replay.py` - API endpoints
 - `src/swing_analysis/reference_layer.py` - Filtering logic
 - `src/swing_analysis/hierarchical_detector.py` - DAG algorithm
+
+### Feedback System
+
+The feedback system captures user observations with rich context snapshots:
+
+**Frontend types** (`frontend/src/lib/api.ts`):
+- `PlaybackFeedbackSnapshot` - Complete state at observation time
+- `FeedbackAttachment` - Attached leg/origin/pivot reference (max 5 per observation)
+- `submitPlaybackFeedback()` - Submit observation with optional screenshot
+
+**Attachment types:**
+```typescript
+type FeedbackAttachment =
+  | { type: 'leg'; leg_id: string; direction: 'bull' | 'bear'; pivot_price: number; origin_price: number; ... }
+  | { type: 'orphaned_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number }
+  | { type: 'pending_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number; source: string };
+```
+
+**Backend storage** (`src/ground_truth_annotator/storage.py`):
+- `PLAYBACK_FEEDBACK_SCHEMA_VERSION = 2` - Current schema version
+- Observations persist to `ground_truth/playback_feedback.json`
+- Screenshots saved to `ground_truth/screenshots/`
 
 ### Debug logging
 ```python

@@ -326,6 +326,28 @@ The feedback input is always visible during playback (not just during linger eve
 - Observations persist to `ground_truth/playback_feedback.json` grouped by session
 - Screenshots saved to `ground_truth/screenshots/{timestamp}_{mode}_{source}_{id}.png`
 
+### Observation Attachments
+
+When using DAG mode or the DAG State Panel, you can attach specific items to your observation for precise feedback:
+
+**How to attach:**
+1. Click on any item in the DAG State Panel (leg, orphaned origin, or pending origin)
+2. A purple ring highlights the attached item
+3. The item appears in the Observation panel with a paperclip icon
+4. Up to 5 items can be attached per observation
+
+**Attached items show:**
+- In the panel item: Purple ring border and paperclip icon
+- In the Observation section: Badge showing "X/5" count
+- Listed below the header with direction (BULL/BEAR), type (Leg/Orphan/Pending), and bar index
+
+**To detach:**
+- Click the X button next to the attachment in the Observation section
+- Or click the item again in the DAG State Panel
+
+**In saved feedback:**
+Attachments are stored in the snapshot with full context (leg_id, prices, bar indices) for later debugging.
+
 ---
 
 ## Keyboard Shortcuts Reference
@@ -427,8 +449,12 @@ The DAG State Panel is always visible in this mode (no toggle needed). It shows:
 |--------|-------------|
 | Active Legs | Currently tracked pre-formation candidates with pivot/origin prices, retracement %, bar count |
 | Orphaned Origins | Preserved origins from invalidated legs awaiting sibling swing formation |
-| Pending Pivots | Potential pivots awaiting confirmation for bull and bear directions |
+| Pending Origins | Potential origins awaiting confirmation for bull and bear directions |
 | Recent Events | Log of leg lifecycle events (LEG_CREATED, LEG_PRUNED, LEG_INVALIDATED) |
+
+**Expandable Lists:** When lists have more items than can display, a clickable "+N more" button appears. Click to load 10 additional items. This applies to Active Legs and both Bull/Bear Orphaned Origins columns.
+
+**Attachments:** Click any leg, orphaned origin, or pending origin to "attach" it to your current observation. This is useful for referencing specific items when capturing feedback. See [Observation Attachments](#observation-attachments) below.
 
 ### Hover Highlighting
 
