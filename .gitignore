@@ -93,3 +93,4 @@ ground_truth/screenshots/
 
 # Frontend build output (can be rebuilt with npm run build)
 frontend/dist/
+tmp/
