@@ -432,8 +432,8 @@ The Current Structure Panel is always visible in this mode (no toggle needed). I
 
 | Column | Description |
 |--------|-------------|
-| Bull Legs | Active bull legs with pivot/origin prices, retracement %, bar count |
-| Bear Legs | Active bear legs with pivot/origin prices, retracement %, bar count |
+| Bull Legs | Active bull legs with pivot/origin prices, retracement %, bar count, impulse |
+| Bear Legs | Active bear legs with pivot/origin prices, retracement %, bar count, impulse |
 | Pending Origins | Potential origins awaiting confirmation for bull and bear directions |
 | Recent Events | Log of leg lifecycle events (LEG_CREATED, LEG_PRUNED, LEG_INVALIDATED) |
 

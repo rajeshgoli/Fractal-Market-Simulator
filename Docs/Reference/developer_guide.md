@@ -94,7 +94,6 @@ scripts/                            # Dev utilities
 │   dag/leg_pruner.py ────► LegPruner (pruning algorithms)                │   │
 │   dag/leg.py ───────────► Leg, PendingOrigin dataclasses                │   │
 │   dag/state.py ─────────► BarType, DetectorState                        │   │
-│   level_calculator.py ──► Fibonacci levels                               │   │
 │   reference_frame.py ───► Price ↔ ratio conversion                       │   │
 │   bar_aggregator.py ────► Multi-timeframe OHLC                           │   │
 │   constants.py ─────────► DISCRETIZATION_LEVELS (16 Fib ratios)          │   │
