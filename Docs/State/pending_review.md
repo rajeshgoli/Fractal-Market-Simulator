@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-21
 
@@ -8,10 +8,8 @@
 
 ## Pending Changes
 
-- **#210** — Remove orphaned_origins and subtree_prune (epic with 6 subissues #212-#217)
-- **#219** — Remove pre-DAG legacy modules and dead code (epic with 8 subissues #220-#227)
-- **#228** — Remove legacy scale-based display (epic with 7 subissues #229-#235)
-- **#236** — Add impulse score to legs for engulfed retention analysis (epic with 4 subissues #237-#240)
+- **#241** — Add impulsiveness & spikiness scores to legs (epic with 6 subissues #242-#247)
+- **#248, #249** — Documentation fixes: removed deleted level_calculator.py reference, added impulse field to leg descriptions
 
 ---
 
@@ -19,8 +17,9 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 21 | #210, #219, #228, #236 — Cleanup epics + impulse score (4 epics, 25 subissues) | All Accepted; minor doc fixes #248, #249 |
 | Dec 21 | #199-#208, #211 — Modularization, pruning redesign, UX enhancements (10 issues) | All Accepted |
-| Dec 20 | #190-#197 — Pivot/origin semantics cascade + #198 architectural audit | All Accepted; design sound post-#197 |
+| Dec 20 | #190-#197, #198 — Pivot/origin semantics cascade + architectural audit | All Accepted; design sound post-#197 |
 | Dec 19 | #187-#189, #183, UX fixes (10 changes) — Temporal causality, sidebar unification, feedback snapshots | All Accepted |
 | Dec 19 | #125, #180-#182, #185, #186 — DAG refinements + UX fixes (6 issues) | All Accepted |
 | Dec 19 | #168-#172, #179 — DAG Visualization Mode (6 issues) | All Accepted |
