@@ -334,7 +334,7 @@ export const LEG_STATUS_STYLES: Record<LegStatus, {
   },
   invalidated: {
     lineStyle: 'dotted',
-    opacity: 0.5,
+    opacity: 0.8,
     color: { bull: '#22C55E', bear: '#EF4444' },  // Same direction colors, dotted
   },
 };
