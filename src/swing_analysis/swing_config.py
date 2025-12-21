@@ -2,14 +2,13 @@
 Swing Detection Configuration
 
 Centralized configuration for all swing detection parameters.
-Extracts magic numbers from the codebase into a single, serializable config.
+Extracts magic numbers from the codebase into a single config.
 
 See Docs/Reference/valid_swings.md for the canonical rules these parameters implement.
 """
 
 from dataclasses import dataclass, field, asdict
-import json
-from typing import Any, Dict
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -58,33 +57,24 @@ class SwingConfig:
     All configurable parameters for swing detection.
 
     This config centralizes all magic numbers used in swing detection.
-    It supports serialization to/from JSON for persistence and replay.
 
     Attributes:
         bull: Configuration for bull swing detection.
         bear: Configuration for bear swing detection.
-        lookback_bars: Number of bars to look back for candidate extrema.
-        staleness_threshold: DEPRECATED - No longer used after #203.
         proximity_prune_threshold: Threshold for proximity-based leg consolidation (#203).
             Legs within this relative difference of each other are consolidated.
             Default 0.05 (5%). Set to 0.0 to disable.
         stale_extension_threshold: Multiplier for removing invalidated legs (#203).
-            Invalidated legs are pruned when price moves N × their range beyond origin.
-            Default 3.0 (3× extension).
+            Invalidated legs are pruned when price moves N x their range beyond origin.
+            Default 3.0 (3x extension).
 
     Example:
         >>> config = SwingConfig.default()
         >>> config.bull.formation_fib
         0.287
-        >>> json_str = config.to_json()
-        >>> restored = SwingConfig.from_json(json_str)
-        >>> restored == config
-        True
     """
     bull: DirectionConfig = field(default_factory=DirectionConfig)
     bear: DirectionConfig = field(default_factory=DirectionConfig)
-    lookback_bars: int = 50
-    staleness_threshold: float = 2.0  # DEPRECATED: kept for backwards compatibility
     proximity_prune_threshold: float = 0.05
     stale_extension_threshold: float = 3.0
 
@@ -92,41 +82,6 @@ class SwingConfig:
     def default(cls) -> "SwingConfig":
         """Create a config with default values."""
         return cls()
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization."""
-        return {
-            "bull": asdict(self.bull),
-            "bear": asdict(self.bear),
-            "lookback_bars": self.lookback_bars,
-            "staleness_threshold": self.staleness_threshold,
-            "proximity_prune_threshold": self.proximity_prune_threshold,
-            "stale_extension_threshold": self.stale_extension_threshold,
-        }
-
-    def to_json(self) -> str:
-        """Serialize to JSON string."""
-        return json.dumps(self.to_dict(), indent=2)
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SwingConfig":
-        """Create from dictionary."""
-        bull_data = data.get("bull", {})
-        bear_data = data.get("bear", {})
-        return cls(
-            bull=DirectionConfig(**bull_data) if bull_data else DirectionConfig(),
-            bear=DirectionConfig(**bear_data) if bear_data else DirectionConfig(),
-            lookback_bars=data.get("lookback_bars", 50),
-            staleness_threshold=data.get("staleness_threshold", 2.0),
-            proximity_prune_threshold=data.get("proximity_prune_threshold", 0.05),
-            stale_extension_threshold=data.get("stale_extension_threshold", 3.0),
-        )
-
-    @classmethod
-    def from_json(cls, json_str: str) -> "SwingConfig":
-        """Deserialize from JSON string."""
-        data = json.loads(json_str)
-        return cls.from_dict(data)
 
     def with_bull(self, **kwargs: Any) -> "SwingConfig":
         """
@@ -145,8 +100,6 @@ class SwingConfig:
         return SwingConfig(
             bull=DirectionConfig(**bull_dict),
             bear=self.bear,
-            lookback_bars=self.lookback_bars,
-            staleness_threshold=self.staleness_threshold,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
         )
@@ -162,40 +115,6 @@ class SwingConfig:
         return SwingConfig(
             bull=self.bull,
             bear=DirectionConfig(**bear_dict),
-            lookback_bars=self.lookback_bars,
-            staleness_threshold=self.staleness_threshold,
-            proximity_prune_threshold=self.proximity_prune_threshold,
-            stale_extension_threshold=self.stale_extension_threshold,
-        )
-
-    def with_lookback(self, lookback_bars: int) -> "SwingConfig":
-        """
-        Create a new config with modified lookback.
-
-        Since SwingConfig is frozen, this creates a new instance.
-        """
-        return SwingConfig(
-            bull=self.bull,
-            bear=self.bear,
-            lookback_bars=lookback_bars,
-            staleness_threshold=self.staleness_threshold,
-            proximity_prune_threshold=self.proximity_prune_threshold,
-            stale_extension_threshold=self.stale_extension_threshold,
-        )
-
-    def with_staleness(self, staleness_threshold: float) -> "SwingConfig":
-        """
-        DEPRECATED: staleness_threshold is no longer used after #203.
-
-        Create a new config with modified staleness threshold.
-
-        Since SwingConfig is frozen, this creates a new instance.
-        """
-        return SwingConfig(
-            bull=self.bull,
-            bear=self.bear,
-            lookback_bars=self.lookback_bars,
-            staleness_threshold=staleness_threshold,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
         )
@@ -214,8 +133,6 @@ class SwingConfig:
         return SwingConfig(
             bull=self.bull,
             bear=self.bear,
-            lookback_bars=self.lookback_bars,
-            staleness_threshold=self.staleness_threshold,
             proximity_prune_threshold=proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
         )
@@ -228,13 +145,11 @@ class SwingConfig:
 
         Args:
             stale_extension_threshold: Multiplier for removing invalidated legs.
-                3.0 means invalidated legs are pruned at 3× extension beyond origin.
+                3.0 means invalidated legs are pruned at 3x extension beyond origin.
         """
         return SwingConfig(
             bull=self.bull,
             bear=self.bear,
-            lookback_bars=self.lookback_bars,
-            staleness_threshold=self.staleness_threshold,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=stale_extension_threshold,
         )

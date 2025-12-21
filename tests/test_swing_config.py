@@ -3,12 +3,10 @@ Tests for SwingConfig dataclass.
 
 Verifies:
 - Default values match documented magic numbers from valid_swings.md
-- Serialization round-trip (to_json → from_json)
 - Immutability (frozen=True)
 - DirectionConfig can be customized per direction
 """
 
-import json
 import pytest
 
 from src.swing_analysis.swing_config import DirectionConfig, SwingConfig
@@ -91,7 +89,6 @@ class TestSwingConfig:
 
         assert isinstance(config.bull, DirectionConfig)
         assert isinstance(config.bear, DirectionConfig)
-        assert config.lookback_bars == 50
 
     def test_default_constructor(self):
         """SwingConfig() should create same as default()."""
@@ -123,110 +120,17 @@ class TestSwingConfig:
         config = SwingConfig()
 
         with pytest.raises(AttributeError):
-            config.lookback_bars = 100  # type: ignore
+            config.proximity_prune_threshold = 0.1  # type: ignore
 
-    def test_lookback_bars_default(self):
-        """lookback_bars should default to 50."""
+    def test_proximity_prune_threshold_default(self):
+        """proximity_prune_threshold should default to 0.05."""
         config = SwingConfig()
-        assert config.lookback_bars == 50
+        assert config.proximity_prune_threshold == 0.05
 
-    def test_custom_lookback(self):
-        """SwingConfig should accept custom lookback_bars."""
-        config = SwingConfig(lookback_bars=100)
-        assert config.lookback_bars == 100
-
-
-class TestSwingConfigSerialization:
-    """Tests for SwingConfig serialization."""
-
-    def test_to_dict(self):
-        """to_dict should produce correct dictionary structure."""
-        config = SwingConfig.default()
-        data = config.to_dict()
-
-        assert "bull" in data
-        assert "bear" in data
-        assert "lookback_bars" in data
-
-        assert data["bull"]["formation_fib"] == 0.287
-        assert data["bear"]["formation_fib"] == 0.287
-        assert data["lookback_bars"] == 50
-
-    def test_from_dict(self):
-        """from_dict should correctly reconstruct SwingConfig."""
-        data = {
-            "bull": {"formation_fib": 0.382, "self_separation": 0.15},
-            "bear": {"formation_fib": 0.236},
-            "lookback_bars": 75,
-        }
-
-        config = SwingConfig.from_dict(data)
-
-        assert config.bull.formation_fib == 0.382
-        assert config.bull.self_separation == 0.15
-        # Other bull fields should use defaults
-        assert config.bull.big_swing_threshold == 0.10
-
-        assert config.bear.formation_fib == 0.236
-        # Other bear fields should use defaults
-        assert config.bear.self_separation == 0.10
-
-        assert config.lookback_bars == 75
-
-    def test_from_dict_empty(self):
-        """from_dict with empty dict should use all defaults."""
-        config = SwingConfig.from_dict({})
-
-        assert config == SwingConfig.default()
-
-    def test_to_json(self):
-        """to_json should produce valid JSON string."""
-        config = SwingConfig.default()
-        json_str = config.to_json()
-
-        # Should be valid JSON
-        data = json.loads(json_str)
-
-        assert data["bull"]["formation_fib"] == 0.287
-        assert data["lookback_bars"] == 50
-
-    def test_from_json(self):
-        """from_json should correctly parse JSON string."""
-        json_str = '{"bull": {"formation_fib": 0.382}, "lookback_bars": 100}'
-
-        config = SwingConfig.from_json(json_str)
-
-        assert config.bull.formation_fib == 0.382
-        assert config.lookback_bars == 100
-
-    def test_round_trip_default(self):
-        """to_json → from_json should preserve default config."""
-        original = SwingConfig.default()
-        json_str = original.to_json()
-        restored = SwingConfig.from_json(json_str)
-
-        assert restored == original
-
-    def test_round_trip_custom(self):
-        """to_json → from_json should preserve custom config."""
-        original = SwingConfig(
-            bull=DirectionConfig(formation_fib=0.382, self_separation=0.15),
-            bear=DirectionConfig(formation_fib=0.236, big_swing_threshold=0.05),
-            lookback_bars=100,
-        )
-
-        json_str = original.to_json()
-        restored = SwingConfig.from_json(json_str)
-
-        assert restored == original
-
-    def test_round_trip_through_dict(self):
-        """to_dict → from_dict should preserve config."""
-        original = SwingConfig.default()
-        data = original.to_dict()
-        restored = SwingConfig.from_dict(data)
-
-        assert restored == original
+    def test_stale_extension_threshold_default(self):
+        """stale_extension_threshold should default to 3.0."""
+        config = SwingConfig()
+        assert config.stale_extension_threshold == 3.0
 
 
 class TestSwingConfigBuilders:
@@ -246,7 +150,6 @@ class TestSwingConfigBuilders:
         # Other values preserved
         assert modified.bull.self_separation == 0.10
         assert modified.bear == original.bear
-        assert modified.lookback_bars == original.lookback_bars
 
     def test_with_bear(self):
         """with_bear should create new config with modified bear params."""
@@ -263,20 +166,31 @@ class TestSwingConfigBuilders:
         assert modified.bull == original.bull
         assert modified.bear.formation_fib == 0.287
 
-    def test_with_lookback(self):
-        """with_lookback should create new config with modified lookback."""
+    def test_with_proximity_prune(self):
+        """with_proximity_prune should create new config with modified threshold."""
         original = SwingConfig.default()
-        modified = original.with_lookback(100)
+        modified = original.with_proximity_prune(0.10)
 
         # Original unchanged
-        assert original.lookback_bars == 50
+        assert original.proximity_prune_threshold == 0.05
 
         # Modified has new value
-        assert modified.lookback_bars == 100
+        assert modified.proximity_prune_threshold == 0.10
 
         # Other values preserved
         assert modified.bull == original.bull
         assert modified.bear == original.bear
+
+    def test_with_stale_extension(self):
+        """with_stale_extension should create new config with modified threshold."""
+        original = SwingConfig.default()
+        modified = original.with_stale_extension(5.0)
+
+        # Original unchanged
+        assert original.stale_extension_threshold == 3.0
+
+        # Modified has new value
+        assert modified.stale_extension_threshold == 5.0
 
     def test_chained_builders(self):
         """Builder methods should be chainable."""
@@ -284,12 +198,12 @@ class TestSwingConfigBuilders:
             SwingConfig.default()
             .with_bull(formation_fib=0.382)
             .with_bear(formation_fib=0.236)
-            .with_lookback(100)
+            .with_proximity_prune(0.10)
         )
 
         assert config.bull.formation_fib == 0.382
         assert config.bear.formation_fib == 0.236
-        assert config.lookback_bars == 100
+        assert config.proximity_prune_threshold == 0.10
 
 
 class TestSwingConfigEquality:
@@ -316,10 +230,10 @@ class TestSwingConfigEquality:
 
         assert config1 != config2
 
-    def test_unequal_lookback(self):
-        """Configs with different lookback should not be equal."""
+    def test_unequal_proximity_prune(self):
+        """Configs with different proximity_prune should not be equal."""
         config1 = SwingConfig.default()
-        config2 = config1.with_lookback(100)
+        config2 = config1.with_proximity_prune(0.10)
 
         assert config1 != config2
 

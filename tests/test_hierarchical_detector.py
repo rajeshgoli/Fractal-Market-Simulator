@@ -110,13 +110,13 @@ class TestHierarchicalDetectorInitialization:
         """Detector initializes with default config."""
         detector = HierarchicalDetector()
         assert detector.config is not None
-        assert detector.config.lookback_bars == 50
+        assert detector.config.proximity_prune_threshold == 0.05
 
     def test_custom_config(self):
         """Detector accepts custom config."""
-        config = SwingConfig.default().with_lookback(100)
+        config = SwingConfig.default().with_proximity_prune(0.10)
         detector = HierarchicalDetector(config)
-        assert detector.config.lookback_bars == 100
+        assert detector.config.proximity_prune_threshold == 0.10
 
     def test_initial_state(self):
         """Detector starts with empty state."""
@@ -166,7 +166,6 @@ class TestSwingFormation:
         config = SwingConfig(
             bull=DirectionConfig(formation_fib=0.287, self_separation=0.10),
             bear=DirectionConfig(formation_fib=0.287, self_separation=0.10),
-            lookback_bars=50,
         )
         detector = HierarchicalDetector(config)
 
@@ -209,7 +208,6 @@ class TestSwingFormation:
         config = SwingConfig(
             bull=DirectionConfig(formation_fib=0.287, self_separation=0.10),
             bear=DirectionConfig(formation_fib=0.287, self_separation=0.10),
-            lookback_bars=50,
         )
         detector = HierarchicalDetector(config)
 
@@ -246,7 +244,6 @@ class TestSwingFormation:
         config = SwingConfig(
             bull=DirectionConfig(formation_fib=0.5),  # 50% required
             bear=DirectionConfig(formation_fib=0.5),  # 50% required for bear too
-            lookback_bars=50,
         )
         detector = HierarchicalDetector(config)
 
@@ -296,7 +293,7 @@ class TestLevelCross:
 
     def test_level_cross_emits_event(self):
         """Level cross events are emitted when price crosses Fib levels."""
-        config = SwingConfig(lookback_bars=50)
+        config = SwingConfig.default()
         detector = HierarchicalDetector(config)
 
         # Create a swing
@@ -331,7 +328,7 @@ class TestParentAssignment:
 
     def test_child_swing_gets_parent(self):
         """Child swing is assigned to parent when formed within parent's range."""
-        config = SwingConfig(lookback_bars=50)
+        config = SwingConfig.default()
         detector = HierarchicalDetector(config)
 
         # Create a parent swing: 5100 -> 5000 (range 100)
@@ -373,7 +370,7 @@ class TestNoLookahead:
 
     def test_bar_index_only_accesses_past(self):
         """Verify that process_bar only uses data from current and past bars."""
-        config = SwingConfig(lookback_bars=10)
+        config = SwingConfig.default()
         detector = HierarchicalDetector(config)
 
         # Process bars sequentially

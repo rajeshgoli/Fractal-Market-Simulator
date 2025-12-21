@@ -16,7 +16,6 @@ import numpy as np
 
 from src.swing_analysis.adapters import (
     swing_node_to_reference_swing,
-    reference_swing_to_swing_node,
     detect_swings_compat,
     _group_by_legacy_scale,
     convert_swings_to_legacy_dict,
@@ -151,106 +150,6 @@ class TestSwingNodeToReferenceSwing:
 
         assert legacy.containing_swing_id is None
         assert legacy.separation_is_anchor is True
-
-
-class TestReferenceSwingToSwingNode:
-    """Tests for converting ReferenceSwing back to SwingNode."""
-
-    def test_basic_conversion(self):
-        """Basic conversion should preserve essential fields."""
-        ref = ReferenceSwing(
-            high_price=5100.0,
-            high_bar_index=100,
-            low_price=5000.0,
-            low_bar_index=150,
-            size=100.0,
-            direction="bull",
-        )
-
-        node = reference_swing_to_swing_node(ref)
-
-        assert float(node.high_price) == 5100.0
-        assert node.high_bar_index == 100
-        assert float(node.low_price) == 5000.0
-        assert node.low_bar_index == 150
-        assert node.direction == "bull"
-        assert node.status == "active"
-
-    def test_custom_swing_id(self):
-        """Custom swing_id should be used if provided."""
-        ref = ReferenceSwing(
-            high_price=5100.0,
-            high_bar_index=100,
-            low_price=5000.0,
-            low_bar_index=150,
-            size=100.0,
-            direction="bull",
-        )
-
-        node = reference_swing_to_swing_node(ref, swing_id="custom99")
-
-        assert node.swing_id == "custom99"
-
-    def test_custom_formed_at_bar(self):
-        """Custom formed_at_bar should be used if provided."""
-        ref = ReferenceSwing(
-            high_price=5100.0,
-            high_bar_index=100,
-            low_price=5000.0,
-            low_bar_index=150,
-            size=100.0,
-            direction="bull",
-        )
-
-        node = reference_swing_to_swing_node(ref, formed_at_bar=200)
-
-        assert node.formed_at_bar == 200
-
-    def test_default_formed_at_bar(self):
-        """Default formed_at_bar should be max of bar indices."""
-        ref = ReferenceSwing(
-            high_price=5100.0,
-            high_bar_index=100,
-            low_price=5000.0,
-            low_bar_index=150,
-            size=100.0,
-            direction="bull",
-        )
-
-        node = reference_swing_to_swing_node(ref)
-
-        assert node.formed_at_bar == 150  # max(100, 150)
-
-
-class TestRoundTripConversion:
-    """Tests for round-trip conversion preserving data."""
-
-    def test_swing_node_round_trip(self):
-        """SwingNode -> ReferenceSwing -> SwingNode preserves essential data."""
-        original = SwingNode(
-            swing_id="round123",
-            high_bar_index=100,
-            high_price=Decimal("5100.00"),
-            low_bar_index=150,
-            low_price=Decimal("5000.00"),
-            direction="bull",
-            status="active",
-            formed_at_bar=150,
-        )
-
-        legacy = swing_node_to_reference_swing(original)
-        restored = reference_swing_to_swing_node(
-            legacy, swing_id=original.swing_id, formed_at_bar=original.formed_at_bar
-        )
-
-        assert restored.swing_id == original.swing_id
-        assert restored.high_bar_index == original.high_bar_index
-        assert restored.low_bar_index == original.low_bar_index
-        assert restored.direction == original.direction
-        assert restored.formed_at_bar == original.formed_at_bar
-        # Price precision may differ due to float conversion
-        assert abs(float(restored.high_price) - float(original.high_price)) < 0.01
-        assert abs(float(restored.low_price) - float(original.low_price)) < 0.01
 
 
 class TestGroupByLegacyScale:

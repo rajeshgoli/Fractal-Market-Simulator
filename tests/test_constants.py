@@ -4,7 +4,6 @@ import pytest
 from src.swing_analysis.constants import (
     DISCRETIZATION_LEVELS,
     DISCRETIZATION_LEVEL_SET_VERSION,
-    SEPARATION_FIB_LEVELS,
 )
 
 
@@ -65,17 +64,3 @@ class TestDiscretizationLevelSetVersion:
     def test_current_version(self):
         """Current version should be v1.0."""
         assert DISCRETIZATION_LEVEL_SET_VERSION == "v1.0"
-
-
-class TestLevelSetRelationships:
-    """Tests for relationships between level sets."""
-
-    def test_discretization_superset_of_separation(self):
-        """DISCRETIZATION_LEVELS should contain all SEPARATION_FIB_LEVELS."""
-        for level in SEPARATION_FIB_LEVELS:
-            assert level in DISCRETIZATION_LEVELS, f"Missing {level}"
-
-    def test_discretization_has_additional_levels(self):
-        """DISCRETIZATION_LEVELS should have more levels than SEPARATION_FIB_LEVELS."""
-        # Additional levels: -0.15, -0.10, 0.0, 2.236
-        assert len(DISCRETIZATION_LEVELS) > len(SEPARATION_FIB_LEVELS)

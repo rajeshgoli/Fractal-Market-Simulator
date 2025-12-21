@@ -56,15 +56,14 @@ class TestConfigParameters:
         config = DirectionConfig(engulfed_breach_threshold=0.25)
         assert config.engulfed_breach_threshold == 0.25
 
-    def test_swing_config_serialization_includes_new_params(self):
-        """SwingConfig serialization should include new threshold parameters."""
+    def test_swing_config_includes_new_params(self):
+        """SwingConfig should include new threshold parameters in DirectionConfig."""
         config = SwingConfig.default()
-        data = config.to_dict()
 
-        assert "pivot_breach_threshold" in data["bull"]
-        assert "engulfed_breach_threshold" in data["bull"]
-        assert data["bull"]["pivot_breach_threshold"] == 0.10
-        assert data["bull"]["engulfed_breach_threshold"] == 0.20
+        assert config.bull.pivot_breach_threshold == 0.10
+        assert config.bull.engulfed_breach_threshold == 0.20
+        assert config.bear.pivot_breach_threshold == 0.10
+        assert config.bear.engulfed_breach_threshold == 0.20
 
 
 class TestPivotBreachDetection:

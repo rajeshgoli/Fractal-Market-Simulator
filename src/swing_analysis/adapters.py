@@ -8,13 +8,12 @@ consumers to the new system.
 The adapter layer allows existing code that expects ReferenceSwing and
 detect_swings() to continue working while components are updated one by one.
 
-This module also contains the legacy ReferenceSwing and SeparationDetails
-dataclasses, moved from swing_detector.py after that module was deprecated.
+This module also contains the legacy ReferenceSwing dataclass, moved from
+swing_detector.py after that module was deprecated.
 """
 
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Any, Literal
-from decimal import Decimal
 
 import pandas as pd
 
@@ -27,21 +26,6 @@ from .dag import (
     dataframe_to_bars,
 )
 from .swing_config import SwingConfig
-
-
-@dataclass
-class SeparationDetails:
-    """Details about structural separation between swings.
-
-    Legacy dataclass from the deprecated swing_detector.py module.
-    Preserved for backward compatibility with existing code.
-    """
-    is_separated: bool
-    is_anchor: bool  # True if first swing (no previous to compare)
-    containing_swing_id: Optional[str] = None
-    from_swing_id: Optional[str] = None  # The swing we measured separation from
-    distance_fib: Optional[float] = None  # Actual distance in FIB terms
-    minimum_fib: Optional[float] = None   # Threshold used (0.236)
 
 
 @dataclass
@@ -171,53 +155,6 @@ def swing_node_to_reference_swing(node: SwingNode) -> ReferenceSwing:
         separation_distance_fib=None,
         separation_minimum_fib=None,
         separation_from_swing_id=None,
-    )
-
-
-def reference_swing_to_swing_node(
-    ref: ReferenceSwing,
-    swing_id: Optional[str] = None,
-    formed_at_bar: Optional[int] = None,
-) -> SwingNode:
-    """
-    Convert legacy ReferenceSwing to hierarchical SwingNode.
-
-    This is useful for importing legacy data into the new system.
-
-    Args:
-        ref: ReferenceSwing from legacy detector.
-        swing_id: Optional ID to assign. If None, generates a new one.
-        formed_at_bar: Bar index when formed. If None, uses the later
-            of high_bar_index or low_bar_index.
-
-    Returns:
-        SwingNode with equivalent data.
-
-    Example:
-        >>> ref = ReferenceSwing(
-        ...     high_price=5100.0,
-        ...     high_bar_index=100,
-        ...     low_price=5000.0,
-        ...     low_bar_index=150,
-        ...     size=100.0,
-        ...     direction="bull",
-        ... )
-        >>> node = reference_swing_to_swing_node(ref)
-        >>> node.direction
-        'bull'
-    """
-    if formed_at_bar is None:
-        formed_at_bar = max(ref.high_bar_index, ref.low_bar_index)
-
-    return SwingNode(
-        swing_id=swing_id or SwingNode.generate_id(),
-        high_bar_index=ref.high_bar_index,
-        high_price=Decimal(str(ref.high_price)),
-        low_bar_index=ref.low_bar_index,
-        low_price=Decimal(str(ref.low_price)),
-        direction=ref.direction,
-        status="active",
-        formed_at_bar=formed_at_bar,
     )
 
 

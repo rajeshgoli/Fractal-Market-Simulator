@@ -27,8 +27,6 @@ Read in order:
 **Known debt:**
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
 - #177 — Minor: missing `invalidated_at_bar` field, AppState/cache duplication
-- `SwingConfig.lookback_bars` — vestigial from pre-DAG architecture, unused by LegDetector (cleanup candidate)
-- `SwingConfig.staleness_threshold` — DEPRECATED, kept for backward compat only
 
 ---
 

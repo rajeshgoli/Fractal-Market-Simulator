@@ -35,12 +35,9 @@ src/
 │   │   ├── leg_pruner.py           # LegPruner (pruning algorithms)
 │   │   └── calibrate.py            # calibrate, calibrate_from_dataframe, dataframe_to_bars
 │   ├── adapters.py                 # Legacy compatibility: SwingNode ↔ ReferenceSwing, detect_swings_compat
-│   ├── level_calculator.py         # Fibonacci level computation
 │   ├── reference_frame.py          # Oriented coordinate system for ratios
 │   ├── bar_aggregator.py           # Multi-timeframe OHLC aggregation
-│   ├── constants.py                # Fibonacci level sets
-│   ├── swing_state_manager.py      # Live swing tracking, ScaleConfig
-│   └── event_detector.py           # Live event detection
+│   └── constants.py                # Fibonacci level sets
 └── discretization/
     ├── schema.py                   # DiscretizationEvent, SwingEntry, etc.
     ├── discretizer.py              # Batch OHLC → event log processor
