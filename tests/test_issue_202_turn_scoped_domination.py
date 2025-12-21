@@ -89,8 +89,10 @@ class TestTurnScopedDomination:
         # Verify prev_bar_type switched to 'bull'
         assert detector.state.prev_bar_type == 'bull'
 
-        # Verify last_turn_bar['bull'] was set to bar 5 (turn transition)
-        assert detector.state.last_turn_bar['bull'] == 5
+        # Verify last_turn_bar['bull'] was set to the pending origin's bar index (bar 4)
+        # not the bar where the turn was detected (bar 5). This ensures the first
+        # leg created in the new turn is included in domination checks.
+        assert detector.state.last_turn_bar['bull'] == 4
 
         # Key assertion: A new bull leg should be created from the new turn's low
         # even though the old bull leg has origin=90 which is "better" than 91
@@ -169,8 +171,9 @@ class TestTurnScopedDomination:
         # Verify prev_bar_type switched to 'bear'
         assert detector.state.prev_bar_type == 'bear'
 
-        # Verify last_turn_bar['bear'] was set to bar 5 (turn transition)
-        assert detector.state.last_turn_bar['bear'] == 5
+        # Verify last_turn_bar['bear'] was set to the pending origin's bar index (bar 4)
+        # not the bar where the turn was detected (bar 5).
+        assert detector.state.last_turn_bar['bear'] == 4
 
         # Key assertion: A new bear leg should be created from the new turn's high
         # even though the old bear leg has origin=110 which is "better" than 109
@@ -238,7 +241,8 @@ class TestTurnScopedDomination:
 
         # Verify state
         assert detector.state.prev_bar_type == 'bear'
-        assert detector.state.last_turn_bar['bear'] == 2
+        # last_turn_bar is set to the pending origin's bar index (bar 1, where the high was)
+        assert detector.state.last_turn_bar['bear'] == 1
 
         # Serialize
         state_dict = detector.state.to_dict()
@@ -249,5 +253,5 @@ class TestTurnScopedDomination:
 
         # Verify restored state
         assert restored_state.prev_bar_type == 'bear'
-        assert restored_state.last_turn_bar['bear'] == 2
+        assert restored_state.last_turn_bar['bear'] == 1
         assert restored_state.last_turn_bar['bull'] == -1

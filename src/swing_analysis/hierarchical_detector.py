@@ -628,8 +628,16 @@ class HierarchicalDetector:
         if current_directional_type:
             # Check for turn transition - only when coming FROM the opposite direction
             if self.state.prev_bar_type and self.state.prev_bar_type != current_directional_type:
-                # Direction changed! This bar starts a new turn for this direction
-                self.state.last_turn_bar[current_directional_type] = bar.index
+                # Direction changed! This bar starts a new turn for this direction.
+                # IMPORTANT: Use the pending origin's bar index as the turn boundary,
+                # not the current bar. The pending origin was set during the opposite
+                # direction's turn and will be used to create the first leg of this turn.
+                # That leg should be considered part of the new turn for domination checks.
+                pending = self.state.pending_origins.get(current_directional_type)
+                if pending:
+                    self.state.last_turn_bar[current_directional_type] = pending.bar_index
+                else:
+                    self.state.last_turn_bar[current_directional_type] = bar.index
             # Note: We intentionally do NOT set last_turn_bar on first directional bar
             # of each type. The first TYPE_2_BULL doesn't create a turn boundary -
             # all legs from the beginning are part of the same initial structure.
