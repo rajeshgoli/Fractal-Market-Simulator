@@ -138,6 +138,7 @@ interface SidebarProps {
   // Attachment support
   attachedItems: AttachableItem[];
   onDetachItem: (item: AttachableItem) => void;
+  onClearAttachments: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -166,6 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   lingerEnabled = true,
   attachedItems,
   onDetachItem,
+  onClearAttachments,
 }) => {
   const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
   const [feedbackText, setFeedbackText] = useState('');
@@ -300,6 +302,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       await submitPlaybackFeedback(feedbackText, currentPlaybackBar, snapshot, screenshotData);
       setFeedbackText('');
+      onClearAttachments(); // Clear attachments after successful submit
       setSubmitStatus('success');
       setHasAutopaused(false); // Reset autopause state after successful submit
       // Clear success status after 2 seconds
@@ -312,7 +315,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext, screenshotTargetRef, attachedItems]);
+  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext, screenshotTargetRef, attachedItems, onClearAttachments]);
 
   const handleInputFocus = useCallback(() => {
     // Pause linger timer if lingering

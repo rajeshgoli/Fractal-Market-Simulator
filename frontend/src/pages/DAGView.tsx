@@ -151,6 +151,10 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     }));
   }, []);
 
+  const handleClearAttachments = useCallback(() => {
+    setAttachedItems([]);
+  }, []);
+
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
   const chart2Ref = useRef<IChartApi | null>(null);
@@ -722,6 +726,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             lingerEnabled={lingerEnabled}
             attachedItems={attachedItems}
             onDetachItem={handleDetachItem}
+            onClearAttachments={handleClearAttachments}
           />
         </div>
 

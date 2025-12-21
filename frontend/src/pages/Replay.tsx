@@ -266,6 +266,10 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     }));
   }, []);
 
+  const handleClearAttachments = useCallback(() => {
+    setAttachedItems([]);
+  }, []);
+
   // Use hook to filter and rank swings based on display config
   // filteredActiveSwings is limited by activeSwingCount (for chart display)
   // allNavigableSwings includes all swings for enabled scales (for navigation)
@@ -1253,6 +1257,7 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
             lingerEnabled={lingerEnabled}
             attachedItems={attachedItems}
             onDetachItem={handleDetachItem}
+            onClearAttachments={handleClearAttachments}
           />
         </div>
 
