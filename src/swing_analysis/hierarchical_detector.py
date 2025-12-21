@@ -196,6 +196,14 @@ class DetectorState:
         default_factory=lambda: {'bull': [], 'bear': []}
     )
 
+    # Turn tracking (#202): Track when each direction's turn started
+    # The domination check should only apply within a turn, not across turns.
+    # When a turn changes (e.g., TYPE_2_BEAR -> TYPE_2_BULL), the bull turn restarts.
+    last_turn_bar: Dict[str, int] = field(
+        default_factory=lambda: {'bull': -1, 'bear': -1}
+    )
+    prev_bar_type: Optional[str] = None  # 'bull', 'bear', or None
+
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization."""
         # Serialize active legs
@@ -277,6 +285,9 @@ class DetectorState:
                 direction: [(str(price), idx) for price, idx in origins]
                 for direction, origins in self.orphaned_origins.items()
             },
+            # Turn tracking (#202)
+            "last_turn_bar": self.last_turn_bar,
+            "prev_bar_type": self.prev_bar_type,
         }
 
     @classmethod
@@ -372,6 +383,10 @@ class DetectorState:
                 (Decimal(price), idx) for price, idx in origins_list
             ]
 
+        # Turn tracking (#202)
+        last_turn_bar = data.get("last_turn_bar", {'bull': -1, 'bear': -1})
+        prev_bar_type = data.get("prev_bar_type")
+
         return cls(
             active_swings=list(swing_map.values()),
             last_bar_index=data.get("last_bar_index", -1),
@@ -389,6 +404,9 @@ class DetectorState:
             price_high_water=Decimal(price_high_water) if price_high_water is not None else None,
             price_low_water=Decimal(price_low_water) if price_low_water is not None else None,
             orphaned_origins=orphaned_origins,
+            # Turn tracking (#202)
+            last_turn_bar=last_turn_bar,
+            prev_bar_type=prev_bar_type,
         )
 
 
@@ -478,6 +496,11 @@ class HierarchicalDetector:
 
         Creating dominated legs is wasteful - they will be pruned at turn.
 
+        IMPORTANT (#202): This check only applies within a single turn.
+        Legs from previous turns (origin_index < last_turn_bar) don't dominate
+        legs in the current turn. This allows nested subtrees to form after
+        directional reversals.
+
         Args:
             direction: 'bull' or 'bear'
             origin_price: The origin price of the potential new leg
@@ -485,8 +508,14 @@ class HierarchicalDetector:
         Returns:
             True if an existing leg dominates (new leg would be pruned)
         """
+        # Get the turn boundary - only legs from current turn can dominate
+        turn_start = self.state.last_turn_bar.get(direction, -1)
+
         for leg in self.state.active_legs:
             if leg.direction != direction or leg.status != 'active':
+                continue
+            # #202: Skip legs from previous turns - they don't dominate current turn
+            if leg.origin_index < turn_start:
                 continue
             # Bull: lower origin is better (origin=LOW, larger range)
             # Bear: higher origin is better (origin=HIGH, larger range)
@@ -580,6 +609,32 @@ class HierarchicalDetector:
         bar_type = self._classify_bar_type(bar, self.state.prev_bar)
         prev_high = Decimal(str(self.state.prev_bar.high))
         prev_low = Decimal(str(self.state.prev_bar.low))
+
+        # Turn detection (#202): Track when direction changes
+        # When transitioning from bear to bull (or vice versa), mark this bar
+        # as the start of a new turn. Domination checks should only apply
+        # within a turn, not across turns.
+        #
+        # Key insight: Only set last_turn_bar when transitioning FROM the opposite
+        # direction. The first TYPE_2_BULL ever seen does NOT start a new turn -
+        # it continues the initial state. Only when we see TYPE_2_BEAR followed
+        # by TYPE_2_BULL do we mark a new bull turn.
+        current_directional_type = None
+        if bar_type == BarType.TYPE_2_BULL:
+            current_directional_type = 'bull'
+        elif bar_type == BarType.TYPE_2_BEAR:
+            current_directional_type = 'bear'
+
+        if current_directional_type:
+            # Check for turn transition - only when coming FROM the opposite direction
+            if self.state.prev_bar_type and self.state.prev_bar_type != current_directional_type:
+                # Direction changed! This bar starts a new turn for this direction
+                self.state.last_turn_bar[current_directional_type] = bar.index
+            # Note: We intentionally do NOT set last_turn_bar on first directional bar
+            # of each type. The first TYPE_2_BULL doesn't create a turn boundary -
+            # all legs from the beginning are part of the same initial structure.
+            # Update prev_bar_type
+            self.state.prev_bar_type = current_directional_type
 
         # Process based on bar type
         if bar_type == BarType.TYPE_2_BULL:
@@ -1633,9 +1688,29 @@ class HierarchicalDetector:
         When an active leg has a better origin, tracking a worse pending origin
         is pointless - if the leg survives, the pending origin won't be used;
         if the leg is invalidated, the orphaned origin is still better.
+
+        IMPORTANT (#202): This check only applies when we're in the SAME direction's
+        turn. During an opposite direction's turn (e.g., bear turn for bull pending
+        origins), always track the pending origin since the old legs are from a
+        previous turn and shouldn't block tracking for the next turn.
         """
+        # #202: If we're currently in the opposite direction's turn, always track.
+        # This allows pending origins to accumulate during retracements.
+        # For example, during a bear turn, always track bull pending origins
+        # so they're available when the new bull turn starts.
+        opposite = 'bear' if direction == 'bull' else 'bull'
+        if self.state.prev_bar_type == opposite:
+            # We're in the opposite direction's turn - always track
+            return True
+
+        # Get the turn boundary - only legs from current turn matter
+        turn_start = self.state.last_turn_bar.get(direction, -1)
+
         for leg in self.state.active_legs:
             if leg.direction == direction and leg.status == 'active':
+                # #202: Skip legs from previous turns
+                if leg.origin_index < turn_start:
+                    continue
                 if direction == 'bull' and leg.origin_price <= price:
                     return False  # Active bull leg has lower/equal origin
                 elif direction == 'bear' and leg.origin_price >= price:
