@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { PlaybackState, BarData, FilterState, SwingScaleKey } from '../types';
+import { PlaybackState, BarData, FilterState } from '../types';
 import { advanceReplay, ReplayEvent, ReplaySwingState, AggregatedBarsResponse, DagStateResponse } from '../lib/api';
 import { LINGER_DURATION_MS } from '../constants';
 
@@ -9,7 +9,6 @@ interface UseForwardPlaybackOptions {
   playbackIntervalMs: number;
   barsPerAdvance: number;  // How many source bars to advance per tick (aggregation factor)
   filters: FilterState[];  // Event type filters
-  enabledScales: Set<SwingScaleKey>;  // Scale filters
   lingerEnabled?: boolean;  // Whether to pause on events (default: true)
   chartAggregationScales?: string[];  // Scales to include in response (e.g., ["S", "M"])
   includeDagState?: boolean;  // Whether to include DAG state in response
@@ -58,7 +57,6 @@ export function useForwardPlayback({
   playbackIntervalMs,
   barsPerAdvance,
   filters,
-  enabledScales,
   lingerEnabled = true,
   chartAggregationScales,
   includeDagState = false,
@@ -243,15 +241,9 @@ export function useForwardPlayback({
         return false;
       }
 
-      // Check scale filter
-      const eventScale = event.scale as SwingScaleKey;
-      if (!enabledScales.has(eventScale)) {
-        return false;
-      }
-
       return true;
     });
-  }, [filters, enabledScales]);
+  }, [filters]);
 
   // Fetch a batch of bars into the buffer (background fetch)
   const fetchBatch = useCallback(async () => {

@@ -5,8 +5,6 @@ import {
   CalibrationData,
   CalibrationSwing,
   CalibrationPhase,
-  SwingDisplayConfig,
-  SwingScaleKey,
   ACTIVE_SWING_COUNT_OPTIONS,
   // Hierarchical types
   HierarchicalDisplayConfig,
@@ -31,10 +29,6 @@ interface ExplanationPanelProps {
   onNavigatePrev?: () => void;
   onNavigateNext?: () => void;
   onStartPlayback?: () => void;
-  // Legacy display config props (scale-based)
-  displayConfig?: SwingDisplayConfig;
-  filteredStats?: Record<string, { total_swings: number; active_swings: number; displayed_swings: number }>; // kept for legacy
-  onToggleScale?: (scale: SwingScaleKey) => void; // kept for legacy
   onSetActiveSwingCount?: (count: number) => void;
   // Hierarchical display config props (new)
   hierarchicalConfig?: HierarchicalDisplayConfig;
@@ -76,9 +70,6 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
   onNavigatePrev,
   onNavigateNext,
   onStartPlayback,
-  displayConfig,
-  filteredStats: _filteredStats,
-  onToggleScale: _onToggleScale,
   onSetActiveSwingCount,
   // Hierarchical props
   hierarchicalConfig,
@@ -90,9 +81,7 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
   onBrowseDepth,
   showStats = false,
 }) => {
-  // Suppress unused variable warnings for legacy props kept for compatibility
-  void _filteredStats;
-  void _onToggleScale;
+  // Suppress unused variable warning for legacy prop kept for compatibility
   void _statsByDepth;
   // Show calibration report when calibrated, or during playback if showStats is enabled
   const shouldShowStats =
@@ -211,7 +200,7 @@ export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
             <div>
               <label className="text-xs text-app-muted block mb-1">Show largest defended:</label>
               <select
-                value={hierarchicalConfig?.activeSwingCount ?? displayConfig?.activeSwingCount ?? 2}
+                value={hierarchicalConfig?.activeSwingCount ?? 2}
                 onChange={(e) => {
                   const count = parseInt(e.target.value, 10);
                   onSetHierarchicalActiveSwingCount?.(count);

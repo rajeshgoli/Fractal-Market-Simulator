@@ -244,13 +244,9 @@ Use OFF mode for continuous observation without interruptions. Events are still 
 | LEVEL_CROSS | OFF | Too frequent for practical use |
 | SWING_TERMINATED | OFF | Redundant with completion/invalidation |
 
-**Scale Filters (Sidebar):**
-
-During forward playback, the sidebar also shows scale filters (S/M/L/XL). Toggle these to show/hide events for specific scales. Filters persist during playback.
-
 **Show Stats Toggle (Sidebar):**
 
-During playback, a "Show Stats" toggle appears in the sidebar. When enabled, it displays the calibration stats panel (thresholds, swing counts by scale) instead of the swing explanation panel. This is useful for referencing calibration data while observing playback events.
+During playback, a "Show Stats" toggle appears in the sidebar. When enabled, it displays the calibration stats panel (thresholds, swing counts by depth) instead of the swing explanation panel. This is useful for referencing calibration data while observing playback events.
 
 **Current Structure Panel Toggle:**
 
@@ -273,15 +269,15 @@ When lingering on a SWING_FORMED event, the explanation panel displays:
 
 | Field | Description |
 |-------|-------------|
-| Scale Badge | XL, L, M, or S |
+| Depth Badge | Tree depth level (Root, Depth 2, Depth 3, etc.) |
 | Direction Badge | BULL (green) or BEAR (red) |
 | High Endpoint | Price, bar index, timestamp |
 | Low Endpoint | Price, bar index, timestamp |
 | Size | Points and percentage |
-| Scale Reason | Why this qualifies (e.g., "Size 112.50 >= XL threshold 100") |
-| Separation | FIB distance from previous swing at same scale |
+| Size Reason | Why this swing is significant based on threshold |
+| Parent | Reference to containing parent swing in hierarchy |
 
-**Anchor Swings:** For the first swing at a scale, separation shows "Largest swing in calibration window - anchor point".
+**Root Swings:** For swings with no parent (root level), no parent reference is shown.
 
 ### Swing Overlay
 
@@ -302,7 +298,7 @@ The feedback input is always visible during playback (not just during linger eve
 **How it works:**
 - Text input appears in the sidebar after calibration completes
 - Visible during both the calibration review phase and forward playback
-- Type observations at any time (e.g., "Calibration found only 1 XL swing but I see several obvious ones")
+- Type observations at any time (e.g., "Calibration found only 1 root swing but I see several obvious ones")
 - Submit with `Ctrl+Enter` or click Save
 - **Auto-pause:** Clicking in the box or typing automatically pauses playback
 - During linger events, timer pauses when input is focused
@@ -312,7 +308,7 @@ The feedback input is always visible during playback (not just during linger eve
 - Window offset used for session
 - Bars elapsed since calibration
 - Current bar index
-- Swings found (count by scale: XL, L, M, S)
+- Swings found (count by depth: root, depth 2, depth 3, deeper)
 - Swings invalidated count
 - Swings completed count
 - Optional event context (if during linger event)
@@ -499,7 +495,7 @@ In Market Structure View, all playback controls are functional:
 |---------|------------------|----------------------|
 | Initial state | Pre-calibrated (10K bars) | Empty (0 bars) |
 | Build process | Instant (pre-computed) | Incremental (watch it build) |
-| Sidebar | Event filters, scale toggles, feedback | Current structure, linger toggles, feedback |
+| Sidebar | Event filters, feedback | Current structure, linger toggles, feedback |
 | Swing overlay | Fib levels for formed swings | Diagonal leg lines for candidates |
 | Linger default | ON | OFF (continuous observation) |
 | Event navigation | Jump between swing events | Not available |

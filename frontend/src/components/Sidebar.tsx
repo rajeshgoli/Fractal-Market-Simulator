@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useRef, RefObject } from 'react';
 import { toPng } from 'html-to-image';
-import { EventType, SwingDisplayConfig, SwingScaleKey, PlaybackState } from '../types';
+import { EventType, PlaybackState } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, Layers, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X } from 'lucide-react';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent, DagLeg } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
 
@@ -51,11 +51,6 @@ export interface DagContextLeg {
   range: number;  // |origin_price - pivot_price|
 }
 
-export interface DagContextOrigin {
-  price: number;
-  bar_index: number;
-}
-
 export interface DagContextPendingOrigin {
   price: number;
   bar_index: number;
@@ -63,10 +58,6 @@ export interface DagContextPendingOrigin {
 
 export interface DagContext {
   activeLegs: DagContextLeg[];
-  orphanedOrigins: {
-    bull: DagContextOrigin[];
-    bear: DagContextOrigin[];
-  };
   pendingOrigins: {
     bull: DagContextPendingOrigin | null;
     bear: DagContextPendingOrigin | null;
@@ -102,11 +93,6 @@ interface SidebarProps {
   onToggleLingerEvent: (eventId: string) => void;
   onResetDefaults: () => void;
   className?: string;
-
-  // Scale filter props (shown during playback, replay mode only)
-  showScaleFilters?: boolean;
-  displayConfig?: SwingDisplayConfig;
-  onToggleScale?: (scale: SwingScaleKey) => void;
 
   // Stats panel toggle (shown during playback, replay mode only)
   showStatsToggle?: boolean;
@@ -147,9 +133,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleLingerEvent,
   onResetDefaults,
   className = '',
-  showScaleFilters = false,
-  displayConfig,
-  onToggleScale,
   showStatsToggle = false,
   showStats = false,
   onToggleShowStats,
@@ -169,7 +152,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDetachItem,
   onClearAttachments,
 }) => {
-  const scaleOrder: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -412,44 +394,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </>
       )}
 
-      {/* Scale Filters Section (shown during playback, replay mode only) */}
-      {showScaleFilters && displayConfig && onToggleScale && (
-        <div className="p-4 border-t border-app-border">
-          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
-            <Layers size={14} />
-            Scale Filters
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {scaleOrder.map(scale => {
-              const isEnabled = displayConfig.enabledScales.has(scale);
-              return (
-                <label
-                  key={scale}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border cursor-pointer transition-colors ${
-                    isEnabled
-                      ? 'bg-trading-blue/20 border-trading-blue text-trading-blue'
-                      : 'bg-app-card border-app-border text-app-muted hover:border-app-text/30'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isEnabled}
-                    onChange={() => onToggleScale(scale)}
-                    className="sr-only"
-                  />
-                  <span className={`w-3 h-3 rounded-sm border flex items-center justify-center ${
-                    isEnabled ? 'bg-trading-blue border-trading-blue' : 'border-app-muted'
-                  }`}>
-                    {isEnabled && <span className="text-white text-[10px]">✓</span>}
-                  </span>
-                  <span className="text-xs font-semibold">{scale}</span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* DAG Context Display (DAG mode only) */}
       {mode === 'dag' && dagContext && (
         <div className="p-4 border-t border-app-border">
@@ -461,14 +405,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex justify-between">
               <span className="text-app-muted">Active Legs</span>
               <span className="text-app-text font-medium">{dagContext.activeLegs.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-app-muted">Orphaned Origins</span>
-              <span className="text-app-text font-medium">
-                <span className="text-trading-blue">{dagContext.orphanedOrigins.bull.length}</span>
-                {' / '}
-                <span className="text-trading-bear">{dagContext.orphanedOrigins.bear.length}</span>
-              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-app-muted">Pending Origins</span>

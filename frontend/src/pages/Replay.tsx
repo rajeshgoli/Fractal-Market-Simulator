@@ -9,7 +9,7 @@ import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
 import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
-import { fetchBars, fetchSession, fetchDetectedSwings, fetchCalibration, fetchDagState, ReplayEvent, DagStateResponse } from '../lib/api';
+import { fetchBars, fetchSession, fetchCalibration, fetchDagState, ReplayEvent, DagStateResponse } from '../lib/api';
 import { LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
@@ -25,9 +25,6 @@ import {
   parseResolutionToMinutes,
   getAggregationLabel,
   getAggregationMinutes,
-  SwingDisplayConfig,
-  SwingScaleKey,
-  DEFAULT_SWING_DISPLAY_CONFIG,
   SwingData,
   // Hierarchical types (Issue #166)
   HierarchicalDisplayConfig,
@@ -38,7 +35,7 @@ import {
   SwingDirectionKey,
   LegEvent,
 } from '../types';
-import { useSwingDisplay, useHierarchicalDisplay } from '../hooks/useSwingDisplay';
+import { useHierarchicalDisplay } from '../hooks/useSwingDisplay';
 import { ViewMode } from '../App';
 
 /**
@@ -183,7 +180,6 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
   // Legacy playback state - kept for usePlayback hook compatibility
   const [events] = useState<DiscretizationEvent[]>([]);
   const [swings] = useState<Record<string, DiscretizationSwing>>({});
-  const [detectedSwings, setDetectedSwings] = useState<DetectedSwing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -197,12 +193,6 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
   const [calibrationPhase, setCalibrationPhase] = useState<CalibrationPhase>(CalibrationPhase.NOT_STARTED);
   const [calibrationData, setCalibrationData] = useState<CalibrationData | null>(null);
   const [currentActiveSwingIndex, setCurrentActiveSwingIndex] = useState<number>(0);
-
-  // Swing display configuration (scale toggles, active swing count)
-  const [displayConfig, setDisplayConfig] = useState<SwingDisplayConfig>({
-    enabledScales: new Set(DEFAULT_SWING_DISPLAY_CONFIG.enabledScales),
-    activeSwingCount: DEFAULT_SWING_DISPLAY_CONFIG.activeSwingCount,
-  });
 
   // Hierarchical display configuration (Issue #166)
   const [hierarchicalConfig, setHierarchicalConfig] = useState<HierarchicalDisplayConfig>({
@@ -262,22 +252,14 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     setAttachedItems([]);
   }, []);
 
-  // Use hook to filter and rank swings based on display config
-  // filteredActiveSwings is limited by activeSwingCount (for chart display)
-  // allNavigableSwings includes all swings for enabled scales (for navigation)
-  const { filteredActiveSwings: _filteredActiveSwings, allNavigableSwings, filteredStats } = useSwingDisplay(calibrationData, displayConfig);
-  void _filteredActiveSwings; // Suppress unused warning - available for future chart display limiting
-
-  // Use hierarchical display hook for new tree-based filtering (Issue #166)
+  // Use hierarchical display hook for tree-based filtering (Issue #166)
+  // This is now the primary source for swing display and navigation
   const hierarchicalData = calibrationData as CalibrationDataHierarchical | null;
   const {
-    filteredActiveSwings: _hierarchicalFilteredSwings,
-    allNavigableSwings: _hierarchicalNavigableSwings,
+    filteredActiveSwings: hierarchicalFilteredSwings,
+    allNavigableSwings,
     statsByDepth,
   } = useHierarchicalDisplay(hierarchicalData, hierarchicalConfig);
-  // These will be used for chart display when hierarchical filtering is fully wired
-  void _hierarchicalFilteredSwings;
-  void _hierarchicalNavigableSwings;
 
   // Chart refs for syncing
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -365,7 +347,6 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     playbackIntervalMs: effectivePlaybackIntervalMs,
     barsPerAdvance,  // How many source bars to skip per tick (aggregation factor)
     filters: lingerEvents,
-    enabledScales: displayConfig.enabledScales,
     lingerEnabled,  // Whether to pause on events
     // Request aggregated bars for both chart scales
     chartAggregationScales: [chart1Aggregation, chart2Aggregation],
@@ -409,21 +390,17 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
   }, [calibrationPhase, forwardPlayback.lingerEvent, playback.lingerSwingId, swings]);
 
   // Convert forward playback's current swing state to DetectedSwing[] for marker rendering
-  // Respects both enabledScales and activeSwingCount from displayConfig
+  // Uses hierarchical config's activeSwingCount for display limiting
   const activeSwingsForMarkers = useMemo((): DetectedSwing[] => {
     if (calibrationPhase !== CalibrationPhase.PLAYING || !forwardPlayback.currentSwingState) {
       return [];
     }
-    const swings: DetectedSwing[] = [];
-    const scales: SwingScaleKey[] = ['XL', 'L', 'M', 'S'];
-    for (const scale of scales) {
-      // Only include swings from enabled scales
-      if (!displayConfig.enabledScales.has(scale)) continue;
-      const scaleSwings = forwardPlayback.currentSwingState[scale] || [];
-      // Limit to activeSwingCount swings per scale (rank is 1-indexed)
-      for (const swing of scaleSwings) {
-        if (swing.rank > displayConfig.activeSwingCount) continue;
-        swings.push({
+    const allSwings: DetectedSwing[] = [];
+    const depthKeys = ['depth_1', 'depth_2', 'depth_3', 'deeper'] as const;
+    for (const depthKey of depthKeys) {
+      const depthSwings = forwardPlayback.currentSwingState[depthKey] || [];
+      for (const swing of depthSwings) {
+        allSwings.push({
           id: swing.id,
           direction: swing.direction,
           high_price: swing.high_price,
@@ -439,8 +416,10 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
         });
       }
     }
-    return swings;
-  }, [calibrationPhase, forwardPlayback.currentSwingState, displayConfig.enabledScales, displayConfig.activeSwingCount]);
+    // Sort by size and limit to activeSwingCount
+    allSwings.sort((a, b) => b.size - a.size);
+    return allSwings.slice(0, hierarchicalConfig.activeSwingCount);
+  }, [calibrationPhase, forwardPlayback.currentSwingState, hierarchicalConfig.activeSwingCount]);
 
   // Compute current active swing for calibration mode (navigate through all swings, not just displayed)
   const currentActiveSwing = useMemo((): CalibrationSwing | null => {
@@ -483,21 +462,22 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
       stateString = 'paused';
     }
 
-    // Count swings by scale from current swing state or calibration data
+    // Count swings by depth from current swing state or calibration data
+    // Note: Legacy XL/L/M/S keys are kept for feedback snapshot compatibility
     const swingsFoundByScale = { XL: 0, L: 0, M: 0, S: 0 };
     if (forwardPlayback.currentSwingState) {
-      // During playback, use current swing state
+      // During playback, use current swing state (now depth-based)
       const swingState = forwardPlayback.currentSwingState;
-      swingsFoundByScale.XL = swingState.XL?.length || 0;
-      swingsFoundByScale.L = swingState.L?.length || 0;
-      swingsFoundByScale.M = swingState.M?.length || 0;
-      swingsFoundByScale.S = swingState.S?.length || 0;
-    } else if (calibrationData?.active_swings_by_scale) {
+      swingsFoundByScale.XL = swingState.depth_1?.length || 0;  // Root (depth 0) -> XL
+      swingsFoundByScale.L = swingState.depth_2?.length || 0;   // Depth 1 -> L
+      swingsFoundByScale.M = swingState.depth_3?.length || 0;   // Depth 2 -> M
+      swingsFoundByScale.S = swingState.deeper?.length || 0;    // Depth 3+ -> S
+    } else if (calibrationData?.active_swings_by_depth) {
       // During calibrated state, use calibration data
-      swingsFoundByScale.XL = calibrationData.active_swings_by_scale.XL?.length || 0;
-      swingsFoundByScale.L = calibrationData.active_swings_by_scale.L?.length || 0;
-      swingsFoundByScale.M = calibrationData.active_swings_by_scale.M?.length || 0;
-      swingsFoundByScale.S = calibrationData.active_swings_by_scale.S?.length || 0;
+      swingsFoundByScale.XL = calibrationData.active_swings_by_depth.depth_1?.length || 0;
+      swingsFoundByScale.L = calibrationData.active_swings_by_depth.depth_2?.length || 0;
+      swingsFoundByScale.M = calibrationData.active_swings_by_depth.depth_3?.length || 0;
+      swingsFoundByScale.S = calibrationData.active_swings_by_depth.deeper?.length || 0;
     }
 
     // Count invalidated and completed from allEvents
@@ -546,33 +526,11 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     );
   }, [allNavigableSwings.length]);
 
-  // Handler for toggling scale filter
-  const handleToggleScale = useCallback((scale: SwingScaleKey) => {
-    setDisplayConfig(prev => {
-      const newEnabledScales = new Set(prev.enabledScales);
-      if (newEnabledScales.has(scale)) {
-        newEnabledScales.delete(scale);
-      } else {
-        newEnabledScales.add(scale);
-      }
-      return { ...prev, enabledScales: newEnabledScales };
-    });
-    // Reset index when filter changes
-    setCurrentActiveSwingIndex(0);
-  }, []);
-
   // Handler for toggling linger event types
   const handleToggleLingerEvent = useCallback((eventId: string) => {
     setLingerEvents(prev =>
       prev.map(e => e.id === eventId ? { ...e, isEnabled: !e.isEnabled } : e)
     );
-  }, []);
-
-  // Handler for setting active swing count
-  const handleSetActiveSwingCount = useCallback((count: number) => {
-    setDisplayConfig(prev => ({ ...prev, activeSwingCount: count }));
-    // Reset index when count changes
-    setCurrentActiveSwingIndex(0);
   }, []);
 
   // Hierarchical filter handlers (Issue #166)
@@ -898,13 +856,32 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     syncChart(chart2Ref.current, chart2Bars);
   }, [chart1Bars, chart2Bars, findAggBarForSourceIndex]);
 
+  // Convert hierarchical filtered swings to DetectedSwing format for chart display
+  const hierarchicalSwingsForMarkers = useMemo((): DetectedSwing[] => {
+    return hierarchicalFilteredSwings.map((swing, index) => ({
+      id: swing.id,
+      direction: swing.direction,
+      high_price: swing.high_price,
+      high_bar_index: swing.high_bar_index,
+      low_price: swing.low_price,
+      low_bar_index: swing.low_bar_index,
+      size: swing.size,
+      rank: index + 1, // Rank by filtered order
+      fib_0: swing.fib_0,
+      fib_0382: swing.fib_0382,
+      fib_1: swing.fib_1,
+      fib_2: swing.fib_2,
+    }));
+  }, [hierarchicalFilteredSwings]);
+
   // Update all chart markers when position or swings change
-  // During PLAYING phase, use activeSwingsForMarkers (from currentSwingState) instead of detectedSwings
+  // During PLAYING phase, use activeSwingsForMarkers (from currentSwingState)
+  // During CALIBRATED phase, use hierarchicalSwingsForMarkers (from hierarchical display config)
   const swingsForMarkers = useMemo(() => {
     return calibrationPhase === CalibrationPhase.PLAYING
       ? activeSwingsForMarkers
-      : detectedSwings;
-  }, [calibrationPhase, activeSwingsForMarkers, detectedSwings]);
+      : hierarchicalSwingsForMarkers;
+  }, [calibrationPhase, activeSwingsForMarkers, hierarchicalSwingsForMarkers]);
 
   // Use calibrationHighlightedSwing during CALIBRATED phase, highlightedSwing during PLAYING
   const markerHighlightedSwing = calibrationPhase === CalibrationPhase.CALIBRATED
@@ -944,42 +921,6 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
       return () => clearTimeout(timeout);
     }
   }, [calibrationPhase, calibrationData]);
-
-  // Fetch detected swings when playback position changes
-  // Use debouncing to avoid too many API calls during fast playback
-  const lastFetchedPositionRef = useRef<number>(-1);
-  const fetchSwingsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const currentPos = playback.currentPosition;
-
-    // Skip if position hasn't changed significantly (within 5 bars)
-    if (Math.abs(currentPos - lastFetchedPositionRef.current) < 5) {
-      return;
-    }
-
-    // Clear any pending fetch
-    if (fetchSwingsDebounceRef.current) {
-      clearTimeout(fetchSwingsDebounceRef.current);
-    }
-
-    // Debounce the fetch (100ms delay)
-    fetchSwingsDebounceRef.current = setTimeout(async () => {
-      try {
-        const result = await fetchDetectedSwings(currentPos + 1, 2);
-        setDetectedSwings(result.swings);
-        lastFetchedPositionRef.current = currentPos;
-      } catch (err) {
-        console.error('Failed to fetch detected swings:', err);
-      }
-    }, 100);
-
-    return () => {
-      if (fetchSwingsDebounceRef.current) {
-        clearTimeout(fetchSwingsDebounceRef.current);
-      }
-    };
-  }, [playback.currentPosition]);
 
   // Fetch DAG state when in DAG visualization mode (Issue #171)
   useEffect(() => {
@@ -1229,9 +1170,6 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
             onToggleLingerEvent={handleToggleLingerEvent}
             onResetDefaults={() => setLingerEvents(REPLAY_LINGER_EVENTS)}
             className="w-64"
-            showScaleFilters={calibrationPhase === CalibrationPhase.PLAYING}
-            displayConfig={displayConfig}
-            onToggleScale={handleToggleScale}
             // Stats toggle (shown during playback)
             showStatsToggle={calibrationPhase === CalibrationPhase.PLAYING}
             showStats={showStats}
@@ -1371,11 +1309,6 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
                 onNavigatePrev={navigatePrevActiveSwing}
                 onNavigateNext={navigateNextActiveSwing}
                 onStartPlayback={handleStartPlayback}
-                // Legacy display config
-                displayConfig={displayConfig}
-                filteredStats={filteredStats}
-                onToggleScale={handleToggleScale}
-                onSetActiveSwingCount={handleSetActiveSwingCount}
                 // Hierarchical display config (Issue #166)
                 hierarchicalConfig={hierarchicalConfig}
                 statsByDepth={statsByDepth}

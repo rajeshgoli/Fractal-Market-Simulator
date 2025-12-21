@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from statistics import median
-from typing import Any, Deque, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Deque, Dict, List, Literal, Optional, Tuple
 import uuid
 
 import numpy as np
@@ -44,11 +44,6 @@ from ..swing_analysis.constants import (
 )
 from ..swing_analysis.reference_frame import ReferenceFrame
 from ..swing_analysis.swing_node import SwingNode
-from ..swing_analysis.adapters import ReferenceSwing, swing_node_to_reference_swing
-
-
-# Type alias for transition period: accept both old and new swing formats
-SwingType = Union[ReferenceSwing, SwingNode]
 
 
 # Version identifier for discretizer implementation
@@ -131,37 +126,6 @@ class _ActiveSwingState:
     previous_band: Optional[str] = None
     dwell_state: Optional[_BandDwellState] = None
     terminated: bool = False
-
-
-def _normalize_swings(
-    swings: Dict[str, List[SwingType]],
-) -> Dict[str, List[ReferenceSwing]]:
-    """
-    Normalize swing input to ReferenceSwing format.
-
-    Supports transition period by accepting both SwingNode and ReferenceSwing.
-    If SwingNode is provided, converts it to ReferenceSwing using the adapter.
-
-    Args:
-        swings: Dict mapping scale to list of swings (ReferenceSwing or SwingNode).
-
-    Returns:
-        Dict mapping scale to list of ReferenceSwing objects.
-    """
-    normalized: Dict[str, List[ReferenceSwing]] = {}
-
-    for scale, swing_list in swings.items():
-        normalized_list: List[ReferenceSwing] = []
-        for swing in swing_list:
-            if isinstance(swing, SwingNode):
-                # Convert SwingNode to ReferenceSwing via adapter
-                normalized_list.append(swing_node_to_reference_swing(swing))
-            else:
-                # Already a ReferenceSwing
-                normalized_list.append(swing)
-        normalized[scale] = normalized_list
-
-    return normalized
 
 
 def _get_band(ratio: float, level_set: List[float]) -> str:
@@ -260,7 +224,7 @@ class Discretizer:
     def discretize(
         self,
         ohlc: pd.DataFrame,
-        swings: Dict[str, List[SwingType]],
+        swings: Dict[str, List[SwingNode]],
         instrument: str = "unknown",
         source_resolution: str = "1m",
     ) -> DiscretizationLog:
@@ -270,17 +234,13 @@ class Discretizer:
         Args:
             ohlc: DataFrame with columns: timestamp, open, high, low, close
                   Index should be sequential bar indices.
-            swings: Dict mapping scale ("XL", "L", "M", "S") to list of swings.
-                    Accepts both ReferenceSwing (legacy) and SwingNode (hierarchical).
-                    SwingNode inputs are automatically converted via the adapter.
+            swings: Dict mapping scale/depth key to list of SwingNode objects.
             instrument: Instrument identifier (e.g., "ES")
             source_resolution: Source data resolution (e.g., "1m", "5m")
 
         Returns:
             DiscretizationLog with all events and swing entries
         """
-        # Normalize input: convert SwingNode to ReferenceSwing if needed
-        normalized_swings = _normalize_swings(swings)
 
         # Initialize state
         events: List[DiscretizationEvent] = []
@@ -302,8 +262,8 @@ class Discretizer:
         }
 
         # Build swing lookup by formation bar
-        swings_by_bar: Dict[int, List[Tuple[str, ReferenceSwing]]] = {}
-        for scale, swing_list in normalized_swings.items():
+        swings_by_bar: Dict[int, List[Tuple[str, SwingNode]]] = {}
+        for scale, swing_list in swings.items():
             for swing in swing_list:
                 formed_bar = max(swing.high_bar_index, swing.low_bar_index)
                 if formed_bar not in swings_by_bar:
@@ -351,16 +311,16 @@ class Discretizer:
                 for scale, swing in swings_by_bar[bar_idx]:
                     swing_id = str(uuid.uuid4())[:8]
 
-                    # Create swing entry
+                    # Create swing entry (SwingNode has Decimal prices, convert to float)
                     direction = "BULL" if swing.direction == "bull" else "BEAR"
                     if direction == "BULL":
-                        anchor0 = swing.low_price
-                        anchor1 = swing.high_price
+                        anchor0 = float(swing.low_price)
+                        anchor1 = float(swing.high_price)
                         anchor0_bar = swing.low_bar_index
                         anchor1_bar = swing.high_bar_index
                     else:
-                        anchor0 = swing.high_price
-                        anchor1 = swing.low_price
+                        anchor0 = float(swing.high_price)
+                        anchor1 = float(swing.low_price)
                         anchor0_bar = swing.high_bar_index
                         anchor1_bar = swing.low_bar_index
 
@@ -377,10 +337,10 @@ class Discretizer:
                     )
                     swing_entries.append(entry)
 
-                    # Create reference frame
+                    # Create reference frame (uses Decimal)
                     frame = ReferenceFrame(
-                        anchor0=Decimal(str(anchor0)),
-                        anchor1=Decimal(str(anchor1)),
+                        anchor0=swing.low_price if direction == "BULL" else swing.high_price,
+                        anchor1=swing.high_price if direction == "BULL" else swing.low_price,
                         direction=direction,
                     )
 
@@ -723,7 +683,7 @@ class Discretizer:
 
     def _build_swing_explanation(
         self,
-        swing: ReferenceSwing,
+        swing: SwingNode,
         scale: str,
         ohlc: pd.DataFrame,
         formed_bar: int,
@@ -732,19 +692,19 @@ class Discretizer:
         Build explanation data for a SWING_FORMED event.
 
         Args:
-            swing: The ReferenceSwing being formed
-            scale: The scale (S, M, L, XL)
+            swing: The SwingNode being formed
+            scale: The scale/depth key
             ohlc: OHLC DataFrame for timestamp lookups
             formed_bar: Bar index where swing was formed
 
         Returns:
             Dict with high/low details, size info, scale_reason, is_anchor, and separation
         """
-        # Get high/low bar data
+        # Get high/low bar data (convert Decimal to float)
         high_bar = swing.high_bar_index
         low_bar = swing.low_bar_index
-        high_price = swing.high_price
-        low_price = swing.low_price
+        high_price = float(swing.high_price)
+        low_price = float(swing.low_price)
 
         # Look up timestamps from OHLC data
         high_timestamp = ""
@@ -754,8 +714,8 @@ class Discretizer:
         if low_bar in ohlc.index:
             low_timestamp = self._format_timestamp(ohlc.loc[low_bar, "timestamp"])
 
-        # Calculate size
-        size_pts = swing.size
+        # Calculate size (SwingNode.range is Decimal)
+        size_pts = float(swing.range)
 
         # Calculate size_pct as percentage of the starting price (anchor1)
         # For bull: anchor1 is high, for bear: anchor1 is low
@@ -766,18 +726,19 @@ class Discretizer:
         threshold = self.config.scale_thresholds.get(scale, 0)
         scale_reason = f"Size {size_pts:.1f} >= {scale} threshold {threshold}"
 
-        # Check if anchor (first swing at scale, or no separation data)
-        # is_anchor means no previous swing to compare against
-        is_anchor = swing.separation_is_anchor
+        # Check if anchor (root swing with no parents)
+        is_anchor = len(swing.parents) == 0
 
-        # Build separation details (null if is_anchor)
+        # Build separation details from parent hierarchy
         separation: Optional[Dict[str, Any]] = None
-        if not is_anchor:
+        if not is_anchor and swing.parents:
+            # Use first parent as the containing swing
+            parent = swing.parents[0]
             separation = {
-                "from_swing_id": swing.separation_from_swing_id,
-                "distance_fib": swing.separation_distance_fib,
-                "minimum_fib": swing.separation_minimum_fib,
-                "containing_swing_id": swing.containing_swing_id,
+                "from_swing_id": None,  # Not tracked in hierarchical model
+                "distance_fib": None,   # Not tracked in hierarchical model
+                "minimum_fib": None,    # Not tracked in hierarchical model
+                "containing_swing_id": parent.swing_id,
             }
 
         return {

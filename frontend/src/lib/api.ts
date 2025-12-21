@@ -1,4 +1,4 @@
-import { BarData, AggregationScale, DetectedSwing, CalibrationData } from '../types';
+import { BarData, AggregationScale, DetectedSwing, CalibrationData, CalibrationSwing } from '../types';
 
 const API_BASE = '/api';
 
@@ -111,10 +111,10 @@ export interface ReplayEvent {
 }
 
 export interface ReplaySwingState {
-  XL: CalibrationData['active_swings_by_scale']['XL'];
-  L: CalibrationData['active_swings_by_scale']['L'];
-  M: CalibrationData['active_swings_by_scale']['M'];
-  S: CalibrationData['active_swings_by_scale']['S'];
+  depth_1: CalibrationSwing[];  // Root swings (depth 0)
+  depth_2: CalibrationSwing[];  // Depth 1
+  depth_3: CalibrationSwing[];  // Depth 2
+  deeper: CalibrationSwing[];   // Depth 3+
 }
 
 // Aggregated bars by scale (for batched playback)

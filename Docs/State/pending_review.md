@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-21
 
@@ -10,6 +10,7 @@
 
 - **#210** — Remove orphaned_origins and subtree_prune (epic with 6 subissues #212-#217)
 - **#219** — Remove pre-DAG legacy modules and dead code (epic with 8 subissues #220-#227)
+- **#228** — Remove legacy scale-based display (epic with 7 subissues #229-#235)
 
 ---
 

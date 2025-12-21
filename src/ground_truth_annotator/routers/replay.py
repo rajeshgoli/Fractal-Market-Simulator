@@ -31,10 +31,6 @@ from ...swing_analysis.events import (
     SwingCompletedEvent,
     LevelCrossEvent,
 )
-from ...swing_analysis.adapters import (
-    _group_by_legacy_scale,
-    swing_node_to_reference_swing,
-)
 from ...swing_analysis.types import Bar
 from ...swing_analysis.reference_frame import ReferenceFrame
 from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceSwingInfo
@@ -778,13 +774,6 @@ async def calibrate_replay(
         s.hierarchical_detector = detector
 
         # Return empty calibration response
-        empty_swings_by_scale: Dict[str, List[CalibrationSwingResponse]] = {
-            "XL": [], "L": [], "M": [], "S": []
-        }
-        empty_stats = {
-            scale: CalibrationScaleStats(total_swings=0, active_swings=0)
-            for scale in ["XL", "L", "M", "S"]
-        }
         empty_tree_stats = TreeStatistics(
             root_swings=0, root_bull=0, root_bear=0, total_nodes=0,
             max_depth=0, avg_children=0.0,
@@ -802,10 +791,6 @@ async def calibrate_replay(
             tree_stats=empty_tree_stats,
             swings_by_depth=empty_swings_by_depth,
             active_swings_by_depth=empty_swings_by_depth,
-            swings_by_scale=empty_swings_by_scale,
-            active_swings_by_scale=empty_swings_by_scale,
-            scale_thresholds=_replay_cache["scale_thresholds"],
-            stats_by_scale=empty_stats,
         )
 
     if actual_bar_count < 10:
@@ -849,23 +834,10 @@ async def calibrate_replay(
         f"{len(active_swings)} reference swings"
     )
 
-    # Calculate scale thresholds based on swing sizes
+    # Calculate scale thresholds for compatibility
     scale_thresholds = _calculate_scale_thresholds(all_swings)
 
-    # Group swings by scale (legacy compatibility)
-    swings_by_scale = _group_swings_by_scale(all_swings, scale_thresholds, current_price)
-    active_swings_by_scale = _group_swings_by_scale(active_swings, scale_thresholds, current_price)
-
-    # Compute legacy stats
-    stats_by_scale = {
-        scale: CalibrationScaleStats(
-            total_swings=len(swings_by_scale[scale]),
-            active_swings=len(active_swings_by_scale[scale])
-        )
-        for scale in ["XL", "L", "M", "S"]
-    }
-
-    # NEW: Compute tree statistics (Issue #166)
+    # Compute tree statistics
     tree_stats = _compute_tree_statistics(
         all_swings=all_swings,
         active_swings=active_swings,
@@ -873,7 +845,7 @@ async def calibrate_replay(
         recent_lookback=10,
     )
 
-    # NEW: Group swings by depth
+    # Group swings by depth
     swings_by_depth = _group_swings_by_depth(all_swings, scale_thresholds)
     active_swings_by_depth = _group_swings_by_depth(active_swings, scale_thresholds)
 
@@ -902,15 +874,9 @@ async def calibrate_replay(
     return CalibrationResponseHierarchical(
         calibration_bar_count=actual_bar_count,
         current_price=current_price,
-        # New hierarchical data
         tree_stats=tree_stats,
         swings_by_depth=swings_by_depth,
         active_swings_by_depth=active_swings_by_depth,
-        # Legacy compatibility
-        swings_by_scale=swings_by_scale,
-        active_swings_by_scale=active_swings_by_scale,
-        scale_thresholds=scale_thresholds,
-        stats_by_scale=stats_by_scale,
     )
 
 
@@ -1098,13 +1064,13 @@ def _build_swing_state(
 
     Args:
         active_swings: List of active SwingNode objects.
-        scale_thresholds: Size thresholds for scale assignment.
+        scale_thresholds: Size thresholds for scale assignment (for compatibility).
 
     Returns:
-        ReplaySwingState grouped by scale.
+        ReplaySwingState grouped by depth.
     """
-    by_scale: Dict[str, List[CalibrationSwingResponse]] = {
-        "XL": [], "L": [], "M": [], "S": []
+    by_depth: Dict[str, List[CalibrationSwingResponse]] = {
+        "depth_1": [], "depth_2": [], "depth_3": [], "deeper": []
     }
 
     sorted_swings = sorted(
@@ -1120,13 +1086,21 @@ def _build_swing_state(
             rank=rank,
             scale_thresholds=scale_thresholds,
         )
-        by_scale[response.scale].append(response)
+        depth = swing.get_depth()
+        if depth == 0:
+            by_depth["depth_1"].append(response)
+        elif depth == 1:
+            by_depth["depth_2"].append(response)
+        elif depth == 2:
+            by_depth["depth_3"].append(response)
+        else:
+            by_depth["deeper"].append(response)
 
     return ReplaySwingState(
-        XL=by_scale["XL"],
-        L=by_scale["L"],
-        M=by_scale["M"],
-        S=by_scale["S"],
+        depth_1=by_depth["depth_1"],
+        depth_2=by_depth["depth_2"],
+        depth_3=by_depth["depth_3"],
+        deeper=by_depth["deeper"],
     )
 
 

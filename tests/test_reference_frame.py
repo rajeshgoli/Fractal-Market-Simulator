@@ -4,7 +4,6 @@ import pytest
 from decimal import Decimal
 
 from src.swing_analysis.reference_frame import ReferenceFrame
-from src.swing_analysis.adapters import ReferenceSwing
 
 
 class TestReferenceFrameBasics:
@@ -252,78 +251,6 @@ class TestRoundTrip:
         ratio = bear_frame.ratio(price)
         recovered = bear_frame.price(ratio)
         assert recovered == price
-
-
-class TestFromSwing:
-    """Test ReferenceFrame.from_swing() factory method."""
-
-    def test_from_bull_swing(self):
-        """Create frame from bull swing (high before low)."""
-        swing = ReferenceSwing(
-            high_price=5100.0,
-            high_bar_index=10,
-            low_price=5000.0,
-            low_bar_index=20,
-            size=100.0,
-            direction="bull",
-        )
-        frame = ReferenceFrame.from_swing(swing)
-
-        assert frame.direction == "BULL"
-        assert frame.anchor0 == Decimal("5000")  # Low = defended
-        assert frame.anchor1 == Decimal("5100")  # High = origin
-        assert frame.range == Decimal("100")
-
-    def test_from_bear_swing(self):
-        """Create frame from bear swing (low before high)."""
-        swing = ReferenceSwing(
-            high_price=5100.0,
-            high_bar_index=20,
-            low_price=5000.0,
-            low_bar_index=10,
-            size=100.0,
-            direction="bear",
-        )
-        frame = ReferenceFrame.from_swing(swing)
-
-        assert frame.direction == "BEAR"
-        assert frame.anchor0 == Decimal("5100")  # High = defended
-        assert frame.anchor1 == Decimal("5000")  # Low = origin
-        assert frame.range == Decimal("-100")
-
-    def test_preserves_ratio_semantics_bull(self):
-        """Bull frame from swing: defended pivot ratio == 0."""
-        swing = ReferenceSwing(
-            high_price=5100.0,
-            high_bar_index=10,
-            low_price=5000.0,
-            low_bar_index=20,
-            size=100.0,
-            direction="bull",
-        )
-        frame = ReferenceFrame.from_swing(swing)
-
-        # Defended pivot (low) should be ratio 0
-        assert frame.ratio(Decimal("5000")) == Decimal("0")
-        # Origin (high) should be ratio 1
-        assert frame.ratio(Decimal("5100")) == Decimal("1")
-
-    def test_preserves_ratio_semantics_bear(self):
-        """Bear frame from swing: defended pivot ratio == 0."""
-        swing = ReferenceSwing(
-            high_price=5100.0,
-            high_bar_index=20,
-            low_price=5000.0,
-            low_bar_index=10,
-            size=100.0,
-            direction="bear",
-        )
-        frame = ReferenceFrame.from_swing(swing)
-
-        # Defended pivot (high) should be ratio 0
-        assert frame.ratio(Decimal("5100")) == Decimal("0")
-        # Origin (low) should be ratio 1
-        assert frame.ratio(Decimal("5000")) == Decimal("1")
 
 
 class TestEdgeCases:

@@ -23,7 +23,7 @@ from src.discretization import (
     validate_log,
 )
 from src.discretization.discretizer import _get_band, _levels_between
-from src.swing_analysis.adapters import ReferenceSwing
+from src.swing_analysis.swing_node import SwingNode
 
 
 # =============================================================================
@@ -56,15 +56,18 @@ def make_swing(
     high_bar: int,
     low_bar: int,
     direction: str = "bull",
-) -> ReferenceSwing:
-    """Create a ReferenceSwing for testing."""
-    return ReferenceSwing(
-        high_price=high_price,
+) -> SwingNode:
+    """Create a SwingNode for testing."""
+    formed_bar = max(high_bar, low_bar)
+    return SwingNode(
+        swing_id=SwingNode.generate_id(),
+        high_price=Decimal(str(high_price)),
         high_bar_index=high_bar,
-        low_price=low_price,
+        low_price=Decimal(str(low_price)),
         low_bar_index=low_bar,
-        size=abs(high_price - low_price),
         direction=direction,
+        status="active",
+        formed_at_bar=formed_bar,
     )
 
 
@@ -989,18 +992,16 @@ class TestSwingFormedExplanation:
         assert "Size 10" in explanation["scale_reason"]
 
     def test_explanation_is_anchor_first_swing(self):
-        """First swing should be marked as anchor (is_anchor=True)."""
+        """First swing (with no parents) should be marked as anchor (is_anchor=True)."""
         discretizer = Discretizer()
 
-        # Create a swing with anchor flag set
-        swing = ReferenceSwing(
+        # Create a swing with no parents (anchor)
+        swing = make_swing(
             high_price=110,
             low_price=100,
-            high_bar_index=0,
-            low_bar_index=1,
-            size=10,
+            high_bar=0,
+            low_bar=1,
             direction="bull",
-            separation_is_anchor=True,  # First swing is anchor
         )
 
         ohlc = make_ohlc([
@@ -1012,7 +1013,7 @@ class TestSwingFormedExplanation:
         formed = [e for e in log.events if e.event_type == EventType.SWING_FORMED][0]
         explanation = formed.data["explanation"]
 
-        # is_anchor should be True
+        # is_anchor should be True (no parents)
         assert "is_anchor" in explanation
         assert explanation["is_anchor"] is True
 
@@ -1021,23 +1022,33 @@ class TestSwingFormedExplanation:
         assert explanation["separation"] is None
 
     def test_explanation_separation_for_non_anchor(self):
-        """Non-anchor swing should include separation details."""
+        """Non-anchor swing (with parent) should include separation details."""
         discretizer = Discretizer()
 
-        # Create a swing with separation details
-        swing = ReferenceSwing(
-            high_price=110,
-            low_price=100,
+        # Create parent swing
+        parent = SwingNode(
+            swing_id="parent-456",
+            high_price=Decimal("120"),
             high_bar_index=0,
-            low_bar_index=1,
-            size=10,
+            low_price=Decimal("90"),
+            low_bar_index=5,
             direction="bull",
-            separation_is_anchor=False,
-            separation_from_swing_id="prev-123",
-            separation_distance_fib=0.35,
-            separation_minimum_fib=0.236,
-            containing_swing_id="container-456",
+            status="active",
+            formed_at_bar=5,
         )
+
+        # Create a child swing with parent
+        swing = SwingNode(
+            swing_id=SwingNode.generate_id(),
+            high_price=Decimal("110"),
+            high_bar_index=0,
+            low_price=Decimal("100"),
+            low_bar_index=1,
+            direction="bull",
+            status="active",
+            formed_at_bar=1,
+        )
+        swing.add_parent(parent)
 
         ohlc = make_ohlc([
             (1000, 105, 110, 105, 108),
@@ -1048,17 +1059,14 @@ class TestSwingFormedExplanation:
         formed = [e for e in log.events if e.event_type == EventType.SWING_FORMED][0]
         explanation = formed.data["explanation"]
 
-        # is_anchor should be False
+        # is_anchor should be False (has parent)
         assert explanation["is_anchor"] is False
 
-        # separation should have all details
+        # separation should have containing_swing_id from parent
         assert explanation["separation"] is not None
         separation = explanation["separation"]
 
-        assert separation["from_swing_id"] == "prev-123"
-        assert separation["distance_fib"] == 0.35
-        assert separation["minimum_fib"] == 0.236
-        assert separation["containing_swing_id"] == "container-456"
+        assert separation["containing_swing_id"] == "parent-456"
 
     def test_explanation_bear_swing(self):
         """Bear swing should also include explanation data."""
@@ -1122,29 +1130,8 @@ class TestSwingFormedExplanation:
 # =============================================================================
 
 
-from decimal import Decimal as D
-from src.swing_analysis.swing_node import SwingNode
-
-
-def make_swing_node(
-    high_price: float,
-    low_price: float,
-    high_bar: int,
-    low_bar: int,
-    direction: str = "bull",
-) -> SwingNode:
-    """Create a SwingNode for testing."""
-    formed_bar = max(high_bar, low_bar)
-    return SwingNode(
-        swing_id=SwingNode.generate_id(),
-        high_price=D(str(high_price)),
-        high_bar_index=high_bar,
-        low_price=D(str(low_price)),
-        low_bar_index=low_bar,
-        direction=direction,
-        status="active",
-        formed_at_bar=formed_bar,
-    )
+# Alias for backward compatibility with existing tests
+make_swing_node = make_swing
 
 
 class TestSwingNodeInput:
@@ -1260,12 +1247,12 @@ class TestSwingNodeInput:
         assert len(inv_events) == 1
         assert log.swings[0].status == "invalidated"
 
-    def test_mixed_input_swing_types(self):
-        """Discretizer should accept mixed ReferenceSwing and SwingNode input."""
+    def test_multi_scale_swing_input(self):
+        """Discretizer should accept SwingNode input at multiple scales."""
         discretizer = Discretizer()
 
-        # One ReferenceSwing
-        ref_swing = make_swing(
+        # XL scale swing
+        xl_swing = make_swing_node(
             high_price=120,
             low_price=100,
             high_bar=0,
@@ -1273,8 +1260,8 @@ class TestSwingNodeInput:
             direction="bull",
         )
 
-        # One SwingNode
-        node_swing = make_swing_node(
+        # M scale swing
+        m_swing = make_swing_node(
             high_price=115,
             low_price=105,
             high_bar=2,
@@ -1284,13 +1271,13 @@ class TestSwingNodeInput:
 
         ohlc = make_ohlc([
             (1000, 105, 120, 105, 118),   # Bar 0
-            (1001, 118, 118, 100, 102),   # Bar 1: ref_swing forms
+            (1001, 118, 118, 100, 102),   # Bar 1: xl_swing forms
             (1002, 102, 115, 102, 114),   # Bar 2
-            (1003, 114, 114, 105, 107),   # Bar 3: node_swing forms
+            (1003, 114, 114, 105, 107),   # Bar 3: m_swing forms
             (1004, 107, 112, 107, 111),   # Bar 4
         ])
 
-        log = discretizer.discretize(ohlc, {"XL": [ref_swing], "M": [node_swing]})
+        log = discretizer.discretize(ohlc, {"XL": [xl_swing], "M": [m_swing]})
 
         # Should have swings at both scales
         scales = {s.scale for s in log.swings}

@@ -251,7 +251,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     playbackIntervalMs: effectivePlaybackIntervalMs,
     barsPerAdvance,
     filters: lingerEvents,
-    enabledScales: new Set(['XL', 'L', 'M']),
     lingerEnabled, // Use lingerEnabled state for toggle
     // Request aggregated bars for both chart scales + DAG state
     chartAggregationScales: [chart1Aggregation, chart2Aggregation],

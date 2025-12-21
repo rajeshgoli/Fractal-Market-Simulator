@@ -24,11 +24,3 @@ from .swing_config import SwingConfig
 
 # Reference layer (post-DAG filtering)
 from .reference_layer import ReferenceLayer, ReferenceSwingInfo, InvalidationResult
-
-# Backward compatibility adapters
-from .adapters import (
-    ReferenceSwing,
-    detect_swings_compat as detect_swings,
-    swing_node_to_reference_swing,
-)
-

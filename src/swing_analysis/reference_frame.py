@@ -14,10 +14,7 @@ branching in ratio calculations.
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .adapters import ReferenceSwing
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -87,34 +84,6 @@ class ReferenceFrame:
             The absolute price
         """
         return self.anchor0 + ratio * self.range
-
-    @classmethod
-    def from_swing(cls, swing: "ReferenceSwing") -> "ReferenceFrame":
-        """
-        Create a ReferenceFrame from a ReferenceSwing.
-
-        The swing's direction determines how anchor0/anchor1 are assigned:
-        - Bull: anchor0 = low (defended), anchor1 = high (origin)
-        - Bear: anchor0 = high (defended), anchor1 = low (origin)
-
-        Args:
-            swing: A ReferenceSwing from the adapters module
-
-        Returns:
-            A ReferenceFrame with properly oriented anchors
-        """
-        if swing.direction == "bull":
-            return cls(
-                anchor0=Decimal(str(swing.low_price)),
-                anchor1=Decimal(str(swing.high_price)),
-                direction="BULL",
-            )
-        else:
-            return cls(
-                anchor0=Decimal(str(swing.high_price)),
-                anchor1=Decimal(str(swing.low_price)),
-                direction="BEAR",
-            )
 
     def is_violated(self, price: Decimal, tolerance: float = 0) -> bool:
         """

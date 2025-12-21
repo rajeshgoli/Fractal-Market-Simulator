@@ -169,18 +169,37 @@ export interface CalibrationSwing {
   fib_2: number;
 }
 
-export interface CalibrationScaleStats {
-  total_swings: number;
-  active_swings: number;
+export interface SwingsByDepth {
+  depth_1: CalibrationSwing[];  // Root swings (depth 0)
+  depth_2: CalibrationSwing[];  // Depth 1
+  depth_3: CalibrationSwing[];  // Depth 2
+  deeper: CalibrationSwing[];   // Depth 3+
+}
+
+export interface TreeStatistics {
+  root_swings: number;
+  root_bull: number;
+  root_bear: number;
+  total_nodes: number;
+  max_depth: number;
+  avg_children: number;
+  defended_by_depth: Record<string, number>;
+  largest_range: number;
+  largest_swing_id: string | null;
+  median_range: number;
+  smallest_range: number;
+  recently_invalidated: number;
+  roots_have_children: boolean;
+  siblings_detected: boolean;
+  no_orphaned_nodes: boolean;
 }
 
 export interface CalibrationData {
   calibration_bar_count: number;
   current_price: number;
-  swings_by_scale: Record<string, CalibrationSwing[]>;
-  active_swings_by_scale: Record<string, CalibrationSwing[]>;
-  scale_thresholds: Record<string, number>;
-  stats_by_scale: Record<string, CalibrationScaleStats>;
+  tree_stats: TreeStatistics;
+  swings_by_depth: SwingsByDepth;
+  active_swings_by_depth: SwingsByDepth;
 }
 
 // Calibration phase states
@@ -192,26 +211,13 @@ export enum CalibrationPhase {
 }
 
 // ============================================================================
-// Swing Display Configuration (Scale Toggles + Active Swing Count)
+// Swing Display Configuration (Active Swing Count)
 // ============================================================================
-
-export type SwingScaleKey = 'XL' | 'L' | 'M' | 'S';
-
-// Legacy scale-based config (for backward compatibility)
-export interface SwingDisplayConfig {
-  enabledScales: Set<SwingScaleKey>;
-  activeSwingCount: number;  // 1-5, how many top swings to show per scale
-}
-
-export const DEFAULT_SWING_DISPLAY_CONFIG: SwingDisplayConfig = {
-  enabledScales: new Set(['XL', 'L', 'M'] as SwingScaleKey[]),  // S off by default
-  activeSwingCount: 2,
-};
 
 export const ACTIVE_SWING_COUNT_OPTIONS = [1, 2, 3, 4, 5] as const;
 
 // ============================================================================
-// Hierarchical Display Configuration (Issue #166 - Replaces Scale)
+// Hierarchical Display Configuration (Issue #166)
 // ============================================================================
 
 export type DepthFilterKey = 'root_only' | '2_levels' | '3_levels' | 'all';

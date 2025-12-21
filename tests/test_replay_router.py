@@ -279,38 +279,43 @@ class TestCalculateScaleThresholds:
 class TestBuildSwingState:
     """Tests for _build_swing_state."""
 
-    def test_groups_by_scale(self):
-        """Builds ReplaySwingState grouped by scale."""
-        swings = [
-            SwingNode(
-                swing_id="xl_swing",
-                high_bar_index=10,
-                high_price=Decimal("5200.00"),
-                low_bar_index=20,
-                low_price=Decimal("5000.00"),  # size=200
-                direction="bull",
-                status="active",
-                formed_at_bar=20,
-            ),
-            SwingNode(
-                swing_id="s_swing",
-                high_bar_index=10,
-                high_price=Decimal("5010.00"),
-                low_bar_index=20,
-                low_price=Decimal("5000.00"),  # size=10
-                direction="bull",
-                status="active",
-                formed_at_bar=20,
-            ),
-        ]
+    def test_groups_by_depth(self):
+        """Builds ReplaySwingState grouped by depth."""
+        # Create a root swing (no parents)
+        root_swing = SwingNode(
+            swing_id="root_swing",
+            high_bar_index=10,
+            high_price=Decimal("5200.00"),
+            low_bar_index=20,
+            low_price=Decimal("5000.00"),  # size=200
+            direction="bull",
+            status="active",
+            formed_at_bar=20,
+        )
 
+        # Create a child swing (depth 1)
+        child_swing = SwingNode(
+            swing_id="child_swing",
+            high_bar_index=10,
+            high_price=Decimal("5010.00"),
+            low_bar_index=20,
+            low_price=Decimal("5000.00"),  # size=10
+            direction="bull",
+            status="active",
+            formed_at_bar=20,
+        )
+        child_swing.add_parent(root_swing)
+
+        swings = [root_swing, child_swing]
         thresholds = {"XL": 100.0, "L": 50.0, "M": 20.0, "S": 0.0}
         result = _build_swing_state(swings, thresholds)
 
-        assert len(result.XL) == 1
-        assert result.XL[0].id == "xl_swing"
-        assert len(result.S) == 1
-        assert result.S[0].id == "s_swing"
+        # Root swing has depth 0 -> depth_1
+        # Child swing has depth 1 -> depth_2
+        assert len(result.depth_1) == 1
+        assert result.depth_1[0].id == "root_swing"
+        assert len(result.depth_2) == 1
+        assert result.depth_2[0].id == "child_swing"
 
 
 # ============================================================================
@@ -394,17 +399,17 @@ class TestResponseSchemaCompatibility:
         assert isinstance(response.depth, int)
         assert isinstance(response.parent_ids, list)
 
-    def test_swing_state_has_all_scales(self):
-        """ReplaySwingState has XL, L, M, S fields."""
+    def test_swing_state_has_all_depths(self):
+        """ReplaySwingState has depth_1, depth_2, depth_3, deeper fields."""
         swings = []
         thresholds = {"XL": 100.0, "L": 50.0, "M": 20.0, "S": 0.0}
 
         result = _build_swing_state(swings, thresholds)
 
-        assert hasattr(result, 'XL')
-        assert hasattr(result, 'L')
-        assert hasattr(result, 'M')
-        assert hasattr(result, 'S')
+        assert hasattr(result, 'depth_1')
+        assert hasattr(result, 'depth_2')
+        assert hasattr(result, 'depth_3')
+        assert hasattr(result, 'deeper')
 
 
 # ============================================================================

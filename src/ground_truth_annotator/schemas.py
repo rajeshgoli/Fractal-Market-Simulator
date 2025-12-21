@@ -209,11 +209,11 @@ class ReplayEventResponse(BaseModel):
 
 
 class ReplaySwingState(BaseModel):
-    """Current state of all swings at a given bar."""
-    XL: List[CalibrationSwingResponse] = []
-    L: List[CalibrationSwingResponse] = []
-    M: List[CalibrationSwingResponse] = []
-    S: List[CalibrationSwingResponse] = []
+    """Current state of all swings at a given bar, grouped by depth."""
+    depth_1: List[CalibrationSwingResponse] = []  # Root swings (depth 0)
+    depth_2: List[CalibrationSwingResponse] = []  # Depth 1
+    depth_3: List[CalibrationSwingResponse] = []  # Depth 2
+    deeper: List[CalibrationSwingResponse] = []  # Depth 3+
 
 
 class AggregatedBarsResponse(BaseModel):
@@ -515,24 +515,18 @@ class SwingsByDepth(BaseModel):
 class CalibrationResponseHierarchical(BaseModel):
     """Calibration response with hierarchical tree statistics.
 
-    This is the new response format for issue #166 that replaces
-    scale-based (S/M/L/XL) display with hierarchy-based display.
+    This is the response format for issue #166 that uses
+    hierarchy-based display instead of scale-based (S/M/L/XL).
     """
     calibration_bar_count: int
     current_price: float
 
-    # Tree statistics (new)
+    # Tree statistics
     tree_stats: TreeStatistics
 
-    # Swings grouped by depth (replaces swings_by_scale)
+    # Swings grouped by depth
     swings_by_depth: SwingsByDepth
     active_swings_by_depth: SwingsByDepth
-
-    # Legacy compatibility - keep for backward compatibility during transition
-    swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
-    active_swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
-    scale_thresholds: Dict[str, float]
-    stats_by_scale: Dict[str, CalibrationScaleStats]
 
 
 # ============================================================================

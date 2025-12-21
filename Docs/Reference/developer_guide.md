@@ -23,7 +23,7 @@ src/
 ├── data/
 │   └── ohlc_loader.py              # CSV loading (TradingView + semicolon formats)
 ├── swing_analysis/
-│   ├── types.py                    # Bar, BullReferenceSwing, BearReferenceSwing
+│   ├── types.py                    # Bar dataclass
 │   ├── swing_config.py             # SwingConfig, DirectionConfig
 │   ├── swing_node.py               # SwingNode hierarchical structure
 │   ├── events.py                   # SwingEvent types
@@ -34,7 +34,6 @@ src/
 │   │   ├── state.py                # BarType, DetectorState
 │   │   ├── leg_pruner.py           # LegPruner (pruning algorithms)
 │   │   └── calibrate.py            # calibrate, calibrate_from_dataframe, dataframe_to_bars
-│   ├── adapters.py                 # Legacy compatibility: SwingNode ↔ ReferenceSwing, detect_swings_compat
 │   ├── reference_frame.py          # Oriented coordinate system for ratios
 │   ├── bar_aggregator.py           # Multi-timeframe OHLC aggregation
 │   └── constants.py                # Fibonacci level sets
@@ -95,7 +94,6 @@ scripts/                            # Dev utilities
 │   dag/leg_pruner.py ────► LegPruner (pruning algorithms)                │   │
 │   dag/leg.py ───────────► Leg, PendingOrigin dataclasses                │   │
 │   dag/state.py ─────────► BarType, DetectorState                        │   │
-│   adapters.py ──────────► detect_swings_compat(), ReferenceSwing         │   │
 │   level_calculator.py ──► Fibonacci levels                               │   │
 │   reference_frame.py ───► Price ↔ ratio conversion                       │   │
 │   bar_aggregator.py ────► Multi-timeframe OHLC                           │   │
@@ -135,14 +133,13 @@ scripts/                            # Dev utilities
 1. Load OHLC
    load_ohlc("data.csv") → DataFrame
 
-2. Detect swings (sequential by scale)
-   detect_swings(df, quota=4) → XL swings
-   detect_swings(df, quota=6, larger_swings=XL) → L swings
-   detect_swings(df, quota=10, larger_swings=L) → M swings
-   detect_swings(df, quota=15, larger_swings=M) → S swings
+2. Calibrate (hierarchical DAG detection)
+   calibrate_from_dataframe(df) → (detector, events)
+   detector.get_active_nodes() → List[SwingNode]  # Hierarchical tree
 
-3. Discretize
-   Discretizer().discretize(df, {"XL": xl, "L": l, "M": m, "S": s}) → DiscretizationLog
+3. Discretize (by depth or custom grouping)
+   swings_by_depth = group_swings_by_depth(detector.get_active_nodes())
+   Discretizer().discretize(df, swings_by_depth) → DiscretizationLog
 
 4. Analyze
    log.events → filter, aggregate, visualize
@@ -562,18 +559,28 @@ Batch processor: OHLC + detected swings → structural event log.
 
 ```python
 from src.discretization import Discretizer, DiscretizerConfig
+from src.swing_analysis import calibrate_from_dataframe
+
+# Calibrate to get SwingNode tree
+detector, events = calibrate_from_dataframe(df)
+
+# Group by depth for discretization
+swings_by_depth = {}
+for node in detector.get_active_nodes():
+    depth = node.get_depth()
+    key = f"depth_{depth}" if depth < 3 else "deeper"
+    swings_by_depth.setdefault(key, []).append(node)
 
 config = DiscretizerConfig(
     level_set=[0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.382, 1.5, 1.618, 1.786, 2.0, 2.618, 3.0, 4.0],
     crossing_semantics="close_cross",
-    invalidation_thresholds={"S": -0.10, "M": -0.10, "L": -0.15, "XL": -0.15},
 )
 
 discretizer = Discretizer(config)
 
 log = discretizer.discretize(
     ohlc=df,                              # DataFrame with timestamp, open, high, low, close
-    swings={"XL": xl_swings, "L": l_swings, ...},  # Dict[scale, List[ReferenceSwing | SwingNode]]
+    swings=swings_by_depth,               # Dict[depth_key, List[SwingNode]]
     instrument="ES",
     source_resolution="1m",
 )
@@ -716,7 +723,6 @@ python -m pytest tests/ --cov=src --cov-report=html
 | `test_swing_config.py` | SwingConfig dataclass |
 | `test_swing_node.py` | SwingNode hierarchical structure |
 | `test_swing_events.py` | Event types |
-| `test_adapters.py` | Legacy compatibility adapters |
 
 ---
 
@@ -744,7 +750,7 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 # {mode: "calibration" | "dag"}
 
 # Calibration: GET /api/replay/calibrate?bar_count=10000
-# Returns swings grouped by scale with hierarchy info (depth, parent_ids)
+# Returns swings grouped by depth with tree statistics
 
 # Advance: POST /api/replay/advance
 # {calibration_bar_count, current_bar_index, advance_by}
