@@ -34,6 +34,8 @@ class DirectionConfig:
             as fraction of range (close-based). Default 0.10 per Rule 2.2.
         child_swing_tolerance: Invalidation tolerance for children of big
             swings as fraction of range. Default 0.10.
+        invalidation_threshold: Fraction of leg range beyond origin that
+            marks decisive invalidation. Default 0.382 (#203).
     """
     formation_fib: float = 0.287
     self_separation: float = 0.10
@@ -41,6 +43,7 @@ class DirectionConfig:
     big_swing_price_tolerance: float = 0.15
     big_swing_close_tolerance: float = 0.10
     child_swing_tolerance: float = 0.10
+    invalidation_threshold: float = 0.382
 
 
 @dataclass(frozen=True)
@@ -55,12 +58,16 @@ class SwingConfig:
         bull: Configuration for bull swing detection.
         bear: Configuration for bear swing detection.
         lookback_bars: Number of bars to look back for candidate extrema.
-        staleness_threshold: Multiplier for staleness pruning (default 2.0).
-            A swing is pruned as stale when price moves N × its range
-            without the swing changing. Higher values = more conservative pruning.
+        staleness_threshold: DEPRECATED - No longer used after #203.
         subtree_prune_threshold: Threshold for pruning small legs/origins (default 0.0).
             Legs/origins smaller than this fraction of a containing parent are pruned.
             0.0 disables pruning, 0.1 would prune legs < 10% of parent.
+        proximity_prune_threshold: Threshold for proximity-based leg consolidation (#203).
+            Legs within this relative difference of each other are consolidated.
+            Default 0.05 (5%). Set to 0.0 to disable.
+        stale_extension_threshold: Multiplier for removing invalidated legs (#203).
+            Invalidated legs are pruned when price moves N × their range beyond origin.
+            Default 3.0 (3× extension).
 
     Example:
         >>> config = SwingConfig.default()
@@ -74,8 +81,10 @@ class SwingConfig:
     bull: DirectionConfig = field(default_factory=DirectionConfig)
     bear: DirectionConfig = field(default_factory=DirectionConfig)
     lookback_bars: int = 50
-    staleness_threshold: float = 2.0
+    staleness_threshold: float = 2.0  # DEPRECATED: kept for backwards compatibility
     subtree_prune_threshold: float = 0.0
+    proximity_prune_threshold: float = 0.05
+    stale_extension_threshold: float = 3.0
 
     @classmethod
     def default(cls) -> "SwingConfig":
@@ -90,6 +99,8 @@ class SwingConfig:
             "lookback_bars": self.lookback_bars,
             "staleness_threshold": self.staleness_threshold,
             "subtree_prune_threshold": self.subtree_prune_threshold,
+            "proximity_prune_threshold": self.proximity_prune_threshold,
+            "stale_extension_threshold": self.stale_extension_threshold,
         }
 
     def to_json(self) -> str:
@@ -107,6 +118,8 @@ class SwingConfig:
             lookback_bars=data.get("lookback_bars", 50),
             staleness_threshold=data.get("staleness_threshold", 2.0),
             subtree_prune_threshold=data.get("subtree_prune_threshold", 0.0),
+            proximity_prune_threshold=data.get("proximity_prune_threshold", 0.05),
+            stale_extension_threshold=data.get("stale_extension_threshold", 3.0),
         )
 
     @classmethod
@@ -135,6 +148,8 @@ class SwingConfig:
             lookback_bars=self.lookback_bars,
             staleness_threshold=self.staleness_threshold,
             subtree_prune_threshold=self.subtree_prune_threshold,
+            proximity_prune_threshold=self.proximity_prune_threshold,
+            stale_extension_threshold=self.stale_extension_threshold,
         )
 
     def with_bear(self, **kwargs: Any) -> "SwingConfig":
@@ -151,6 +166,8 @@ class SwingConfig:
             lookback_bars=self.lookback_bars,
             staleness_threshold=self.staleness_threshold,
             subtree_prune_threshold=self.subtree_prune_threshold,
+            proximity_prune_threshold=self.proximity_prune_threshold,
+            stale_extension_threshold=self.stale_extension_threshold,
         )
 
     def with_lookback(self, lookback_bars: int) -> "SwingConfig":
@@ -165,10 +182,14 @@ class SwingConfig:
             lookback_bars=lookback_bars,
             staleness_threshold=self.staleness_threshold,
             subtree_prune_threshold=self.subtree_prune_threshold,
+            proximity_prune_threshold=self.proximity_prune_threshold,
+            stale_extension_threshold=self.stale_extension_threshold,
         )
 
     def with_staleness(self, staleness_threshold: float) -> "SwingConfig":
         """
+        DEPRECATED: staleness_threshold is no longer used after #203.
+
         Create a new config with modified staleness threshold.
 
         Since SwingConfig is frozen, this creates a new instance.
@@ -179,6 +200,8 @@ class SwingConfig:
             lookback_bars=self.lookback_bars,
             staleness_threshold=staleness_threshold,
             subtree_prune_threshold=self.subtree_prune_threshold,
+            proximity_prune_threshold=self.proximity_prune_threshold,
+            stale_extension_threshold=self.stale_extension_threshold,
         )
 
     def with_subtree_prune(self, subtree_prune_threshold: float) -> "SwingConfig":
@@ -197,4 +220,47 @@ class SwingConfig:
             lookback_bars=self.lookback_bars,
             staleness_threshold=self.staleness_threshold,
             subtree_prune_threshold=subtree_prune_threshold,
+            proximity_prune_threshold=self.proximity_prune_threshold,
+            stale_extension_threshold=self.stale_extension_threshold,
+        )
+
+    def with_proximity_prune(self, proximity_prune_threshold: float) -> "SwingConfig":
+        """
+        Create a new config with modified proximity prune threshold (#203).
+
+        Since SwingConfig is frozen, this creates a new instance.
+
+        Args:
+            proximity_prune_threshold: Relative difference threshold for consolidation.
+                0.05 means legs within 5% relative difference are consolidated.
+                0.0 disables proximity pruning.
+        """
+        return SwingConfig(
+            bull=self.bull,
+            bear=self.bear,
+            lookback_bars=self.lookback_bars,
+            staleness_threshold=self.staleness_threshold,
+            subtree_prune_threshold=self.subtree_prune_threshold,
+            proximity_prune_threshold=proximity_prune_threshold,
+            stale_extension_threshold=self.stale_extension_threshold,
+        )
+
+    def with_stale_extension(self, stale_extension_threshold: float) -> "SwingConfig":
+        """
+        Create a new config with modified stale extension threshold (#203).
+
+        Since SwingConfig is frozen, this creates a new instance.
+
+        Args:
+            stale_extension_threshold: Multiplier for removing invalidated legs.
+                3.0 means invalidated legs are pruned at 3× extension beyond origin.
+        """
+        return SwingConfig(
+            bull=self.bull,
+            bear=self.bear,
+            lookback_bars=self.lookback_bars,
+            staleness_threshold=self.staleness_threshold,
+            subtree_prune_threshold=self.subtree_prune_threshold,
+            proximity_prune_threshold=self.proximity_prune_threshold,
+            stale_extension_threshold=stale_extension_threshold,
         )

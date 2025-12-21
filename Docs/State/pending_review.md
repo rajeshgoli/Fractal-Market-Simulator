@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-20
 
@@ -11,6 +11,7 @@
 - **#199** — Fix orphaned origin marker positions (bull below, bear above)
 - **#200** — Rename pending_pivots to pending_origins + skip redundant tracking
 - **#202** — Turn-scoped domination check for nested swing detection after directional reversals
+- **#203** — Rework leg staleness/pruning: proximity-based consolidation + extended visibility for invalidated legs
 
 ---
 

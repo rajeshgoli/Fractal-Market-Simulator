@@ -37,15 +37,15 @@ function getLineStyleValue(status: 'active' | 'stale' | 'invalidated'): LineStyl
 }
 
 /**
- * LegOverlay renders active legs as diagonal lines connecting origin to pivot.
+ * LegOverlay renders legs as diagonal lines connecting origin to pivot.
  *
  * For each leg, it draws:
  * - A line from (origin_index, origin_price) to (pivot_index, pivot_price)
  *
- * Visual treatment:
+ * Visual treatment (#203):
  * - Active legs: Solid lines, blue (bull) / red (bear), 70% opacity
  * - Stale legs: Dashed lines, yellow, 50% opacity
- * - Invalidated legs: Not shown (pruned from display)
+ * - Invalidated legs: Dotted lines, gray, 30% opacity (shown until 3× extension prune)
  */
 export const LegOverlay: React.FC<LegOverlayProps> = ({
   chart,
@@ -160,12 +160,8 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     clearLineSeries();
 
     // Filter legs to only show those visible up to current position
-    // and exclude invalidated legs
+    // (#203: now includes invalidated legs with dotted line style)
     const visibleLegs = legs.filter(leg => {
-      // Skip invalidated legs (they should not be shown)
-      if (leg.status === 'invalidated') {
-        return false;
-      }
       // Only show legs where pivot is at or before current position
       return leg.pivot_index <= currentPosition;
     });

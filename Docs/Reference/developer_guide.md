@@ -339,8 +339,8 @@ The pipeline order per bar:
 | `SwingCompletedEvent` | Price reaches 2.0 extension target |
 | `LevelCrossEvent` | Price crosses Fib level boundary |
 | `LegCreatedEvent` | New candidate leg is created (pre-formation) |
-| `LegPrunedEvent` | Leg is removed due to staleness or turn pruning |
-| `LegInvalidatedEvent` | Leg falls below 0.382 threshold (decisive invalidation) |
+| `LegPrunedEvent` | Leg is removed (reasons: `turn_prune`, `subtree_prune`, `proximity_prune`, `extension_prune`) |
+| `LegInvalidatedEvent` | Leg breaches invalidation threshold (configurable, default 0.382) |
 
 **Tolerance rules (Rule 2.2):**
 - Big swings (top 10% by range): full tolerance (0.15)
@@ -386,13 +386,43 @@ During strong trends, the DAG creates many parallel legs with different origins 
 4. Emit `LegPrunedEvent` with `reason="subtree_prune"` for discarded legs
 5. Threshold controlled by `SwingConfig.subtree_prune_threshold` (default: 0.0 = disabled, set to 0.1 for 10%)
 
+**Step 3: Proximity-based consolidation (#203)**
+
+After subtree pruning, legs within a configurable relative difference threshold are consolidated:
+1. Sort remaining legs by range (descending)
+2. Keep first (largest) as survivor
+3. For each remaining leg: if relative_diff(leg, nearest_survivor) < threshold, prune
+4. Uses bisect for O(log N) nearest-neighbor lookup
+5. Threshold controlled by `SwingConfig.proximity_prune_threshold` (default: 0.05 = 5%)
+6. Emit `LegPrunedEvent` with `reason="proximity_prune"` for discarded legs
+
+Example with 5% threshold:
+| Leg Range | Nearest Survivor | Rel Diff | Action |
+|-----------|------------------|----------|--------|
+| 113.5 | — | — | Keep (largest) |
+| 100.5 | 113.5 | 11.5% | Keep |
+| 98.5 | 100.5 | 2.0% | Prune |
+| 38.5 | 100.5 | 62% | Keep (distinct) |
+
 **Active swing immunity:**
 Legs that have formed into active swings are never pruned. If an origin has any active swings, the entire origin is immune from pruning.
+
+**Extended visibility for invalidated legs (#203):**
+
+Invalidated legs remain visible in the DAG until they are pruned at 3× extension:
+- `active` → legs not yet invalidated, shown with solid lines
+- `invalidated` → legs past invalidation threshold, shown with dotted lines
+- At 3× extension beyond origin, invalidated legs are pruned via `_check_extension_prune()`
+
+Configuration:
+- `DirectionConfig.invalidation_threshold`: Configurable per direction (default: 0.382)
+- `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
 
 **Benefits:**
 - Multi-origin preservation: Keeps the best leg from each structural level
 - Fractal compression: Detailed near active zone, sparse further back
 - Self-regulating: Tree size stays bounded as older noise is pruned
+- Counter-trend references: Invalidated legs remain visible for reference until 3× extension
 
 ---
 

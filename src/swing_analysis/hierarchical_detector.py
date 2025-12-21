@@ -166,8 +166,6 @@ class DetectorState:
         prev_bar: Previous bar for type classification.
         active_legs: Currently tracked legs (bull and bear can coexist).
         pending_origins: Potential origins for new legs awaiting temporal confirmation.
-        price_high_water: Highest price seen since last leg modification.
-        price_low_water: Lowest price seen since last leg modification.
     """
 
     active_swings: List[SwingNode] = field(default_factory=list)
@@ -185,8 +183,6 @@ class DetectorState:
     pending_origins: Dict[str, Optional[PendingOrigin]] = field(
         default_factory=lambda: {'bull': None, 'bear': None}
     )
-    price_high_water: Optional[Decimal] = None
-    price_low_water: Optional[Decimal] = None
 
     # Orphaned origins (#163): preserved origins from invalidated legs
     # Format: direction -> List[(origin_price, origin_bar_index)]
@@ -278,8 +274,7 @@ class DetectorState:
             "prev_bar": prev_bar_data,
             "active_legs": legs_data,
             "pending_origins": pending_origins_data,
-            "price_high_water": str(self.price_high_water) if self.price_high_water is not None else None,
-            "price_low_water": str(self.price_low_water) if self.price_low_water is not None else None,
+            # Note: price_high_water/price_low_water removed in #203 (staleness removal)
             # Orphaned origins (#163)
             "orphaned_origins": {
                 direction: [(str(price), idx) for price, idx in origins]
@@ -370,10 +365,6 @@ class DetectorState:
                 close=prev_bar_data["close"],
             )
 
-        # Deserialize price water marks
-        price_high_water = data.get("price_high_water")
-        price_low_water = data.get("price_low_water")
-
         # Deserialize orphaned origins (#163)
         orphaned_origins_raw = data.get("orphaned_origins", {'bull': [], 'bear': []})
         orphaned_origins: Dict[str, List[Tuple[Decimal, int]]] = {'bull': [], 'bear': []}
@@ -401,8 +392,7 @@ class DetectorState:
             prev_bar=prev_bar,
             active_legs=active_legs,
             pending_origins=pending_origins,
-            price_high_water=Decimal(price_high_water) if price_high_water is not None else None,
-            price_low_water=Decimal(price_low_water) if price_low_water is not None else None,
+            # Note: price_high_water/price_low_water removed in #203
             orphaned_origins=orphaned_origins,
             # Turn tracking (#202)
             last_turn_bar=last_turn_bar,
@@ -582,16 +572,6 @@ class HierarchicalDetector:
         bar_close = Decimal(str(bar.close))
         bar_open = Decimal(str(bar.open))
 
-        # Initialize water marks if needed
-        if self.state.price_high_water is None:
-            self.state.price_high_water = bar_high
-        if self.state.price_low_water is None:
-            self.state.price_low_water = bar_low
-
-        # Update water marks
-        self.state.price_high_water = max(self.state.price_high_water, bar_high)
-        self.state.price_low_water = min(self.state.price_low_water, bar_low)
-
         # Extend leg pivots on new extremes (#188, #192, #197)
         # This must happen BEFORE bar type classification because bars with
         # HH+EL or EH+LL fall through to Type 1 which didn't extend pivots.
@@ -659,9 +639,9 @@ class HierarchicalDetector:
             if leg.status == 'active':
                 leg.bar_count += 1
 
-        # Check staleness and prune (#168: now emits LegPrunedEvent)
-        staleness_events = self._check_staleness(bar, timestamp)
-        events.extend(staleness_events)
+        # Check 3× extension pruning for invalidated legs (#203)
+        extension_prune_events = self._check_extension_prune(bar, timestamp)
+        events.extend(extension_prune_events)
 
         # Prune orphaned origins (#163)
         self._prune_orphaned_origins(bar)
@@ -1349,21 +1329,24 @@ class HierarchicalDetector:
         self, bar: Bar, timestamp: datetime, bar_high: Decimal, bar_low: Decimal
     ) -> List[SwingEvent]:
         """
-        Check for decisive invalidation (0.382 rule) of legs.
+        Check for decisive invalidation of legs (#203).
 
-        A leg is decisively invalidated when price moves 38.2% of the
-        leg's range beyond the defended pivot.
+        A leg is decisively invalidated when price moves beyond the
+        configured invalidation threshold (default 0.382) of the leg's range
+        beyond the defended pivot.
 
         When a leg is invalidated:
+        - Its status is set to 'invalidated' but it remains in active_legs (#203)
         - Its origin is preserved as an "orphaned origin" for sibling swing formation (#163)
         - If the leg formed into a swing, that swing is also invalidated (#174)
+
+        Invalidated legs remain visible until 3× extension prune (#203).
 
         Returns:
             List of LegInvalidatedEvent and SwingInvalidatedEvent for any
             legs/swings invalidated.
         """
         events: List[SwingEvent] = []
-        invalidation_threshold = Decimal("0.382")
         invalidated_legs: List[Leg] = []
         invalidation_prices: Dict[str, Decimal] = {}  # leg_id -> price at invalidation
 
@@ -1374,9 +1357,15 @@ class HierarchicalDetector:
             if leg.range == 0:
                 continue
 
+            # Get per-direction invalidation threshold (#203)
+            if leg.direction == 'bull':
+                invalidation_threshold = Decimal(str(self.config.bull.invalidation_threshold))
+            else:
+                invalidation_threshold = Decimal(str(self.config.bear.invalidation_threshold))
+
             threshold_amount = invalidation_threshold * leg.range
 
-            # Invalidation happens when price breaches 38.2% beyond the origin
+            # Invalidation happens when price breaches threshold beyond the origin
             # (the origin is the defended level that must hold)
             # Bull: origin=LOW, invalidation if price drops below origin - threshold
             # Bear: origin=HIGH, invalidation if price rises above origin + threshold
@@ -1423,63 +1412,61 @@ class HierarchicalDetector:
                         ))
                         break
 
-        # Remove invalidated legs
-        self.state.active_legs = [leg for leg in self.state.active_legs if leg.status != 'invalidated']
+        # NOTE: Invalidated legs are NOT removed here (#203)
+        # They remain visible until 3× extension prune in _check_extension_prune()
 
         return events
 
-    def _check_staleness(self, bar: Bar, timestamp: datetime) -> List[LegPrunedEvent]:
+    def _check_extension_prune(self, bar: Bar, timestamp: datetime) -> List[LegPrunedEvent]:
         """
-        Apply staleness pruning (2x rule).
+        Prune invalidated legs that have reached 3× extension (#203).
 
-        A leg is stale when price has moved 2x the leg's range without
-        the leg changing.
+        Invalidated legs remain visible until price moves 3× their range
+        beyond the origin. This allows them to serve as counter-trend references.
 
         Returns:
-            List of LegPrunedEvent for any legs pruned due to staleness.
+            List of LegPrunedEvent for legs pruned due to extension.
         """
         events: List[LegPrunedEvent] = []
-        staleness_threshold = Decimal(str(self.config.staleness_threshold))
-        stale_legs: List[Leg] = []
+        extension_threshold = Decimal(str(self.config.stale_extension_threshold))
+        bar_high = Decimal(str(bar.high))
+        bar_low = Decimal(str(bar.low))
+        pruned_legs: List[Leg] = []
 
         for leg in self.state.active_legs:
-            if leg.status != 'active':
+            if leg.status != 'invalidated':
                 continue
 
             if leg.range == 0:
                 continue
 
-            # Calculate price movement since leg was last modified
+            # Calculate extension beyond origin
+            # Bull leg: origin=LOW, check how far below origin price has gone
+            # Bear leg: origin=HIGH, check how far above origin price has gone
+            extension_amount = extension_threshold * leg.range
+
             if leg.direction == 'bull':
-                # For bull leg, check how far price has moved down
-                if self.state.price_low_water is not None:
-                    price_move = leg.price_at_creation - self.state.price_low_water
-                else:
-                    price_move = Decimal("0")
-            else:
-                # For bear leg, check how far price has moved up
-                if self.state.price_high_water is not None:
-                    price_move = self.state.price_high_water - leg.price_at_creation
-                else:
-                    price_move = Decimal("0")
-
-            # Check if stale (moved 2x without modification)
-            if price_move > staleness_threshold * leg.range:
-                if leg.last_modified_bar < bar.index - 10:  # Haven't changed in 10 bars
+                prune_price = leg.origin_price - extension_amount
+                if bar_low < prune_price:
                     leg.status = 'stale'
-                    stale_legs.append(leg)
+                    pruned_legs.append(leg)
+            else:  # bear
+                prune_price = leg.origin_price + extension_amount
+                if bar_high > prune_price:
+                    leg.status = 'stale'
+                    pruned_legs.append(leg)
 
-        # Emit LegPrunedEvent for each stale leg (#168)
-        for leg in stale_legs:
+        # Emit LegPrunedEvent for each pruned leg
+        for leg in pruned_legs:
             events.append(LegPrunedEvent(
                 bar_index=bar.index,
                 timestamp=timestamp,
-                swing_id="",
+                swing_id=leg.swing_id or "",
                 leg_id=leg.leg_id,
-                reason="staleness",
+                reason="extension_prune",
             ))
 
-        # Remove stale legs
+        # Remove pruned legs
         self.state.active_legs = [leg for leg in self.state.active_legs if leg.status != 'stale']
 
         return events
@@ -1488,13 +1475,13 @@ class HierarchicalDetector:
         self, direction: str, bar: Bar, timestamp: datetime
     ) -> List[LegPrunedEvent]:
         """
-        Prune legs with recursive 10% rule and multi-origin preservation (#185).
+        Prune legs with recursive 10% rule, multi-origin preservation, and proximity consolidation.
 
         1. Group legs by origin
         2. For each origin group: keep ONLY the largest (prune others)
            - On tie, keep earliest pivot bar (#190)
-        3. Multi-origin preservation: always keep one leg per origin
-        4. Recursive 10% across origins: prune small contained origins
+        3. Recursive 10% across origins: prune small contained origins (#185)
+        4. Proximity consolidation: prune legs within threshold of survivors (#203)
         5. Active swing immunity: legs with active swings are never pruned
 
         This preserves nested structure while compressing noise.
@@ -1567,6 +1554,12 @@ class HierarchicalDetector:
         # Apply 10% rule to prune small origin groups whose best leg is
         # contained within a larger origin's best leg range
         events.extend(self._apply_recursive_subtree_prune(
+            direction, bar, timestamp, best_per_origin, pruned_leg_ids, active_swing_ids
+        ))
+
+        # Step 3: Proximity-based consolidation (#203)
+        # Prune legs that are too similar to survivors (within relative difference threshold)
+        events.extend(self._apply_proximity_prune(
             direction, bar, timestamp, best_per_origin, pruned_leg_ids, active_swing_ids
         ))
 
@@ -1686,6 +1679,126 @@ class HierarchicalDetector:
                                 leg_id=leg.leg_id,
                                 reason="subtree_prune",
                             ))
+
+        return events
+
+    def _apply_proximity_prune(
+        self,
+        direction: str,
+        bar: Bar,
+        timestamp: datetime,
+        best_per_origin: Dict[Tuple[Decimal, int], "Leg"],
+        pruned_leg_ids: Set[str],
+        active_swing_ids: Set[str],
+    ) -> List[LegPrunedEvent]:
+        """
+        Apply proximity-based consolidation (#203).
+
+        Prunes legs that are too similar to larger survivors.
+        Uses relative difference: |range_a - range_b| / max(range_a, range_b)
+
+        Algorithm:
+        1. Sort remaining legs by range (descending)
+        2. Keep first (largest) as survivor
+        3. For each remaining leg:
+           - If relative_diff(leg, nearest_survivor) < threshold: prune
+           - Else: add to survivors
+
+        Uses bisect for O(log N) nearest-neighbor lookup in sorted survivor list.
+
+        Active swing immunity: Legs with active swings are never pruned.
+
+        Args:
+            direction: 'bull' or 'bear'
+            bar: Current bar
+            timestamp: Timestamp for events
+            best_per_origin: Dict mapping origin -> best leg for that origin
+            pruned_leg_ids: Set to track pruned leg IDs (mutated)
+            active_swing_ids: Set of swing IDs that are currently active
+
+        Returns:
+            List of LegPrunedEvent for pruned legs with reason="proximity_prune"
+        """
+        import bisect
+
+        events: List[LegPrunedEvent] = []
+        prune_threshold = Decimal(str(self.config.proximity_prune_threshold))
+
+        # Skip proximity pruning if threshold is 0 (disabled)
+        if prune_threshold == 0:
+            return events
+
+        # Get remaining legs (not already pruned)
+        remaining_legs = [
+            leg for origin, leg in best_per_origin.items()
+            if leg.leg_id not in pruned_leg_ids
+        ]
+
+        if len(remaining_legs) <= 1:
+            return events
+
+        # Sort by range descending
+        remaining_legs.sort(key=lambda l: l.range, reverse=True)
+
+        # Track survivors as (range, leg) for binary search
+        # survivor_ranges is kept sorted ascending for bisect
+        survivor_ranges: List[Decimal] = []
+        survivor_legs: List[Leg] = []
+
+        # First leg (largest) is always a survivor
+        first_leg = remaining_legs[0]
+        survivor_ranges.append(first_leg.range)
+        survivor_legs.append(first_leg)
+
+        # Process remaining legs
+        for leg in remaining_legs[1:]:
+            if leg.leg_id in pruned_leg_ids:
+                continue
+
+            # Active swing immunity
+            if leg.swing_id and leg.swing_id in active_swing_ids:
+                # Immune legs become survivors
+                pos = bisect.bisect_left(survivor_ranges, leg.range)
+                survivor_ranges.insert(pos, leg.range)
+                survivor_legs.insert(pos, leg)
+                continue
+
+            # Find nearest survivor using binary search
+            pos = bisect.bisect_left(survivor_ranges, leg.range)
+
+            # Check neighbors (pos-1 and pos) to find nearest
+            min_rel_diff = Decimal("1.0")  # Max possible relative diff
+
+            if pos > 0:
+                left_range = survivor_ranges[pos - 1]
+                rel_diff = abs(leg.range - left_range) / max(leg.range, left_range)
+                if rel_diff < min_rel_diff:
+                    min_rel_diff = rel_diff
+
+            if pos < len(survivor_ranges):
+                right_range = survivor_ranges[pos]
+                rel_diff = abs(leg.range - right_range) / max(leg.range, right_range)
+                if rel_diff < min_rel_diff:
+                    min_rel_diff = rel_diff
+
+            # If too close to a survivor, prune
+            if min_rel_diff < prune_threshold:
+                leg.status = 'pruned'
+                pruned_leg_ids.add(leg.leg_id)
+                events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id="",
+                    leg_id=leg.leg_id,
+                    reason="proximity_prune",
+                ))
+            else:
+                # This leg is distinct, add to survivors
+                # Insert at correct position to maintain sorted order
+                bisect.insort(survivor_ranges, leg.range)
+                # Find position again for leg insertion
+                new_pos = bisect.bisect_left(survivor_ranges, leg.range)
+                survivor_legs.insert(new_pos, leg)
 
         return events
 
