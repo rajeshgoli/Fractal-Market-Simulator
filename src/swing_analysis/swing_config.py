@@ -36,6 +36,10 @@ class DirectionConfig:
             swings as fraction of range. Default 0.10.
         invalidation_threshold: Fraction of leg range beyond origin that
             marks decisive invalidation. Default 0.382 (#203).
+        pivot_breach_threshold: Fraction of leg range beyond pivot that
+            triggers pruning of formed legs. Default 0.10 (10%) (#208).
+        engulfed_breach_threshold: Combined breach fraction (origin + pivot)
+            that marks a leg as engulfed and deletes it. Default 0.20 (#208).
     """
     formation_fib: float = 0.287
     self_separation: float = 0.10
@@ -44,6 +48,8 @@ class DirectionConfig:
     big_swing_close_tolerance: float = 0.10
     child_swing_tolerance: float = 0.10
     invalidation_threshold: float = 0.382
+    pivot_breach_threshold: float = 0.10
+    engulfed_breach_threshold: float = 0.20
 
 
 @dataclass(frozen=True)

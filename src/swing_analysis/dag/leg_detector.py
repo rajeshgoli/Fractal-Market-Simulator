@@ -143,6 +143,10 @@ class LegDetector:
         Bull leg: origin at LOW (fixed) -> pivot at HIGH (extends on new highs)
         Bear leg: origin at HIGH (fixed) -> pivot at LOW (extends on new lows)
 
+        IMPORTANT (#208): Pivots only extend if the origin has never been breached.
+        If the origin was breached, the leg is structurally compromised and
+        pivot extension is disabled.
+
         This fixes the bug where bars with HH+EL (higher high, equal low) or
         EH+LL (equal high, lower low) were classified as Type 1 and didn't
         extend pivots, causing legs to show stale pivot values.
@@ -152,21 +156,83 @@ class LegDetector:
             bar_high: Current bar's high as Decimal
             bar_low: Current bar's low as Decimal
         """
-        # Extend bull leg pivots on new highs
+        # Extend bull leg pivots on new highs (only if origin not breached #208)
         for leg in self.state.active_legs:
             if leg.direction == 'bull' and leg.status == 'active':
-                if bar_high > leg.pivot_price:
+                if bar_high > leg.pivot_price and leg.max_origin_breach is None:
                     leg.pivot_price = bar_high
                     leg.pivot_index = bar.index
                     leg.last_modified_bar = bar.index
 
-        # Extend bear leg pivots on new lows
+        # Extend bear leg pivots on new lows (only if origin not breached #208)
         for leg in self.state.active_legs:
             if leg.direction == 'bear' and leg.status == 'active':
-                if bar_low < leg.pivot_price:
+                if bar_low < leg.pivot_price and leg.max_origin_breach is None:
                     leg.pivot_price = bar_low
                     leg.pivot_index = bar.index
                     leg.last_modified_bar = bar.index
+
+    def _update_breach_tracking(self, bar_high: Decimal, bar_low: Decimal) -> None:
+        """
+        Update breach tracking for all active legs (#208).
+
+        Tracks maximum breach beyond origin and pivot for each leg.
+        - Origin breach: price moved past the origin (invalidating direction)
+        - Pivot breach: retracement went too deep (only tracked for formed legs)
+
+        Per R1, pivot breach is detected when retracement exceeds threshold:
+        - Bull leg: bar_low < pivot - (threshold × range)
+        - Bear leg: bar_high > pivot + (threshold × range)
+
+        Args:
+            bar_high: Current bar's high as Decimal
+            bar_low: Current bar's low as Decimal
+        """
+        for leg in self.state.active_legs:
+            if leg.status != 'active':
+                continue
+
+            # Origin breach tracking
+            if leg.direction == 'bull':
+                # Bull origin (low) breached when price goes below it
+                if bar_low < leg.origin_price:
+                    breach = leg.origin_price - bar_low
+                    if leg.max_origin_breach is None or breach > leg.max_origin_breach:
+                        leg.max_origin_breach = breach
+            else:  # bear
+                # Bear origin (high) breached when price goes above it
+                if bar_high > leg.origin_price:
+                    breach = bar_high - leg.origin_price
+                    if leg.max_origin_breach is None or breach > leg.max_origin_breach:
+                        leg.max_origin_breach = breach
+
+            # Pivot breach tracking (only for formed legs)
+            # Per R1: check if retracement went beyond threshold
+            # Only track if this bar did NOT make a new extreme in the leg direction
+            # This prevents triggering on continuous trend bars
+            if leg.formed and leg.range > 0:
+                if leg.direction == 'bull':
+                    # Bull: only track if bar did NOT make new high (reversal/retracement)
+                    if bar_high <= leg.pivot_price:
+                        # Check if bar_low dropped below pivot - threshold×range
+                        threshold = Decimal(str(self.config.bull.pivot_breach_threshold))
+                        breach_level = leg.pivot_price - (threshold * leg.range)
+                        if bar_low < breach_level:
+                            # Track how far below the breach level
+                            breach = breach_level - bar_low
+                            if leg.max_pivot_breach is None or breach > leg.max_pivot_breach:
+                                leg.max_pivot_breach = breach
+                else:  # bear
+                    # Bear: only track if bar did NOT make new low (reversal/retracement)
+                    if bar_low >= leg.pivot_price:
+                        # Check if bar_high rose above pivot + threshold×range
+                        threshold = Decimal(str(self.config.bear.pivot_breach_threshold))
+                        breach_level = leg.pivot_price + (threshold * leg.range)
+                        if bar_high > breach_level:
+                            # Track how far above the breach level
+                            breach = bar_high - breach_level
+                            if leg.max_pivot_breach is None or breach > leg.max_pivot_breach:
+                                leg.max_pivot_breach = breach
 
     def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[SwingFormedEvent]:
         """
@@ -189,12 +255,24 @@ class LegDetector:
         bar_close = Decimal(str(bar.close))
         bar_open = Decimal(str(bar.open))
 
+        # Prune legs with breached pivots or engulfed legs (#208)
+        # This must happen BEFORE pivot extension so we can create replacement
+        # legs at the new extreme (bar_high/bar_low) before the original pivot extends
+        prune_events, create_events = self._pruner.prune_breach_legs(
+            self.state, bar, timestamp
+        )
+        events.extend(prune_events)
+        events.extend(create_events)
+
         # Extend leg pivots on new extremes (#188, #192, #197)
         # This must happen BEFORE bar type classification because bars with
         # HH+EL or EH+LL fall through to Type 1 which didn't extend pivots.
         # Origins are FIXED (where move started) and do NOT extend.
         # Only pivots (current defended extreme) extend as price moves.
         self._extend_leg_pivots(bar, bar_high, bar_low)
+
+        # Update breach tracking for all legs (#208)
+        self._update_breach_tracking(bar_high, bar_low)
 
         # First bar initialization
         if self.state.prev_bar is None:

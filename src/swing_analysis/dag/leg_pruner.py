@@ -6,6 +6,7 @@ Handles all pruning operations:
 - Subtree pruning: apply 10% rule across origin groups
 - Proximity pruning: consolidate similar-sized legs
 - Domination pruning: prune legs with worse origins
+- Breach pruning: prune formed legs when pivot is breached (#208)
 """
 
 import bisect
@@ -17,7 +18,7 @@ from typing import List, Dict, Tuple, Set, TYPE_CHECKING
 from ..swing_config import SwingConfig
 from ..swing_node import SwingNode
 from ..types import Bar
-from ..events import LegPrunedEvent
+from ..events import LegPrunedEvent, LegCreatedEvent
 from .leg import Leg
 from .state import DetectorState
 
@@ -524,3 +525,152 @@ class LegPruner:
                     bisect.insort(survivor_ranges, leg.range)
 
         return events
+
+    def prune_breach_legs(
+        self,
+        state: DetectorState,
+        bar: Bar,
+        timestamp: datetime,
+    ) -> Tuple[List[LegPrunedEvent], List[LegCreatedEvent]]:
+        """
+        Prune formed legs when pivot is breached, and delete engulfed legs (#208).
+
+        This method checks all active, formed legs for two conditions:
+
+        1. **Engulfed**: Origin was ever breached AND pivot breach threshold exceeded
+           - The leg is structurally compromised (price went against it)
+           - Action: Delete immediately, no replacement
+
+        2. **Pivot Breach**: Pivot breach threshold exceeded AND origin NEVER breached
+           - Also requires: current bar made new extreme in leg direction
+           - The pivot is no longer a valid reference level
+           - Action: Prune original, create replacement with new pivot
+
+        Replacement legs:
+        - Have the same origin (price and index) as the original
+        - Have their pivot at the new extreme (bar_high for bull, bar_low for bear)
+        - Start with formed=False (must go through formation checks)
+        - Can continue extending as price moves in that direction
+
+        Args:
+            state: Current detector state (mutated)
+            bar: Current bar (for event metadata and new pivot location)
+            timestamp: Timestamp for events
+
+        Returns:
+            Tuple of (LegPrunedEvent list, LegCreatedEvent list)
+        """
+        prune_events: List[LegPrunedEvent] = []
+        create_events: List[LegCreatedEvent] = []
+
+        bar_high = Decimal(str(bar.high))
+        bar_low = Decimal(str(bar.low))
+
+        legs_to_prune: List[Leg] = []
+        legs_to_replace: List[Tuple[Leg, Decimal, str]] = []  # (leg, new_pivot, reason)
+
+        for leg in state.active_legs:
+            if leg.status != 'active' or not leg.formed:
+                continue
+
+            if leg.range == 0:
+                continue
+
+            # Check if pivot breach threshold was exceeded (retracement went too deep)
+            # max_pivot_breach is set when retracement exceeds threshold per R1
+            if leg.max_pivot_breach is None:
+                continue  # No pivot breach detected yet
+
+            # Engulfed: origin was ever breached AND pivot threshold exceeded
+            # Single code path for all engulfed cases
+            if leg.max_origin_breach is not None:
+                legs_to_prune.append(leg)
+                prune_events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=leg.swing_id or "",
+                    leg_id=leg.leg_id,
+                    reason="engulfed",
+                ))
+                continue
+
+            # Pivot breach with replacement: origin NEVER breached
+            # Only trigger if current bar made new extreme in leg direction
+            # AND the extension past pivot exceeds the threshold
+            if leg.direction == 'bull':
+                # Bull: need new high that exceeds pivot by threshold
+                pivot_threshold = Decimal(str(self.config.bull.pivot_breach_threshold))
+                extension_threshold = leg.pivot_price + (pivot_threshold * leg.range)
+                if bar_high > extension_threshold:
+                    legs_to_replace.append((leg, bar_high, "pivot_breach"))
+            else:
+                # Bear: need new low that exceeds pivot by threshold
+                pivot_threshold = Decimal(str(self.config.bear.pivot_breach_threshold))
+                extension_threshold = leg.pivot_price - (pivot_threshold * leg.range)
+                if bar_low < extension_threshold:
+                    legs_to_replace.append((leg, bar_low, "pivot_breach"))
+
+        # Process legs to prune (engulfed - no replacement)
+        for leg in legs_to_prune:
+            leg.status = 'stale'
+
+        # Process legs to replace (pivot breach)
+        for leg, new_pivot, reason in legs_to_replace:
+            # Check if a replacement leg already exists from same origin
+            existing_replacement = any(
+                l.direction == leg.direction
+                and l.status == 'active'
+                and l.origin_price == leg.origin_price
+                and l.origin_index == leg.origin_index
+                and l.leg_id != leg.leg_id
+                for l in state.active_legs
+            )
+
+            if not existing_replacement:
+                # Create replacement leg with new pivot
+                new_leg = Leg(
+                    direction=leg.direction,
+                    origin_price=leg.origin_price,
+                    origin_index=leg.origin_index,
+                    pivot_price=new_pivot,
+                    pivot_index=bar.index,
+                    formed=False,  # Must go through formation checks
+                    price_at_creation=Decimal(str(bar.close)),
+                    last_modified_bar=bar.index,
+                    bar_count=0,
+                    gap_count=0,
+                )
+                state.active_legs.append(new_leg)
+
+                create_events.append(LegCreatedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id="",  # New leg doesn't have swing_id yet
+                    leg_id=new_leg.leg_id,
+                    direction=new_leg.direction,
+                    origin_price=new_leg.origin_price,
+                    origin_index=new_leg.origin_index,
+                    pivot_price=new_leg.pivot_price,
+                    pivot_index=new_leg.pivot_index,
+                ))
+
+            # Prune the original leg
+            leg.status = 'stale'
+            prune_events.append(LegPrunedEvent(
+                bar_index=bar.index,
+                timestamp=timestamp,
+                swing_id=leg.swing_id or "",
+                leg_id=leg.leg_id,
+                reason=reason,
+            ))
+
+        # Remove pruned legs from active_legs
+        pruned_ids = {leg.leg_id for leg in legs_to_prune}
+        pruned_ids.update(leg.leg_id for leg, _, _ in legs_to_replace)
+        if pruned_ids:
+            state.active_legs = [
+                leg for leg in state.active_legs
+                if leg.leg_id not in pruned_ids
+            ]
+
+        return prune_events, create_events

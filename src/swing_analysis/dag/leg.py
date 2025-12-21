@@ -38,6 +38,8 @@ class Leg:
         gap_count: Number of gap bars in this leg
         last_modified_bar: Bar index when leg was last modified
         price_at_creation: Price when leg was created (for staleness)
+        max_origin_breach: Maximum breach beyond origin (None if never breached)
+        max_pivot_breach: Maximum breach beyond pivot (None if never breached)
     """
     direction: Literal['bull', 'bear']
     origin_price: Decimal
@@ -54,11 +56,23 @@ class Leg:
     price_at_creation: Decimal = Decimal("0")
     leg_id: str = field(default_factory=lambda: SwingNode.generate_id())
     swing_id: Optional[str] = None  # Set when leg forms into swing (#174)
+    max_origin_breach: Optional[Decimal] = None  # Max breach beyond origin (None if never breached)
+    max_pivot_breach: Optional[Decimal] = None  # Max breach beyond pivot (None if never breached)
 
     @property
     def range(self) -> Decimal:
         """Absolute range of the leg."""
         return abs(self.origin_price - self.pivot_price)
+
+    @property
+    def origin_breached(self) -> bool:
+        """True if price has ever breached the origin."""
+        return self.max_origin_breach is not None
+
+    @property
+    def pivot_breached(self) -> bool:
+        """True if price has ever breached the pivot."""
+        return self.max_pivot_breach is not None
 
 
 @dataclass

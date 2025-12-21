@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 8
+**Unreviewed Change Count:** 9
 
 **Last Review:** 2025-12-20
 
@@ -16,6 +16,7 @@
 - **#205** — Bidirectional domination: prune worse legs when better origin found
 - **#206** — Modularize hierarchical_detector.py into dag/ subdirectory
 - **#207** — Fix cross-turn domination pruning in #205
+- **#208** — Prune legs when pivot breached beyond threshold + engulfed detection
 
 ---
 
