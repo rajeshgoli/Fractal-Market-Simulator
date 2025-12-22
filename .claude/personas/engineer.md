@@ -39,6 +39,28 @@ Execute implementation tasks with precision. Tasks come from GitHub issues.
 7. **Track**: Update `Docs/State/pending_review.md` per rules below
 8. **Handoff**: Close or comment on issue, signal ready for review
 
+## Feedback Investigation Protocol (CRITICAL)
+
+When investigating observations from `ground_truth/playback_feedback.json`:
+
+1. **Never speculate** — Do not theorize root cause by reading code alone
+2. **Execute against real data** — Use `csv_index` from the feedback entry to load the exact bar range
+3. **Use investigation harnesses**:
+   - `scripts/investigate_leg.py` — Trace leg lifecycle (breach tracking, formation, pruning)
+   - Build new generic harnesses if the existing ones don't cover the scenario
+4. **Inspect execution logs** — Only after running and observing actual behavior
+5. **Report findings** — Provide analysis and root cause based on what you observed, not what you assume
+
+**Example workflow:**
+```bash
+# From feedback entry with csv_index=1172207, investigate a bear leg
+python scripts/investigate_leg.py --file test_data/es-5m.csv --offset 1172207 \
+    --origin-price 4431.75 --origin-bar 204 --pivot-price 4427.25 --pivot-bar 207 \
+    --direction bear --until-bar 270
+```
+
+**Why this matters:** Speculation creates false confidence. Execution reveals what actually happened.
+
 ## pending_review.md Rules (CRITICAL)
 
 **Only Engineer increments the count. Only Architect resets it to 0.**

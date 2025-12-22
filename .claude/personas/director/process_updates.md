@@ -221,3 +221,26 @@ Revision history for workflow system changes.
 **Design Principle:** All context belongs in docs/issues. The handoff is just a pointer. If the sentence isn't self-sufficient, the preceding documentation work is incomplete.
 
 **Impact:** `/handoff` command now produces copy-pasteable single sentence that the user can paste directly to invoke the next role.
+
+---
+
+## 2025-12-22: Feedback Investigation Protocol for Engineer
+
+**Triggered by:** User feedback that engineers were speculating about root causes by reading code instead of executing against real data.
+
+**Root Cause:** No explicit guidance existed for investigating observations from `ground_truth/playback_feedback.json`. Engineers could theorize from code reading without verifying behavior through execution.
+
+**Changes Made:**
+
+1. **`engineer.md`**: Added "Feedback Investigation Protocol (CRITICAL)" section with 5-step process:
+   - Never speculate — no theorizing from code reading alone
+   - Execute against real data — use `csv_index` from feedback entry
+   - Use investigation harnesses — reference to `scripts/investigate_leg.py` + guidance to build new ones
+   - Inspect execution logs — only analyze after observing actual behavior
+   - Report findings — provide analysis based on observation, not assumption
+
+2. Added example command showing real usage of the investigation harness
+
+**Rationale:** Speculation creates false confidence. The existing harness (`scripts/investigate_leg.py`) exists precisely to trace what actually happened. Engineers must use execution + logs to understand behavior, not guess from static code analysis.
+
+**Impact:** Engineer role now has explicit protocol for feedback investigation. Must execute before analyzing.
