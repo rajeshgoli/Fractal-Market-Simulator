@@ -67,7 +67,7 @@ class SwingConfig:
             Default 0.05 (5%). Set to 0.0 to disable.
         stale_extension_threshold: Multiplier for removing invalidated legs (#203).
             Invalidated legs are pruned when price moves N x their range beyond origin.
-            Default 3.0 (3x extension).
+            Default 999.0 (effectively disabled; normal pruning handles cleanup).
 
     Example:
         >>> config = SwingConfig.default()
@@ -77,7 +77,7 @@ class SwingConfig:
     bull: DirectionConfig = field(default_factory=DirectionConfig)
     bear: DirectionConfig = field(default_factory=DirectionConfig)
     proximity_prune_threshold: float = 0.05
-    stale_extension_threshold: float = 3.0
+    stale_extension_threshold: float = 999.0
 
     @classmethod
     def default(cls) -> "SwingConfig":

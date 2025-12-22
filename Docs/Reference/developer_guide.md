@@ -404,11 +404,11 @@ Invalidated legs remain visible in the DAG until pruned by one of two conditions
 - `active` → legs not yet invalidated, shown with solid lines
 - `invalidated` → legs past invalidation threshold, shown with dotted lines
 - **Engulfed prune:** If both origin AND pivot are breached, invalidated legs are deleted immediately (no replacement)
-- **Extension prune:** At 3× extension beyond origin, invalidated legs are pruned via `_check_extension_prune()`
+- **Extension prune:** At N× extension beyond origin, invalidated legs are pruned via `_check_extension_prune()` (disabled by default)
 
 Configuration:
 - `DirectionConfig.invalidation_threshold`: Configurable per direction (default: 0.382)
-- `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
+- `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 999.0, effectively disabled)
 
 **Inner structure pruning (#264):**
 
