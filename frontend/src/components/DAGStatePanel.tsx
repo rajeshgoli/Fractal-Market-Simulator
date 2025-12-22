@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DagStateResponse, DagLeg, DagPendingOrigin } from '../lib/api';
 import { LegEvent, HighlightedDagItem } from '../types';
-import { GitBranch, Circle, Target, History, ChevronDown, Paperclip } from 'lucide-react';
+import { GitBranch, Circle, History, ChevronDown, Paperclip } from 'lucide-react';
 import { FollowedLegsPanel } from './FollowedLegsPanel';
 import { FollowedLeg } from '../hooks/useFollowLeg';
 
@@ -248,7 +248,7 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
     );
   }
 
-  const { active_legs, pending_origins, leg_counts } = dagState;
+  const { active_legs, leg_counts } = dagState;
   const bullLegs = active_legs.filter(leg => leg.direction === 'bull');
   const bearLegs = active_legs.filter(leg => leg.direction === 'bear');
 
