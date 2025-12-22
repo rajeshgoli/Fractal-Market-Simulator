@@ -1,6 +1,6 @@
 # Product Direction
 
-**Last Updated:** December 21, 2025 (PM8)
+**Last Updated:** December 21, 2025 (PM9)
 **Owner:** Product
 
 ---
@@ -20,6 +20,25 @@ DAG visualization complete. Now in **active user testing** phase using the Repla
 **Active issues:** See [GitHub Issues](https://github.com/rajeshgoli/Fractal-Market-Simulator/issues) for current bugs. Issues are filed and resolved rapidly during this phase — GitHub is the source of truth.
 
 **Test data:** `test_data/es-5m.csv` at various offsets. Observations captured in `ground_truth/playback_feedback.json`.
+
+---
+
+## Upcoming: Hierarchy Exploration Mode (#250)
+
+**Status:** Epic filed, ready for engineering.
+
+Interactive visualization of parent-child relationships between legs. Users can explore full lineage (ancestors + descendants) from any leg.
+
+| Feature | Description |
+|---------|-------------|
+| **Entry** | Hover 1s → tree icon → click to enter |
+| **In mode** | Full lineage highlighted, unrelated legs fade, connection lines show relationships |
+| **Navigation** | Click highlighted leg to recenter on its lineage |
+| **Exit** | Corner X button or ESC key |
+
+**Use case:** Build intuition about how the algorithm thinks; understand structural nesting.
+
+**Subissues:** #251-#258 (execute sequentially, atomic commit)
 
 ---
 

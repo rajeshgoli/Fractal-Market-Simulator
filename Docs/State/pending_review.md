@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(none)
+*No pending changes.*
 
 ---
 
@@ -16,7 +16,6 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
-| Dec 22 | #241, #248-#250, #260-#266, bugfixes — Impulse metrics, hierarchy exploration, inner structure pruning (10 changes) | All Accepted |
 | Dec 21 | #210, #219, #228, #236 — Cleanup epics + impulse score (4 epics, 25 subissues) | All Accepted; minor doc fixes #248, #249 |
 | Dec 21 | #199-#208, #211 — Modularization, pruning redesign, UX enhancements (10 issues) | All Accepted |
 | Dec 20 | #190-#197, #198 — Pivot/origin semantics cascade + architectural audit | All Accepted; design sound post-#197 |

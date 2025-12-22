@@ -4,6 +4,112 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 21, 2025 - Inner Structure Pruning Rule
+
+**Context:** User observed that when price breaks past a structural high, multiple bull legs with the same pivot can exist — one from the "real" swing low and others from retrace lows inside the structure. The inner ones are noise.
+
+### User Insight
+
+Consider: `H1=6100 → L1=5900 → H2=6050 → L2=5950 → H4=6150`
+
+At H4, two bull legs exist:
+- L1→H4 (origin=5900, range=250) — the structural leg
+- L2→H4 (origin=5950, range=200) — inner structure noise
+
+L2 came from bear leg H2→L2 which was **fully contained** inside H1→L1. Once H4 breaks past H1, L2→H4 is redundant.
+
+### Key Refinement (User-Driven)
+
+Initial proposal: prune any bull leg whose origin corresponds to an invalidated inner bear.
+
+User correction: **Must check both origin AND pivot containment.**
+
+**Counterexample:** `H1=6100 → L1=5900 → H2=6050 → L2=5850 → H3=6150`
+
+Here L2 < L1, so:
+- H1→L1 gets pivot extension → H1→L2
+- L1→H2 gets engulfed (origin and pivot breached) → deleted
+- L2→H3 is the only surviving bull leg — correct!
+
+Checking only origin would wrongly prune L2→H3. The containment test must be:
+```
+B_inner.origin < B_outer.origin   (H2 < H1)
+AND
+B_inner.pivot > B_outer.pivot     (L2 > L1)
+```
+
+### Epic Filed
+
+**#264** — Prune inner structure bull legs when outer bear structure is invalidated.
+
+Includes 5 test cases covering basic pruning, no-prune when pivot breaks outside, multiple nesting levels, symmetric bear case, and no-prune without shared pivot.
+
+---
+
+## December 21, 2025 - Hierarchy Exploration Mode Design
+
+**Context:** User expressed satisfaction with progress and asked how to visualize the hierarchical data that exists in the DAG but isn't currently visible.
+
+### User Need
+
+Hierarchy exists in the data but is invisible. User wants to:
+- See which legs are children of which (structural nesting)
+- Understand how deep a leg is in the hierarchy
+- Explore "zoom levels" — large swings containing smaller ones
+- Build intuition about how the algorithm thinks
+
+### Options Considered
+
+**Option A: Depth encoding on chart** — Thickness or opacity by depth (shallow = bold, deep = faint)
+- User concern: "might clutter the view and not really give me a sense of hierarchy"
+
+**Option B: Interactive lineage highlighting** — Click/hover a leg to see parent and children highlighted
+- User preference: "I like the idea of start somewhere and explore what it links to"
+
+**Option C: Both** — Depth encoding as baseline, interactive lineage on demand
+
+### User Decision: Option B with Navigation
+
+User chose interactive exploration with ability to "go in sequence and see the full nest."
+
+### Interaction Design (User-Driven)
+
+**Entry:**
+- Hover on leg for ~1 second → tree icon appears
+- Click tree icon → enters hierarchy mode
+- Rationale: Doesn't conflict with existing click (show explanation) or double-click (add to attachment) semantics
+
+**In Hierarchy Mode:**
+- Full ancestry (up to root) + all descendants shown highlighted
+- Unrelated legs fade (dimmed, not hidden)
+- Connection lines (distinct color) showing parent → child relationships
+- Navigation stays intact — click highlighted legs to recenter on their lineage
+
+**Exit:**
+- Tree icon with (X) in corner of chart area
+- ESC key mapped to exit
+- Click button or press ESC to return to normal view
+
+### Product Instinct
+
+Raised concern about connection lines potentially getting visually noisy with deep hierarchies. User agreed to start with full implementation and refine after use: "we can refine after use."
+
+### Epic Filed
+
+**#250** with subissues #251-#258:
+1. Backend: Expose full lineage in API
+2. Frontend: Tree icon on hover (1s delay)
+3. Frontend: Hierarchy mode highlighting and fading
+4. Frontend: Connection lines for parent-child relationships
+5. Frontend: Exit mechanism (corner X button, ESC key)
+6. Frontend: Navigation within hierarchy mode (recenter on click)
+7. Tests: Add tests for hierarchy exploration
+8. Documentation: Update user_guide.md and developer_guide.md
+
+Engineer to execute sequentially with atomic commit.
+
+---
+
 ## December 21, 2025 - Impulsiveness & Spikiness Scores Design
 
 **Context:** User reflected on #236 (raw impulse field) and proposed two trader-interpretable metrics.
