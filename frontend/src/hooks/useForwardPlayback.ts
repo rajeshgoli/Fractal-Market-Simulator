@@ -492,6 +492,10 @@ export function useForwardPlayback({
         includeDagState
       );
 
+      // Track new state for history snapshot
+      let newVisibleBars: BarData[] = [];
+      let newAllEvents: ReplayEvent[] = [];
+
       // Append new bars (process even if end_of_data to update UI correctly)
       if (response.new_bars.length > 0) {
         const newBarData: BarData[] = response.new_bars.map(bar => ({
@@ -505,7 +509,10 @@ export function useForwardPlayback({
           source_end_index: bar.index,
         }));
 
-        setVisibleBars(prev => [...prev, ...newBarData]);
+        setVisibleBars(prev => {
+          newVisibleBars = [...prev, ...newBarData];
+          return newVisibleBars;
+        });
         setCurrentPosition(response.current_bar_index);
         onNewBars?.(newBarData);
 
@@ -516,11 +523,13 @@ export function useForwardPlayback({
       // Update aggregated bars from response (replaces separate API call)
       if (response.aggregated_bars && onAggregatedBarsChange) {
         onAggregatedBarsChange(response.aggregated_bars);
+        latestAggregatedBarsRef.current = response.aggregated_bars;
       }
 
       // Update DAG state from response (replaces separate API call)
       if (response.dag_state && onDagStateChange) {
         onDagStateChange(response.dag_state);
+        latestDagStateRef.current = response.dag_state;
       }
 
       // Update swing state
@@ -529,7 +538,30 @@ export function useForwardPlayback({
 
       // Accumulate all events for navigation history (unfiltered)
       if (response.events.length > 0) {
-        setAllEvents(prev => [...prev, ...response.events]);
+        setAllEvents(prev => {
+          newAllEvents = [...prev, ...response.events];
+          return newAllEvents;
+        });
+      } else {
+        // Get current events for snapshot
+        setAllEvents(prev => {
+          newAllEvents = prev;
+          return prev;
+        });
+      }
+
+      // Push snapshot to history buffer for backward navigation (#278)
+      if (response.new_bars.length > 0) {
+        setTimeout(() => {
+          pushHistorySnapshot(
+            response.current_bar_index,
+            newVisibleBars,
+            newAllEvents,
+            response.dag_state || latestDagStateRef.current,
+            response.aggregated_bars || latestAggregatedBarsRef.current,
+            response.swing_state
+          );
+        }, 0);
       }
 
       // Handle end of data AFTER processing bars
@@ -555,7 +587,7 @@ export function useForwardPlayback({
     } finally {
       advancePendingRef.current = false;
     }
-  }, [calibrationBarCount, currentPosition, barsPerAdvance, chartAggregationScales, includeDagState, endOfData, clearTimers, enterLinger, filterEvents, lingerEnabled, onNewBars, onSwingStateChange, onAggregatedBarsChange, onDagStateChange]);
+  }, [calibrationBarCount, currentPosition, barsPerAdvance, chartAggregationScales, includeDagState, endOfData, clearTimers, enterLinger, filterEvents, lingerEnabled, onNewBars, onSwingStateChange, onAggregatedBarsChange, onDagStateChange, pushHistorySnapshot]);
 
   // Ref to hold the latest advanceBar function
   const advanceBarRef = useRef<() => Promise<void>>(async () => {});
