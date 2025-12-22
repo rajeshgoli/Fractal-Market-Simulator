@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-21
 
@@ -12,6 +12,7 @@
 - **#248, #249** — Documentation fixes: removed deleted level_calculator.py reference, added impulse field to leg descriptions
 - **#260** — Fix feedback endpoint crash: remove stale FeedbackAttachmentOrphanedOrigin reference (regression from #210)
 - **#263** — Add chart maximize/minimize controls (expand icon top-right of each chart)
+- **Bugfix** — Fix engulfed pruning for invalidated legs (pivot breach now tracked for invalidated legs)
 
 ---
 
