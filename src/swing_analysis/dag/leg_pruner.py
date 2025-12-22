@@ -574,3 +574,182 @@ class LegPruner:
             ]
 
         return prune_events, create_events
+
+    def prune_inner_structure_legs(
+        self,
+        state: DetectorState,
+        invalidated_legs: List[Leg],
+        bar: Bar,
+        timestamp: datetime,
+    ) -> List[LegPrunedEvent]:
+        """
+        Prune counter-direction legs from inner structure pivots (#264).
+
+        When multiple bear (or bull) legs are invalidated simultaneously, some may
+        be strictly contained inside others. The counter-direction legs originating
+        from inner structure pivots are redundant when an outer-origin leg exists
+        with the same current pivot.
+
+        Example (bear direction):
+        - H1=6100 → L1=5900 (outer bear leg)
+        - H2=6050 → L2=5950 (inner bear leg, strictly contained in H1→L1)
+        - At H4=6150: Both are invalidated (origin breached)
+        - Bull leg L2→H4 is redundant because L1→H4 exists and covers the structure
+        - Prune L2→H4, keep L1→H4
+
+        Containment definition (same direction):
+        Bear: B_inner contained in B_outer iff inner.origin < outer.origin AND inner.pivot > outer.pivot
+        Bull: B_inner contained in B_outer iff inner.origin > outer.origin AND inner.pivot < outer.pivot
+
+        Only prunes if the outer-origin counter-leg exists with the same pivot.
+
+        Args:
+            state: Current detector state (mutated)
+            invalidated_legs: Legs that were just invalidated in this bar
+            bar: Current bar (for event metadata)
+            timestamp: Timestamp for events
+
+        Returns:
+            List of LegPrunedEvent for pruned legs with reason="inner_structure"
+        """
+        events: List[LegPrunedEvent] = []
+        pruned_leg_ids: Set[str] = set()
+
+        # Group invalidated legs by direction
+        bear_invalidated = [leg for leg in invalidated_legs if leg.direction == 'bear']
+        bull_invalidated = [leg for leg in invalidated_legs if leg.direction == 'bull']
+
+        # Build set of active swing IDs for immunity check
+        active_swing_ids = {
+            swing.swing_id for swing in state.active_swings
+            if swing.status == 'active'
+        }
+
+        # Process bear invalidated legs -> prune inner bull legs
+        events.extend(self._prune_inner_structure_for_direction(
+            state, bear_invalidated, 'bull', bar, timestamp,
+            pruned_leg_ids, active_swing_ids
+        ))
+
+        # Process bull invalidated legs -> prune inner bear legs
+        events.extend(self._prune_inner_structure_for_direction(
+            state, bull_invalidated, 'bear', bar, timestamp,
+            pruned_leg_ids, active_swing_ids
+        ))
+
+        # Remove pruned legs from active_legs
+        if pruned_leg_ids:
+            state.active_legs = [
+                leg for leg in state.active_legs
+                if leg.leg_id not in pruned_leg_ids
+            ]
+
+        return events
+
+    def _prune_inner_structure_for_direction(
+        self,
+        state: DetectorState,
+        invalidated_legs: List[Leg],
+        counter_direction: str,
+        bar: Bar,
+        timestamp: datetime,
+        pruned_leg_ids: Set[str],
+        active_swing_ids: Set[str],
+    ) -> List[LegPrunedEvent]:
+        """
+        Prune inner structure legs for a specific direction pair.
+
+        Args:
+            state: Current detector state
+            invalidated_legs: Invalidated legs of one direction (e.g., bear)
+            counter_direction: The counter direction to prune ('bull' if invalidated are 'bear')
+            bar: Current bar
+            timestamp: Timestamp for events
+            pruned_leg_ids: Set to track pruned leg IDs (mutated)
+            active_swing_ids: Set of swing IDs that are currently active
+
+        Returns:
+            List of LegPrunedEvent for pruned legs
+        """
+        events: List[LegPrunedEvent] = []
+
+        if len(invalidated_legs) < 2:
+            return events  # Need at least 2 legs to have containment
+
+        # Get active counter-direction legs (the ones we might prune)
+        counter_legs = [
+            leg for leg in state.active_legs
+            if leg.direction == counter_direction and leg.status == 'active'
+        ]
+
+        if not counter_legs:
+            return events
+
+        # For each pair of invalidated legs, check containment
+        for i, inner in enumerate(invalidated_legs):
+            for outer in invalidated_legs:
+                if inner.leg_id == outer.leg_id:
+                    continue
+
+                # Check strict containment
+                # For bear legs: inner contained in outer means:
+                #   inner.origin (HIGH) < outer.origin (HIGH) AND
+                #   inner.pivot (LOW) > outer.pivot (LOW)
+                # For bull legs: inner contained in outer means:
+                #   inner.origin (LOW) > outer.origin (LOW) AND
+                #   inner.pivot (HIGH) < outer.pivot (HIGH)
+                is_contained = False
+                if inner.direction == 'bear':
+                    is_contained = (
+                        inner.origin_price < outer.origin_price and
+                        inner.pivot_price > outer.pivot_price
+                    )
+                else:  # bull
+                    is_contained = (
+                        inner.origin_price > outer.origin_price and
+                        inner.pivot_price < outer.pivot_price
+                    )
+
+                if not is_contained:
+                    continue
+
+                # inner is contained in outer
+                # Find counter-direction legs originating from inner's pivot
+                # Bull legs have origin at LOW (which is inner bear's pivot)
+                # Bear legs have origin at HIGH (which is inner bull's pivot)
+                for inner_leg in counter_legs:
+                    if inner_leg.leg_id in pruned_leg_ids:
+                        continue
+
+                    # Check if this counter-leg originates from inner's pivot
+                    if inner_leg.origin_price != inner.pivot_price:
+                        continue
+
+                    # Check if there's an outer-origin counter-leg with the same pivot
+                    outer_leg_exists = any(
+                        leg.origin_price == outer.pivot_price and
+                        leg.pivot_price == inner_leg.pivot_price and
+                        leg.status == 'active' and
+                        leg.leg_id not in pruned_leg_ids
+                        for leg in counter_legs
+                    )
+
+                    if not outer_leg_exists:
+                        continue
+
+                    # Active swing immunity
+                    if inner_leg.swing_id and inner_leg.swing_id in active_swing_ids:
+                        continue
+
+                    # Prune the inner-origin counter-leg
+                    inner_leg.status = 'pruned'
+                    pruned_leg_ids.add(inner_leg.leg_id)
+                    events.append(LegPrunedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id=inner_leg.swing_id or "",
+                        leg_id=inner_leg.leg_id,
+                        reason="inner_structure",
+                    ))
+
+        return events

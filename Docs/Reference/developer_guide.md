@@ -360,7 +360,7 @@ The pipeline order per bar:
 | `SwingCompletedEvent` | Price reaches 2.0 extension target |
 | `LevelCrossEvent` | Price crosses Fib level boundary |
 | `LegCreatedEvent` | New candidate leg is created (pre-formation) |
-| `LegPrunedEvent` | Leg is removed (reasons: `turn_prune`, `proximity_prune`, `breach_prune`, `extension_prune`) |
+| `LegPrunedEvent` | Leg is removed (reasons: `turn_prune`, `proximity_prune`, `breach_prune`, `extension_prune`, `inner_structure`) |
 | `LegInvalidatedEvent` | Leg breaches invalidation threshold (configurable, default 0.382) |
 
 **Tolerance rules (Rule 2.2):**
@@ -409,6 +409,32 @@ Invalidated legs remain visible in the DAG until pruned by one of two conditions
 Configuration:
 - `DirectionConfig.invalidation_threshold`: Configurable per direction (default: 0.382)
 - `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
+
+**Inner structure pruning (#264):**
+
+When multiple legs of the same direction are invalidated simultaneously, prune counter-direction legs from inner structure pivots. Inner structure legs are redundant when an outer-origin leg exists with the same current pivot.
+
+Example (bear direction):
+```
+H1=6100 → L1=5900 → H2=6050 → L2=5950 → H4=6150
+         (outer)              (inner)
+
+At H4 (breaks above H1):
+- Bear leg H1→L1 invalidated (outer structure)
+- Bear leg H2→L2 invalidated (inner structure, contained in H1→L1)
+- Bull leg L1→H4 survives (outer-origin)
+- Bull leg L2→H4 PRUNED (inner-origin, reason="inner_structure")
+```
+
+Containment definition:
+- Bear: B_inner contained in B_outer iff `inner.origin < outer.origin AND inner.pivot > outer.pivot`
+- Bull: B_inner contained in B_outer iff `inner.origin > outer.origin AND inner.pivot < outer.pivot`
+
+Pruning conditions:
+1. Multiple legs of same direction invalidated in same bar
+2. One leg strictly contained in another
+3. Counter-direction legs exist from both pivots
+4. Both counter-direction legs share the same current pivot
 
 **Benefits:**
 - Multi-origin preservation: Keeps the best leg from each structural level

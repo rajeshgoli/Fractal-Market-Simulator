@@ -1033,6 +1033,15 @@ class LegDetector:
                         ))
                         break
 
+        # Prune inner structure legs when multiple legs are invalidated (#264)
+        # When contained legs are invalidated together, prune the counter-direction
+        # legs from inner pivots (they're redundant to outer-origin legs)
+        if len(invalidated_legs) >= 2:
+            inner_prune_events = self._pruner.prune_inner_structure_legs(
+                self.state, invalidated_legs, bar, timestamp
+            )
+            events.extend(inner_prune_events)
+
         # NOTE: Invalidated legs are NOT removed here (#203)
         # They remain visible until 3x extension prune in _check_extension_prune()
 

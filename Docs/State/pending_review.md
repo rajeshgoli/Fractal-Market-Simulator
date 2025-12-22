@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2025-12-21
 
@@ -13,6 +13,7 @@
 - **#260** — Fix feedback endpoint crash: remove stale FeedbackAttachmentOrphanedOrigin reference (regression from #210)
 - **#263** — Add chart maximize/minimize controls (expand icon top-right of each chart)
 - **Bugfix** — Fix engulfed pruning for invalidated legs (pivot breach now tracked for invalidated legs)
+- **#264** — Prune inner structure legs when outer structure is invalidated
 
 ---
 
