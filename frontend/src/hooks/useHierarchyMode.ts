@@ -43,7 +43,8 @@ export interface UseHierarchyModeResult {
   isFocused: (legId: string) => boolean;
 }
 
-export function useHierarchyMode(legs: ActiveLeg[]): UseHierarchyModeResult {
+export function useHierarchyMode(_legs: ActiveLeg[]): UseHierarchyModeResult {
+  void _legs; // Available for future use (e.g., local lineage computation)
   const [isActive, setIsActive] = useState(false);
   const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
   const [lineage, setLineage] = useState<LegLineageResponse | null>(null);

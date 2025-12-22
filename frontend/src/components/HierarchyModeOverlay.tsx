@@ -44,8 +44,10 @@ export const HierarchyModeOverlay: React.FC<HierarchyModeOverlayProps> = ({
   focusedLegId,
   isActive,
   onExit,
-  onRecenter,
+  // onRecenter is available for future use (e.g., clicking on connection lines)
+  onRecenter: _onRecenter,
 }) => {
+  void _onRecenter; // Suppress unused variable warning
   const [connectionLines, setConnectionLines] = useState<ConnectionLine[]>([]);
   const [containerRect, setContainerRect] = useState<DOMRect | null>(null);
 

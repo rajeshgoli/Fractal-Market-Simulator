@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { IChartApi, ISeriesApi, LineStyle, Time, LineData, LineSeries } from 'lightweight-charts';
+import { IChartApi, ISeriesApi, LineStyle, Time, LineData, LineSeries, LineWidth } from 'lightweight-charts';
 import { ActiveLeg, BarData, LEG_STATUS_STYLES } from '../types';
 
 interface LegOverlayProps {
@@ -165,7 +165,7 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
 
     // Determine opacity and line style based on hierarchy mode (#253)
     let opacity: number;
-    let lineWidth: number;
+    let lineWidth: LineWidth;
     let lineStyle: LineStyle;
 
     if (hierarchyMode?.isActive) {
@@ -175,23 +175,23 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       if (isFocused) {
         // Focused leg: full opacity, thicker line
         opacity = 1.0;
-        lineWidth = 4;
+        lineWidth = 4 as LineWidth;
         lineStyle = LineStyle.Solid;
       } else if (isInHierarchy) {
         // In hierarchy but not focused: slightly less prominent
         opacity = 0.8;
-        lineWidth = 3;
+        lineWidth = 3 as LineWidth;
         lineStyle = LineStyle.Solid;
       } else {
         // Not in hierarchy: faded/dimmed
         opacity = 0.15;
-        lineWidth = 1;
+        lineWidth = 1 as LineWidth;
         lineStyle = getLineStyleValue(leg.status);
       }
     } else {
       // Normal mode: use default highlighting
       opacity = isHighlighted ? 1.0 : style.opacity;
-      lineWidth = isHighlighted ? 4 : 2;
+      lineWidth = (isHighlighted ? 4 : 2) as LineWidth;
       lineStyle = isHighlighted ? LineStyle.Solid : getLineStyleValue(leg.status);
     }
 
