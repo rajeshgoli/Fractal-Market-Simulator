@@ -70,6 +70,18 @@ All 10 pending changes accepted. Summary:
 
 **#198 architectural audit completed:** Type classification, symmetric frames, and semantic enforcement reviewed. Conclusion: current design is sound. See `Docs/Working/arch_audit.md`.
 
+### Pending Spec: Follow Leg (#267)
+
+Product has submitted a spec for Follow Leg feature (`Docs/Working/follow_leg.md`). **Architectural assessment:**
+
+1. **Event tracking** — Reuses existing LegDetector/LegPruner events. No new backend logic needed for events themselves.
+2. **API endpoint** — New polling endpoint for followed legs. Low complexity.
+3. **CSV index mapping** — Useful improvement for all attachments. Should be included in implementation.
+4. **5-leg limit** — Reasonable constraint to prevent UI clutter and performance issues.
+5. **No retroactive events** — Correct design decision, simplifies implementation.
+
+**Assessment:** Spec is sound. Ready for engineering breakdown into sub-issues.
+
 ### Next: Validate L1-L7 Detection
 
 With semantics enforced and codebase clean, L1-L7 validation can proceed:

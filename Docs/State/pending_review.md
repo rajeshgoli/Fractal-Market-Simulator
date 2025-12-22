@@ -1,23 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 10
+**Unreviewed Change Count:** 0
 
-**Last Review:** 2025-12-21
+**Last Review:** 2025-12-22
 
 ---
 
 ## Pending Changes
 
-- **#241** — Add impulsiveness & spikiness scores to legs (epic with 6 subissues #242-#247)
-- **#248, #249** — Documentation fixes: removed deleted level_calculator.py reference, added impulse field to leg descriptions
-- **#260** — Fix feedback endpoint crash: remove stale FeedbackAttachmentOrphanedOrigin reference (regression from #210)
-- **#263** — Add chart maximize/minimize controls (expand icon top-right of each chart)
-- **Bugfix** — Fix engulfed pruning for invalidated legs (pivot breach now tracked for invalidated legs)
-- **#264** — Prune inner structure legs when outer structure is invalidated
-- **#265** — Refactor test_hierarchical_detector.py into logical modules (5 test files + conftest.py)
-- **#261** — Disable 3x invalidated leg cleanup (stale_extension_threshold set to 999.0)
-- **#266** — Remove swing immunity for inner structure pruning (inner legs pruned regardless of swing status)
-- **#250** — Hierarchy Exploration Mode (epic with 8 subissues #251-#258)
+*No pending changes.*
 
 ---
 
