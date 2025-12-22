@@ -551,6 +551,10 @@ class DagLegResponse(BaseModel):
     # Spikiness (0-100): Sigmoid-normalized skewness of bar contributions (#241)
     # 50 = neutral, 90+ = spike-driven, 10- = evenly distributed
     spikiness: Optional[float] = None
+    # Parent leg ID for hierarchy exploration (#250, #251)
+    parent_leg_id: Optional[str] = None
+    # Swing ID if this leg has formed into a swing
+    swing_id: Optional[str] = None
 
 
 class DagPendingOrigin(BaseModel):
@@ -579,3 +583,26 @@ class DagStateResponse(BaseModel):
     active_legs: List[DagLegResponse]
     pending_origins: Dict[str, Optional[DagPendingOrigin]]
     leg_counts: DagLegCounts
+
+
+# ============================================================================
+# Hierarchy Exploration Models (Issue #250 - Hierarchy Exploration Mode)
+# ============================================================================
+
+
+class LegLineageResponse(BaseModel):
+    """Response from lineage endpoint for hierarchy exploration.
+
+    Given a leg ID, returns full ancestry chain and all descendants.
+    Used by the frontend to highlight the selected leg's hierarchy.
+    """
+    # The leg being queried
+    leg_id: str
+    # Full ancestry chain from this leg up to root (parent, grandparent, ...)
+    # Ordered from immediate parent to root
+    ancestors: List[str]
+    # All descendants (children, grandchildren, etc.)
+    # Flat list of all leg IDs descended from this leg
+    descendants: List[str]
+    # Depth in hierarchy (0 = root, 1 = has one parent, etc.)
+    depth: int

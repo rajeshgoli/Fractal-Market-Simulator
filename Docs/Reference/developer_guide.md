@@ -687,7 +687,8 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `DAGView.tsx` | Page for DAG build visualization mode |
 | `ChartArea.tsx` | Two stacked lightweight-charts |
 | `SwingOverlay.tsx` | Fib level rendering on charts |
-| `LegOverlay.tsx` | Leg visualization for DAG mode |
+| `LegOverlay.tsx` | Leg visualization for DAG mode (includes tree icon hover) |
+| `HierarchyModeOverlay.tsx` | Hierarchy exploration mode (exit button, connection lines, status) |
 | `PlaybackControls.tsx` | Play/pause/step transport |
 | `ExplanationPanel.tsx` | Calibration report and swing details |
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |
@@ -695,6 +696,7 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `usePlayback.ts` | Legacy playback (calibration scrubbing) |
 | `useForwardPlayback.ts` | Forward-only playback after calibration |
 | `useSwingDisplay.ts` | Scale filtering and swing ranking |
+| `useHierarchyMode.ts` | Hierarchy exploration state management (#250) |
 
 **Stack:** React 19, lightweight-charts v5, Tailwind CSS 4, Vite 7
 
@@ -804,8 +806,16 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 # DAG State: GET /api/dag/state
 # Returns internal leg-level state for DAG visualization:
 # - active_legs: currently tracked legs (pre-formation candidates)
+#   - includes parent_leg_id and swing_id for hierarchy (#250)
 # - pending_origins: potential origins awaiting confirmation for each direction
 # - leg_counts: count by direction (bull/bear)
+
+# Leg Lineage: GET /api/dag/lineage/{leg_id}
+# Returns full hierarchy for a leg (used by hierarchy exploration mode #250):
+# - leg_id: The queried leg
+# - ancestors: Chain from this leg to root (parent, grandparent, ...)
+# - descendants: All legs whose ancestry includes this leg
+# - depth: How deep this leg is (0 = root)
 ```
 
 **Reference Layer Integration:**

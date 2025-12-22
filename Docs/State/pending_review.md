@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 10
 
 **Last Review:** 2025-12-21
 
@@ -17,6 +17,7 @@
 - **#265** — Refactor test_hierarchical_detector.py into logical modules (5 test files + conftest.py)
 - **#261** — Disable 3x invalidated leg cleanup (stale_extension_threshold set to 999.0)
 - **#266** — Remove swing immunity for inner structure pruning (inner legs pruned regardless of swing status)
+- **#250** — Hierarchy Exploration Mode (epic with 8 subissues #251-#258)
 
 ---
 

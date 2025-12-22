@@ -518,8 +518,47 @@ In Market Structure View, all playback controls are functional:
 | Event navigation | Jump between swing events | Not available |
 | Current Structure Panel | Toggle (Swings/Current Structure tabs) | Always visible |
 
+### Hierarchy Exploration Mode
+
+Hierarchy exploration mode lets you visualize parent-child relationships between legs, showing structural nesting and containment.
+
+**How to enter:**
+1. Hover over any leg line on the chart for 1 second
+2. A tree icon appears near the pivot point
+3. Click the tree icon to enter hierarchy mode
+
+**What you see:**
+- **Focused leg**: Highlighted with full opacity and thick line (4px)
+- **Related legs**: Ancestors and descendants shown at 80% opacity with 3px lines
+- **Other legs**: Faded to 15% opacity with thin lines
+- **Connection lines**: Dashed lines connect parent-child leg pivots
+- **Status indicator**: Shows leg ID, depth, and lineage counts (top-left)
+- **Exit button**: X button in top-right corner
+
+**Navigation within hierarchy mode:**
+- Click on any highlighted (related) leg to recenter the view on that leg
+- The lineage is recalculated from the new focused leg
+- Non-related legs remain faded
+
+**How to exit:**
+- Press `ESC` key
+- Click the X button in the top-right corner
+
+**What hierarchy shows:**
+| Concept | Description |
+|---------|-------------|
+| Ancestors | Parent → grandparent → ... → root leg chain |
+| Descendants | All legs whose parent chain includes this leg |
+| Depth | How many ancestors this leg has (0 = root) |
+
+**Use cases:**
+- **Structure debugging**: See which smaller legs are nested within larger ones
+- **Origin tracking**: Follow how legs spawn from each other
+- **Zoom levels**: Understand the fractal containment of price structures
+
 ### Use Cases
 
 - **Algorithm debugging**: Watch how legs form, get pruned, and eventually become swings
 - **Understanding swing formation**: See why certain price patterns form swings and others don't
 - **Pruning behavior**: Observe how proximity and breach pruning keep the leg count manageable
+- **Hierarchy exploration**: Visualize parent-child relationships and structural nesting

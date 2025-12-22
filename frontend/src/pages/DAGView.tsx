@@ -7,7 +7,9 @@ import { PlaybackControls } from '../components/PlaybackControls';
 import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
 import { LegOverlay } from '../components/LegOverlay';
 import { PendingOriginsOverlay } from '../components/PendingOriginsOverlay';
+import { HierarchyModeOverlay } from '../components/HierarchyModeOverlay';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
+import { useHierarchyMode } from '../hooks/useHierarchyMode';
 import {
   fetchBars,
   fetchSession,
@@ -49,6 +51,8 @@ function dagLegToActiveLeg(leg: DagLeg): ActiveLeg {
     bar_count: leg.bar_count,
     impulsiveness: leg.impulsiveness,
     spikiness: leg.spikiness,
+    parent_leg_id: leg.parent_leg_id,
+    swing_id: leg.swing_id,
   };
 }
 
@@ -273,6 +277,21 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     if (!dagState) return [];
     return dagState.active_legs.map(dagLegToActiveLeg);
   }, [dagState]);
+
+  // Hierarchy exploration mode (#250)
+  const hierarchyMode = useHierarchyMode(activeLegs);
+
+  // Handle tree icon click - enter hierarchy mode
+  const handleTreeIconClick = useCallback((legId: string) => {
+    hierarchyMode.enterHierarchyMode(legId);
+  }, [hierarchyMode]);
+
+  // Handle recenter in hierarchy mode (click on another leg in hierarchy)
+  const handleHierarchyRecenter = useCallback((legId: string) => {
+    if (hierarchyMode.state.isActive && hierarchyMode.isInHierarchy(legId)) {
+      hierarchyMode.recenterOnLeg(legId);
+    }
+  }, [hierarchyMode]);
 
   // Get current playback position
   const currentPlaybackPosition = useMemo(() => {
@@ -768,8 +787,14 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             currentPosition={currentPlaybackPosition}
             highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
             onLegHover={handleChartLegHover}
-            onLegClick={handleChartLegClick}
+            onLegClick={hierarchyMode.state.isActive ? handleHierarchyRecenter : handleChartLegClick}
             onLegDoubleClick={handleChartLegDoubleClick}
+            hierarchyMode={{
+              isActive: hierarchyMode.state.isActive,
+              highlightedLegIds: hierarchyMode.state.highlightedLegIds,
+              focusedLegId: hierarchyMode.state.focusedLegId,
+            }}
+            onTreeIconClick={handleTreeIconClick}
           />
           <LegOverlay
             chart={chart2Ref.current}
@@ -779,8 +804,14 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             currentPosition={currentPlaybackPosition}
             highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
             onLegHover={handleChartLegHover}
-            onLegClick={handleChartLegClick}
+            onLegClick={hierarchyMode.state.isActive ? handleHierarchyRecenter : handleChartLegClick}
             onLegDoubleClick={handleChartLegDoubleClick}
+            hierarchyMode={{
+              isActive: hierarchyMode.state.isActive,
+              highlightedLegIds: hierarchyMode.state.highlightedLegIds,
+              focusedLegId: hierarchyMode.state.focusedLegId,
+            }}
+            onTreeIconClick={handleTreeIconClick}
           />
 
           {/* Pending Origins Overlays - render price lines for highlighted pending origins */}
@@ -805,6 +836,30 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
                 ? highlightedDagItem.direction
                 : null
             }
+          />
+
+          {/* Hierarchy Mode Overlays - exit button, connection lines (#250) */}
+          <HierarchyModeOverlay
+            chart={chart1Ref.current}
+            series={series1Ref.current}
+            legs={activeLegs}
+            bars={chart1Bars}
+            lineage={hierarchyMode.state.lineage}
+            focusedLegId={hierarchyMode.state.focusedLegId}
+            isActive={hierarchyMode.state.isActive}
+            onExit={hierarchyMode.exitHierarchyMode}
+            onRecenter={handleHierarchyRecenter}
+          />
+          <HierarchyModeOverlay
+            chart={chart2Ref.current}
+            series={series2Ref.current}
+            legs={activeLegs}
+            bars={chart2Bars}
+            lineage={hierarchyMode.state.lineage}
+            focusedLegId={hierarchyMode.state.focusedLegId}
+            isActive={hierarchyMode.state.isActive}
+            onExit={hierarchyMode.exitHierarchyMode}
+            onRecenter={handleHierarchyRecenter}
           />
 
           {/* Playback Controls */}

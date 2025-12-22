@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { IChartApi, ISeriesApi, LineStyle, Time, LineData, LineSeries } from 'lightweight-charts';
 import { ActiveLeg, BarData, LEG_STATUS_STYLES } from '../types';
 
@@ -12,6 +12,13 @@ interface LegOverlayProps {
   onLegHover?: (legId: string | null) => void;
   onLegClick?: (legId: string) => void;
   onLegDoubleClick?: (legId: string) => void;
+  // Hierarchy mode props (#250)
+  hierarchyMode?: {
+    isActive: boolean;
+    highlightedLegIds: Set<string>;
+    focusedLegId: string | null;
+  };
+  onTreeIconClick?: (legId: string) => void;
 }
 
 /**
@@ -89,6 +96,8 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
   onLegHover,
   onLegClick,
   onLegDoubleClick,
+  hierarchyMode,
+  onTreeIconClick,
 }) => {
   // Track created line series so we can remove them on update
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,6 +109,11 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
 
   // Track current hovered leg to avoid redundant callbacks
   const currentHoveredLegRef = useRef<string | null>(null);
+
+  // Tree icon hover state (#252)
+  const [treeIconLegId, setTreeIconLegId] = useState<string | null>(null);
+  const [treeIconPosition, setTreeIconPosition] = useState<{ x: number; y: number } | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clear all existing line series
   const clearLineSeries = useCallback(() => {
@@ -148,14 +162,43 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     if (!chart || !series) return null;
 
     const style = LEG_STATUS_STYLES[leg.status];
-    // Highlighted legs get full opacity and thicker line
-    const opacity = isHighlighted ? 1.0 : style.opacity;
-    const lineWidth = isHighlighted ? 4 : 2;
+
+    // Determine opacity and line style based on hierarchy mode (#253)
+    let opacity: number;
+    let lineWidth: number;
+    let lineStyle: LineStyle;
+
+    if (hierarchyMode?.isActive) {
+      const isInHierarchy = hierarchyMode.highlightedLegIds.has(leg.leg_id);
+      const isFocused = hierarchyMode.focusedLegId === leg.leg_id;
+
+      if (isFocused) {
+        // Focused leg: full opacity, thicker line
+        opacity = 1.0;
+        lineWidth = 4;
+        lineStyle = LineStyle.Solid;
+      } else if (isInHierarchy) {
+        // In hierarchy but not focused: slightly less prominent
+        opacity = 0.8;
+        lineWidth = 3;
+        lineStyle = LineStyle.Solid;
+      } else {
+        // Not in hierarchy: faded/dimmed
+        opacity = 0.15;
+        lineWidth = 1;
+        lineStyle = getLineStyleValue(leg.status);
+      }
+    } else {
+      // Normal mode: use default highlighting
+      opacity = isHighlighted ? 1.0 : style.opacity;
+      lineWidth = isHighlighted ? 4 : 2;
+      lineStyle = isHighlighted ? LineStyle.Solid : getLineStyleValue(leg.status);
+    }
+
     const color = getColorWithOpacity(
       style.color[leg.direction],
       opacity
     );
-    const lineStyle = isHighlighted ? LineStyle.Solid : getLineStyleValue(leg.status);
 
     // Get timestamps for origin and pivot
     const originTime = getTimestampForIndex(leg.origin_index);
@@ -192,7 +235,7 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       console.error('Failed to create leg line:', error);
       return null;
     }
-  }, [chart, series, getTimestampForIndex]);
+  }, [chart, series, getTimestampForIndex, hierarchyMode]);
 
   // Find the nearest visible leg to a given price/time position
   // Returns leg_id if within pick threshold, null otherwise
@@ -248,17 +291,24 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     return nearestLeg;
   }, [chart, series, legs, bars, currentPosition, getTimestampForIndex]);
 
-  // Handle hover detection via crosshair move
+  // Handle hover detection via crosshair move + tree icon timer (#252)
   useEffect(() => {
-    if (!chart || !series || !onLegHover) return;
+    if (!chart || !series) return;
 
     const handleCrosshairMove = (param: { time?: Time; point?: { x: number; y: number }; seriesData?: Map<unknown, unknown> }) => {
       if (!param.time || !param.point) {
         // Mouse left chart area
         if (currentHoveredLegRef.current !== null) {
           currentHoveredLegRef.current = null;
-          onLegHover(null);
+          onLegHover?.(null);
         }
+        // Clear tree icon timer
+        if (hoverTimerRef.current) {
+          clearTimeout(hoverTimerRef.current);
+          hoverTimerRef.current = null;
+        }
+        setTreeIconLegId(null);
+        setTreeIconPosition(null);
         return;
       }
 
@@ -271,7 +321,39 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       // Only emit if changed
       if (hoveredLeg !== currentHoveredLegRef.current) {
         currentHoveredLegRef.current = hoveredLeg;
-        onLegHover(hoveredLeg);
+        onLegHover?.(hoveredLeg);
+
+        // Clear existing timer
+        if (hoverTimerRef.current) {
+          clearTimeout(hoverTimerRef.current);
+          hoverTimerRef.current = null;
+        }
+
+        // Hide tree icon when hovering over different leg
+        if (treeIconLegId !== hoveredLeg) {
+          setTreeIconLegId(null);
+          setTreeIconPosition(null);
+        }
+
+        // Start 1s timer for tree icon if hovering a leg (#252)
+        if (hoveredLeg && onTreeIconClick && !hierarchyMode?.isActive) {
+          hoverTimerRef.current = setTimeout(() => {
+            // Get leg center position for tree icon
+            const leg = legs.find(l => l.leg_id === hoveredLeg);
+            if (leg) {
+              const pivotTime = getTimestampForIndex(leg.pivot_index);
+              if (pivotTime !== null) {
+                const timeScale = chart.timeScale();
+                const x = timeScale.timeToCoordinate(pivotTime as Time);
+                const y = series.priceToCoordinate(leg.pivot_price);
+                if (x !== null && y !== null) {
+                  setTreeIconLegId(hoveredLeg);
+                  setTreeIconPosition({ x, y: y - 25 }); // Position above pivot
+                }
+              }
+            }
+          }, 1000);
+        }
       }
     };
 
@@ -279,8 +361,11 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
 
     return () => {
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+      }
     };
-  }, [chart, series, onLegHover, findNearestLeg]);
+  }, [chart, series, onLegHover, findNearestLeg, onTreeIconClick, hierarchyMode?.isActive, legs, getTimestampForIndex, treeIconLegId]);
 
   // Handle click detection
   useEffect(() => {
@@ -371,9 +456,66 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     return () => {
       clearLineSeries();
     };
-  }, [chart, series, legs, bars, currentPosition, highlightedLegId, clearLineSeries, createLegLine]);
+  }, [chart, series, legs, bars, currentPosition, highlightedLegId, hierarchyMode, clearLineSeries, createLegLine]);
 
-  // This component doesn't render any DOM elements
-  // It only manages line series on the chart via side effects
-  return null;
+  // Handle tree icon click
+  const handleTreeIconClick = useCallback(() => {
+    if (treeIconLegId && onTreeIconClick) {
+      onTreeIconClick(treeIconLegId);
+      setTreeIconLegId(null);
+      setTreeIconPosition(null);
+    }
+  }, [treeIconLegId, onTreeIconClick]);
+
+  // Get chart container for portal positioning
+  const chartContainer = chart?.chartElement()?.parentElement;
+
+  // Render tree icon when visible (#252)
+  if (!treeIconLegId || !treeIconPosition || !chartContainer) {
+    return null;
+  }
+
+  const chartRect = chartContainer.getBoundingClientRect();
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        left: chartRect.left + treeIconPosition.x - 12,
+        top: chartRect.top + treeIconPosition.y - 12,
+        zIndex: 1000,
+        pointerEvents: 'auto',
+      }}
+    >
+      <button
+        onClick={handleTreeIconClick}
+        className="w-6 h-6 bg-slate-800 border border-slate-600 rounded-md flex items-center justify-center hover:bg-slate-700 hover:border-blue-400 transition-colors cursor-pointer"
+        title="Explore hierarchy"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-blue-400"
+        >
+          {/* Tree/hierarchy icon */}
+          <path d="M12 3v6" />
+          <path d="M12 9l-4 4" />
+          <path d="M12 9l4 4" />
+          <circle cx="12" cy="3" r="2" fill="currentColor" />
+          <circle cx="8" cy="15" r="2" fill="currentColor" />
+          <circle cx="16" cy="15" r="2" fill="currentColor" />
+          <path d="M8 17v2" />
+          <path d="M16 17v2" />
+          <circle cx="8" cy="21" r="1.5" fill="currentColor" />
+          <circle cx="16" cy="21" r="1.5" fill="currentColor" />
+        </svg>
+      </button>
+    </div>
+  );
 };

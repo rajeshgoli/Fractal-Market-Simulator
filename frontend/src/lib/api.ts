@@ -300,6 +300,9 @@ export interface DagLeg {
   // Spikiness (0-100): Sigmoid-normalized skewness of bar contributions (#241)
   // 50 = neutral, 90+ = spike-driven, 10- = evenly distributed
   spikiness: number | null;
+  // Hierarchy fields for exploration (#250, #251)
+  parent_leg_id: string | null;
+  swing_id: string | null;
 }
 
 export interface DagPendingOrigin {
@@ -326,6 +329,23 @@ export async function fetchDagState(): Promise<DagStateResponse> {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(errorData.detail || `Failed to fetch DAG state: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// Types for hierarchy exploration (Issue #250)
+export interface LegLineageResponse {
+  leg_id: string;
+  ancestors: string[];  // Ordered from immediate parent to root
+  descendants: string[];  // All descendant leg IDs
+  depth: number;  // 0 = root
+}
+
+export async function fetchLegLineage(legId: string): Promise<LegLineageResponse> {
+  const response = await fetch(`${API_BASE}/dag/lineage/${encodeURIComponent(legId)}`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch leg lineage: ${response.statusText}`);
   }
   return response.json();
 }

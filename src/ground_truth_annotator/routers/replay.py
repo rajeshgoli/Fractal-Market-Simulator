@@ -59,6 +59,8 @@ from ..schemas import (
     DagPendingOrigin,
     DagLegCounts,
     DagStateResponse,
+    # Hierarchy exploration models (Issue #250)
+    LegLineageResponse,
 )
 
 if TYPE_CHECKING:
@@ -1197,6 +1199,9 @@ def _build_dag_state(detector: LegDetector) -> DagStateResponse:
             # Impulsiveness and spikiness replace raw impulse (#241)
             impulsiveness=leg.impulsiveness,
             spikiness=leg.spikiness,
+            # Hierarchy fields for exploration (#250, #251)
+            parent_leg_id=leg.parent_leg_id,
+            swing_id=leg.swing_id,
         )
         for leg in state.active_legs
     ]
@@ -1324,6 +1329,9 @@ async def get_dag_state():
             # Impulsiveness and spikiness replace raw impulse (#241)
             impulsiveness=leg.impulsiveness,
             spikiness=leg.spikiness,
+            # Hierarchy fields for exploration (#250, #251)
+            parent_leg_id=leg.parent_leg_id,
+            swing_id=leg.swing_id,
         )
         for leg in state.active_legs
     ]
@@ -1349,4 +1357,91 @@ async def get_dag_state():
         active_legs=active_legs,
         pending_origins=pending_origins,
         leg_counts=leg_counts,
+    )
+
+
+@router.get("/api/dag/lineage/{leg_id}", response_model=LegLineageResponse)
+async def get_leg_lineage(leg_id: str):
+    """
+    Get full lineage for a leg (ancestors and descendants).
+
+    Used by the frontend for hierarchy exploration mode (#250).
+    Given a leg ID, returns:
+    - ancestors: chain from this leg up to root (following parent_leg_id)
+    - descendants: all legs whose ancestry includes this leg
+    - depth: how deep this leg is in the hierarchy
+
+    Args:
+        leg_id: The leg ID to get lineage for.
+
+    Returns:
+        LegLineageResponse with ancestors, descendants, and depth.
+    """
+    global _replay_cache
+
+    detector = _replay_cache.get("detector")
+    if detector is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Must calibrate first. Call /api/replay/calibrate."
+        )
+
+    state = detector.state
+
+    # Build a lookup dict for efficient access
+    legs_by_id = {leg.leg_id: leg for leg in state.active_legs}
+
+    # Check if leg exists
+    if leg_id not in legs_by_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Leg with ID '{leg_id}' not found."
+        )
+
+    target_leg = legs_by_id[leg_id]
+
+    # Build ancestors chain by following parent_leg_id
+    ancestors: List[str] = []
+    current_id = target_leg.parent_leg_id
+    visited = {leg_id}  # Prevent cycles
+    while current_id and current_id in legs_by_id and current_id not in visited:
+        ancestors.append(current_id)
+        visited.add(current_id)
+        current_id = legs_by_id[current_id].parent_leg_id
+
+    # Build descendants by finding all legs whose ancestor chain includes this leg
+    # A leg is a descendant if we can trace its parent_leg_id chain back to leg_id
+    descendants: List[str] = []
+
+    # Build parent lookup for all legs
+    def get_ancestors(lid: str) -> set:
+        """Get all ancestor IDs for a leg."""
+        result = set()
+        current = legs_by_id.get(lid)
+        if not current:
+            return result
+        cur_parent = current.parent_leg_id
+        seen = {lid}
+        while cur_parent and cur_parent in legs_by_id and cur_parent not in seen:
+            result.add(cur_parent)
+            seen.add(cur_parent)
+            cur_parent = legs_by_id[cur_parent].parent_leg_id
+        return result
+
+    for lid, leg in legs_by_id.items():
+        if lid == leg_id:
+            continue
+        # Check if leg_id is in this leg's ancestry
+        leg_ancestors = get_ancestors(lid)
+        if leg_id in leg_ancestors:
+            descendants.append(lid)
+
+    # Compute depth (0 = root)
+    depth = len(ancestors)
+
+    return LegLineageResponse(
+        leg_id=leg_id,
+        ancestors=ancestors,
+        descendants=descendants,
+        depth=depth,
     )

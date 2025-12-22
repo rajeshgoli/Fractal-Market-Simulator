@@ -324,6 +324,9 @@ export interface ActiveLeg {
   impulsiveness: number | null;
   // Spikiness (0-100): Sigmoid-normalized skewness of bar contributions (#241)
   spikiness: number | null;
+  // Hierarchy fields for exploration (#250, #251)
+  parent_leg_id: string | null;
+  swing_id: string | null;
 }
 
 // Leg visual style configuration
