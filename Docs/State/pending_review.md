@@ -1,23 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 10
+**Unreviewed Change Count:** 0
 
-**Last Review:** 2025-12-21
+**Last Review:** 2025-12-22
 
 ---
 
 ## Pending Changes
 
-- **#241** — Add impulsiveness & spikiness scores to legs (epic with 6 subissues #242-#247)
-- **#248, #249** — Documentation fixes: removed deleted level_calculator.py reference, added impulse field to leg descriptions
-- **#260** — Fix feedback endpoint crash: remove stale FeedbackAttachmentOrphanedOrigin reference (regression from #210)
-- **#263** — Add chart maximize/minimize controls (expand icon top-right of each chart)
-- **Bugfix** — Fix engulfed pruning for invalidated legs (pivot breach now tracked for invalidated legs)
-- **#264** — Prune inner structure legs when outer structure is invalidated
-- **#265** — Refactor test_hierarchical_detector.py into logical modules (5 test files + conftest.py)
-- **#261** — Disable 3x invalidated leg cleanup (stale_extension_threshold set to 999.0)
-- **#266** — Remove swing immunity for inner structure pruning (inner legs pruned regardless of swing status)
-- **#250** — Hierarchy Exploration Mode (epic with 8 subissues #251-#258)
+(none)
 
 ---
 
@@ -25,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 22 | #241, #248-#250, #260-#266, bugfixes — Impulse metrics, hierarchy exploration, inner structure pruning (10 changes) | All Accepted |
 | Dec 21 | #210, #219, #228, #236 — Cleanup epics + impulse score (4 epics, 25 subissues) | All Accepted; minor doc fixes #248, #249 |
 | Dec 21 | #199-#208, #211 — Modularization, pruning redesign, UX enhancements (10 issues) | All Accepted |
 | Dec 20 | #190-#197, #198 — Pivot/origin semantics cascade + architectural audit | All Accepted; design sound post-#197 |
