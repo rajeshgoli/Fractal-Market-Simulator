@@ -292,26 +292,30 @@ class LegDetector:
             bar_low: Current bar's low as Decimal
         """
         for leg in self.state.active_legs:
-            if leg.status != 'active':
+            # Skip legs that are completely done (stale/pruned)
+            # But include 'invalidated' legs - they can still become engulfed
+            if leg.status not in ('active', 'invalidated'):
                 continue
 
-            # Origin breach tracking
-            if leg.direction == 'bull':
-                # Bull origin (low) breached when price goes below it
-                if bar_low < leg.origin_price:
-                    breach = leg.origin_price - bar_low
-                    if leg.max_origin_breach is None or breach > leg.max_origin_breach:
-                        leg.max_origin_breach = breach
-            else:  # bear
-                # Bear origin (high) breached when price goes above it
-                if bar_high > leg.origin_price:
-                    breach = bar_high - leg.origin_price
-                    if leg.max_origin_breach is None or breach > leg.max_origin_breach:
-                        leg.max_origin_breach = breach
+            # Origin breach tracking (active legs only - invalidated already have origin breach)
+            if leg.status == 'active':
+                if leg.direction == 'bull':
+                    # Bull origin (low) breached when price goes below it
+                    if bar_low < leg.origin_price:
+                        breach = leg.origin_price - bar_low
+                        if leg.max_origin_breach is None or breach > leg.max_origin_breach:
+                            leg.max_origin_breach = breach
+                else:  # bear
+                    # Bear origin (high) breached when price goes above it
+                    if bar_high > leg.origin_price:
+                        breach = bar_high - leg.origin_price
+                        if leg.max_origin_breach is None or breach > leg.max_origin_breach:
+                            leg.max_origin_breach = breach
 
-            # Pivot breach tracking (only for formed legs)
+            # Pivot breach tracking (formed legs, including invalidated)
             # Once formed, the pivot is frozen as a structural reference
             # Price going past it = breach (for unformed legs, it would just extend)
+            # Invalidated legs need pivot breach tracked for engulfed detection
             if leg.formed and leg.range > 0:
                 if leg.direction == 'bull':
                     # Bull pivot (HIGH) breached when price goes above it

@@ -488,6 +488,28 @@ class LegPruner:
                 if bar_low < extension_threshold:
                     legs_to_replace.append((leg, bar_low, "pivot_breach"))
 
+        # Also check invalidated legs for engulfed condition
+        # Invalidated legs already have origin breached; if pivot also breached, they're engulfed
+        # This cleans up noise from legs that were invalidated but still visible
+        for leg in state.active_legs:
+            if leg.status != 'invalidated' or not leg.formed:
+                continue
+
+            if leg.range == 0:
+                continue
+
+            # Invalidated legs by definition have origin breach
+            # Check if pivot breach also occurred -> engulfed
+            if leg.max_pivot_breach is not None and leg.max_origin_breach is not None:
+                legs_to_prune.append(leg)
+                prune_events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=leg.swing_id or "",
+                    leg_id=leg.leg_id,
+                    reason="engulfed",
+                ))
+
         # Process legs to prune (engulfed - no replacement)
         for leg in legs_to_prune:
             leg.status = 'stale'

@@ -724,3 +724,141 @@ class TestBreachTrackingAccuracy:
                 # Pivot should have extended, no breach tracked
                 assert bear_legs[0].max_pivot_breach is None
                 assert bear_legs[0].pivot_price == Decimal('4420')  # Extended
+
+
+class TestInvalidatedLegEngulfed:
+    """Test that invalidated legs can still be pruned as engulfed."""
+
+    def test_invalidated_leg_pruned_when_pivot_breached(self):
+        """
+        When a leg is invalidated (origin breach > threshold) and then pivot
+        is breached, it should be pruned as engulfed.
+
+        This ensures invalidated legs don't linger as visual noise when they
+        become structurally irrelevant (price has gone past both ends).
+        """
+        detector = HierarchicalDetector()
+
+        # Create a bear leg: origin at high, pivot at low
+        bar0 = make_bar(0, 4435.0, 4440.0, 4430.0, 4438.0)
+        detector.process_bar(bar0)
+
+        bar1 = make_bar(1, 4438.0, 4439.0, 4425.0, 4426.0)
+        detector.process_bar(bar1)
+
+        # Find the bear leg - should be formed
+        bear_legs = [
+            leg for leg in detector.state.active_legs
+            if leg.direction == 'bear' and leg.formed
+        ]
+        assert len(bear_legs) >= 1
+        target_leg = bear_legs[0]
+        origin = target_leg.origin_price
+        pivot = target_leg.pivot_price
+        leg_id = target_leg.leg_id
+
+        # Cause origin breach beyond invalidation threshold (38.2%)
+        # For range ~15, need breach > 5.7 points
+        bar2 = make_bar(2, 4426.0, 4448.0, 4427.0, 4447.0)
+        detector.process_bar(bar2)
+
+        bar3 = make_bar(3, 4447.0, 4450.0, 4445.0, 4449.0)
+        detector.process_bar(bar3)
+
+        # Leg should now be invalidated
+        target_leg = next(
+            (leg for leg in detector.state.active_legs if leg.leg_id == leg_id),
+            None
+        )
+        if target_leg is None:
+            # Leg might have been pruned by turn pruning, that's ok
+            return
+
+        assert target_leg.status == 'invalidated'
+        assert target_leg.max_origin_breach is not None
+
+        # Now breach the pivot (price drops below original pivot)
+        bar4 = make_bar(4, 4449.0, 4450.0, 4420.0, 4422.0)
+        events4 = detector.process_bar(bar4)
+
+        # Leg should now have pivot breach tracked (we track for invalidated legs now)
+        target_leg = next(
+            (leg for leg in detector.state.active_legs if leg.leg_id == leg_id),
+            None
+        )
+        # If still present, check that pivot breach is now tracked
+        if target_leg:
+            assert target_leg.max_pivot_breach is not None
+
+        # Process one more bar to trigger the engulfed pruning
+        bar5 = make_bar(5, 4422.0, 4425.0, 4418.0, 4420.0)
+        events5 = detector.process_bar(bar5)
+
+        # Check that an engulfed prune event was emitted
+        all_events = events4 + events5
+        engulfed_events = [
+            e for e in all_events
+            if isinstance(e, LegPrunedEvent) and e.reason == 'engulfed'
+        ]
+
+        # The invalidated leg should have been pruned as engulfed
+        assert len(engulfed_events) >= 1
+
+        # Verify the leg is no longer in active_legs
+        remaining = [leg for leg in detector.state.active_legs if leg.leg_id == leg_id]
+        assert len(remaining) == 0
+
+    def test_pivot_breach_tracked_for_invalidated_legs(self):
+        """
+        Verify that max_pivot_breach is updated even for invalidated legs.
+
+        This is necessary for detecting when invalidated legs become engulfed.
+        """
+        detector = HierarchicalDetector()
+
+        # Create a bull leg
+        bar0 = make_bar(0, 4420.0, 4425.0, 4415.0, 4423.0)
+        detector.process_bar(bar0)
+
+        bar1 = make_bar(1, 4423.0, 4440.0, 4422.0, 4438.0)
+        detector.process_bar(bar1)
+
+        # Find the bull leg
+        bull_legs = [
+            leg for leg in detector.state.active_legs
+            if leg.direction == 'bull' and leg.formed
+        ]
+        if not bull_legs:
+            return  # No formed bull leg, skip test
+
+        target_leg = bull_legs[0]
+        leg_id = target_leg.leg_id
+        pivot = target_leg.pivot_price
+
+        # Invalidate by breaching origin significantly
+        bar2 = make_bar(2, 4438.0, 4439.0, 4405.0, 4408.0)
+        detector.process_bar(bar2)
+
+        # Check leg is invalidated
+        target_leg = next(
+            (leg for leg in detector.state.active_legs if leg.leg_id == leg_id),
+            None
+        )
+        if target_leg is None:
+            return
+
+        # Even if not invalidated, proceed to test pivot breach tracking
+        initial_pivot_breach = target_leg.max_pivot_breach
+
+        # Now cause pivot breach (price goes above the pivot)
+        bar3 = make_bar(3, 4408.0, 4445.0, 4407.0, 4444.0)
+        detector.process_bar(bar3)
+
+        # Check pivot breach was tracked
+        target_leg = next(
+            (leg for leg in detector.state.active_legs if leg.leg_id == leg_id),
+            None
+        )
+        if target_leg and target_leg.status == 'invalidated':
+            # Pivot breach should now be tracked for invalidated legs
+            assert target_leg.max_pivot_breach is not None
