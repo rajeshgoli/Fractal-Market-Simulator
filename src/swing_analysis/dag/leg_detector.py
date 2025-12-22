@@ -1134,10 +1134,11 @@ class LegDetector:
 
     def _check_extension_prune(self, bar: Bar, timestamp: datetime) -> List[LegPrunedEvent]:
         """
-        Prune invalidated legs that have reached 3x extension (#203).
+        Prune invalidated child legs that have reached 3x extension (#203, #261).
 
-        Invalidated legs remain visible until price moves 3x their range
-        beyond the origin. This allows them to serve as counter-trend references.
+        Invalidated legs with a parent are pruned when price moves 3x their range
+        beyond the origin. Root legs (no parent) are never pruned by this rule,
+        preserving the anchor that began the move as historical reference.
 
         Returns:
             List of LegPrunedEvent for legs pruned due to extension.
@@ -1150,6 +1151,10 @@ class LegDetector:
 
         for leg in self.state.active_legs:
             if leg.status != 'invalidated':
+                continue
+
+            # Only prune child legs; root legs (no parent) are preserved (#261)
+            if leg.parent_leg_id is None:
                 continue
 
             if leg.range == 0:

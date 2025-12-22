@@ -881,7 +881,7 @@ All thresholds are configurable. Defaults shown:
 | `invalidation_threshold` | 0.382 | Origin breach % to invalidate |
 | `pivot_breach_threshold` | 0.10 | Pivot extension % to trigger replacement |
 | `proximity_prune_threshold` | 0.05 | Range similarity % for consolidation |
-| `stale_extension_threshold` | 999.0 | Disabled (was 3x range for cleanup) |
+| `stale_extension_threshold` | 3.0 | Prune invalidated child legs at 3x range (root legs preserved) |
 
 Bull and bear can have different configs for asymmetric markets.
 
@@ -1247,7 +1247,7 @@ Current defaults are symmetric. If asymmetric behavior isn't needed, simplify to
 | Big Swing Price Tolerance | 0.15 | Touch tolerance for big swings |
 | Big Swing Close Tolerance | 0.10 | Close tolerance for big swings |
 | Child Swing Tolerance | 0.10 | Tolerance for children of big swings |
-| Stale Extension | 999.0 | Disabled (3x cleanup) |
+| Stale Extension | 3.0 | Prune invalidated child legs at 3x range |
 
 ---
 

@@ -128,9 +128,9 @@ class TestSwingConfig:
         assert config.proximity_prune_threshold == 0.05
 
     def test_stale_extension_threshold_default(self):
-        """stale_extension_threshold should default to 999.0 (effectively disabled)."""
+        """stale_extension_threshold should default to 3.0 (#261)."""
         config = SwingConfig()
-        assert config.stale_extension_threshold == 999.0
+        assert config.stale_extension_threshold == 3.0
 
 
 class TestSwingConfigBuilders:
@@ -187,7 +187,7 @@ class TestSwingConfigBuilders:
         modified = original.with_stale_extension(5.0)
 
         # Original unchanged
-        assert original.stale_extension_threshold == 999.0
+        assert original.stale_extension_threshold == 3.0
 
         # Modified has new value
         assert modified.stale_extension_threshold == 5.0
