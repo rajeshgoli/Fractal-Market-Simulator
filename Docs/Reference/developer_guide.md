@@ -410,9 +410,11 @@ Configuration:
 - `DirectionConfig.invalidation_threshold`: Configurable per direction (default: 0.382)
 - `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 999.0, effectively disabled)
 
-**Inner structure pruning (#264, #266):**
+**Inner structure pruning (#264, #266, #279):**
 
-When multiple legs of the same direction are invalidated simultaneously, prune counter-direction legs from inner structure pivots. Inner structure legs are redundant when an outer-origin leg exists with the same current pivot.
+When legs of the same direction are invalidated, prune counter-direction legs from inner structure pivots. Inner structure legs are redundant when an outer-origin leg exists with the same current pivot.
+
+**Sequential invalidation (#279):** Contained legs are invalidated sequentially (inner first, outer later) because inner.origin < outer.origin. The algorithm checks newly invalidated legs against ALL previously invalidated legs, not just same-bar invalidations.
 
 **Important:** Swing immunity does NOT apply for inner structure pruning. If a leg is structurally inner (contained in a larger structure) and there's an outer-origin leg with the same pivot, the inner leg is redundant regardless of whether it formed a swing (#266).
 
@@ -433,7 +435,7 @@ Containment definition:
 - Bull: B_inner contained in B_outer iff `inner.origin > outer.origin AND inner.pivot < outer.pivot`
 
 Pruning conditions:
-1. Multiple legs of same direction invalidated in same bar
+1. Multiple legs of same direction invalidated (can be same bar or sequential)
 2. One leg strictly contained in another
 3. Counter-direction legs exist from both pivots
 4. Both counter-direction legs share the same current pivot
