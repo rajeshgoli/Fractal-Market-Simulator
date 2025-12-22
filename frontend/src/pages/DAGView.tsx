@@ -344,14 +344,23 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     }
   }, [calibrationPhase, currentPlaybackPosition, followLeg]);
 
-  // TODO (#267): Marker click detection requires chart click handling + proximity check
-  // The SeriesMarkersPlugin doesn't expose click events directly.
-  // For now, users can see markers but clicking them isn't implemented yet.
+  // Handle marker click - show event inspection popup (#267)
+  const handleMarkerClick = useCallback((
+    barIndex: number,
+    events: LifecycleEventWithLegInfo[],
+    position: { x: number; y: number }
+  ) => {
+    setEventPopup({
+      events,
+      barIndex,
+      position,
+    });
+  }, []);
 
   // Handle attaching an event to feedback (#267)
   const handleAttachEvent = useCallback((event: LifecycleEventWithLegInfo) => {
-    // Create attachment item from event - would need to extend AttachableItem type
-    // For now, just close the popup
+    // TODO: Extend AttachableItem type to support lifecycle events
+    // For now, log and close popup
     console.log('Attach event:', event);
     setEventPopup(null);
   }, []);
@@ -921,14 +930,20 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
 
           {/* Event Markers Overlays - lifecycle event markers on candles (#267) */}
           <EventMarkersOverlay
+            chart={chart1Ref.current}
+            series={series1Ref.current}
             markersPlugin={markers1Ref.current}
             bars={chart1Bars}
             eventsByBar={followLeg.eventsByBar}
+            onMarkerClick={handleMarkerClick}
           />
           <EventMarkersOverlay
+            chart={chart2Ref.current}
+            series={series2Ref.current}
             markersPlugin={markers2Ref.current}
             bars={chart2Bars}
             eventsByBar={followLeg.eventsByBar}
+            onMarkerClick={handleMarkerClick}
           />
 
           {/* Playback Controls */}

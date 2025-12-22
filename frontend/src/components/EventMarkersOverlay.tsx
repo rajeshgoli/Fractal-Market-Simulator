@@ -3,18 +3,21 @@
  *
  * Displays markers on candles where lifecycle events occurred for followed legs.
  * Uses the lightweight-charts SeriesMarkersPlugin API.
+ * Supports click detection for marker interaction.
  */
 
 import { useEffect, useCallback } from 'react';
-import { ISeriesMarkersPluginApi, Time, SeriesMarker } from 'lightweight-charts';
+import { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, Time, SeriesMarker } from 'lightweight-charts';
 import { BarData } from '../types';
 import { LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
 
 interface EventMarkersOverlayProps {
+  chart: IChartApi | null;
+  series: ISeriesApi<'Candlestick'> | null;
   markersPlugin: ISeriesMarkersPluginApi<Time> | null;
   bars: BarData[];
   eventsByBar: Map<number, LifecycleEventWithLegInfo[]>;
-  onMarkerClick?: (barIndex: number, events: LifecycleEventWithLegInfo[]) => void;
+  onMarkerClick?: (barIndex: number, events: LifecycleEventWithLegInfo[], position: { x: number; y: number }) => void;
 }
 
 /**
@@ -80,9 +83,12 @@ function getMarkerText(eventType: string): string {
 }
 
 export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
+  chart,
+  series,
   markersPlugin,
   bars,
   eventsByBar,
+  onMarkerClick,
 }) => {
   // Build timestamp lookup
   const getTimestampForBarIndex = useCallback((barIndex: number): number | null => {
@@ -129,10 +135,11 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
       });
 
       const primaryEvent = sortedEvents[0];
+      const position = getMarkerPosition(primaryEvent.event_type);
 
       markers.push({
         time: timestamp as Time,
-        position: getMarkerPosition(primaryEvent.event_type),
+        position,
         color: primaryEvent.legColor,
         shape: getMarkerShape(primaryEvent.event_type),
         text: getMarkerText(primaryEvent.event_type),
@@ -151,6 +158,81 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
       markersPlugin.setMarkers([]);
     };
   }, [markersPlugin, bars, eventsByBar, getTimestampForBarIndex]);
+
+  // Click handler for marker detection
+  useEffect(() => {
+    if (!chart || !series || !onMarkerClick || eventsByBar.size === 0) {
+      return;
+    }
+
+    const chartElement = chart.chartElement();
+    if (!chartElement) return;
+
+    const timeScale = chart.timeScale();
+    const CLICK_THRESHOLD = 20; // pixels
+
+    const handleClick = (e: MouseEvent) => {
+      const rect = chartElement.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      // Convert click X to timestamp
+      const clickTime = timeScale.coordinateToTime(clickX);
+      if (clickTime === null) return;
+
+      // Find the closest marker timestamp
+      let closestBarIndex: number | null = null;
+      let closestDistance = Infinity;
+
+      for (const [barIndex, events] of eventsByBar) {
+        const timestamp = getTimestampForBarIndex(barIndex);
+        if (timestamp === null) continue;
+
+        const markerX = timeScale.timeToCoordinate(timestamp as Time);
+        if (markerX === null) continue;
+
+        // Get the bar's high/low for Y position calculation
+        const bar = bars.find(b =>
+          (b.source_start_index !== undefined && barIndex >= b.source_start_index && barIndex <= (b.source_end_index ?? b.source_start_index)) ||
+          b.index === barIndex
+        );
+        if (!bar) continue;
+
+        // Calculate marker Y based on position (above or below bar)
+        const primaryEvent = events[0];
+        const position = getMarkerPosition(primaryEvent.event_type);
+        const markerY = position === 'aboveBar'
+          ? series.priceToCoordinate(bar.high)
+          : series.priceToCoordinate(bar.low);
+
+        if (markerY === null) continue;
+
+        // Check distance
+        const dx = clickX - markerX;
+        const dy = clickY - markerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < CLICK_THRESHOLD && distance < closestDistance) {
+          closestDistance = distance;
+          closestBarIndex = barIndex;
+        }
+      }
+
+      // If we found a close marker, trigger the callback
+      if (closestBarIndex !== null) {
+        const events = eventsByBar.get(closestBarIndex);
+        if (events) {
+          onMarkerClick(closestBarIndex, events, { x: e.clientX, y: e.clientY });
+        }
+      }
+    };
+
+    chartElement.addEventListener('click', handleClick);
+
+    return () => {
+      chartElement.removeEventListener('click', handleClick);
+    };
+  }, [chart, series, onMarkerClick, eventsByBar, bars, getTimestampForBarIndex]);
 
   // This component only manages markers via the plugin, no visual render
   return null;
