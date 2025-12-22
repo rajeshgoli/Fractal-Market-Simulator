@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 8
 
 **Last Review:** 2025-12-21
 
@@ -15,6 +15,7 @@
 - **Bugfix** — Fix engulfed pruning for invalidated legs (pivot breach now tracked for invalidated legs)
 - **#264** — Prune inner structure legs when outer structure is invalidated
 - **#265** — Refactor test_hierarchical_detector.py into logical modules (5 test files + conftest.py)
+- **#261** — Disable 3x invalidated leg cleanup (stale_extension_threshold set to 999.0)
 
 ---
 
