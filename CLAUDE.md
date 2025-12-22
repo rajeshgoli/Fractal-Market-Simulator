@@ -174,6 +174,31 @@ Update `Docs/State/pending_review.md`:
 - [ ] User guide updated (if user-facing changes)
 - [ ] `Docs/State/pending_review.md` updated
 
+## Epic Filing Workflow
+
+When filing epics (multi-issue features), structure them as follows:
+
+### Sub-Issue Structure
+- Create sub-issues for each distinct concern
+- Each sub-issue should be completable and testable independently
+- Engineer agent completes and tests each sub-issue in turn
+
+### Required Sub-Issues
+Every epic must include a documentation sub-issue:
+- Update `Docs/Reference/DAG.md` for changes to DAG behavior
+- Update `Docs/Reference/developer_guide.md` for implementation/architecture changes
+- Update `Docs/Reference/user_guide.md` for user-facing changes
+
+### Commit Strategy
+- All sub-issues should be committed and pushed in one atomic operation at the end
+- The final sub-issue should instruct: "Commit all changes and push"
+
+### Parallelism
+- If the epic is too large for one agent session, explicitly call out sequential execution requirements
+- Sub-issues that can be worked in parallel should be marked: "Can be parallelized with #NNN"
+- Sub-issues requiring sequential execution should be marked: "Requires #NNN to be completed first"
+- If no sequential dependency is noted, agents may work sub-issues in parallel and commit individually
+
 ## Usage Patterns
 
 See `Docs/Reference/user_guide.md` for detailed usage instructions.

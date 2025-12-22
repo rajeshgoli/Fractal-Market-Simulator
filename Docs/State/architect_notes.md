@@ -13,7 +13,6 @@ Read in order:
 - Fibonacci-based structural analysis (0.382 formation/invalidation)
 - Resolution-agnostic (1m to 1mo)
 - SwingConfig centralizes all detection parameters
-- Compatibility layer (adapters.py) for gradual migration
 - Discretization: structural events, not per-bar tokens
 - Calibration-first playback for causal evaluation
 - Backend-controlled data boundary for replay (single source of truth)
@@ -22,7 +21,9 @@ Read in order:
 - **Strict inter-bar causality:** Legs only form when pivots are from different bars (#189)
 - **Turn pruning:** Within-origin (keep largest) + active swing immunity
 - **Modular DAG layer:** dag/ subdirectory with LegDetector, LegPruner, state, calibrate, leg modules (#206)
-- **Structure-driven pruning:** Proximity consolidation (5%), pivot breach (10%), engulfed (20%) (#203, #208)
+- **Structure-driven pruning:** Proximity consolidation (5%), pivot breach (10%), engulfed (strict) (#203, #208)
+- **Impulse scoring:** Range/duration metric + impulsiveness/spikiness percentiles (#236, #241)
+- **Inner structure pruning:** Counter-direction legs from contained pivots pruned regardless of swing status (#264, #266)
 
 **Known debt:**
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
@@ -31,6 +32,32 @@ Read in order:
 ---
 
 ## Current Phase: L1-L7 Validation
+
+### Recent Changes — Dec 22 Review
+
+All 10 pending changes accepted. Summary:
+
+| Issue(s) | Summary | Outcome |
+|----------|---------|---------|
+| #241 (#242-#247) | Impulsiveness & spikiness scores | Accepted — Well-documented metrics with O(log n) percentile and O(1) moments |
+| #248, #249 | Documentation fixes | Accepted — Debt cleared |
+| #250 (#251-#258) | Hierarchy Exploration Mode | Accepted — Tree icon, lineage API, focus/ancestor/descendant highlighting |
+| #260 | Feedback endpoint crash fix | Accepted — Removed stale FeedbackAttachmentOrphanedOrigin reference |
+| #261 | Disable 3x invalidated leg cleanup | Accepted — stale_extension_threshold=999.0 |
+| #263 | Chart maximize/minimize controls | Accepted — UX enhancement |
+| #264 | Inner structure leg pruning | Accepted — Counter-direction pruning on nested invalidation |
+| #265 | Test refactoring | Accepted — Split test_hierarchical_detector.py into 5 logical modules |
+| #266 | Remove swing immunity for inner structure | Accepted — Policy change, inner legs pruned regardless of swing |
+| Bugfix | Engulfed pruning for invalidated legs | Accepted — Pivot breach now tracked for invalidated legs |
+
+**Architectural observations:**
+1. **Impulse metrics (#241)**: Clean implementation using bisect for O(log n) percentile lookup and running moments for O(1) spikiness updates. Metrics frozen when origin is breached — prevents stale updates.
+
+2. **Hierarchy exploration (#250)**: Appropriate use of existing dag/ abstractions. Lineage API returns ancestors/descendants efficiently. Frontend uses new useHierarchyMode.ts hook.
+
+3. **Inner structure pruning (#264, #266)**: Significant policy change — removing swing immunity means formed swings can be pruned if structurally contained. This is correct: inner structure is redundant when outer-origin legs exist with same pivot.
+
+4. **Stale cleanup disabled (#261)**: Setting stale_extension_threshold=999.0 effectively disables the feature. Other pruning mechanisms (proximity, breach, engulfed) handle cleanup adequately.
 
 ### Pivot/Origin Semantics — FIXED
 
@@ -45,7 +72,7 @@ Read in order:
 
 ### Next: Validate L1-L7 Detection
 
-With semantics enforced, L1-L7 validation can proceed:
+With semantics enforced and codebase clean, L1-L7 validation can proceed:
 
 | Label | Structure | Expected Status |
 |-------|-----------|-----------------|
@@ -57,7 +84,7 @@ With semantics enforced, L1-L7 validation can proceed:
 | **L6** | 1=6929, 0=6771 | Should detect |
 | **L7** | 1=6882, 0=6770 | Should detect |
 
-**Validation method:** Use DAG Build Mode to observe leg/swing formation at key price levels.
+**Validation method:** Use DAG Build Mode to observe leg/swing formation at key price levels. Hierarchy exploration mode now available to visualize parent-child relationships.
 
 ---
 
@@ -66,35 +93,38 @@ With semantics enforced, L1-L7 validation can proceed:
 | Component | Status | Notes |
 |-----------|--------|-------|
 | LegDetector (dag/) | **Complete** | O(n log k), modularized into 5 modules |
-| LegPruner (dag/) | **Complete** | Handles all pruning: domination, proximity, breach, engulfed |
+| LegPruner (dag/) | **Complete** | Handles all pruning: domination, proximity, breach, engulfed, inner structure |
 | Temporal Causality | **Fixed** | Strict inter-bar ordering (#189) |
 | Leg Origin Updates | **Fixed** | Origins update on price extensions (#188) |
-| SwingConfig | Complete | Centralizes all parameters including new thresholds |
+| SwingConfig | Complete | Centralizes all parameters including thresholds |
 | SwingNode | Complete | DAG hierarchy model |
 | ReferenceFrame | Complete | Central coordinate abstraction |
 | ReferenceLayer | Complete | Tolerance/completion rules |
 | Turn Pruning | Complete | Within-origin pruning + active swing immunity |
 | Pivot Breach Pruning | Complete | 10% threshold with replacement leg (#208) |
-| Engulfed Detection | Complete | 20% combined breach deletes leg (#208) |
+| Engulfed Detection | Complete | Strict (0.0 threshold) deletes leg (#208, #236) |
 | Proximity Consolidation | Complete | 5% relative difference consolidation (#203) |
-| Compatibility Adapter | Complete | SwingNode ↔ ReferenceSwing |
+| Inner Structure Pruning | **Complete** | Counter-direction pruning, no swing immunity (#264, #266) |
+| Impulse Metrics | **Complete** | Impulsiveness (percentile) + spikiness (sigmoid) (#241) |
 | Replay View | Complete | Tree-based UI, forward playback |
 | DAG Visualization | Complete | Leg/origin visualization, hover highlighting, chart interaction |
-| Discretization | Complete | Accepts SwingNode via adapter |
-| V2 API Schemas | Complete | HierarchicalSwingResponse, etc. |
-| Legacy Detectors | Deleted | #153 completed cleanup |
-| Test Suite | Healthy | 693 tests passing |
-| Documentation | Current | Both guides updated |
+| Hierarchy Exploration | **Complete** | Tree icon, lineage API, focus/ancestor/descendant display (#250) |
+| Chart Controls | **Complete** | Maximize/minimize per chart (#263) |
+| Discretization | Complete | Works directly with SwingNode (no adapter) |
+| V2 API Schemas | Complete | HierarchicalSwingResponse, depth-based grouping |
+| Legacy Code | **Deleted** | All pre-DAG modules removed (#210, #219, #228) |
+| Test Suite | Healthy | 600+ tests passing, refactored into logical modules (#265) |
+| Documentation | **Current** | user_guide.md and developer_guide.md updated |
 
 ---
 
 ## Documentation Status
 
-| Document | Status | Action Needed |
-|----------|--------|---------------|
-| `developer_guide.md` | Current | - |
-| `user_guide.md` | Current | - |
-| `CLAUDE.md` | Current | - |
+| Document | Status | Notes |
+|----------|--------|-------|
+| `developer_guide.md` | Current | Includes impulse metrics, inner structure pruning, hierarchy exploration |
+| `user_guide.md` | Current | Includes chart controls, hierarchy exploration mode, leg metrics |
+| `CLAUDE.md` | Current | — |
 
 ---
 
@@ -110,9 +140,11 @@ With semantics enforced, L1-L7 validation can proceed:
 - **DAG/Reference separation:** DAG tracks structural extremas; Reference layer defines "good reference" semantics
 - **Rules by construction:** Temporal ordering enforced by bar relationships, not post-hoc filtering
 - **Strict inter-bar causality:** Legs require pivots from different bars (#189)
-- **Fractal compression:** Recursive 10% pruning creates detail near active zone, sparse further back
+- **Fractal compression:** Recursive pruning creates detail near active zone, sparse further back
 - **Modular design:** dag/ subdirectory with clear separation of concerns (#206)
 - **Configurable thresholds:** All pruning/breach thresholds centralized in SwingConfig
+- **Strong deletion bias:** Actively remove unused code to maintain codebase clarity
+- **No swing immunity for structure:** Inner structure legs pruned regardless of formation status (#266)
 
 ---
 
@@ -155,6 +187,8 @@ With semantics enforced, L1-L7 validation can proceed:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 22 | #241, #248-#250, #260-#266, bugfixes — Impulse metrics, hierarchy exploration, inner structure pruning (10 changes) | All Accepted |
+| Dec 21 | #210, #219, #228, #236 — Cleanup epics + impulse score (4 epics, 25 subissues) | All Accepted; minor doc fixes #248, #249 |
 | Dec 21 | #199-#208, #211 — Modularization, pruning redesign, UX enhancements (10 issues) | All Accepted |
 | Dec 20 | #190-#197, #198 — Pivot/origin semantics fixes + architectural audit | All Accepted |
 | Dec 19 | #187-#189, #183, UX fixes (10 changes) — Temporal causality fix, sidebar unification | All Accepted |
