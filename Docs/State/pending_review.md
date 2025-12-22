@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2025-12-21
 
@@ -14,6 +14,7 @@
 - **#263** — Add chart maximize/minimize controls (expand icon top-right of each chart)
 - **Bugfix** — Fix engulfed pruning for invalidated legs (pivot breach now tracked for invalidated legs)
 - **#264** — Prune inner structure legs when outer structure is invalidated
+- **#265** — Refactor test_hierarchical_detector.py into logical modules (5 test files + conftest.py)
 
 ---
 

@@ -741,10 +741,10 @@ cd frontend && npm run build  # Output: frontend/dist/
 python -m pytest tests/ -v
 
 # Specific module
-python -m pytest tests/test_hierarchical_detector.py -v
+python -m pytest tests/test_calibration.py -v
 
 # Single test
-python -m pytest tests/test_hierarchical_detector.py::TestCalibrateFromDataframe -v
+python -m pytest tests/test_calibration.py::TestCalibrateFromDataframe -v
 
 # With coverage
 python -m pytest tests/ --cov=src --cov-report=html
@@ -754,7 +754,12 @@ python -m pytest tests/ --cov=src --cov-report=html
 
 | File | Tests |
 |------|-------|
-| `test_hierarchical_detector.py` | Hierarchical detector algorithm |
+| `conftest.py` | Shared fixtures (`make_bar()`) |
+| `test_detector_state.py` | Initialization, serialization, state restore |
+| `test_swing_lifecycle.py` | Formation, invalidation, level crossing, parent assignment |
+| `test_leg_pruning.py` | Turn pruning, domination pruning |
+| `test_leg_extension.py` | Pivot extension, same-bar prevention, state cleanup |
+| `test_calibration.py` | Calibrate functions, DataFrame helpers, performance |
 | `test_discretizer.py` | Event generation, side-channels |
 | `test_reference_frame.py` | ReferenceFrame coordinate system |
 | `test_swing_config.py` | SwingConfig dataclass |
