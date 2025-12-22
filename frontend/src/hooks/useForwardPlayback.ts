@@ -674,7 +674,7 @@ export function useForwardPlayback({
     }
   }, [playbackState, startPlayback, pause, exitLinger]);
 
-  // Step forward by speed aggregation unit (e.g., 12 5m bars when speed is 1x per 1H)
+  // Step forward - either through history or by advancing (#278)
   const stepForward = useCallback(async () => {
     if (playbackState === PlaybackState.LINGERING) {
       exitLinger();
@@ -684,8 +684,31 @@ export function useForwardPlayback({
       clearTimers();
     }
     setPlaybackState(PlaybackState.PAUSED);
+
+    // If viewing history, navigate forward through cached snapshots
+    const history = historyBufferRef.current;
+    if (historyIndexRef.current >= 0) {
+      const nextIdx = historyIndexRef.current + 1;
+      if (nextIdx < history.length) {
+        // Move forward in history
+        historyIndexRef.current = nextIdx;
+        const snapshot = history[nextIdx];
+        restoreFromSnapshot(snapshot);
+        return;
+      } else {
+        // At end of history, exit history mode and resume from latest
+        historyIndexRef.current = -1;
+        // Restore to latest snapshot before advancing
+        if (history.length > 0) {
+          const latestSnapshot = history[history.length - 1];
+          restoreFromSnapshot(latestSnapshot);
+        }
+      }
+    }
+
+    // Not viewing history (or just exited), advance normally
     await advanceBar();
-  }, [playbackState, clearTimers, exitLinger, advanceBar]);
+  }, [playbackState, clearTimers, exitLinger, advanceBar, restoreFromSnapshot]);
 
   // Step back through cached history (#278)
   const stepBack = useCallback(() => {
