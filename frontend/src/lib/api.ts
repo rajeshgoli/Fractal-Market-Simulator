@@ -81,6 +81,7 @@ export interface ReplayBarData {
   high: number;
   low: number;
   close: number;
+  csv_index: number;  // Original row index in source CSV file
 }
 
 export interface ReplayEvent {
@@ -248,8 +249,9 @@ export interface PlaybackFeedbackSnapshot {
 
 // Attachment types for feedback
 export type FeedbackAttachment =
-  | { type: 'leg'; leg_id: string; direction: 'bull' | 'bear'; pivot_price: number; origin_price: number; pivot_index: number; origin_index: number }
-  | { type: 'pending_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number; source: string };
+  | { type: 'leg'; leg_id: string; direction: 'bull' | 'bear'; pivot_price: number; origin_price: number; pivot_index: number; origin_index: number; csv_index?: number }
+  | { type: 'pending_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number; source: string; csv_index?: number }
+  | { type: 'lifecycle_event'; leg_id: string; leg_direction: 'bull' | 'bear'; event_type: string; bar_index: number; csv_index: number; timestamp: string; explanation: string };
 
 export interface PlaybackFeedbackResponse {
   success: boolean;
@@ -346,6 +348,35 @@ export async function fetchLegLineage(legId: string): Promise<LegLineageResponse
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(errorData.detail || `Failed to fetch leg lineage: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// Types for Follow Leg feature (Issue #267)
+export interface LifecycleEvent {
+  leg_id: string;
+  event_type: 'formed' | 'origin_breached' | 'pivot_breached' | 'engulfed' | 'pruned' | 'invalidated';
+  bar_index: number;
+  csv_index: number;
+  timestamp: string;
+  explanation: string;
+}
+
+export interface FollowedLegsEventsResponse {
+  events: LifecycleEvent[];
+}
+
+export async function fetchFollowedLegsEvents(
+  legIds: string[],
+  sinceBar: number
+): Promise<FollowedLegsEventsResponse> {
+  const legIdsParam = legIds.join(',');
+  const response = await fetch(
+    `${API_BASE}/followed-legs/events?leg_ids=${encodeURIComponent(legIdsParam)}&since_bar=${sinceBar}`
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch followed legs events: ${response.statusText}`);
   }
   return response.json();
 }

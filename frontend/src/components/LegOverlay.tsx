@@ -19,6 +19,10 @@ interface LegOverlayProps {
     focusedLegId: string | null;
   };
   onTreeIconClick?: (legId: string) => void;
+  // Eye icon for follow (#267)
+  onEyeIconClick?: (legId: string) => void;
+  // Follow colors (#267) - Map from leg_id to hex color
+  followedLegColors?: Map<string, string>;
 }
 
 /**
@@ -98,6 +102,8 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
   onLegDoubleClick,
   hierarchyMode,
   onTreeIconClick,
+  onEyeIconClick,
+  followedLegColors,
 }) => {
   // Track created line series so we can remove them on update
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -194,10 +200,10 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       lineStyle = isHighlighted ? LineStyle.Solid : getLineStyleValue(leg.status);
     }
 
-    const color = getColorWithOpacity(
-      style.color[leg.direction],
-      opacity
-    );
+    // Use follow color if leg is followed (#267), otherwise use direction color
+    const followColor = followedLegColors?.get(leg.leg_id);
+    const baseColor = followColor ?? style.color[leg.direction];
+    const color = getColorWithOpacity(baseColor, opacity);
 
     // Get timestamps for origin and pivot
     const originTime = getTimestampForIndex(leg.origin_index);
@@ -234,7 +240,7 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       console.error('Failed to create leg line:', error);
       return null;
     }
-  }, [chart, series, getTimestampForIndex, hierarchyMode]);
+  }, [chart, series, getTimestampForIndex, hierarchyMode, followedLegColors]);
 
   // Find the nearest visible leg to a given price/time position
   // Returns leg_id if within pick threshold, null otherwise
@@ -454,10 +460,22 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     }
   }, [treeIconLegId, onTreeIconClick]);
 
+  // Handle eye icon click (#267)
+  const handleEyeIconClick = useCallback(() => {
+    if (treeIconLegId && onEyeIconClick) {
+      onEyeIconClick(treeIconLegId);
+      setTreeIconLegId(null);
+      setTreeIconPosition(null);
+    }
+  }, [treeIconLegId, onEyeIconClick]);
+
+  // Check if current leg is followed
+  const isCurrentLegFollowed = treeIconLegId ? followedLegColors?.has(treeIconLegId) : false;
+
   // Get chart container for portal positioning
   const chartContainer = chart?.chartElement()?.parentElement;
 
-  // Render tree icon when visible (#252)
+  // Render tree and eye icons when visible (#252, #267)
   if (!treeIconLegId || !treeIconPosition || !chartContainer) {
     return null;
   }
@@ -468,41 +486,73 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     <div
       style={{
         position: 'fixed',
-        left: chartRect.left + treeIconPosition.x - 12,
+        left: chartRect.left + treeIconPosition.x - 27, // Adjusted for two icons
         top: chartRect.top + treeIconPosition.y - 12,
         zIndex: 1000,
         pointerEvents: 'auto',
       }}
+      className="flex gap-1"
     >
-      <button
-        onClick={handleTreeIconClick}
-        className="w-6 h-6 bg-slate-800 border border-slate-600 rounded-md flex items-center justify-center hover:bg-slate-700 hover:border-blue-400 transition-colors cursor-pointer"
-        title="Explore hierarchy"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-blue-400"
+      {/* Tree icon - explore hierarchy */}
+      {onTreeIconClick && (
+        <button
+          onClick={handleTreeIconClick}
+          className="w-6 h-6 bg-slate-800 border border-slate-600 rounded-md flex items-center justify-center hover:bg-slate-700 hover:border-blue-400 transition-colors cursor-pointer"
+          title="Explore hierarchy"
         >
-          {/* Tree/hierarchy icon */}
-          <path d="M12 3v6" />
-          <path d="M12 9l-4 4" />
-          <path d="M12 9l4 4" />
-          <circle cx="12" cy="3" r="2" fill="currentColor" />
-          <circle cx="8" cy="15" r="2" fill="currentColor" />
-          <circle cx="16" cy="15" r="2" fill="currentColor" />
-          <path d="M8 17v2" />
-          <path d="M16 17v2" />
-          <circle cx="8" cy="21" r="1.5" fill="currentColor" />
-          <circle cx="16" cy="21" r="1.5" fill="currentColor" />
-        </svg>
-      </button>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-blue-400"
+          >
+            {/* Tree/hierarchy icon */}
+            <path d="M12 3v6" />
+            <path d="M12 9l-4 4" />
+            <path d="M12 9l4 4" />
+            <circle cx="12" cy="3" r="2" fill="currentColor" />
+            <circle cx="8" cy="15" r="2" fill="currentColor" />
+            <circle cx="16" cy="15" r="2" fill="currentColor" />
+            <path d="M8 17v2" />
+            <path d="M16 17v2" />
+            <circle cx="8" cy="21" r="1.5" fill="currentColor" />
+            <circle cx="16" cy="21" r="1.5" fill="currentColor" />
+          </svg>
+        </button>
+      )}
+      {/* Eye icon - follow leg (#267) */}
+      {onEyeIconClick && (
+        <button
+          onClick={handleEyeIconClick}
+          className={`w-6 h-6 border rounded-md flex items-center justify-center transition-colors cursor-pointer ${
+            isCurrentLegFollowed
+              ? 'bg-green-900 border-green-500 hover:bg-green-800'
+              : 'bg-slate-800 border-slate-600 hover:bg-slate-700 hover:border-green-400'
+          }`}
+          title={isCurrentLegFollowed ? "Unfollow leg" : "Follow leg"}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill={isCurrentLegFollowed ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={isCurrentLegFollowed ? "text-green-400" : "text-green-400"}
+          >
+            {/* Eye icon */}
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 };

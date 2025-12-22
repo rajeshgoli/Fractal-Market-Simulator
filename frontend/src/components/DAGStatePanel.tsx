@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { DagStateResponse, DagLeg, DagPendingOrigin } from '../lib/api';
 import { LegEvent, HighlightedDagItem } from '../types';
 import { GitBranch, Circle, Target, History, ChevronDown, Paperclip } from 'lucide-react';
+import { FollowedLegsPanel } from './FollowedLegsPanel';
+import { FollowedLeg } from '../hooks/useFollowLeg';
 
 // Types for attachable items
 export type AttachableItem =
@@ -20,6 +22,10 @@ interface DAGStatePanelProps {
   onDetachItem?: (item: AttachableItem) => void;
   // Focus support (from chart click)
   focusedLegId?: string | null;
+  // Follow Leg support (#267)
+  followedLegs?: FollowedLeg[];
+  onUnfollowLeg?: (legId: string) => void;
+  onFollowedLegClick?: (legId: string) => void;
 }
 
 // Format price for display
@@ -178,6 +184,9 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
   onAttachItem,
   onDetachItem,
   focusedLegId,
+  followedLegs = [],
+  onUnfollowLeg,
+  onFollowedLegClick,
 }) => {
   // Expansion state for each section
   const [bullLegsLimit, setBullLegsLimit] = useState(6);
@@ -352,85 +361,12 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
           </div>
         </div>
 
-        {/* Column 3: Pending Origins */}
-        <div className="p-3 flex flex-col overflow-hidden">
-          <div className="flex items-center gap-2 mb-2">
-            <Target size={12} className="text-trading-purple" />
-            <span className="text-xs text-app-muted font-medium uppercase tracking-wider">
-              Pending Origins
-            </span>
-          </div>
-          <div className="flex-1 space-y-3">
-            {/* Bull Origin */}
-            <div>
-              <span className="text-[10px] text-trading-bull uppercase block mb-1">Bull</span>
-              {pending_origins.bull ? (() => {
-                const isAttached = isItemAttached(attachedItems, 'pending_origin', 'bull');
-                return (
-                  <div
-                    className={`text-xs bg-trading-bull/10 rounded px-2 py-2 border cursor-pointer transition-all duration-150 ${
-                      isAttached
-                        ? 'border-trading-purple ring-2 ring-trading-purple/50'
-                        : highlightedItem?.type === 'pending_origin' && highlightedItem.id === 'bull'
-                        ? 'border-trading-bull ring-2 ring-trading-bull/50 scale-[1.02]'
-                        : 'border-trading-bull/20 hover:border-trading-bull/40'
-                    }`}
-                    onMouseEnter={() => onHoverItem?.({ type: 'pending_origin', id: 'bull', direction: 'bull' })}
-                    onMouseLeave={() => onHoverItem?.(null)}
-                    onClick={() => handleItemClick({ type: 'pending_origin', data: pending_origins.bull! }, 'bull')}
-                  >
-                    <div className="flex justify-between mb-1">
-                      <span className="font-mono font-medium flex items-center gap-1">
-                        {isAttached && <Paperclip size={10} className="text-trading-purple" />}
-                        {formatPrice(pending_origins.bull.price)}
-                      </span>
-                      <span className="text-app-muted">@{pending_origins.bull.bar_index}</span>
-                    </div>
-                    <div className="text-[10px] text-app-muted">
-                      Source: {pending_origins.bull.source}
-                    </div>
-                  </div>
-                );
-              })() : (
-                <span className="text-xs text-app-muted italic">None pending</span>
-              )}
-            </div>
-            {/* Bear Origin */}
-            <div>
-              <span className="text-[10px] text-trading-bear uppercase block mb-1">Bear</span>
-              {pending_origins.bear ? (() => {
-                const isAttached = isItemAttached(attachedItems, 'pending_origin', 'bear');
-                return (
-                  <div
-                    className={`text-xs bg-trading-bear/10 rounded px-2 py-2 border cursor-pointer transition-all duration-150 ${
-                      isAttached
-                        ? 'border-trading-purple ring-2 ring-trading-purple/50'
-                        : highlightedItem?.type === 'pending_origin' && highlightedItem.id === 'bear'
-                        ? 'border-trading-bear ring-2 ring-trading-bear/50 scale-[1.02]'
-                        : 'border-trading-bear/20 hover:border-trading-bear/40'
-                    }`}
-                    onMouseEnter={() => onHoverItem?.({ type: 'pending_origin', id: 'bear', direction: 'bear' })}
-                    onMouseLeave={() => onHoverItem?.(null)}
-                    onClick={() => handleItemClick({ type: 'pending_origin', data: pending_origins.bear! }, 'bear')}
-                  >
-                    <div className="flex justify-between mb-1">
-                      <span className="font-mono font-medium flex items-center gap-1">
-                        {isAttached && <Paperclip size={10} className="text-trading-purple" />}
-                        {formatPrice(pending_origins.bear.price)}
-                      </span>
-                      <span className="text-app-muted">@{pending_origins.bear.bar_index}</span>
-                    </div>
-                    <div className="text-[10px] text-app-muted">
-                      Source: {pending_origins.bear.source}
-                    </div>
-                  </div>
-                );
-              })() : (
-                <span className="text-xs text-app-muted italic">None pending</span>
-              )}
-            </div>
-          </div>
-        </div>
+        {/* Column 3: Followed Legs (#267) */}
+        <FollowedLegsPanel
+          followedLegs={followedLegs}
+          onUnfollow={onUnfollowLeg || (() => {})}
+          onLegClick={onFollowedLegClick}
+        />
 
         {/* Column 4: Recent Events Log */}
         <div className="p-3 flex flex-col overflow-hidden">
