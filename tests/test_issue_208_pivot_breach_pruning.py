@@ -69,16 +69,20 @@ class TestConfigParameters:
 class TestPivotBreachDetection:
     """Test pivot breach detection for formed legs."""
 
-    def test_bear_leg_pivot_breach_creates_replacement(self):
+    def test_bear_leg_pivot_extends_when_origin_not_breached(self):
         """
-        When a bear leg's pivot (low) is breached beyond threshold,
-        the leg should be pruned and replaced with a new leg.
+        When origin is NOT breached, the pivot EXTENDS to track new extremes.
+        This is NOT a "pivot breach" - it's the leg growing.
+
+        Pivot breach only occurs when:
+        1. Origin is breached first (freezes the pivot)
+        2. Then price goes past the frozen pivot
 
         Scenario:
         - Bear leg forms: origin=4450, pivot=4420 (range=30)
-        - Price retraces up (bull move), then drops back
-        - Price goes to 4415 (5 points below pivot = 16.7% > 10% threshold)
-        - Original leg should be pruned, replacement created at 4450->4415
+        - Price retraces up (but doesn't breach origin at 4450)
+        - Price drops below pivot to 4415
+        - Since origin NOT breached, pivot EXTENDS to 4415 (not breached)
         """
         detector = HierarchicalDetector()
 
@@ -110,7 +114,6 @@ class TestPivotBreachDetection:
         assert bear_leg.pivot_price == Decimal('4420')
 
         # Bar 3: Type 2-Bull retracement - causes leg to form (38.2% retrace)
-        # Range = 30, 38.2% = 11.46 points, so price needs to reach ~4431.5
         bar3 = make_bar(3, 4422.0, 4435.0, 4425.0, 4433.0)
         detector.process_bar(bar3)
 
@@ -121,41 +124,37 @@ class TestPivotBreachDetection:
         ]
         formed_bear_legs = [leg for leg in bear_legs if leg.formed]
         assert len(formed_bear_legs) >= 1
+        bear_leg = formed_bear_legs[0]
+        assert bear_leg.max_origin_breach is None  # Origin NOT breached
 
-        # Bar 4: Price drops below original pivot to 4415
-        # Breach = 5 points, range = 30, breach_frac = 16.7% > 10% threshold
+        # Bar 4: Price drops below pivot to 4415
+        # Since origin is NOT breached, pivot EXTENDS (doesn't breach)
         bar4 = make_bar(4, 4433.0, 4434.0, 4415.0, 4417.0)
         events4 = detector.process_bar(bar4)
 
-        # Check that a LegPrunedEvent was emitted with reason="pivot_breach"
+        # No pivot breach prune should occur - pivot extended instead
         prune_events = [e for e in events4 if isinstance(e, LegPrunedEvent)]
-        assert len(prune_events) >= 1
-        assert any(e.reason == "pivot_breach" for e in prune_events)
+        pivot_breach_events = [e for e in prune_events if e.reason == "pivot_breach"]
+        assert len(pivot_breach_events) == 0
 
-        # Check that a replacement LegCreatedEvent was emitted
-        create_events = [e for e in events4 if isinstance(e, LegCreatedEvent)]
-        assert len(create_events) >= 1
-
-        # The replacement leg should have the new pivot at 4415
-        replacement_legs = [
+        # Verify the pivot EXTENDED to 4415 (not breached)
+        bear_leg = next(
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bear' and leg.status == 'active'
-            and leg.origin_price == Decimal('4450')
-        ]
-        assert len(replacement_legs) >= 1
-        # At least one should have pivot at 4415
-        assert any(leg.pivot_price == Decimal('4415') for leg in replacement_legs)
+            if leg.direction == 'bear' and leg.origin_price == Decimal('4450')
+        )
+        assert bear_leg.pivot_price == Decimal('4415')  # Extended
+        assert bear_leg.max_pivot_breach is None  # Not breached
 
-    def test_bull_leg_pivot_breach_creates_replacement(self):
+    def test_bull_leg_pivot_extends_when_origin_not_breached(self):
         """
-        When a bull leg's pivot (high) is breached beyond threshold,
-        the leg should be pruned and replaced with a new leg.
+        When origin is NOT breached, the pivot EXTENDS to track new extremes.
+        This is NOT a "pivot breach" - it's the leg growing.
 
         Scenario:
         - Bull leg forms: origin=4400, pivot=4430 (range=30)
-        - Price retraces down, then rallies
-        - Price goes to 4435 (5 points above pivot = 16.7% > 10% threshold)
-        - Original leg should be pruned, replacement created at 4400->4435
+        - Price retraces down (but doesn't breach origin at 4400)
+        - Price rallies above pivot to 4435
+        - Since origin NOT breached, pivot EXTENDS to 4435 (not breached)
         """
         detector = HierarchicalDetector()
 
@@ -179,36 +178,36 @@ class TestPivotBreachDetection:
         assert len(bull_legs) >= 1
 
         # Bar 3: Type 2-Bear retracement - causes leg to form (38.2% retrace)
-        # Range = 30, price retraces toward origin
         bar3 = make_bar(3, 4428.0, 4429.0, 4412.0, 4415.0)
         detector.process_bar(bar3)
 
-        # Verify leg is now formed
+        # Verify leg is now formed and origin NOT breached
         bull_legs = [
             leg for leg in detector.state.active_legs
             if leg.direction == 'bull' and leg.status == 'active'
         ]
         formed_bull_legs = [leg for leg in bull_legs if leg.formed]
         assert len(formed_bull_legs) >= 1
+        bull_leg = formed_bull_legs[0]
+        assert bull_leg.max_origin_breach is None  # Origin NOT breached
 
-        # Bar 4: Price rallies above original pivot to 4435
-        # Breach = 5 points, range = 30, breach_frac = 16.7% > 10% threshold
+        # Bar 4: Price rallies above pivot to 4435
+        # Since origin NOT breached, pivot EXTENDS (doesn't breach)
         bar4 = make_bar(4, 4415.0, 4435.0, 4414.0, 4433.0)
         events4 = detector.process_bar(bar4)
 
-        # Check that a LegPrunedEvent was emitted with reason="pivot_breach"
+        # No pivot breach prune should occur - pivot extended instead
         prune_events = [e for e in events4 if isinstance(e, LegPrunedEvent)]
-        assert len(prune_events) >= 1
-        assert any(e.reason == "pivot_breach" for e in prune_events)
+        pivot_breach_events = [e for e in prune_events if e.reason == "pivot_breach"]
+        assert len(pivot_breach_events) == 0
 
-        # The replacement leg should have the new pivot at 4435
-        replacement_legs = [
+        # Verify the pivot EXTENDED to 4435 (not breached)
+        bull_leg = next(
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
-            and leg.origin_price == Decimal('4400')
-        ]
-        assert len(replacement_legs) >= 1
-        assert any(leg.pivot_price == Decimal('4435') for leg in replacement_legs)
+            if leg.direction == 'bull' and leg.origin_price == Decimal('4400')
+        )
+        assert bull_leg.pivot_price == Decimal('4435')  # Extended
+        assert bull_leg.max_pivot_breach is None  # Not breached
 
     def test_pivot_breach_threshold_boundary(self):
         """
@@ -309,15 +308,17 @@ class TestEngulfedLegDetection:
 
     def test_engulfed_leg_deleted_no_replacement(self):
         """
-        When both origin AND pivot are breached with combined breach >= 20%,
-        the leg should be deleted with no replacement.
+        When both origin AND pivot are breached, the leg should be deleted
+        with no replacement (engulfed).
 
         Scenario:
         - Bear leg forms: origin=4450, pivot=4420 (range=30)
-        - Origin breached by 3 points (10%) on one bar
-        - Pivot breached by 4 points (13.3%) on another bar
-        - Combined = 23.3% > 20% threshold
-        - Leg should be deleted
+        - Origin breached first (freezes pivot)
+        - Then pivot breached (price drops below frozen pivot)
+        - On next bar, prune_breach_legs sees both breaches and deletes leg
+
+        Note: prune_breach_legs runs at START of process_bar, so the engulfed
+        prune happens on the bar AFTER both breaches are set.
         """
         detector = HierarchicalDetector()
 
@@ -343,29 +344,41 @@ class TestEngulfedLegDetection:
         assert len(bear_legs) >= 1
         original_leg_id = bear_legs[0].leg_id
 
-        # Bar 4: Breach origin by going above 4450 to 4453 (3 points = 10%)
+        # Bar 4: Breach origin by going above 4450 to 4453
+        # This freezes the pivot (origin is now breached)
         bar4 = make_bar(4, 4433.0, 4453.0, 4430.0, 4445.0)
         detector.process_bar(bar4)
 
-        # Bar 5: Breach pivot by going below 4420 to 4416 (4 points = 13.3%)
-        # Combined breach = 10% + 13.3% = 23.3% > 20% threshold
+        # Verify origin is breached and pivot is frozen at 4420
+        bear_leg = next(l for l in detector.state.active_legs if l.leg_id == original_leg_id)
+        assert bear_leg.max_origin_breach is not None
+        assert bear_leg.pivot_price == Decimal('4420')
+
+        # Bar 5: Breach pivot by going below frozen pivot 4420 to 4416
+        # This sets max_pivot_breach (since origin is already breached)
         bar5 = make_bar(5, 4445.0, 4448.0, 4416.0, 4418.0)
-        events5 = detector.process_bar(bar5)
+        detector.process_bar(bar5)
+
+        # Verify pivot is now also breached
+        bear_leg = next((l for l in detector.state.active_legs if l.leg_id == original_leg_id), None)
+        if bear_leg:
+            assert bear_leg.max_pivot_breach is not None
+
+        # Bar 6: Next bar triggers prune_breach_legs which sees both breaches
+        bar6 = make_bar(6, 4418.0, 4420.0, 4415.0, 4417.0)
+        events6 = detector.process_bar(bar6)
 
         # Check that a LegPrunedEvent was emitted with reason="engulfed"
-        prune_events = [e for e in events5 if isinstance(e, LegPrunedEvent)]
+        prune_events = [e for e in events6 if isinstance(e, LegPrunedEvent)]
         engulfed_events = [e for e in prune_events if e.reason == "engulfed"]
         assert len(engulfed_events) >= 1
 
-        # No replacement should be created (no LegCreatedEvent with same origin)
-        create_events = [e for e in events5 if isinstance(e, LegCreatedEvent)]
-        # Filter to only those from same origin - should be empty for engulfed
-        # (Note: there might be other legs created, so we check specifically)
+        # No replacement should be created for engulfed legs
+        create_events = [e for e in events6 if isinstance(e, LegCreatedEvent)]
         replacement_events = [
             e for e in create_events
             if e.origin_price == Decimal('4450')
         ]
-        # For engulfed, there should be no replacement
         assert len(replacement_events) == 0
 
         # The original leg should no longer be in active_legs
@@ -409,21 +422,18 @@ class TestEngulfedLegDetection:
 
 
 class TestReplacementLegBehavior:
-    """Test that replacement legs behave correctly."""
+    """Test pivot extension behavior when origin is not breached."""
 
-    def test_replacement_leg_starts_unformed_when_created(self):
+    def test_pivot_extends_to_new_extreme(self):
         """
-        Replacement legs are created with formed=False, but may form on the same bar
-        if the close price already satisfies the formation threshold.
+        When origin is NOT breached, the pivot extends to track new extremes.
+        No "replacement" leg is created - the original leg just updates its pivot.
 
-        The key is that replacement legs are created with formed=False by the pruner,
-        and then formation checks happen normally on each bar.
-
-        In this test, the close price is near the pivot (4417 close vs 4415 pivot),
-        which gives a retracement of about 94% from origin 4450 (range 35),
-        so the leg forms immediately. This is correct behavior.
-
-        We verify the replacement leg exists and has the right properties.
+        Scenario:
+        - Bear leg forms with pivot at 4420
+        - Price drops to 4415 (below original pivot)
+        - Since origin NOT breached, pivot EXTENDS to 4415
+        - The same leg continues with updated pivot
         """
         detector = HierarchicalDetector()
 
@@ -440,28 +450,34 @@ class TestReplacementLegBehavior:
         bar3 = make_bar(3, 4422.0, 4435.0, 4425.0, 4433.0)
         detector.process_bar(bar3)
 
-        # Trigger pivot breach
+        # Get the leg ID before pivot extends
+        bear_leg = next(
+            leg for leg in detector.state.active_legs
+            if leg.direction == 'bear' and leg.origin_price == Decimal('4450')
+        )
+        original_leg_id = bear_leg.leg_id
+        assert bear_leg.pivot_price == Decimal('4420')
+
+        # Bar 4: Price drops to 4415 - pivot extends (not a breach)
         bar4 = make_bar(4, 4433.0, 4434.0, 4415.0, 4417.0)
         events4 = detector.process_bar(bar4)
 
-        # Verify a LegCreatedEvent was emitted for the replacement
+        # No replacement leg created - same leg extends
         create_events = [e for e in events4 if isinstance(e, LegCreatedEvent)]
-        assert len(create_events) >= 1
+        replacement_events = [e for e in create_events if e.origin_price == Decimal('4450')]
+        assert len(replacement_events) == 0  # No new leg from same origin
 
-        # Find the replacement leg
-        replacement_legs = [
+        # The SAME leg now has pivot at 4415
+        bear_leg = next(
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bear' and leg.status == 'active'
-            and leg.origin_price == Decimal('4450')
-            and leg.pivot_price == Decimal('4415')
-        ]
-        assert len(replacement_legs) >= 1
-        # The replacement formed immediately (close is 94% from origin)
-        # This is correct - formation happens normally after creation
+            if leg.leg_id == original_leg_id
+        )
+        assert bear_leg.pivot_price == Decimal('4415')  # Extended, not replaced
+        assert bear_leg.max_pivot_breach is None  # Not breached
 
-    def test_replacement_leg_can_extend(self):
+    def test_pivot_continues_extending(self):
         """
-        Replacement legs should be able to continue extending as price moves.
+        Pivot continues to extend as price makes new extremes.
         """
         detector = HierarchicalDetector()
 
@@ -478,29 +494,29 @@ class TestReplacementLegBehavior:
         bar3 = make_bar(3, 4422.0, 4435.0, 4425.0, 4433.0)
         detector.process_bar(bar3)
 
-        # Trigger pivot breach at 4415
+        # Bar 4: First extension to 4415
         bar4 = make_bar(4, 4433.0, 4434.0, 4415.0, 4417.0)
         detector.process_bar(bar4)
 
-        # Verify replacement at 4415
-        replacement_legs = [
+        # Verify pivot at 4415
+        bear_leg = next(
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bear' and leg.status == 'active'
-            and leg.origin_price == Decimal('4450')
-        ]
-        assert any(leg.pivot_price == Decimal('4415') for leg in replacement_legs)
+            if leg.direction == 'bear' and leg.origin_price == Decimal('4450')
+        )
+        assert bear_leg.pivot_price == Decimal('4415')
 
-        # Bar 5: Price continues down to 4410 - replacement should extend
+        # Bar 5: Continue extending to 4410
         bar5 = make_bar(5, 4417.0, 4418.0, 4410.0, 4412.0)
         detector.process_bar(bar5)
 
-        # Replacement leg should now have pivot at 4410
-        extended_legs = [
+        # Pivot extended to 4410
+        bear_leg = next(
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bear' and leg.status == 'active'
-            and leg.origin_price == Decimal('4450')
-        ]
-        assert any(leg.pivot_price == Decimal('4410') for leg in extended_legs)
+            if leg.direction == 'bear' and leg.origin_price == Decimal('4450')
+        )
+        assert bear_leg.pivot_price == Decimal('4410')  # Extended again
+        assert bear_leg.max_origin_breach is None  # Origin still not breached
+        assert bear_leg.max_pivot_breach is None  # Pivot still not breached
 
     def test_no_duplicate_replacement_legs(self):
         """

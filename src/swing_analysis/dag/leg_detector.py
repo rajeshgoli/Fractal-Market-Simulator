@@ -278,11 +278,14 @@ class LegDetector:
 
         Tracks maximum breach beyond origin and pivot for each leg.
         - Origin breach: price moved past the origin (invalidating direction)
-        - Pivot breach: retracement went too deep (only tracked for formed legs)
+        - Pivot breach: price moved past the pivot (violating defended level)
 
-        Per R1, pivot breach is detected when retracement exceeds threshold:
-        - Bull leg: bar_low < pivot - (threshold × range)
-        - Bear leg: bar_high > pivot + (threshold × range)
+        Pivot breach is only tracked for FORMED legs. Once formed, the pivot
+        is frozen as a structural reference. Price going past it = breach.
+        For unformed legs, price movement past pivot is extension, not breach.
+
+        Origin breach and pivot breach are independent - either can happen
+        without the other. If BOTH happen, the leg is "engulfed".
 
         Args:
             bar_high: Current bar's high as Decimal
@@ -307,32 +310,21 @@ class LegDetector:
                         leg.max_origin_breach = breach
 
             # Pivot breach tracking (only for formed legs)
-            # Per R1: check if retracement went beyond threshold
-            # Only track if this bar did NOT make a new extreme in the leg direction
-            # This prevents triggering on continuous trend bars
+            # Once formed, the pivot is frozen as a structural reference
+            # Price going past it = breach (for unformed legs, it would just extend)
             if leg.formed and leg.range > 0:
                 if leg.direction == 'bull':
-                    # Bull: only track if bar did NOT make new high (reversal/retracement)
-                    if bar_high <= leg.pivot_price:
-                        # Check if bar_low dropped below pivot - threshold×range
-                        threshold = Decimal(str(self.config.bull.pivot_breach_threshold))
-                        breach_level = leg.pivot_price - (threshold * leg.range)
-                        if bar_low < breach_level:
-                            # Track how far below the breach level
-                            breach = breach_level - bar_low
-                            if leg.max_pivot_breach is None or breach > leg.max_pivot_breach:
-                                leg.max_pivot_breach = breach
+                    # Bull pivot (HIGH) breached when price goes above it
+                    if bar_high > leg.pivot_price:
+                        breach = bar_high - leg.pivot_price
+                        if leg.max_pivot_breach is None or breach > leg.max_pivot_breach:
+                            leg.max_pivot_breach = breach
                 else:  # bear
-                    # Bear: only track if bar did NOT make new low (reversal/retracement)
-                    if bar_low >= leg.pivot_price:
-                        # Check if bar_high rose above pivot + threshold×range
-                        threshold = Decimal(str(self.config.bear.pivot_breach_threshold))
-                        breach_level = leg.pivot_price + (threshold * leg.range)
-                        if bar_high > breach_level:
-                            # Track how far above the breach level
-                            breach = bar_high - breach_level
-                            if leg.max_pivot_breach is None or breach > leg.max_pivot_breach:
-                                leg.max_pivot_breach = breach
+                    # Bear pivot (LOW) breached when price goes below it
+                    if bar_low < leg.pivot_price:
+                        breach = leg.pivot_price - bar_low
+                        if leg.max_pivot_breach is None or breach > leg.max_pivot_breach:
+                            leg.max_pivot_breach = breach
 
     def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[SwingFormedEvent]:
         """
