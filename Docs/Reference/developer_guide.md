@@ -410,9 +410,11 @@ Configuration:
 - `DirectionConfig.invalidation_threshold`: Configurable per direction (default: 0.382)
 - `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 999.0, effectively disabled)
 
-**Inner structure pruning (#264):**
+**Inner structure pruning (#264, #266):**
 
 When multiple legs of the same direction are invalidated simultaneously, prune counter-direction legs from inner structure pivots. Inner structure legs are redundant when an outer-origin leg exists with the same current pivot.
+
+**Important:** Swing immunity does NOT apply for inner structure pruning. If a leg is structurally inner (contained in a larger structure) and there's an outer-origin leg with the same pivot, the inner leg is redundant regardless of whether it formed a swing (#266).
 
 Example (bear direction):
 ```
@@ -435,6 +437,7 @@ Pruning conditions:
 2. One leg strictly contained in another
 3. Counter-direction legs exist from both pivots
 4. Both counter-direction legs share the same current pivot
+5. **No swing immunity** — inner structure legs are pruned even if they formed swings
 
 **Benefits:**
 - Multi-origin preservation: Keeps the best leg from each structural level

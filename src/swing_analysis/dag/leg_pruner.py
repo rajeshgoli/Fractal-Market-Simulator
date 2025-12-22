@@ -619,22 +619,14 @@ class LegPruner:
         bear_invalidated = [leg for leg in invalidated_legs if leg.direction == 'bear']
         bull_invalidated = [leg for leg in invalidated_legs if leg.direction == 'bull']
 
-        # Build set of active swing IDs for immunity check
-        active_swing_ids = {
-            swing.swing_id for swing in state.active_swings
-            if swing.status == 'active'
-        }
-
         # Process bear invalidated legs -> prune inner bull legs
         events.extend(self._prune_inner_structure_for_direction(
-            state, bear_invalidated, 'bull', bar, timestamp,
-            pruned_leg_ids, active_swing_ids
+            state, bear_invalidated, 'bull', bar, timestamp, pruned_leg_ids
         ))
 
         # Process bull invalidated legs -> prune inner bear legs
         events.extend(self._prune_inner_structure_for_direction(
-            state, bull_invalidated, 'bear', bar, timestamp,
-            pruned_leg_ids, active_swing_ids
+            state, bull_invalidated, 'bear', bar, timestamp, pruned_leg_ids
         ))
 
         # Remove pruned legs from active_legs
@@ -654,10 +646,13 @@ class LegPruner:
         bar: Bar,
         timestamp: datetime,
         pruned_leg_ids: Set[str],
-        active_swing_ids: Set[str],
     ) -> List[LegPrunedEvent]:
         """
         Prune inner structure legs for a specific direction pair.
+
+        No swing immunity for inner_structure pruning - if a leg is structurally
+        inner (contained in a larger structure) and there's an outer-origin leg
+        with the same pivot, the inner leg is redundant regardless of swing status.
 
         Args:
             state: Current detector state
@@ -666,7 +661,6 @@ class LegPruner:
             bar: Current bar
             timestamp: Timestamp for events
             pruned_leg_ids: Set to track pruned leg IDs (mutated)
-            active_swing_ids: Set of swing IDs that are currently active
 
         Returns:
             List of LegPrunedEvent for pruned legs
@@ -737,9 +731,10 @@ class LegPruner:
                     if not outer_leg_exists:
                         continue
 
-                    # Active swing immunity
-                    if inner_leg.swing_id and inner_leg.swing_id in active_swing_ids:
-                        continue
+                    # No swing immunity for inner_structure pruning (#264)
+                    # If the leg is structurally inner (contained in a larger structure)
+                    # and there's an outer-origin leg with the same pivot, the inner
+                    # leg is redundant regardless of whether it formed a swing.
 
                     # Prune the inner-origin counter-leg
                     inner_leg.status = 'pruned'

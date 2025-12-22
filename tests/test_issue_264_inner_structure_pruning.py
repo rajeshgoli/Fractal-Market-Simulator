@@ -370,35 +370,20 @@ class TestInnerStructurePruningEdgeCases:
         inner_structure_events = [e for e in prune_events if e.reason == 'inner_structure']
         assert len(inner_structure_events) == 0
 
-    def test_active_swing_immunity(self):
+    def test_no_swing_immunity_for_inner_structure(self):
         """
-        Legs that have formed into active swings should be immune from
-        inner structure pruning.
+        Swing immunity does NOT apply for inner structure pruning.
+
+        If a leg is structurally inner (contained in a larger structure)
+        and there's an outer-origin leg with the same pivot, the inner
+        leg is redundant regardless of whether it formed a swing.
+
+        See test_issue_266_no_swing_immunity.py for comprehensive test.
         """
-        detector = HierarchicalDetector()
-
-        # Create scenario where inner leg forms into swing
-        bar0 = make_bar(0, 6095.0, 6100.0, 6090.0, 6095.0)
-        detector.process_bar(bar0)
-
-        bar1 = make_bar(1, 6095.0, 6098.0, 5900.0, 5910.0)
-        detector.process_bar(bar1)
-
-        bar2 = make_bar(2, 5910.0, 6050.0, 5905.0, 6045.0)
-        detector.process_bar(bar2)
-
-        bar3 = make_bar(3, 6045.0, 6048.0, 5950.0, 5960.0)
-        detector.process_bar(bar3)
-
-        # Check if any bull leg has formed into a swing
-        bull_legs_with_swing = [
-            leg for leg in detector.state.active_legs
-            if leg.direction == 'bull' and leg.swing_id
-        ]
-
-        # The test verifies immunity - if a leg has an active swing,
-        # it won't be pruned. Due to various pruning rules, we may not
-        # always get legs with swings, but the logic is correct.
+        # This is a placeholder - the comprehensive test is in
+        # test_issue_266_no_swing_immunity.py which verifies that
+        # inner structure legs ARE pruned even with active swings.
+        pass
 
 
 class TestLegPrunerUnit:
