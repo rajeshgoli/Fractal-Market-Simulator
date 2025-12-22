@@ -842,7 +842,7 @@ async def calibrate_replay(
     # DAG mode: Allow bar_count=0 for incremental build from scratch (#179)
     if actual_bar_count == 0:
         logger.info("DAG mode: initializing detector with 0 bars for incremental build")
-        config = SwingConfig.default()
+        config = SwingConfig.default().with_proximity_prune(0.0)  # DEBUG: disable proximity pruning
         ref_layer = ReferenceLayer(config)
         detector = LegDetector(config)
 
