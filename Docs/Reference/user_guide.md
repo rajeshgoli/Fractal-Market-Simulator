@@ -523,8 +523,8 @@ In Market Structure View, all playback controls are functional:
 Hierarchy exploration mode lets you visualize parent-child relationships between legs, showing structural nesting and containment.
 
 **How to enter:**
-1. Hover over any leg line on the chart for 1 second
-2. A tree icon appears near the pivot point
+1. Click on any leg line on the chart
+2. The leg highlights in the panel and a tree icon appears near the pivot point
 3. Click the tree icon to enter hierarchy mode
 
 **What you see:**

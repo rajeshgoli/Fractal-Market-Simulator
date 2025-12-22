@@ -110,10 +110,9 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
   // Track current hovered leg to avoid redundant callbacks
   const currentHoveredLegRef = useRef<string | null>(null);
 
-  // Tree icon hover state (#252)
+  // Tree icon state - shown on click (#252)
   const [treeIconLegId, setTreeIconLegId] = useState<string | null>(null);
   const [treeIconPosition, setTreeIconPosition] = useState<{ x: number; y: number } | null>(null);
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clear all existing line series
   const clearLineSeries = useCallback(() => {
@@ -291,7 +290,7 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     return nearestLeg;
   }, [chart, series, legs, bars, currentPosition, getTimestampForIndex]);
 
-  // Handle hover detection via crosshair move + tree icon timer (#252)
+  // Handle hover detection via crosshair move
   useEffect(() => {
     if (!chart || !series) return;
 
@@ -302,13 +301,6 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
           currentHoveredLegRef.current = null;
           onLegHover?.(null);
         }
-        // Clear tree icon timer
-        if (hoverTimerRef.current) {
-          clearTimeout(hoverTimerRef.current);
-          hoverTimerRef.current = null;
-        }
-        setTreeIconLegId(null);
-        setTreeIconPosition(null);
         return;
       }
 
@@ -322,38 +314,6 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       if (hoveredLeg !== currentHoveredLegRef.current) {
         currentHoveredLegRef.current = hoveredLeg;
         onLegHover?.(hoveredLeg);
-
-        // Clear existing timer
-        if (hoverTimerRef.current) {
-          clearTimeout(hoverTimerRef.current);
-          hoverTimerRef.current = null;
-        }
-
-        // Hide tree icon when hovering over different leg
-        if (treeIconLegId !== hoveredLeg) {
-          setTreeIconLegId(null);
-          setTreeIconPosition(null);
-        }
-
-        // Start 1s timer for tree icon if hovering a leg (#252)
-        if (hoveredLeg && onTreeIconClick && !hierarchyMode?.isActive) {
-          hoverTimerRef.current = setTimeout(() => {
-            // Get leg center position for tree icon
-            const leg = legs.find(l => l.leg_id === hoveredLeg);
-            if (leg) {
-              const pivotTime = getTimestampForIndex(leg.pivot_index);
-              if (pivotTime !== null) {
-                const timeScale = chart.timeScale();
-                const x = timeScale.timeToCoordinate(pivotTime as Time);
-                const y = series.priceToCoordinate(leg.pivot_price);
-                if (x !== null && y !== null) {
-                  setTreeIconLegId(hoveredLeg);
-                  setTreeIconPosition({ x, y: y - 25 }); // Position above pivot
-                }
-              }
-            }
-          }, 1000);
-        }
       }
     };
 
@@ -361,15 +321,12 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
 
     return () => {
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
-      if (hoverTimerRef.current) {
-        clearTimeout(hoverTimerRef.current);
-      }
     };
-  }, [chart, series, onLegHover, findNearestLeg, onTreeIconClick, hierarchyMode?.isActive, legs, getTimestampForIndex, treeIconLegId]);
+  }, [chart, series, onLegHover, findNearestLeg]);
 
-  // Handle click detection
+  // Handle click detection - show tree icon on click (#252)
   useEffect(() => {
-    if (!chart || !series || (!onLegClick && !onLegDoubleClick)) return;
+    if (!chart || !series) return;
 
     const chartElement = chart.chartElement();
 
@@ -384,10 +341,21 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       const time = timeScale.coordinateToTime(x);
       const price = series.coordinateToPrice(y);
 
-      if (time === null || price === null) return;
+      if (time === null || price === null) {
+        // Clicked outside valid area - hide tree icon
+        setTreeIconLegId(null);
+        setTreeIconPosition(null);
+        return;
+      }
 
       const clickedLeg = findNearestLeg(time as number, price);
-      if (!clickedLeg) return;
+
+      if (!clickedLeg) {
+        // Clicked but no leg nearby - hide tree icon
+        setTreeIconLegId(null);
+        setTreeIconPosition(null);
+        return;
+      }
 
       const now = Date.now();
       const DOUBLE_CLICK_THRESHOLD = 300; // ms
@@ -401,6 +369,9 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
         onLegDoubleClick?.(clickedLeg);
         lastClickTimeRef.current = 0;
         lastClickLegRef.current = null;
+        // Hide tree icon on double-click
+        setTreeIconLegId(null);
+        setTreeIconPosition(null);
       } else {
         // Single click - delay to see if it becomes a double-click
         lastClickTimeRef.current = now;
@@ -410,6 +381,22 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
         setTimeout(() => {
           if (lastClickLegRef.current === clickedLeg && now === lastClickTimeRef.current) {
             onLegClick?.(clickedLeg);
+
+            // Show tree icon near pivot if not in hierarchy mode (#252)
+            if (onTreeIconClick && !hierarchyMode?.isActive) {
+              const leg = legs.find(l => l.leg_id === clickedLeg);
+              if (leg) {
+                const pivotTime = getTimestampForIndex(leg.pivot_index);
+                if (pivotTime !== null) {
+                  const pivotX = timeScale.timeToCoordinate(pivotTime as Time);
+                  const pivotY = series.priceToCoordinate(leg.pivot_price);
+                  if (pivotX !== null && pivotY !== null) {
+                    setTreeIconLegId(clickedLeg);
+                    setTreeIconPosition({ x: pivotX, y: pivotY - 25 }); // Position above pivot
+                  }
+                }
+              }
+            }
           }
         }, DOUBLE_CLICK_THRESHOLD);
       }
@@ -420,7 +407,7 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     return () => {
       chartElement.removeEventListener('click', handleClick);
     };
-  }, [chart, series, onLegClick, onLegDoubleClick, findNearestLeg]);
+  }, [chart, series, onLegClick, onLegDoubleClick, findNearestLeg, onTreeIconClick, hierarchyMode?.isActive, legs, getTimestampForIndex]);
 
   // Update line series when legs or bars change
   useEffect(() => {
