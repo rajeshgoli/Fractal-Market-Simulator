@@ -8,9 +8,11 @@ import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
 import { LegOverlay } from '../components/LegOverlay';
 import { PendingOriginsOverlay } from '../components/PendingOriginsOverlay';
 import { HierarchyModeOverlay } from '../components/HierarchyModeOverlay';
+import { EventMarkersOverlay } from '../components/EventMarkersOverlay';
+import { EventInspectionPopup } from '../components/EventInspectionPopup';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { useHierarchyMode } from '../hooks/useHierarchyMode';
-import { useFollowLeg } from '../hooks/useFollowLeg';
+import { useFollowLeg, LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
 import {
   fetchBars,
   fetchSession,
@@ -123,6 +125,13 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
 
   // Feedback attachment state (max 5 items)
   const [attachedItems, setAttachedItems] = useState<AttachableItem[]>([]);
+
+  // Event inspection popup state (#267)
+  const [eventPopup, setEventPopup] = useState<{
+    events: LifecycleEventWithLegInfo[];
+    barIndex: number;
+    position: { x: number; y: number };
+  } | null>(null);
 
   const handleAttachItem = useCallback((item: AttachableItem) => {
     setAttachedItems(prev => {
@@ -327,6 +336,25 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
       }
     }
   }, [followLeg, dagState, currentPlaybackPosition]);
+
+  // Fetch lifecycle events for followed legs when playback advances (#267)
+  useEffect(() => {
+    if (calibrationPhase === CalibrationPhase.PLAYING && followLeg.followedLegs.length > 0) {
+      followLeg.fetchEventsForFollowedLegs(currentPlaybackPosition);
+    }
+  }, [calibrationPhase, currentPlaybackPosition, followLeg]);
+
+  // TODO (#267): Marker click detection requires chart click handling + proximity check
+  // The SeriesMarkersPlugin doesn't expose click events directly.
+  // For now, users can see markers but clicking them isn't implemented yet.
+
+  // Handle attaching an event to feedback (#267)
+  const handleAttachEvent = useCallback((event: LifecycleEventWithLegInfo) => {
+    // Create attachment item from event - would need to extend AttachableItem type
+    // For now, just close the popup
+    console.log('Attach event:', event);
+    setEventPopup(null);
+  }, []);
 
   // Handler to start playback
   const handleStartPlayback = useCallback(() => {
@@ -891,6 +919,18 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             onRecenter={handleHierarchyRecenter}
           />
 
+          {/* Event Markers Overlays - lifecycle event markers on candles (#267) */}
+          <EventMarkersOverlay
+            markersPlugin={markers1Ref.current}
+            bars={chart1Bars}
+            eventsByBar={followLeg.eventsByBar}
+          />
+          <EventMarkersOverlay
+            markersPlugin={markers2Ref.current}
+            bars={chart2Bars}
+            eventsByBar={followLeg.eventsByBar}
+          />
+
           {/* Playback Controls */}
           <div className="shrink-0 z-10">
             <PlaybackControls
@@ -964,6 +1004,26 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             />
           </div>
         </main>
+
+        {/* Event Inspection Popup (#267) */}
+        {eventPopup && (
+          <EventInspectionPopup
+            events={eventPopup.events}
+            barIndex={eventPopup.barIndex}
+            csvIndex={sessionInfo ? sessionInfo.windowOffset + eventPopup.barIndex : undefined}
+            position={eventPopup.position}
+            onClose={() => setEventPopup(null)}
+            onAttachEvent={handleAttachEvent}
+            onFocusLeg={(legId) => {
+              setFocusedLegId(legId);
+              const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+              if (leg) {
+                setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
+              }
+              setEventPopup(null);
+            }}
+          />
+        )}
       </div>
     </div>
   );
