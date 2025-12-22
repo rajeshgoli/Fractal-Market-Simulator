@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-22
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- #281 — Implement leg hierarchy (parent-child relationships)
 - #279 — Fix inner structure pruning for sequential invalidation
 - #278 — Enable backward navigation through cached DAG states
 

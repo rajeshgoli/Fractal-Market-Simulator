@@ -171,6 +171,11 @@ class LegPruner:
                     reason="dominated_in_turn",
                 ))
 
+        # Reparent children of pruned legs before removal (#281)
+        for leg in state.active_legs:
+            if leg.leg_id in pruned_leg_ids:
+                self.reparent_children(state, leg)
+
         # Remove pruned legs from active_legs
         if pruned_leg_ids:
             state.active_legs = [
@@ -266,6 +271,11 @@ class LegPruner:
         events.extend(self._apply_proximity_prune(
             state, direction, bar, timestamp, best_per_origin, pruned_leg_ids, active_swing_ids
         ))
+
+        # Reparent children of pruned legs before removal (#281)
+        for leg in state.active_legs:
+            if leg.leg_id in pruned_leg_ids:
+                self.reparent_children(state, leg)
 
         # Remove pruned legs from active_legs
         state.active_legs = [
@@ -511,7 +521,9 @@ class LegPruner:
                 ))
 
         # Process legs to prune (engulfed - no replacement)
+        # Reparent children before removal (#281)
         for leg in legs_to_prune:
+            self.reparent_children(state, leg)
             leg.status = 'stale'
 
         # Process legs to replace (pivot breach)
@@ -528,6 +540,7 @@ class LegPruner:
 
             if not existing_replacement:
                 # Create replacement leg with new pivot
+                # Inherit parent from original leg (#281)
                 new_leg = Leg(
                     direction=leg.direction,
                     origin_price=leg.origin_price,
@@ -539,6 +552,7 @@ class LegPruner:
                     last_modified_bar=bar.index,
                     bar_count=0,
                     gap_count=0,
+                    parent_leg_id=leg.parent_leg_id,  # Inherit parent from original (#281)
                 )
                 state.active_legs.append(new_leg)
 
@@ -554,6 +568,8 @@ class LegPruner:
                     pivot_index=new_leg.pivot_index,
                 ))
 
+            # Reparent children before pruning original leg (#281)
+            self.reparent_children(state, leg)
             # Prune the original leg
             leg.status = 'stale'
             prune_events.append(LegPrunedEvent(
@@ -628,6 +644,11 @@ class LegPruner:
         events.extend(self._prune_inner_structure_for_direction(
             state, bull_invalidated, 'bear', bar, timestamp, pruned_leg_ids
         ))
+
+        # Reparent children of pruned legs before removal (#281)
+        for leg in state.active_legs:
+            if leg.leg_id in pruned_leg_ids:
+                self.reparent_children(state, leg)
 
         # Remove pruned legs from active_legs
         if pruned_leg_ids:
@@ -748,3 +769,24 @@ class LegPruner:
                     ))
 
         return events
+
+    def reparent_children(self, state: DetectorState, pruned_leg: Leg) -> None:
+        """
+        Reparent children of a pruned leg to its parent (grandparent) (#281).
+
+        When a leg is pruned, any legs that had it as parent need to be
+        reparented to the pruned leg's parent. This maintains the hierarchy
+        chain without gaps.
+
+        Example:
+        - Before: L4 (root) -> L5 -> L6
+        - If L5 is pruned: L4 (root) -> L6 (reparented)
+        - If the root is pruned: L6 becomes root (parent_leg_id = None)
+
+        Args:
+            state: Current detector state (mutated)
+            pruned_leg: The leg being pruned
+        """
+        for leg in state.active_legs:
+            if leg.parent_leg_id == pruned_leg.leg_id:
+                leg.parent_leg_id = pruned_leg.parent_leg_id  # Could be None (root)

@@ -563,6 +563,8 @@ class LegDetector:
             if not existing_bull_leg:
                 # Create new bull leg: origin at LOW -> pivot at HIGH
                 leg_range = abs(bar_high - pending.price)
+                # Find parent BEFORE creating leg (leg not yet in active_legs)
+                parent_leg_id = self._find_parent_for_leg('bull', pending.price, pending.bar_index)
                 new_leg = Leg(
                     direction='bull',
                     origin_price=pending.price,  # LOW - where upward move started
@@ -572,6 +574,7 @@ class LegDetector:
                     price_at_creation=bar_close,
                     last_modified_bar=bar.index,
                     impulse=_calculate_impulse(leg_range, pending.bar_index, bar.index),
+                    parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                 )
                 self.state.active_legs.append(new_leg)
                 # Clear pending origin after leg creation (#197)
@@ -651,6 +654,8 @@ class LegDetector:
             # Pivot extension handled by _extend_leg_pivots (#188)
             if not existing_bear_leg:
                 leg_range = abs(pending.price - bar_low)
+                # Find parent BEFORE creating leg (leg not yet in active_legs)
+                parent_leg_id = self._find_parent_for_leg('bear', pending.price, pending.bar_index)
                 new_bear_leg = Leg(
                     direction='bear',
                     origin_price=pending.price,  # HIGH - where downward move started
@@ -660,6 +665,7 @@ class LegDetector:
                     price_at_creation=bar_close,
                     last_modified_bar=bar.index,
                     impulse=_calculate_impulse(leg_range, pending.bar_index, bar.index),
+                    parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                 )
                 self.state.active_legs.append(new_bear_leg)
                 # Clear pending origin after leg creation (#197)
@@ -730,6 +736,8 @@ class LegDetector:
                 if (pending_bear.bar_index < pending_bull.bar_index
                     and not self._pruner.would_leg_be_dominated(self.state, 'bear', pending_bear.price)):
                     leg_range = abs(pending_bear.price - pending_bull.price)
+                    # Find parent BEFORE creating leg (leg not yet in active_legs)
+                    parent_leg_id = self._find_parent_for_leg('bear', pending_bear.price, pending_bear.bar_index)
                     new_bear_leg = Leg(
                         direction='bear',
                         origin_price=pending_bear.price,  # HIGH - where downward move started
@@ -739,6 +747,7 @@ class LegDetector:
                         price_at_creation=bar_close,
                         last_modified_bar=bar.index,
                         impulse=_calculate_impulse(leg_range, pending_bear.bar_index, pending_bull.bar_index),
+                        parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                     )
                     self.state.active_legs.append(new_bear_leg)
                     # Clear pending origins after leg creation (#197)
@@ -769,6 +778,8 @@ class LegDetector:
                 if (pending_bull.bar_index < pending_bear.bar_index
                     and not self._pruner.would_leg_be_dominated(self.state, 'bull', pending_bull.price)):
                     leg_range = abs(pending_bear.price - pending_bull.price)
+                    # Find parent BEFORE creating leg (leg not yet in active_legs)
+                    parent_leg_id = self._find_parent_for_leg('bull', pending_bull.price, pending_bull.bar_index)
                     new_bull_leg = Leg(
                         direction='bull',
                         origin_price=pending_bull.price,  # LOW - where upward move started
@@ -778,6 +789,7 @@ class LegDetector:
                         price_at_creation=bar_close,
                         last_modified_bar=bar.index,
                         impulse=_calculate_impulse(leg_range, pending_bull.bar_index, pending_bear.bar_index),
+                        parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                     )
                     self.state.active_legs.append(new_bull_leg)
                     # Clear pending origins after leg creation (#197)
@@ -1159,8 +1171,9 @@ class LegDetector:
                     leg.status = 'stale'
                     pruned_legs.append(leg)
 
-        # Emit LegPrunedEvent for each pruned leg
+        # Reparent children and emit LegPrunedEvent for each pruned leg (#281)
         for leg in pruned_legs:
+            self._pruner.reparent_children(self.state, leg)
             events.append(LegPrunedEvent(
                 bar_index=bar.index,
                 timestamp=timestamp,
@@ -1402,6 +1415,52 @@ class LegDetector:
             else:
                 break
         return level
+
+    def _find_parent_for_leg(self, direction: str, origin_price: Decimal, origin_index: int) -> Optional[str]:
+        """
+        Find parent leg_id for a new leg using time-price ordering (#281).
+
+        Parent-child relationships are based on same-direction, time-price ordering:
+        - Bull: parent = max(origin_price) among eligible legs with lower origin prices
+        - Bear: parent = min(origin_price) among eligible legs with higher origin prices
+
+        Eligibility constraint: Only legs whose origin has not been breached can be parents.
+
+        Args:
+            direction: 'bull' or 'bear'
+            origin_price: Origin price of the new leg
+            origin_index: Origin bar index of the new leg
+
+        Returns:
+            leg_id of parent leg, or None if no eligible parent found
+        """
+        eligible = [
+            leg for leg in self.state.active_legs
+            if leg.direction == direction
+            and leg.status == 'active'
+            and not leg.origin_breached  # Rule: non-breached only
+            and leg.origin_index < origin_index  # Earlier in time
+        ]
+
+        if not eligible:
+            return None
+
+        if direction == 'bull':
+            # Bull: parent has lower origin price (lower low is ancestor)
+            eligible = [l for l in eligible if l.origin_price < origin_price]
+            if not eligible:
+                return None
+            # Select max origin_price; on tie, latest origin_index
+            parent = max(eligible, key=lambda l: (l.origin_price, l.origin_index))
+        else:  # bear
+            # Bear: parent has higher origin price (higher high is ancestor)
+            eligible = [l for l in eligible if l.origin_price > origin_price]
+            if not eligible:
+                return None
+            # Select min origin_price; on tie, latest origin_index (negate for min)
+            parent = min(eligible, key=lambda l: (l.origin_price, -l.origin_index))
+
+        return parent.leg_id
 
     def _find_parents(self, new_swing: SwingNode) -> List[SwingNode]:
         """
