@@ -647,71 +647,148 @@ Clean structure: one swing low (3918), one swing high (3925).
 
 ## Hierarchy: Parent-Child Relationships <a name="hierarchy"></a>
 
-Swings form a **DAG (Directed Acyclic Graph)** — multiple parents allowed, no cycles.
+Legs form hierarchical **trees by direction** — bull legs have a separate hierarchy from bear legs. Multiple disconnected hierarchies can exist within the same direction.
 
-### Parent Finding Rule
+### The Leg Hierarchy Rule
 
-A swing B is a PARENT of swing A if A's defended pivot falls within B's 0-2 Fibonacci range.
+Parent-child relationships are established when a new leg is created, based on **same-direction, time-price ordering**:
 
-```
-Parent Swing B:
-  Low = 3900 (defended pivot for bull)
-  High = 4000 (origin for bear context)
-  Range = 100 points
+> "For any two legs L1 and L2 in the same direction such that L1.origin.time is before L2.origin.time and L1.origin.price < L2.origin.price, and no L3 exists such that L1.origin.time < L3.origin.time < L2.origin.time and L1.origin.price < L3.origin.price < L2.origin.price, then L2 is a child of L1."
 
-  0.0 level = 3900
-  2.0 level = 3900 + (2.0 × 100) = 4100
+**In plain terms:**
+- Bull legs: A leg with a higher-low origin is a child of the nearest leg with a lower-low origin
+- Bear legs: A leg with a lower-high origin is a child of the nearest leg with a higher-high origin
+- "Nearest" means no intermediate leg exists between them in both time AND price dimensions
 
-Child Swing A:
-  Low = 3950 (defended pivot)
+### Eligibility Constraint: Origin Breach
 
-Is A's defended pivot (3950) within B's [3900, 4100] range?
-  3900 ≤ 3950 ≤ 4100 ✓ YES
+> "Only legs whose origin has not been breached can have new children."
 
-B is a PARENT of A.
-```
-
-### Why Hierarchy Matters
-
-Hierarchy enables fractal analysis:
+When searching for a parent, legs with breached origins are filtered out. This ensures broken structure doesn't propagate into new hierarchy.
 
 ```
-Daily Swing: 3800 → 4200 (400 point range)
-  │
-  ├─ 4H Swing: 3900 → 4100 (200 point range)
-  │    │
-  │    ├─ 1H Swing: 3950 → 4050 (100 point range)
-  │    │    │
-  │    │    └─ 15m Swing: 3980 → 4020 (40 point range)
-  │    │
-  │    └─ 1H Swing: 3920 → 4000 (80 point range)
-  │
-  └─ 4H Swing: 4000 → 4150 (150 point range)
+BULL HIERARCHY EXAMPLE:
+═══════════════════════
 
-Each swing contains smaller swings.
-Parent invalidation cascades to children.
+L1: origin=(100, t1), non-breached     ← Root leg (lowest origin)
+ └── L2: origin=(110, t2)              ← Child of L1 (higher low)
+      └── L3: origin=(120, t3)         ← Child of L2 (higher low)
+
+Each leg's origin is higher than its parent's.
+This tracks the progression of "higher lows" in an uptrend.
+
+
+BEAR HIERARCHY EXAMPLE:
+═══════════════════════
+
+B1: origin=(120, t1), non-breached     ← Root leg (highest origin)
+ └── B2: origin=(115, t3)              ← Child of B1 (lower high)
+      └── B3: origin=(110, t5)         ← Child of B2 (lower high)
+
+Each leg's origin is lower than its parent's.
+This tracks the progression of "lower highs" in a downtrend.
 ```
 
-### Multiple Parents
+### Finding the Immediate Parent
 
-Unlike a tree, the DAG allows multiple parents:
+The "no L3 between" clause naturally selects the **immediate predecessor**. Implementation simplifies to:
 
 ```
-                Parent A                    Parent B
-           (3800 → 4000)               (3900 → 4100)
-                  \                       /
-                   \                     /
-                    \                   /
-                     ▼                 ▼
-                      Child Swing
-                    (3950 → 4050)
+BULL: parent = max(origin.price) among eligible legs
+      (eligible = same direction, non-breached, earlier time, lower price)
 
-Child's defended pivot (3950) is within:
-  - Parent A's [3800, 4200] range ✓
-  - Parent B's [3900, 4100] range ✓
+BEAR: parent = min(origin.price) among eligible legs
+      (eligible = same direction, non-breached, earlier time, higher price)
 
-Child has TWO parents.
+TIEBREAKER: If multiple legs have the same origin price, select the one
+            with the latest origin time (most recent confirmation of that level).
 ```
+
+### Siblings and Distant Cousins
+
+> "You can also have 'siblings' such that S1.origin.time < S2.origin.time but S1.origin.price = S2.origin.price although this should be rare. They are 'siblings' if S1's origin was never breached, then by definition S2 must have the same parent as S1. If S1's origin was breached, S2 will have a different parent. They're in unrelated branches and can be distant 'cousins' even."
+
+Two legs at the same price level but different times:
+
+**Case 1 — Siblings (S1 non-breached):**
+- S1 and S2 have the same `origin_price`
+- S1's origin was never breached
+- When S2 forms, S1 is still eligible as a potential parent for others
+- S2's parent search finds the same parent that S1 has
+- Result: S1 and S2 are **siblings** (same parent)
+
+**Case 2 — Distant Cousins (S1 breached):**
+- S1 and S2 have the same `origin_price`
+- S1's origin was breached before S2 formed
+- S1 is filtered out of the eligible parent search
+- S2's parent search finds a different (possibly much older or newer depending on price action) leg
+- Result: S1 and S2 are in **completely different branches** — distant cousins or unrelated
+
+### Reparenting on Prune
+
+> "If legs L4, L5, and L6 exist, such that L6.parent = L5 and L5.parent = L4, then if L5 is pruned for whatever reason and L6 is not pruned then, L6.parent will be set to L4."
+
+When a leg is pruned, its children are reparented to the grandparent:
+
+```
+BEFORE PRUNE:           AFTER L5 PRUNED:
+L4 (root)               L4 (root)
+ └── L5                  └── L6 (reparented)
+      └── L6
+
+If the root is pruned, children become roots.
+```
+
+### Multiple Disconnected Hierarchies
+
+Bull and bear legs maintain **completely separate hierarchies**. Additionally, within the same direction, multiple disconnected trees can form:
+
+```
+EXAMPLE: Two separate bull hierarchies
+
+Price action: L1 → H1 → L2 → H2 → L3 → H3
+              (where L1 < L2 < H2 < L3 < H3)
+
+Bull hierarchy: L1 → H3 forms one large bull leg
+                (single tree tracking the major uptrend)
+
+Bear hierarchies:
+  Tree 1: H2 → L2 (not growing, inner structure)
+  Tree 2: H3 → L3 (possibly still growing)
+
+The bear legs from H2 and H3 are in separate hierarchies
+because H3 > H2 (H3 cannot be a child of H2).
+```
+
+### Why Leg Hierarchy Matters
+
+Leg hierarchy tracks **structural progression** within a directional move:
+
+```
+TRADING INTERPRETATION:
+═══════════════════════
+
+Bull leg hierarchy with depth 4:
+  L1 (origin=3900) → L2 (3920) → L3 (3950) → L4 (3980)
+
+This represents FOUR confirmed "higher lows" in succession.
+- Strong trending structure
+- Each child validates the parent's defended level
+- Invalidation of L1 cascades implications to all descendants
+
+Contrast with a single bull leg (depth 0):
+- Just one defended low
+- Less structural confirmation
+- More vulnerable to invalidation
+```
+
+### Hierarchy vs. Swing Parents
+
+**Leg hierarchy** (this section) tracks same-direction structural progression based on origin relationships.
+
+**Swing hierarchy** uses Fibonacci containment: a swing is a parent of another if the child's defended pivot falls within the parent's 0-2 range. This enables cross-direction nesting (a bull swing inside a bear swing's range).
+
+Both hierarchies coexist and serve different analytical purposes.
 
 ---
 
