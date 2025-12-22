@@ -13,6 +13,7 @@ scale format by mapping depth to scale.
 """
 
 import logging
+from datetime import datetime
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Query
@@ -30,6 +31,9 @@ from ...swing_analysis.events import (
     SwingInvalidatedEvent,
     SwingCompletedEvent,
     LevelCrossEvent,
+    LegCreatedEvent,
+    LegPrunedEvent,
+    LegInvalidatedEvent,
 )
 from ...swing_analysis.types import Bar
 from ...swing_analysis.reference_frame import ReferenceFrame
@@ -61,6 +65,9 @@ from ..schemas import (
     DagStateResponse,
     # Hierarchy exploration models (Issue #250)
     LegLineageResponse,
+    # Follow Leg models (Issue #267)
+    LifecycleEvent,
+    FollowedLegsEventsResponse,
 )
 
 if TYPE_CHECKING:
@@ -83,6 +90,7 @@ _replay_cache: Dict[str, Any] = {
     "reference_layer": None,  # ReferenceLayer for filtering and invalidation
     "aggregator": None,  # BarAggregator for incremental bar aggregation
     "source_resolution": 5,  # Source resolution in minutes
+    "lifecycle_events": [],  # Lifecycle events for followed legs (#267)
 }
 
 
@@ -353,6 +361,83 @@ def _format_trigger_explanation(
         return f"Crossed {level} ({level_price:.2f}): {prev} -> {level}"
 
     return ""
+
+
+def _event_to_lifecycle_event(
+    event: SwingEvent,
+    bar_index: int,
+    csv_index: int,
+    timestamp: str,
+) -> Optional[LifecycleEvent]:
+    """
+    Convert a SwingEvent to a LifecycleEvent for Follow Leg tracking.
+
+    Only converts relevant leg lifecycle events. Returns None for events
+    that aren't tracked (like LEVEL_CROSS).
+
+    Args:
+        event: The swing event.
+        bar_index: The bar index where event occurred.
+        csv_index: The CSV row index.
+        timestamp: ISO format timestamp.
+
+    Returns:
+        LifecycleEvent or None if event type not tracked.
+    """
+    # Map leg events to lifecycle events
+    if isinstance(event, SwingFormedEvent):
+        # SwingFormedEvent means a leg transitioned to formed state
+        # The swing_id is the leg's swing_id
+        return LifecycleEvent(
+            leg_id=event.swing_id,
+            event_type="formed",
+            bar_index=bar_index,
+            csv_index=csv_index,
+            timestamp=timestamp,
+            explanation=f"Leg formed with pivot at {float(event.high_price):.2f}, "
+                        f"range {abs(float(event.high_price) - float(event.low_price)):.2f} points"
+        )
+
+    elif isinstance(event, LegInvalidatedEvent):
+        # Leg's origin was breached beyond threshold
+        return LifecycleEvent(
+            leg_id=event.leg_id,
+            event_type="invalidated",
+            bar_index=bar_index,
+            csv_index=csv_index,
+            timestamp=timestamp,
+            explanation=f"Leg invalidated at price {float(event.invalidation_price):.2f}"
+        )
+
+    elif isinstance(event, LegPrunedEvent):
+        # Map prune reasons to lifecycle event types
+        reason = event.reason
+        if reason == "engulfed":
+            event_type = "engulfed"
+            explanation = "Leg engulfed: both origin and pivot breached"
+        elif reason == "pivot_breach":
+            event_type = "pivot_breached"
+            explanation = "Leg pruned: pivot breached"
+        elif reason in ("turn_prune", "proximity_prune", "dominated_in_turn",
+                       "extension_prune", "inner_structure"):
+            event_type = "pruned"
+            explanation = f"Pruned: {reason.replace('_', ' ')}"
+        else:
+            event_type = "pruned"
+            explanation = f"Pruned: {reason}"
+
+        return LifecycleEvent(
+            leg_id=event.leg_id,
+            event_type=event_type,
+            bar_index=bar_index,
+            csv_index=csv_index,
+            timestamp=timestamp,
+            explanation=explanation
+        )
+
+    # Skip SwingInvalidatedEvent, SwingCompletedEvent, LevelCrossEvent for lifecycle
+    # These are swing-level events, not leg-level events
+    return None
 
 
 def _calculate_scale_thresholds(swings: List[SwingNode]) -> Dict[str, float]:
@@ -997,6 +1082,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
             high=bar.high,
             low=bar.low,
             close=bar.close,
+            csv_index=s.window_offset + bar.index,
         ))
 
         # Convert events to responses
@@ -1010,6 +1096,14 @@ async def advance_replay(request: ReplayAdvanceRequest):
 
             event_response = _event_to_response(event, swing, scale_thresholds)
             all_events.append(event_response)
+
+        # Capture lifecycle events for Follow Leg feature (#267)
+        csv_index = s.window_offset + bar.index
+        timestamp = datetime.fromtimestamp(bar.timestamp).isoformat()
+        for event in events:
+            lifecycle_event = _event_to_lifecycle_event(event, bar.index, csv_index, timestamp)
+            if lifecycle_event:
+                _replay_cache["lifecycle_events"].append(lifecycle_event)
 
     # Update cache state
     _replay_cache["last_bar_index"] = end_idx - 1
@@ -1445,3 +1539,53 @@ async def get_leg_lineage(leg_id: str):
         descendants=descendants,
         depth=depth,
     )
+
+
+# ============================================================================
+# Follow Leg Endpoints (Issue #267)
+# ============================================================================
+
+
+@router.get("/api/followed-legs/events", response_model=FollowedLegsEventsResponse)
+async def get_followed_legs_events(
+    leg_ids: str = Query(..., description="Comma-separated list of leg IDs to track"),
+    since_bar: int = Query(..., description="Only return events from this bar index onwards"),
+):
+    """
+    Get lifecycle events for followed legs.
+
+    Returns events for the specified leg IDs that occurred at or after the
+    since_bar index. Used by the Follow Leg feature to show event markers
+    on candles.
+
+    Events tracked:
+    - formed: Leg transitioned from forming to formed
+    - origin_breached: Price crossed origin beyond threshold
+    - pivot_breached: Price crossed pivot beyond threshold
+    - engulfed: Both origin and pivot breached
+    - pruned: Leg removed from active set
+    - invalidated: Leg breaches invalidation threshold
+
+    Args:
+        leg_ids: Comma-separated list of leg IDs to track.
+        since_bar: Only return events from this bar index onwards.
+
+    Returns:
+        FollowedLegsEventsResponse with matching lifecycle events.
+    """
+    global _replay_cache
+
+    # Parse leg IDs
+    leg_id_set = set(lid.strip() for lid in leg_ids.split(",") if lid.strip())
+
+    if not leg_id_set:
+        return FollowedLegsEventsResponse(events=[])
+
+    # Filter lifecycle events
+    all_events = _replay_cache.get("lifecycle_events", [])
+    filtered_events = [
+        event for event in all_events
+        if event.leg_id in leg_id_set and event.bar_index >= since_bar
+    ]
+
+    return FollowedLegsEventsResponse(events=filtered_events)

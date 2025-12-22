@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-22
 
@@ -10,6 +10,34 @@
 
 - #279 — Fix inner structure pruning for sequential invalidation
 - #278 — Enable backward navigation through cached DAG states
+
+### #267: Follow Leg Feature
+
+Track specific legs through their complete lifecycle with visual markers.
+
+**Sub-issues completed:**
+- #268: Add csv_index to bar data and attachments
+- #269: Lifecycle event tracking API
+- #270: Color palette and leg recoloring
+- #271: Follow icon and interaction
+- #272: Followed Legs panel
+- #273: Candle event markers
+- #274: Event inspection popup with attach
+- #275: Tests for Follow Leg feature
+- #276: Documentation updates
+
+**Files changed:**
+- `src/ground_truth_annotator/schemas.py` - Added csv_index to attachments, lifecycle event models
+- `src/ground_truth_annotator/routers/replay.py` - Added lifecycle event tracking, GET /api/followed-legs/events endpoint
+- `frontend/src/lib/api.ts` - Added csv_index, lifecycle event types, API function
+- `frontend/src/hooks/useFollowLeg.ts` - New hook for follow leg state management
+- `frontend/src/components/LegOverlay.tsx` - Added eye icon, follow colors support
+- `frontend/src/components/DAGStatePanel.tsx` - Integrated FollowedLegsPanel
+- `frontend/src/components/FollowedLegsPanel.tsx` - New panel component
+- `frontend/src/components/EventMarkersOverlay.tsx` - New candle markers component
+- `frontend/src/components/EventInspectionPopup.tsx` - New popup component
+- `tests/test_follow_leg.py` - New test file
+- `Docs/Reference/user_guide.md` - Added Follow Leg Feature documentation
 
 ---
 

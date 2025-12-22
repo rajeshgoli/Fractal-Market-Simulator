@@ -577,9 +577,59 @@ Hierarchy exploration mode lets you visualize parent-child relationships between
 - **Origin tracking**: Follow how legs spawn from each other
 - **Zoom levels**: Understand the fractal containment of price structures
 
+### Follow Leg Feature
+
+The Follow Leg feature lets you track specific legs through their complete lifecycle, with visual markers showing state changes on the chart.
+
+**How to follow a leg:**
+1. Click on a leg line on the chart (or click a leg in the Current Structure Panel)
+2. A tree icon and eye icon appear near the leg's pivot
+3. Click the **eye icon** to follow the leg
+4. The leg is recolored in your assigned tracking color
+
+**What you see when following:**
+- **Recolored leg**: The leg's line changes to your assigned tracking color (from the palette)
+- **Followed Legs Panel**: The leg appears in Column 3 with state, last event, and unfollow button
+- **Candle markers**: When lifecycle events occur, markers appear on the candles:
+  - **F** (formed): Leg transitioned from forming to formed
+  - **P** (pruned): Leg removed from active set
+  - **E** (engulfed): Both origin and pivot breached
+  - **X** (invalidated): Leg breaches invalidation threshold
+  - **O!** / **P!**: Origin or pivot breached
+
+**Following constraints:**
+- Maximum 5 legs can be followed simultaneously
+- 5 bull colors and 5 bear colors available
+- Colors are recycled when you unfollow
+
+**Color palette:**
+| Direction | Slot | Name | Color |
+|-----------|------|------|-------|
+| Bull | B1 | Forest | Green (#228B22) |
+| Bull | B2 | Teal | Teal (#008080) |
+| Bull | B3 | Cyan | Cyan (#00CED1) |
+| Bull | B4 | Sky | Blue (#4169E1) |
+| Bull | B5 | Mint | Green (#3CB371) |
+| Bear | R1 | Crimson | Red (#DC143C) |
+| Bear | R2 | Coral | Orange (#FF6347) |
+| Bear | R3 | Orange | Orange (#FF8C00) |
+| Bear | R4 | Salmon | Pink (#FA8072) |
+| Bear | R5 | Brick | Red (#B22222) |
+
+**Event inspection:**
+- Click on a candle with event markers to see event details
+- Shows event type, explanation, timestamp, and leg color
+- "Attach" button adds the event to your observation
+- "Focus" button centers the chart on that leg
+
+**To unfollow:**
+- Click the X button next to the leg in the Followed Legs Panel
+- Or click the eye icon on the leg again (when it's already followed)
+
 ### Use Cases
 
 - **Algorithm debugging**: Watch how legs form, get pruned, and eventually become swings
 - **Understanding swing formation**: See why certain price patterns form swings and others don't
 - **Pruning behavior**: Observe how proximity and breach pruning keep the leg count manageable
 - **Hierarchy exploration**: Visualize parent-child relationships and structural nesting
+- **Lifecycle tracking**: Follow specific legs to understand their complete lifecycle with visual event markers

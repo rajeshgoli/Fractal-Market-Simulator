@@ -190,6 +190,7 @@ class ReplayBarResponse(BaseModel):
     high: float
     low: float
     close: float
+    csv_index: int  # Original row index in source CSV file
 
 
 class ReplayEventResponse(BaseModel):
@@ -307,6 +308,7 @@ class FeedbackAttachmentLeg(BaseModel):
     origin_price: float
     pivot_index: int
     origin_index: int
+    csv_index: Optional[int] = None  # Current bar's CSV index when attached
 
 
 class FeedbackAttachmentPendingOrigin(BaseModel):
@@ -316,6 +318,19 @@ class FeedbackAttachmentPendingOrigin(BaseModel):
     price: float
     bar_index: int
     source: str  # "high", "low", "open", "close"
+    csv_index: Optional[int] = None  # CSV index of the pending origin bar
+
+
+class FeedbackAttachmentLifecycleEvent(BaseModel):
+    """A lifecycle event attachment in feedback (for Follow Leg feature)."""
+    type: str = "lifecycle_event"
+    leg_id: str
+    leg_direction: str  # "bull" or "bear"
+    event_type: str  # formed, origin_breached, pivot_breached, engulfed, pruned, invalidated
+    bar_index: int
+    csv_index: int
+    timestamp: str  # ISO format timestamp
+    explanation: str
 
 
 class PlaybackFeedbackSnapshot(BaseModel):
@@ -334,10 +349,11 @@ class PlaybackFeedbackSnapshot(BaseModel):
     # Mode-specific context
     replay_context: Optional[ReplayContext] = None
     dag_context: Optional[DagContext] = None
-    # Attachments (legs, pending origins highlighted by user)
+    # Attachments (legs, pending origins, lifecycle events)
     attachments: Optional[List[Union[
         FeedbackAttachmentLeg,
-        FeedbackAttachmentPendingOrigin
+        FeedbackAttachmentPendingOrigin,
+        FeedbackAttachmentLifecycleEvent
     ]]] = None
 
 
@@ -606,3 +622,32 @@ class LegLineageResponse(BaseModel):
     descendants: List[str]
     # Depth in hierarchy (0 = root, 1 = has one parent, etc.)
     depth: int
+
+
+# ============================================================================
+# Follow Leg Models (Issue #267 - Follow Leg Feature)
+# ============================================================================
+
+
+class LifecycleEvent(BaseModel):
+    """A lifecycle event for a followed leg.
+
+    Tracks significant state changes for legs being followed by the user.
+    """
+    leg_id: str
+    event_type: str  # formed, origin_breached, pivot_breached, engulfed, pruned, invalidated
+    bar_index: int
+    csv_index: int
+    timestamp: str  # ISO format
+    explanation: str
+
+
+class FollowedLegsEventsRequest(BaseModel):
+    """Request for lifecycle events of followed legs."""
+    leg_ids: List[str]
+    since_bar: int
+
+
+class FollowedLegsEventsResponse(BaseModel):
+    """Response with lifecycle events for followed legs."""
+    events: List[LifecycleEvent]
