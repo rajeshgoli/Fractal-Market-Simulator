@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-22
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-*No pending changes.*
+- #279 — Fix inner structure pruning for sequential invalidation
 
 ---
 
