@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-22
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - #279 — Fix inner structure pruning for sequential invalidation
+- #278 — Enable backward navigation through cached DAG states
 
 ---
 
