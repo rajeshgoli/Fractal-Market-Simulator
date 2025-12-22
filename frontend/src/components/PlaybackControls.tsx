@@ -22,6 +22,8 @@ interface PlaybackControlsProps {
   hasNextEvent?: boolean;
   currentEventIndex?: number;  // 0-based, -1 if no events yet
   totalEvents?: number;
+  // Backward navigation (#278)
+  canStepBack?: boolean;  // Whether step back is available (has cached history)
   // Bar counter
   currentBar: number;
   totalBars: number;
@@ -61,6 +63,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   hasNextEvent = true,
   currentEventIndex = -1,
   totalEvents = 0,
+  canStepBack = true,  // Default to true for backward compatibility (#278)
   currentBar,
   totalBars,
   calibrationBarCount,
@@ -124,14 +127,14 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           </button>
           <button
             onClick={onJumpToPreviousEvent || onStepBack}
-            disabled={onJumpToPreviousEvent ? !hasPreviousEvent : false}
+            disabled={onJumpToPreviousEvent ? !hasPreviousEvent : !canStepBack}
             className={`p-2 rounded-full transition-colors ${
-              onJumpToPreviousEvent && !hasPreviousEvent
+              (onJumpToPreviousEvent && !hasPreviousEvent) || (!onJumpToPreviousEvent && !canStepBack)
                 ? 'text-app-muted/30 cursor-not-allowed'
                 : 'text-app-muted hover:text-white hover:bg-app-card'
             }`}
             aria-label="Previous Event"
-            title={onJumpToPreviousEvent ? "Previous Event ([)" : "Step Back"}
+            title={onJumpToPreviousEvent ? "Previous Event ([)" : canStepBack ? "Step Back ([)" : "No history cached"}
           >
             <Rewind size={18} />
           </button>

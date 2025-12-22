@@ -696,9 +696,37 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |
 | `Sidebar.tsx` | Event filters, feedback input, attachment display |
 | `usePlayback.ts` | Legacy playback (calibration scrubbing) |
-| `useForwardPlayback.ts` | Forward-only playback after calibration |
+| `useForwardPlayback.ts` | Forward-only playback after calibration (includes history buffer for step back) |
 | `useSwingDisplay.ts` | Scale filtering and swing ranking |
 | `useHierarchyMode.ts` | Hierarchy exploration state management (#250) |
+
+**Backward Navigation (#278):**
+
+The `useForwardPlayback` hook supports stepping back through cached DAG state snapshots:
+
+```typescript
+interface HistorySnapshot {
+  barIndex: number;
+  visibleBars: BarData[];
+  dagState: DagStateResponse | null;
+  aggregatedBars: AggregatedBarsResponse | null;
+  swingState: ReplaySwingState | null;
+  allEvents: ReplayEvent[];
+}
+
+// Hook options
+historyBufferSize?: number;  // Max positions to cache (default: 100)
+
+// Hook return values
+canStepBack: boolean;  // Whether step back is available
+historySize: number;   // Current buffer size
+```
+
+**Implementation details:**
+- Snapshots are pushed to a sliding window buffer on each bar advance
+- `stepBack()` restores the previous snapshot via `restoreFromSnapshot()`
+- `jumpToStart()` resets the history buffer
+- `canStepBack` is `true` when `historySize >= 2` and not at oldest position
 
 **Stack:** React 19, lightweight-charts v5, Tailwind CSS 4, Vite 7
 

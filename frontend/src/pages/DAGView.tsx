@@ -885,6 +885,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
               onJumpToNextEvent={undefined}
               hasPreviousEvent={false}
               hasNextEvent={!forwardPlayback.endOfData}
+              canStepBack={forwardPlayback.canStepBack}
               currentEventIndex={forwardPlayback.currentEventIndex}
               totalEvents={forwardPlayback.allEvents.length}
               currentBar={Math.max(0, currentPlaybackPosition + 1)}

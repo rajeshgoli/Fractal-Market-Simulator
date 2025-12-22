@@ -1235,6 +1235,8 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
               hasNextEvent={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.hasNextEvent : true}
               currentEventIndex={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentEventIndex : -1}
               totalEvents={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.allEvents.length : 0}
+              // Backward navigation (#278)
+              canStepBack={calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.canStepBack : true}
               currentBar={calibrationPhase === CalibrationPhase.CALIBRATED ? (calibrationData?.calibration_bar_count ?? 0) - 1 : (calibrationPhase === CalibrationPhase.PLAYING ? forwardPlayback.currentPosition : playback.currentPosition)}
               totalBars={sourceBars.length}
               // Forward playback metadata (only show new UI in PLAYING phase)

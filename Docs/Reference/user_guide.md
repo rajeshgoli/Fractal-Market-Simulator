@@ -161,9 +161,30 @@ After pressing Play (or Space/Enter) in the calibrated state, playback enters **
 - Navigate between events with arrow keys when multiple occur
 - Press **Escape** or click X to dismiss linger and resume playback
 
+### Backward Navigation (Step Back)
+
+You can step back through recently viewed bars using the Step Back button (◀◀) or `[` key:
+
+**How it works:**
+- DAG state snapshots are cached in a sliding window buffer (default: 100 positions)
+- Step Back restores the previous snapshot including DAG state, visible bars, and events
+- The button is disabled when at the oldest cached position or at session start
+
 **Limitations:**
-- Step Back is disabled in forward-only mode (can't un-see data)
-- Use Jump to Start to reset and re-watch from calibration end
+- Maximum history is configurable (default: 100 bars)
+- Stepping forward after stepping back continues from the restored position
+- Jump to Start resets the history buffer
+
+**Button States:**
+| State | Appearance | Reason |
+|-------|------------|--------|
+| Enabled | Normal | History available to step back |
+| Disabled (grayed) | Faded | At oldest cached position or session start |
+
+**Use cases:**
+- Review what just happened during analysis
+- Compare before/after states for specific events
+- Understand how a leg or swing evolved
 
 ### Chart Controls
 

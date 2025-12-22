@@ -3,6 +3,19 @@ import { PlaybackState, BarData, FilterState } from '../types';
 import { advanceReplay, ReplayEvent, ReplaySwingState, AggregatedBarsResponse, DagStateResponse } from '../lib/api';
 import { LINGER_DURATION_MS } from '../constants';
 
+// Default history buffer size (configurable)
+const DEFAULT_HISTORY_BUFFER_SIZE = 100;
+
+// Snapshot of state at a given position for backward navigation
+interface HistorySnapshot {
+  barIndex: number;
+  visibleBars: BarData[];
+  dagState: DagStateResponse | null;
+  aggregatedBars: AggregatedBarsResponse | null;
+  swingState: ReplaySwingState | null;
+  allEvents: ReplayEvent[];
+}
+
 interface UseForwardPlaybackOptions {
   calibrationBarCount: number;
   calibrationBars: BarData[];
@@ -12,6 +25,7 @@ interface UseForwardPlaybackOptions {
   lingerEnabled?: boolean;  // Whether to pause on events (default: true)
   chartAggregationScales?: string[];  // Scales to include in response (e.g., ["S", "M"])
   includeDagState?: boolean;  // Whether to include DAG state in response
+  historyBufferSize?: number;  // Max positions to cache for step back (default: 100)
   onNewBars?: (bars: BarData[]) => void;
   onSwingStateChange?: (state: ReplaySwingState) => void;
   onAggregatedBarsChange?: (bars: AggregatedBarsResponse) => void;  // Called with aggregated bars
@@ -34,6 +48,9 @@ interface UseForwardPlaybackReturn {
   currentEventIndex: number;  // 0-based index of current event, -1 if before first event
   hasPreviousEvent: boolean;
   hasNextEvent: boolean;
+  // Backward navigation
+  canStepBack: boolean;  // Whether step back is available (has cached history)
+  historySize: number;   // Current number of cached positions
   // Controls
   play: () => void;
   pause: () => void;
@@ -60,6 +77,7 @@ export function useForwardPlayback({
   lingerEnabled = true,
   chartAggregationScales,
   includeDagState = false,
+  historyBufferSize = DEFAULT_HISTORY_BUFFER_SIZE,
   onNewBars,
   onSwingStateChange,
   onAggregatedBarsChange,
@@ -82,6 +100,15 @@ export function useForwardPlayback({
 
   // Event tracking for navigation
   const [allEvents, setAllEvents] = useState<ReplayEvent[]>([]);
+
+  // History buffer for backward navigation (#278)
+  const historyBufferRef = useRef<HistorySnapshot[]>([]);
+  const [historySize, setHistorySize] = useState(0);
+  // Track current position in history for forward/backward navigation
+  const historyIndexRef = useRef(-1);  // -1 means at latest, >=0 means viewing cached history
+  // Store latest DAG state and aggregated bars for snapshotting
+  const latestDagStateRef = useRef<DagStateResponse | null>(null);
+  const latestAggregatedBarsRef = useRef<AggregatedBarsResponse | null>(null);
 
   // Refs for timers and queue
   const playbackIntervalRef = useRef<number | null>(null);
@@ -134,6 +161,63 @@ export function useForwardPlayback({
       animationFrameRef.current = null;
     }
   }, []);
+
+  // Push a snapshot to the history buffer (#278)
+  const pushHistorySnapshot = useCallback((
+    barIndex: number,
+    bars: BarData[],
+    events: ReplayEvent[],
+    dagState: DagStateResponse | null,
+    aggregatedBars: AggregatedBarsResponse | null,
+    swingState: ReplaySwingState | null
+  ) => {
+    const snapshot: HistorySnapshot = {
+      barIndex,
+      visibleBars: [...bars],  // Clone to avoid reference issues
+      dagState,
+      aggregatedBars,
+      swingState,
+      allEvents: [...events],
+    };
+
+    // If we're viewing history (stepped back), truncate future when advancing
+    if (historyIndexRef.current >= 0) {
+      historyBufferRef.current = historyBufferRef.current.slice(0, historyIndexRef.current + 1);
+      historyIndexRef.current = -1;  // Back to latest
+    }
+
+    historyBufferRef.current.push(snapshot);
+
+    // Trim buffer if it exceeds max size
+    if (historyBufferRef.current.length > historyBufferSize) {
+      historyBufferRef.current.shift();
+    }
+
+    setHistorySize(historyBufferRef.current.length);
+  }, [historyBufferSize]);
+
+  // Restore state from a history snapshot (#278)
+  const restoreFromSnapshot = useCallback((snapshot: HistorySnapshot) => {
+    setVisibleBars(snapshot.visibleBars);
+    setCurrentPosition(snapshot.barIndex);
+    setAllEvents(snapshot.allEvents);
+    setCurrentSwingState(snapshot.swingState);
+
+    // Update DAG state via callback
+    if (snapshot.dagState && onDagStateChange) {
+      onDagStateChange(snapshot.dagState);
+    }
+
+    // Update aggregated bars via callback
+    if (snapshot.aggregatedBars && onAggregatedBarsChange) {
+      onAggregatedBarsChange(snapshot.aggregatedBars);
+    }
+
+    // Update swing state via callback
+    if (snapshot.swingState && onSwingStateChange) {
+      onSwingStateChange(snapshot.swingState);
+    }
+  }, [onDagStateChange, onAggregatedBarsChange, onSwingStateChange]);
 
   // Show the current event in the queue
   const showCurrentEvent = useCallback(() => {
@@ -332,23 +416,48 @@ export function useForwardPlayback({
     // Pop first bar from buffer
     const { bar, events } = buffer.shift()!;
 
-    // Render the bar
-    setVisibleBars(prev => [...prev, bar]);
+    // Render the bar - use functional update to get latest state for snapshot
+    let newVisibleBars: BarData[] = [];
+    let newAllEvents: ReplayEvent[] = [];
+    setVisibleBars(prev => {
+      newVisibleBars = [...prev, bar];
+      return newVisibleBars;
+    });
     setCurrentPosition(bar.index);
     onNewBars?.([bar]);
 
     // Apply pending aggregated bars and DAG state (only on last bar of batch or every bar)
     if (pendingAggregatedBarsRef.current && onAggregatedBarsChange) {
       onAggregatedBarsChange(pendingAggregatedBarsRef.current);
-      // Don't clear - keep showing until next batch updates it
+      latestAggregatedBarsRef.current = pendingAggregatedBarsRef.current;
     }
     if (pendingDagStateRef.current && onDagStateChange) {
       onDagStateChange(pendingDagStateRef.current);
+      latestDagStateRef.current = pendingDagStateRef.current;
     }
     if (pendingSwingStateRef.current) {
       setCurrentSwingState(pendingSwingStateRef.current);
       onSwingStateChange?.(pendingSwingStateRef.current);
     }
+
+    // Accumulate events for history snapshot
+    setAllEvents(prev => {
+      newAllEvents = events.length > 0 ? [...prev, ...events] : prev;
+      return newAllEvents;
+    });
+
+    // Push snapshot to history buffer for backward navigation (#278)
+    // Use setTimeout to ensure state updates have been applied
+    setTimeout(() => {
+      pushHistorySnapshot(
+        bar.index,
+        newVisibleBars,
+        newAllEvents,
+        latestDagStateRef.current,
+        latestAggregatedBarsRef.current,
+        pendingSwingStateRef.current
+      );
+    }, 0);
 
     // Check for events that should trigger linger
     const filteredEvents = filterEvents(events);
@@ -363,7 +472,7 @@ export function useForwardPlayback({
     }
 
     return true; // Bar rendered successfully
-  }, [endOfData, clearTimers, filterEvents, lingerEnabled, enterLinger, barsPerAdvance, fetchBatch, onNewBars, onAggregatedBarsChange, onDagStateChange, onSwingStateChange]);
+  }, [endOfData, clearTimers, filterEvents, lingerEnabled, enterLinger, barsPerAdvance, fetchBatch, onNewBars, onAggregatedBarsChange, onDagStateChange, onSwingStateChange, pushHistorySnapshot]);
 
   // Legacy advanceBar - still used for stepForward and jumpToNextEvent
   const advanceBar = useCallback(async () => {
@@ -546,7 +655,7 @@ export function useForwardPlayback({
     await advanceBar();
   }, [playbackState, clearTimers, exitLinger, advanceBar]);
 
-  // Step back (not supported in forward-only mode - just pause)
+  // Step back through cached history (#278)
   const stepBack = useCallback(() => {
     if (playbackState === PlaybackState.LINGERING) {
       exitLinger();
@@ -556,8 +665,30 @@ export function useForwardPlayback({
       clearTimers();
     }
     setPlaybackState(PlaybackState.PAUSED);
-    // Note: Cannot actually go back in forward-only mode
-  }, [playbackState, clearTimers, exitLinger]);
+
+    // Navigate backward through history buffer
+    const history = historyBufferRef.current;
+    if (history.length === 0) return;
+
+    // Determine current history position
+    let currentIdx = historyIndexRef.current;
+    if (currentIdx < 0) {
+      // At latest position, go to second-to-last snapshot
+      currentIdx = history.length - 1;
+    }
+
+    // Step back one position
+    const targetIdx = currentIdx - 1;
+    if (targetIdx < 0) {
+      // Already at oldest cached position
+      return;
+    }
+
+    // Update history index and restore snapshot
+    historyIndexRef.current = targetIdx;
+    const snapshot = history[targetIdx];
+    restoreFromSnapshot(snapshot);
+  }, [playbackState, clearTimers, exitLinger, restoreFromSnapshot]);
 
   // Jump to start (reset to calibration end)
   const jumpToStart = useCallback(() => {
@@ -570,6 +701,12 @@ export function useForwardPlayback({
     setEndOfData(false);
     setCurrentSwingState(null);
     setAllEvents([]); // Reset events when resetting to start
+    // Reset history buffer (#278)
+    historyBufferRef.current = [];
+    historyIndexRef.current = -1;
+    setHistorySize(0);
+    latestDagStateRef.current = null;
+    latestAggregatedBarsRef.current = null;
   }, [clearTimers, exitLinger, calibrationBars, calibrationBarCount]);
 
   // Navigate to previous event in linger queue
@@ -870,6 +1007,18 @@ export function useForwardPlayback({
     };
   }, [clearTimers]);
 
+  // Compute canStepBack: at least 2 snapshots needed (one to view, one to step back to)
+  // Also check historyIndex - if we're already at position 0, can't go further back
+  const canStepBack = useMemo(() => {
+    if (historySize < 2) return false;
+    // If viewing history, check if we can go further back
+    if (historyIndexRef.current >= 0) {
+      return historyIndexRef.current > 0;
+    }
+    // At latest position, can step back if there's history
+    return historySize > 1;
+  }, [historySize]);
+
   return {
     playbackState,
     currentPosition,
@@ -886,6 +1035,9 @@ export function useForwardPlayback({
     currentEventIndex,
     hasPreviousEvent,
     hasNextEvent,
+    // Backward navigation (#278)
+    canStepBack,
+    historySize,
     // Controls
     play: startPlayback,
     pause,
