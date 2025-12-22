@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries } from 'lightweight-charts';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { BarData, AGGREGATION_OPTIONS, AggregationScale } from '../types';
 
 interface ChartHeaderProps {
@@ -8,34 +8,51 @@ interface ChartHeaderProps {
   aggregation: AggregationScale;
   barCount: number;
   onAggregationChange: (scale: AggregationScale) => void;
+  isMaximized: boolean;
+  onToggleMaximize: () => void;
 }
 
 const ChartHeader: React.FC<ChartHeaderProps> = ({
   title,
   aggregation,
   barCount,
-  onAggregationChange
+  onAggregationChange,
+  isMaximized,
+  onToggleMaximize
 }) => {
   return (
-    <div className="absolute top-2 left-2 z-10 flex items-center gap-2 bg-app-card/80 backdrop-blur border border-app-border rounded px-2 py-1 shadow-sm">
-      <span className="text-xs font-bold text-app-text">{title}</span>
-      <span className="text-xs text-app-muted">({barCount} bars)</span>
-      <div className="h-3 w-px bg-app-border"></div>
-      <div className="relative">
-        <select
-          value={aggregation}
-          onChange={(e) => onAggregationChange(e.target.value as AggregationScale)}
-          className="appearance-none bg-transparent text-xs text-trading-blue hover:text-blue-400 font-mono pr-4 cursor-pointer focus:outline-none"
-        >
-          {AGGREGATION_OPTIONS.map(option => (
-            <option key={option.value} value={option.value} className="bg-app-card text-app-text">
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown size={10} className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-trading-blue" />
+    <>
+      <div className="absolute top-2 left-2 z-10 flex items-center gap-2 bg-app-card/80 backdrop-blur border border-app-border rounded px-2 py-1 shadow-sm">
+        <span className="text-xs font-bold text-app-text">{title}</span>
+        <span className="text-xs text-app-muted">({barCount} bars)</span>
+        <div className="h-3 w-px bg-app-border"></div>
+        <div className="relative">
+          <select
+            value={aggregation}
+            onChange={(e) => onAggregationChange(e.target.value as AggregationScale)}
+            className="appearance-none bg-transparent text-xs text-trading-blue hover:text-blue-400 font-mono pr-4 cursor-pointer focus:outline-none"
+          >
+            {AGGREGATION_OPTIONS.map(option => (
+              <option key={option.value} value={option.value} className="bg-app-card text-app-text">
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={10} className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-trading-blue" />
+        </div>
       </div>
-    </div>
+      <button
+        onClick={onToggleMaximize}
+        className="absolute top-2 right-2 z-10 p-1.5 bg-app-card/80 backdrop-blur border border-app-border rounded shadow-sm hover:bg-app-card hover:border-trading-blue transition-colors"
+        title={isMaximized ? "Restore" : "Maximize"}
+      >
+        {isMaximized ? (
+          <Minimize2 size={14} className="text-app-muted hover:text-trading-blue" />
+        ) : (
+          <Maximize2 size={14} className="text-app-muted hover:text-trading-blue" />
+        )}
+      </button>
+    </>
   );
 };
 
@@ -176,29 +193,48 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
   onChart1Ready,
   onChart2Ready,
 }) => {
+  // Track which chart is maximized: null = both visible, 1 = chart 1 maximized, 2 = chart 2 maximized
+  const [maximizedChart, setMaximizedChart] = useState<1 | 2 | null>(null);
+
+  const toggleChart1Maximize = () => {
+    setMaximizedChart(prev => prev === 1 ? null : 1);
+  };
+
+  const toggleChart2Maximize = () => {
+    setMaximizedChart(prev => prev === 2 ? null : 2);
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-app-bg">
-      {/* Top Chart */}
-      <div className="flex-1 relative border-b border-app-border min-h-0">
-        <ChartHeader
-          title="Chart 1"
-          aggregation={chart1Aggregation}
-          barCount={chart1Data.length}
-          onAggregationChange={onChart1AggregationChange}
-        />
-        <SingleChart data={chart1Data} onChartReady={onChart1Ready} />
-      </div>
+      {/* Top Chart - hidden when chart 2 is maximized */}
+      {maximizedChart !== 2 && (
+        <div className={`flex-1 relative min-h-0 ${maximizedChart === null ? 'border-b border-app-border' : ''}`}>
+          <ChartHeader
+            title="Chart 1"
+            aggregation={chart1Aggregation}
+            barCount={chart1Data.length}
+            onAggregationChange={onChart1AggregationChange}
+            isMaximized={maximizedChart === 1}
+            onToggleMaximize={toggleChart1Maximize}
+          />
+          <SingleChart data={chart1Data} onChartReady={onChart1Ready} />
+        </div>
+      )}
 
-      {/* Bottom Chart */}
-      <div className="flex-1 relative min-h-0">
-        <ChartHeader
-          title="Chart 2"
-          aggregation={chart2Aggregation}
-          barCount={chart2Data.length}
-          onAggregationChange={onChart2AggregationChange}
-        />
-        <SingleChart data={chart2Data} onChartReady={onChart2Ready} />
-      </div>
+      {/* Bottom Chart - hidden when chart 1 is maximized */}
+      {maximizedChart !== 1 && (
+        <div className="flex-1 relative min-h-0">
+          <ChartHeader
+            title="Chart 2"
+            aggregation={chart2Aggregation}
+            barCount={chart2Data.length}
+            onAggregationChange={onChart2AggregationChange}
+            isMaximized={maximizedChart === 2}
+            onToggleMaximize={toggleChart2Maximize}
+          />
+          <SingleChart data={chart2Data} onChartReady={onChart2Ready} />
+        </div>
+      )}
     </div>
   );
 };

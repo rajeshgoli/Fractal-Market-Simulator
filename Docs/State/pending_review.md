@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-21
 
@@ -10,6 +10,8 @@
 
 - **#241** — Add impulsiveness & spikiness scores to legs (epic with 6 subissues #242-#247)
 - **#248, #249** — Documentation fixes: removed deleted level_calculator.py reference, added impulse field to leg descriptions
+- **#260** — Fix feedback endpoint crash: remove stale FeedbackAttachmentOrphanedOrigin reference (regression from #210)
+- **#263** — Add chart maximize/minimize controls (expand icon top-right of each chart)
 
 ---
 

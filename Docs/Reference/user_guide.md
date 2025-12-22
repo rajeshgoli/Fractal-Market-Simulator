@@ -165,6 +165,17 @@ After pressing Play (or Space/Enter) in the calibrated state, playback enters **
 - Step Back is disabled in forward-only mode (can't un-see data)
 - Use Jump to Start to reset and re-watch from calibration end
 
+### Chart Controls
+
+Each chart has a maximize/minimize button in the top-right corner:
+
+| Icon | Action |
+|------|--------|
+| ⤢ (expand) | Maximize chart to full area, hiding the other chart |
+| ⤡ (shrink) | Restore both charts side by side |
+
+Zoom levels and scroll position are preserved through maximize/minimize.
+
 ### Aggregation Options
 
 Each chart has an independent aggregation selector:
