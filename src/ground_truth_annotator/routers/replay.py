@@ -34,6 +34,8 @@ from ...swing_analysis.events import (
     LegCreatedEvent,
     LegPrunedEvent,
     LegInvalidatedEvent,
+    OriginBreachedEvent,
+    PivotBreachedEvent,
 )
 from ...swing_analysis.types import Bar
 from ...swing_analysis.reference_frame import ReferenceFrame
@@ -433,6 +435,30 @@ def _event_to_lifecycle_event(
             csv_index=csv_index,
             timestamp=timestamp,
             explanation=explanation
+        )
+
+    elif isinstance(event, OriginBreachedEvent):
+        # First time price crossed the leg's origin
+        return LifecycleEvent(
+            leg_id=event.leg_id,
+            event_type="origin_breached",
+            bar_index=bar_index,
+            csv_index=csv_index,
+            timestamp=timestamp,
+            explanation=f"Origin breached at {float(event.breach_price):.2f} "
+                        f"({float(event.breach_amount):.2f} past origin)"
+        )
+
+    elif isinstance(event, PivotBreachedEvent):
+        # First time price crossed the leg's pivot (formed legs only)
+        return LifecycleEvent(
+            leg_id=event.leg_id,
+            event_type="pivot_breached",
+            bar_index=bar_index,
+            csv_index=csv_index,
+            timestamp=timestamp,
+            explanation=f"Pivot breached at {float(event.breach_price):.2f} "
+                        f"({float(event.breach_amount):.2f} past pivot)"
         )
 
     # Skip SwingInvalidatedEvent, SwingCompletedEvent, LevelCrossEvent for lifecycle

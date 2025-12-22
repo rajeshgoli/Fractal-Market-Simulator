@@ -40,6 +40,8 @@ from ..events import (
     LegCreatedEvent,
     LegPrunedEvent,
     LegInvalidatedEvent,
+    OriginBreachedEvent,
+    PivotBreachedEvent,
 )
 from .leg import Leg, PendingOrigin
 from .state import DetectorState, BarType
@@ -272,7 +274,13 @@ class LegDetector:
                     # Recalculate impulse when pivot extends (#236)
                     leg.impulse = _calculate_impulse(leg.range, leg.origin_index, leg.pivot_index)
 
-    def _update_breach_tracking(self, bar_high: Decimal, bar_low: Decimal) -> None:
+    def _update_breach_tracking(
+        self,
+        bar: Bar,
+        bar_high: Decimal,
+        bar_low: Decimal,
+        timestamp: datetime
+    ) -> List[SwingEvent]:
         """
         Update breach tracking for all active legs (#208).
 
@@ -288,9 +296,16 @@ class LegDetector:
         without the other. If BOTH happen, the leg is "engulfed".
 
         Args:
+            bar: Current bar being processed
             bar_high: Current bar's high as Decimal
             bar_low: Current bar's low as Decimal
+            timestamp: Timestamp for events
+
+        Returns:
+            List of OriginBreachedEvent and PivotBreachedEvent for first-time breaches.
         """
+        events: List[SwingEvent] = []
+
         for leg in self.state.active_legs:
             # Skip legs that are completely done (stale/pruned)
             # But include 'invalidated' legs - they can still become engulfed
@@ -303,14 +318,36 @@ class LegDetector:
                     # Bull origin (low) breached when price goes below it
                     if bar_low < leg.origin_price:
                         breach = leg.origin_price - bar_low
-                        if leg.max_origin_breach is None or breach > leg.max_origin_breach:
+                        was_first_breach = leg.max_origin_breach is None
+                        if was_first_breach or breach > leg.max_origin_breach:
                             leg.max_origin_breach = breach
+                        # Emit event on FIRST breach only
+                        if was_first_breach:
+                            events.append(OriginBreachedEvent(
+                                bar_index=bar.index,
+                                timestamp=timestamp,
+                                swing_id="",
+                                leg_id=leg.leg_id,
+                                breach_price=bar_low,
+                                breach_amount=breach,
+                            ))
                 else:  # bear
                     # Bear origin (high) breached when price goes above it
                     if bar_high > leg.origin_price:
                         breach = bar_high - leg.origin_price
-                        if leg.max_origin_breach is None or breach > leg.max_origin_breach:
+                        was_first_breach = leg.max_origin_breach is None
+                        if was_first_breach or breach > leg.max_origin_breach:
                             leg.max_origin_breach = breach
+                        # Emit event on FIRST breach only
+                        if was_first_breach:
+                            events.append(OriginBreachedEvent(
+                                bar_index=bar.index,
+                                timestamp=timestamp,
+                                swing_id="",
+                                leg_id=leg.leg_id,
+                                breach_price=bar_high,
+                                breach_amount=breach,
+                            ))
 
             # Pivot breach tracking (formed legs, including invalidated)
             # Once formed, the pivot is frozen as a structural reference
@@ -321,14 +358,38 @@ class LegDetector:
                     # Bull pivot (HIGH) breached when price goes above it
                     if bar_high > leg.pivot_price:
                         breach = bar_high - leg.pivot_price
-                        if leg.max_pivot_breach is None or breach > leg.max_pivot_breach:
+                        was_first_breach = leg.max_pivot_breach is None
+                        if was_first_breach or breach > leg.max_pivot_breach:
                             leg.max_pivot_breach = breach
+                        # Emit event on FIRST breach only
+                        if was_first_breach:
+                            events.append(PivotBreachedEvent(
+                                bar_index=bar.index,
+                                timestamp=timestamp,
+                                swing_id="",
+                                leg_id=leg.leg_id,
+                                breach_price=bar_high,
+                                breach_amount=breach,
+                            ))
                 else:  # bear
                     # Bear pivot (LOW) breached when price goes below it
                     if bar_low < leg.pivot_price:
                         breach = leg.pivot_price - bar_low
-                        if leg.max_pivot_breach is None or breach > leg.max_pivot_breach:
+                        was_first_breach = leg.max_pivot_breach is None
+                        if was_first_breach or breach > leg.max_pivot_breach:
                             leg.max_pivot_breach = breach
+                        # Emit event on FIRST breach only
+                        if was_first_breach:
+                            events.append(PivotBreachedEvent(
+                                bar_index=bar.index,
+                                timestamp=timestamp,
+                                swing_id="",
+                                leg_id=leg.leg_id,
+                                breach_price=bar_low,
+                                breach_amount=breach,
+                            ))
+
+        return events
 
     def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[SwingFormedEvent]:
         """
@@ -368,7 +429,9 @@ class LegDetector:
         self._extend_leg_pivots(bar, bar_high, bar_low)
 
         # Update breach tracking for all legs (#208)
-        self._update_breach_tracking(bar_high, bar_low)
+        # Returns breach events for first-time origin/pivot breaches
+        breach_events = self._update_breach_tracking(bar, bar_high, bar_low, timestamp)
+        events.extend(breach_events)
 
         # First bar initialization
         if self.state.prev_bar is None:

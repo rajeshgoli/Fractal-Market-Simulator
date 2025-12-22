@@ -360,3 +360,78 @@ class LegInvalidatedEvent(SwingEvent):
     )
     leg_id: str = ""
     invalidation_price: Decimal = field(default_factory=lambda: Decimal("0"))
+
+
+@dataclass
+class OriginBreachedEvent(SwingEvent):
+    """
+    Emitted when a leg's origin is first breached (price crosses origin).
+
+    This is distinct from invalidation (-0.382 threshold). Origin breach
+    means price has crossed back past the origin point, compromising the
+    leg's structural integrity but not yet invalidating it.
+
+    Attributes:
+        event_type: Always "ORIGIN_BREACHED".
+        leg_id: Unique identifier for the leg.
+        breach_price: Price at which breach occurred.
+        breach_amount: How far past origin (absolute value).
+
+    Example:
+        >>> from datetime import datetime
+        >>> from decimal import Decimal
+        >>> event = OriginBreachedEvent(
+        ...     bar_index=50,
+        ...     timestamp=datetime.now(),
+        ...     swing_id="",
+        ...     leg_id="leg_abc123",
+        ...     breach_price=Decimal("4950.00"),
+        ...     breach_amount=Decimal("2.50"),
+        ... )
+        >>> event.event_type
+        'ORIGIN_BREACHED'
+    """
+
+    event_type: Literal["ORIGIN_BREACHED"] = field(
+        default="ORIGIN_BREACHED", init=False
+    )
+    leg_id: str = ""
+    breach_price: Decimal = field(default_factory=lambda: Decimal("0"))
+    breach_amount: Decimal = field(default_factory=lambda: Decimal("0"))
+
+
+@dataclass
+class PivotBreachedEvent(SwingEvent):
+    """
+    Emitted when a formed leg's pivot is first breached (price crosses pivot).
+
+    This tracks when price extends past a formed leg's pivot point. Only
+    emitted for formed legs - forming legs have extending pivots.
+
+    Attributes:
+        event_type: Always "PIVOT_BREACHED".
+        leg_id: Unique identifier for the leg.
+        breach_price: Price at which breach occurred.
+        breach_amount: How far past pivot (absolute value).
+
+    Example:
+        >>> from datetime import datetime
+        >>> from decimal import Decimal
+        >>> event = PivotBreachedEvent(
+        ...     bar_index=60,
+        ...     timestamp=datetime.now(),
+        ...     swing_id="",
+        ...     leg_id="leg_abc123",
+        ...     breach_price=Decimal("5010.00"),
+        ...     breach_amount=Decimal("5.00"),
+        ... )
+        >>> event.event_type
+        'PIVOT_BREACHED'
+    """
+
+    event_type: Literal["PIVOT_BREACHED"] = field(
+        default="PIVOT_BREACHED", init=False
+    )
+    leg_id: str = ""
+    breach_price: Decimal = field(default_factory=lambda: Decimal("0"))
+    breach_amount: Decimal = field(default_factory=lambda: Decimal("0"))
