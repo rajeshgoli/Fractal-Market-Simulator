@@ -8,7 +8,6 @@ import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
 import { LegOverlay } from '../components/LegOverlay';
 import { PendingOriginsOverlay } from '../components/PendingOriginsOverlay';
 import { HierarchyModeOverlay } from '../components/HierarchyModeOverlay';
-import { FollowedLegsPanel } from '../components/FollowedLegsPanel';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { useHierarchyMode } from '../hooks/useHierarchyMode';
 import { useFollowLeg } from '../hooks/useFollowLeg';
@@ -941,35 +940,28 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             />
           </div>
 
-          {/* DAG State Panel + Followed Legs Panel - Always shown in DAG mode */}
-          <div className="h-48 md:h-56 shrink-0 flex gap-2">
-            <div className="flex-1">
-              <DAGStatePanel
-                dagState={dagState}
-                recentLegEvents={recentLegEvents}
-                isLoading={isDagLoading}
-                onHoverItem={setHighlightedDagItem}
-                highlightedItem={highlightedDagItem}
-                attachedItems={attachedItems}
-                onAttachItem={handleAttachItem}
-                onDetachItem={handleDetachItem}
-                focusedLegId={focusedLegId}
-              />
-            </div>
-            {/* Followed Legs Panel (#267) */}
-            <div className="w-64 bg-app-card border border-app-border rounded-lg overflow-hidden">
-              <FollowedLegsPanel
-                followedLegs={followLeg.followedLegs}
-                onUnfollow={followLeg.unfollowLeg}
-                onLegClick={(legId) => {
-                  setFocusedLegId(legId);
-                  const leg = dagState?.active_legs.find(l => l.leg_id === legId);
-                  if (leg) {
-                    setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
-                  }
-                }}
-              />
-            </div>
+          {/* DAG State Panel - Always shown in DAG mode */}
+          <div className="h-48 md:h-56 shrink-0">
+            <DAGStatePanel
+              dagState={dagState}
+              recentLegEvents={recentLegEvents}
+              isLoading={isDagLoading}
+              onHoverItem={setHighlightedDagItem}
+              highlightedItem={highlightedDagItem}
+              attachedItems={attachedItems}
+              onAttachItem={handleAttachItem}
+              onDetachItem={handleDetachItem}
+              focusedLegId={focusedLegId}
+              followedLegs={followLeg.followedLegs}
+              onUnfollowLeg={followLeg.unfollowLeg}
+              onFollowedLegClick={(legId) => {
+                setFocusedLegId(legId);
+                const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+                if (leg) {
+                  setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
+                }
+              }}
+            />
           </div>
         </main>
       </div>
