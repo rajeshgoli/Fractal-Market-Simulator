@@ -550,17 +550,38 @@ export function useForwardPlayback({
         });
       }
 
-      // Push snapshot to history buffer for backward navigation (#278)
+      // Push snapshot for EACH bar for fine-grained backward navigation (#278)
+      // This allows stepping back at 5m granularity even after advancing at 1H
       if (response.new_bars.length > 0) {
+        const newBarData: BarData[] = response.new_bars.map(bar => ({
+          index: bar.index,
+          timestamp: bar.timestamp,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          source_start_index: bar.index,
+          source_end_index: bar.index,
+        }));
+
+        // Get the bars before this advance
+        const barsBeforeAdvance = newVisibleBars.slice(0, -newBarData.length);
+
         setTimeout(() => {
-          pushHistorySnapshot(
-            response.current_bar_index,
-            newVisibleBars,
-            newAllEvents,
-            response.dag_state || latestDagStateRef.current,
-            response.aggregated_bars || latestAggregatedBarsRef.current,
-            response.swing_state
-          );
+          // Push a snapshot for each bar in the batch
+          for (let i = 0; i < newBarData.length; i++) {
+            const barsUpToThis = [...barsBeforeAdvance, ...newBarData.slice(0, i + 1)];
+            const barIndex = newBarData[i].index;
+            pushHistorySnapshot(
+              barIndex,
+              barsUpToThis,
+              newAllEvents,
+              // All intermediate snapshots share the final DAG state (best we can do)
+              response.dag_state || latestDagStateRef.current,
+              response.aggregated_bars || latestAggregatedBarsRef.current,
+              response.swing_state
+            );
+          }
         }, 0);
       }
 
