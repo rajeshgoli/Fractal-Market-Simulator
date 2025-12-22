@@ -400,10 +400,11 @@ Legs that have formed into active swings are never pruned. If an origin has any 
 
 **Extended visibility for invalidated legs (#203):**
 
-Invalidated legs remain visible in the DAG until they are pruned at 3× extension:
+Invalidated legs remain visible in the DAG until pruned by one of two conditions:
 - `active` → legs not yet invalidated, shown with solid lines
 - `invalidated` → legs past invalidation threshold, shown with dotted lines
-- At 3× extension beyond origin, invalidated legs are pruned via `_check_extension_prune()`
+- **Engulfed prune:** If both origin AND pivot are breached, invalidated legs are deleted immediately (no replacement)
+- **Extension prune:** At 3× extension beyond origin, invalidated legs are pruned via `_check_extension_prune()`
 
 Configuration:
 - `DirectionConfig.invalidation_threshold`: Configurable per direction (default: 0.382)
