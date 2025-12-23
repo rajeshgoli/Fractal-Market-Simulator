@@ -2,10 +2,9 @@
 Leg pruning logic for the DAG layer.
 
 Handles all pruning operations:
-- Turn pruning: consolidate legs on direction change
 - Origin-proximity pruning: consolidate legs close in (time, range) space (#294)
-- Domination pruning: prune legs with worse origins
 - Breach pruning: prune formed legs when pivot is breached (#208)
+- Inner structure pruning: prune redundant legs from contained pivots (#264)
 """
 
 import bisect
@@ -54,9 +53,9 @@ class LegPruner:
         A leg is dominated if an existing active leg of the same direction has
         a better or equal origin. Since all legs of the same direction converge
         to the same pivot (via extend), the leg with the best origin will
-        always have the largest range and survive turn pruning.
+        always have the largest range.
 
-        Creating dominated legs is wasteful - they will be pruned at turn.
+        Creating dominated legs is wasteful.
 
         IMPORTANT (#202): This check only applies within a single turn.
         Legs from previous turns (origin_index < last_turn_bar) don't dominate
@@ -71,10 +70,6 @@ class LegPruner:
         Returns:
             True if an existing leg dominates (new leg would be pruned)
         """
-        # Skip if domination pruning is disabled
-        if not self.config.enable_domination_prune:
-            return False
-
         # Get the turn boundary - only legs from current turn can dominate
         turn_start = state.last_turn_bar.get(direction, -1)
 
@@ -92,108 +87,7 @@ class LegPruner:
                 return True
         return False
 
-    def prune_dominated_legs_in_turn(
-        self,
-        state: DetectorState,
-        new_leg: Leg,
-        bar: Bar,
-        timestamp: datetime,
-    ) -> List[LegPrunedEvent]:
-        """
-        Prune existing legs dominated by a newly created leg (#204, #207).
-
-        When a new leg is created with a better origin than existing legs,
-        those worse legs should be pruned. This is the reverse of
-        would_leg_be_dominated - that prevents creating worse legs, this removes
-        existing worse legs when a better one is found.
-
-        For trading: having a leg with origin 2 points worse means stop losses
-        would be placed incorrectly, potentially getting stopped out on noise.
-
-        IMPORTANT (#207): Turn boundaries are respected for BOTH creation AND pruning.
-        Legs from different turns represent independent structural phases and must
-        coexist. A leg from turn A should never be pruned by a leg from turn B.
-
-        Definition of "same turn": Legs are in the same turn if their origin_index
-        is >= the last_turn_bar[direction] value when they were created.
-
-        Immunity: Legs that have formed into active swings are never pruned.
-
-        Args:
-            state: Current detector state (mutated)
-            new_leg: The newly created leg with a better origin
-            bar: Current bar (for event metadata)
-            timestamp: Timestamp for events
-
-        Returns:
-            List of LegPrunedEvent for pruned legs
-        """
-        # Skip if domination pruning is disabled
-        if not self.config.enable_domination_prune:
-            return []
-
-        events: List[LegPrunedEvent] = []
-        direction = new_leg.direction
-        new_origin = new_leg.origin_price
-
-        # Get the turn boundary - only prune legs from the SAME turn (#207)
-        turn_start = state.last_turn_bar.get(direction, -1)
-
-        # Build set of active swing IDs for immunity check
-        active_swing_ids = {
-            swing.swing_id for swing in state.active_swings
-            if swing.status == 'active'
-        }
-
-        pruned_leg_ids: Set[str] = set()
-
-        for leg in state.active_legs:
-            if leg.leg_id == new_leg.leg_id:
-                continue  # Don't prune self
-            if leg.direction != direction or leg.status != 'active':
-                continue
-            # #207: Skip legs from previous turns - they represent different structures
-            if leg.origin_index < turn_start:
-                continue
-            # Active swing immunity - legs with active swings are never pruned
-            if leg.swing_id and leg.swing_id in active_swing_ids:
-                continue
-
-            # Check if this leg is dominated by new_leg
-            # Bull: lower origin is better, so prune if existing origin > new origin
-            # Bear: higher origin is better, so prune if existing origin < new origin
-            is_dominated = False
-            if direction == 'bull' and leg.origin_price > new_origin:
-                is_dominated = True
-            if direction == 'bear' and leg.origin_price < new_origin:
-                is_dominated = True
-
-            if is_dominated:
-                leg.status = 'pruned'
-                pruned_leg_ids.add(leg.leg_id)
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id="",
-                    leg_id=leg.leg_id,
-                    reason="dominated_in_turn",
-                ))
-
-        # Reparent children of pruned legs before removal (#281)
-        for leg in state.active_legs:
-            if leg.leg_id in pruned_leg_ids:
-                self.reparent_children(state, leg)
-
-        # Remove pruned legs from active_legs
-        if pruned_leg_ids:
-            state.active_legs = [
-                leg for leg in state.active_legs
-                if leg.leg_id not in pruned_leg_ids
-            ]
-
-        return events
-
-    def prune_legs_on_turn(
+    def apply_origin_proximity_prune(
         self,
         state: DetectorState,
         direction: str,
@@ -201,17 +95,22 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Prune legs with multi-origin preservation and origin-proximity consolidation.
+        Apply origin-proximity based consolidation (#294).
 
-        1. Group legs by origin
-        2. For each origin group: keep ONLY the largest (prune others)
-           - On tie, keep earliest pivot bar (#190)
-        3. Origin-proximity consolidation (#294): prune legs close in (time, range) space
-           - Compares legs by origin proximity rather than pivot grouping
-           - Prunes newer leg if both time_ratio and range_ratio below thresholds
-        4. Active swing immunity: legs with active swings are never pruned
+        Prunes legs that are close in origin (time, range) space:
 
-        This preserves nested structure while compressing noise.
+        **Prune newer leg if BOTH conditions are true:**
+        - time_ratio < origin_time_prune_threshold: Legs formed around same time
+        - range_ratio < origin_range_prune_threshold: Legs have similar ranges
+
+        Where:
+        - time_ratio = (bars_since_older_origin - bars_since_newer_origin) / bars_since_older_origin
+        - range_ratio = |older_range - newer_range| / max(older_range, newer_range)
+
+        Defensive check: If newer leg is longer than older leg, raise exception.
+        Per design, this should be impossible (breach/engulfing mechanics prevent it).
+
+        Active swing immunity: Legs with active swings are never pruned.
 
         Args:
             state: Current detector state (mutated)
@@ -220,13 +119,15 @@ class LegPruner:
             timestamp: Timestamp for events
 
         Returns:
-            List of LegPrunedEvent for pruned legs
+            List of LegPrunedEvent for pruned legs with reason="origin_proximity_prune"
         """
-        # Skip if turn pruning is disabled
-        if not self.config.enable_turn_prune:
-            return []
-
         events: List[LegPrunedEvent] = []
+        range_threshold = Decimal(str(self.config.origin_range_prune_threshold))
+        time_threshold = Decimal(str(self.config.origin_time_prune_threshold))
+
+        # Skip proximity pruning if either threshold is 0 (disabled)
+        if range_threshold == 0 or time_threshold == 0:
+            return events
 
         # Get active legs of the specified direction
         legs = [
@@ -243,132 +144,16 @@ class LegPruner:
             if swing.status == 'active'
         }
 
-        # Group by origin (same origin_price and origin_index)
-        origin_groups: Dict[Tuple[Decimal, int], List[Leg]] = defaultdict(list)
-        for leg in legs:
-            key = (leg.origin_price, leg.origin_index)
-            origin_groups[key].append(leg)
-
-        pruned_leg_ids: Set[str] = set()
-
-        # Step 1: Within each origin group, keep ONLY the largest
-        # (Prune all others except those with active swings)
-        best_per_origin: Dict[Tuple[Decimal, int], Leg] = {}
-
-        for origin_key, group in origin_groups.items():
-            # Find the largest in this origin group; on tie, keep earliest pivot (fixes #190)
-            largest = max(group, key=lambda l: (l.range, -l.pivot_index))
-            best_per_origin[origin_key] = largest
-
-            if len(group) <= 1:
-                continue
-
-            # Prune all legs except the largest (old behavior from #181)
-            for leg in group:
-                if leg.leg_id == largest.leg_id:
-                    continue
-                # Active swing immunity: never prune legs with active swings
-                if leg.swing_id and leg.swing_id in active_swing_ids:
-                    continue
-                leg.status = 'pruned'
-                pruned_leg_ids.add(leg.leg_id)
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id="",
-                    leg_id=leg.leg_id,
-                    reason="turn_prune",
-                ))
-
-        # Step 2: Proximity-based consolidation (#203)
-        # Prune legs that are too similar to survivors (within relative difference threshold)
-        events.extend(self._apply_proximity_prune(
-            state, direction, bar, timestamp, best_per_origin, pruned_leg_ids, active_swing_ids
-        ))
-
-        # Reparent children of pruned legs before removal (#281)
-        for leg in state.active_legs:
-            if leg.leg_id in pruned_leg_ids:
-                self.reparent_children(state, leg)
-
-        # Remove pruned legs from active_legs
-        state.active_legs = [
-            leg for leg in state.active_legs
-            if leg.leg_id not in pruned_leg_ids
-        ]
-
-        return events
-
-    def _apply_proximity_prune(
-        self,
-        state: DetectorState,
-        direction: str,
-        bar: Bar,
-        timestamp: datetime,
-        best_per_origin: Dict[Tuple[Decimal, int], Leg],
-        pruned_leg_ids: Set[str],
-        active_swing_ids: Set[str],
-    ) -> List[LegPrunedEvent]:
-        """
-        Apply origin-proximity based consolidation (#294).
-
-        Prunes legs that are close in origin (time, range) space. This replaces
-        the pivot-based proximity pruning with origin-based logic:
-
-        **Prune newer leg if BOTH conditions are true:**
-        - time_ratio < origin_time_prune_threshold: Legs formed around same time
-        - range_ratio < origin_range_prune_threshold: Legs have similar ranges
-
-        Where:
-        - time_ratio = (bars_since_older_origin - bars_since_newer_origin) / bars_since_older_origin
-        - range_ratio = |older_range - newer_range| / max(older_range, newer_range)
-
-        Defensive check: If newer leg is longer than older leg, raise exception.
-        Per design, this should be impossible (breach/engulfing mechanics prevent it).
-
-        Active swing immunity: Legs with active swings are never pruned.
-
-        Args:
-            state: Current detector state
-            direction: 'bull' or 'bear'
-            bar: Current bar
-            timestamp: Timestamp for events
-            best_per_origin: Dict mapping origin -> best leg for that origin
-            pruned_leg_ids: Set to track pruned leg IDs (mutated)
-            active_swing_ids: Set of swing IDs that are currently active
-
-        Returns:
-            List of LegPrunedEvent for pruned legs with reason="origin_proximity_prune"
-        """
-        events: List[LegPrunedEvent] = []
-        range_threshold = Decimal(str(self.config.origin_range_prune_threshold))
-        time_threshold = Decimal(str(self.config.origin_time_prune_threshold))
-
-        # Skip proximity pruning if both thresholds are 0 (disabled)
-        if range_threshold == 0 or time_threshold == 0:
-            return events
-
-        # Get remaining legs (not already pruned)
-        remaining_legs = [
-            leg for origin, leg in best_per_origin.items()
-            if leg.leg_id not in pruned_leg_ids
-        ]
-
-        if len(remaining_legs) <= 1:
-            return events
-
         # Sort by origin_index ascending (older legs first)
-        remaining_legs.sort(key=lambda l: l.origin_index)
+        legs.sort(key=lambda l: l.origin_index)
 
         current_bar = bar.index
+        pruned_leg_ids: Set[str] = set()
 
         # Track survivors (legs that won't be pruned)
         survivors: List[Leg] = []
 
-        for leg in remaining_legs:
-            if leg.leg_id in pruned_leg_ids:
-                continue
-
+        for leg in legs:
             # Active swing immunity
             if leg.swing_id and leg.swing_id in active_swing_ids:
                 survivors.append(leg)
@@ -433,6 +218,18 @@ class LegPruner:
                 ))
             else:
                 survivors.append(leg)
+
+        # Reparent children of pruned legs before removal (#281)
+        for leg in state.active_legs:
+            if leg.leg_id in pruned_leg_ids:
+                self.reparent_children(state, leg)
+
+        # Remove pruned legs from active_legs
+        if pruned_leg_ids:
+            state.active_legs = [
+                leg for leg in state.active_legs
+                if leg.leg_id not in pruned_leg_ids
+            ]
 
         return events
 

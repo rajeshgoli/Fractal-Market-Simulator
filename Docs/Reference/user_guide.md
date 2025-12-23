@@ -404,9 +404,7 @@ The Detection Config Panel allows real-time adjustment of swing detection thresh
 |--------|---------|-------------|
 | Engulfed | ON | Delete legs breached on both origin and pivot sides |
 | Inner Structure | ON | Prune legs with same pivot as parent leg |
-| Turn Consolidation | ON | Consolidate legs on price direction turns |
 | Pivot Breach | ON | Replace legs when pivot is breached beyond threshold |
-| Domination | ON | Prune dominated legs during turn consolidation |
 
 **How to use:**
 1. Adjust sliders for desired thresholds
@@ -560,7 +558,7 @@ You can interact with legs directly on the chart (not just in the panel):
 | Event | Description |
 |-------|-------------|
 | LEG_CREATED | New candidate leg created from pivot + origin pair |
-| LEG_PRUNED | Leg removed (turn pruning, inner structure pruning, origin-proximity consolidation, or staleness) |
+| LEG_PRUNED | Leg removed (inner structure pruning, origin-proximity consolidation, or staleness) |
 | LEG_INVALIDATED | Leg fell below 0.382 threshold (decisive invalidation) |
 
 ### Playback Controls

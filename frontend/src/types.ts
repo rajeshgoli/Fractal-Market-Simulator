@@ -459,9 +459,7 @@ export interface DetectionConfig {
   // Pruning algorithm toggles
   enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
   enable_inner_structure_prune: boolean;  // Enable inner structure pruning (default: true)
-  enable_turn_prune: boolean;  // Enable turn-based consolidation (default: true)
   enable_pivot_breach_prune: boolean;  // Enable pivot breach replacement (default: true)
-  enable_domination_prune: boolean;  // Enable domination pruning (default: true)
 }
 
 /**
@@ -485,7 +483,5 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   origin_time_threshold: 0.0,
   enable_engulfed_prune: true,
   enable_inner_structure_prune: true,
-  enable_turn_prune: true,
   enable_pivot_breach_prune: true,
-  enable_domination_prune: true,
 };

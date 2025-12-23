@@ -97,7 +97,7 @@ class TestOriginProximityPruningDisabled:
         state.active_legs = [leg1, leg2]
 
         bar = make_bar(20)
-        events = pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         # Only turn pruning should occur, not proximity pruning
         # (legs have different origins, so turn pruning won't consolidate them)
@@ -117,7 +117,7 @@ class TestOriginProximityPruningDisabled:
         state.active_legs = [leg1, leg2]
 
         bar = make_bar(20)
-        events = pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         # No proximity pruning should occur
         assert len(state.active_legs) == 2
@@ -136,7 +136,7 @@ class TestOriginProximityPruningDisabled:
         state.active_legs = [leg1, leg2]
 
         bar = make_bar(20)
-        events = pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         # No proximity pruning should occur
         assert len(state.active_legs) == 2
@@ -168,7 +168,7 @@ class TestOriginProximityPruningLogic:
         # Both conditions met -> prune newer leg
 
         bar = make_bar(20)
-        events = pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         # Check that proximity prune event was emitted
         prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
@@ -195,7 +195,7 @@ class TestOriginProximityPruningLogic:
         # Range similar but time threshold not met -> keep both
 
         bar = make_bar(20)
-        events = pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
         assert len(prox_events) == 0
@@ -217,7 +217,7 @@ class TestOriginProximityPruningLogic:
         state.active_legs = [leg1, leg2]
 
         bar = make_bar(20)
-        events = pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
         assert len(prox_events) == 0
@@ -245,7 +245,7 @@ class TestOriginProximityDefensiveCheck:
         bar = make_bar(20)
 
         with pytest.raises(ValueError, match="newer leg.*is longer than older leg"):
-            pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+            pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
 
 class TestOriginProximityActiveSwingImmunity:
@@ -280,7 +280,7 @@ class TestOriginProximityActiveSwingImmunity:
         state.active_legs = [leg1, leg2]
 
         bar = make_bar(20)
-        events = pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         # leg2 should not be pruned due to active swing immunity
         prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
@@ -310,7 +310,7 @@ class TestOriginProximityMultipleLegs:
         state.active_legs = [leg1, leg2, leg3]
 
         bar = make_bar(20)
-        events = pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
         # Both leg2 and leg3 should be pruned (newer than leg1, similar range/time)
@@ -335,7 +335,7 @@ class TestOriginProximityMultipleLegs:
         state.active_legs = [leg1, leg2, leg3]
 
         bar = make_bar(100)
-        events = pruner.prune_legs_on_turn(state, 'bull', bar, datetime.now())
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         # time_ratio for leg2 vs leg1: (100 - 50) / 100 = 0.50 > 0.10 (keep)
         # time_ratio for leg3 vs leg1: (100 - 10) / 100 = 0.90 > 0.10 (keep)

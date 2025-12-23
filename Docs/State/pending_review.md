@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-23
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - #297: Replace window_offset with csv_index in feedback snapshots
+- #296: Remove deprecated turn consolidation and domination pruning
 
 ---
 

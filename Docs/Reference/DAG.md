@@ -513,42 +513,7 @@ The invalidation correctly signaled structure breakdown.
 
 Multiple legs can exist simultaneously. Pruning removes redundant or dominated legs.
 
-### 1. Domination Pruning
-
-**Rule:** A leg with a worse origin is pruned when a better origin appears.
-
-```
-BULL: Lower origin is better (larger potential range)
-BEAR: Higher origin is better (larger potential range)
-
-Example (Bull):
-  Leg A: Origin = 3980.00
-  Leg B: Origin = 3975.00 ← BETTER (lower)
-
-Leg A is DOMINATED by Leg B.
-If both have same pivot, Leg A is pruned.
-```
-
-**Why?** A trader only cares about the most significant structure. If there's a lower swing low, the higher one is less relevant.
-
-### 2. Turn Pruning
-
-**Rule:** When direction changes, consolidate legs of the opposite direction.
-
-```
-Market was trending UP (Type 2-Bull bars)
-Now gets a Type 2-Bear bar (direction change = "turn")
-
-At the turn:
-1. Group all bear legs by their origin
-2. Within each origin group, keep only the largest (by range)
-3. Prune the rest
-
-Rationale: Multiple legs from same origin are redundant.
-           Keep the one that extended furthest.
-```
-
-### 3. Origin-Proximity Pruning (#294)
+### 1. Origin-Proximity Pruning (#294)
 
 **Rule:** Legs close together in origin (time, range) space are consolidated. Newer legs are pruned when BOTH conditions are true:
 - **Time ratio** < threshold: Legs formed around the same time
@@ -580,7 +545,7 @@ Rationale:
 
 **Defensive Check:** If a newer leg is longer than an older leg, an exception is raised. This should be impossible per design (breach/engulfing mechanics prevent it). If it happens, there's a bug upstream.
 
-### 4. Pivot Breach Pruning
+### 2. Pivot Breach Pruning
 
 **Rule:** A formed leg whose pivot is breached (but origin defended) gets replaced.
 
@@ -598,7 +563,7 @@ Rationale: The defended level (origin) is intact.
            The pivot just extended — structure continues.
 ```
 
-### 5. Engulfed Pruning
+### 3. Engulfed Pruning
 
 **Rule:** A leg breached on BOTH origin AND pivot is deleted immediately.
 
@@ -611,7 +576,7 @@ Both endpoints violated = structure is meaningless.
 Leg is deleted immediately. No replacement.
 ```
 
-### 6. Inner Structure Pruning
+### 4. Inner Structure Pruning
 
 **Rule:** When outer structure invalidates, redundant inner counter-legs are pruned.
 
@@ -644,20 +609,18 @@ Price oscillates between 3918 and 3927
 Active legs at one point:
 1. Bull: O=3918.00 → P=3925.00 (from session low)
 2. Bull: O=3919.25 → P=3925.00 (from higher low)
-3. Bull: O=3921.25 → P=3925.00 (from even higher low)
-4. Bear: O=3925.00 → P=3921.25 (from high)
 
-When Type 2-Bear bar arrives (turn from bull to bear):
-  → Turn pruning kicks in
-  → Bull legs grouped by origin
-  → Leg 1 (O=3918.00) has BEST origin (lowest)
-  → Legs 2 and 3 are DOMINATED and PRUNED
+With origin-proximity pruning enabled:
+  time_ratio = (bars_since_leg1 - bars_since_leg2) / bars_since_leg1
+             = small (legs formed close together)
+  range_ratio = |7.00 - 5.75| / 7.00 = 0.18 (similar ranges)
+
+  Both ratios below threshold → Leg 2 is PRUNED
 
 After pruning:
-1. Bull: O=3918.00 → P=3925.00 (SURVIVES)
-4. Bear: O=3925.00 → P=3921.25 (SURVIVES)
+1. Bull: O=3918.00 → P=3925.00 (SURVIVES - older, larger)
 
-Clean structure: one swing low (3918), one swing high (3925).
+Clean structure: dominant swing low at 3918.
 ```
 
 ---
@@ -1019,15 +982,10 @@ Bar 7 (00:35): O=3982.25 H=3982.75 L=3979.25 C=3980.00
 Compare: LH=3982.75 < 3983.25, HL=3979.25 < 3980.25
 → TYPE 2-BEAR (direction change!)
 
-TURN DETECTED: Bull → Bear
-
 CREATE BEAR LEG:
   Origin: 3983.25 (previous bar's HIGH)
   Pivot: 3979.25 (current LOW)
   Range: 4.00 points
-
-TURN PRUNING on Bull legs:
-  Only one bull leg exists. No consolidation needed.
 
 Active Legs: [Bull: 3976.25 → 3983.25, Bear: 3983.25 → 3979.25]
 
@@ -1196,16 +1154,7 @@ The combination tells you both *how fast* and *how* the move happened.
 - Structure is intact, just extended
 - Action: Replace with updated pivot
 
-### Q8: What's the "turn" concept and why does it matter for pruning?
-
-**A:** A "turn" is when market direction changes (e.g., Type 2-Bull after Type 2-Bear bars). At turns:
-- The algorithm knows the previous trend ended
-- Multiple legs of the old direction can be consolidated
-- Only the most significant (largest from each origin) survive
-
-This prevents cluttering with redundant legs from the same move.
-
-### Q9: Can a swing have multiple parents? What does that mean?
+### Q8: Can a swing have multiple parents? What does that mean?
 
 **A:** Yes. A swing can be a child of multiple larger structures:
 
@@ -1221,7 +1170,7 @@ Child is nested inside BOTH larger structures.
 
 This means invalidating Parent A would cascade implications to the child, and similarly for Parent B.
 
-### Q10: The algorithm seems complex. Is there a simpler mental model?
+### Q9: The algorithm seems complex. Is there a simpler mental model?
 
 **A:** Yes. Think of it as tracking "defended levels":
 
@@ -1261,11 +1210,11 @@ These could be unified as **one "structure threshold"** with different direction
 
 ### 3. Pruning Rules Consolidation
 
-Six pruning rules could reduce to two:
+Four pruning rules could reduce to two:
 1. **Dominance:** Keep the best origin for each direction
 2. **Breach:** Remove when endpoints are violated
 
-The proximity, turn, and inner structure pruning are all variations of dominance.
+The proximity and inner structure pruning are variations of dominance.
 
 **Opportunity:** Document as "dominance-based cleanup" rather than separate rules.
 
@@ -1331,7 +1280,6 @@ The algorithm emits events for state changes:
 | **Range** | Distance from origin to pivot |
 | **Formation** | Confirmation of swing via retracement |
 | **Invalidation** | Structure broken via origin breach |
-| **Turn** | Direction change (bull→bear or bear→bull) |
 | **Pruning** | Removing redundant or dominated legs |
 | **DAG** | Directed Acyclic Graph (hierarchical structure) |
 | **Impulse** | Points per bar (move intensity) |

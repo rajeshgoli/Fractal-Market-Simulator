@@ -541,9 +541,9 @@ class LegDetector:
         """
         events: List[SwingEvent] = []
 
-        # Prune bear legs on turn (#181): Type 2-Bull signals turn, prune redundant bear legs
-        turn_prune_events = self._pruner.prune_legs_on_turn(self.state, 'bear', bar, timestamp)
-        events.extend(turn_prune_events)
+        # Apply origin-proximity pruning for bear legs (#294)
+        proximity_prune_events = self._pruner.apply_origin_proximity_prune(self.state, 'bear', bar, timestamp)
+        events.extend(proximity_prune_events)
 
         # Check if we can start a bull leg from the pending bull origin
         # prev_low is the origin (starting point) for a bull swing extending up
@@ -591,8 +591,6 @@ class LegDetector:
                     pivot_price=new_leg.pivot_price,
                     pivot_index=new_leg.pivot_index,
                 ))
-                # Prune existing legs dominated by this better origin (#204)
-                events.extend(self._pruner.prune_dominated_legs_in_turn(self.state, new_leg, bar, timestamp))
 
         # Update pending origins only if more extreme AND not worse than active leg origins (#200)
         # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
@@ -634,9 +632,9 @@ class LegDetector:
         """
         events: List[SwingEvent] = []
 
-        # Prune bull legs on turn (#181): Type 2-Bear signals turn, prune redundant bull legs
-        turn_prune_events = self._pruner.prune_legs_on_turn(self.state, 'bull', bar, timestamp)
-        events.extend(turn_prune_events)
+        # Apply origin-proximity pruning for bull legs (#294)
+        proximity_prune_events = self._pruner.apply_origin_proximity_prune(self.state, 'bull', bar, timestamp)
+        events.extend(proximity_prune_events)
 
         # Start new bear leg for potential bear swing
         # (tracking downward movement for possible bear retracement later)
@@ -682,8 +680,6 @@ class LegDetector:
                     pivot_price=new_bear_leg.pivot_price,
                     pivot_index=new_bear_leg.pivot_index,
                 ))
-                # Prune existing legs dominated by this better origin (#204)
-                events.extend(self._pruner.prune_dominated_legs_in_turn(self.state, new_bear_leg, bar, timestamp))
 
         # Update pending origins only if more extreme AND not worse than active leg origins (#200)
         # Bull origin: only update if this low is lower (tracking swing lows for bull legs)
@@ -765,8 +761,6 @@ class LegDetector:
                         pivot_price=new_bear_leg.pivot_price,
                         pivot_index=new_bear_leg.pivot_index,
                     ))
-                    # Prune existing legs dominated by this better origin (#204)
-                    events.extend(self._pruner.prune_dominated_legs_in_turn(self.state, new_bear_leg, bar, timestamp))
 
             # Create bull leg if LOW came before HIGH (price moved up)
             # Bull swing: origin=LOW (starting point), pivot=HIGH (defended extreme)
@@ -807,8 +801,6 @@ class LegDetector:
                         pivot_price=new_bull_leg.pivot_price,
                         pivot_index=new_bull_leg.pivot_index,
                     ))
-                    # Prune existing legs dominated by this better origin (#204)
-                    events.extend(self._pruner.prune_dominated_legs_in_turn(self.state, new_bull_leg, bar, timestamp))
 
             # Update pending origins only if more extreme AND not worse than active leg origins (#200)
             # Bear origin: only update if this high is higher (tracking swing highs for bear legs)
@@ -1208,15 +1200,7 @@ class LegDetector:
         turn. During an opposite direction's turn (e.g., bear turn for bull pending
         origins), always track the pending origin since the old legs are from a
         previous turn and shouldn't block tracking for the next turn.
-
-        NOTE: This check is bypassed when domination pruning is disabled, to allow
-        all potential legs to be created for debugging purposes.
         """
-        # If domination pruning is disabled, always track pending origins
-        # This allows users to see all potential legs for debugging
-        if not self.config.enable_domination_prune:
-            return True
-
         # #202: If we're currently in the opposite direction's turn, always track.
         # This allows pending origins to accumulate during retracements.
         # For example, during a bear turn, always track bull pending origins

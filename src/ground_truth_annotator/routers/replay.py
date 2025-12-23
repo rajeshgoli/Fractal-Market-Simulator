@@ -1876,16 +1876,12 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     if any([
         request.enable_engulfed_prune is not None,
         request.enable_inner_structure_prune is not None,
-        request.enable_turn_prune is not None,
         request.enable_pivot_breach_prune is not None,
-        request.enable_domination_prune is not None,
     ]):
         new_config = new_config.with_prune_toggles(
             enable_engulfed_prune=request.enable_engulfed_prune,
             enable_inner_structure_prune=request.enable_inner_structure_prune,
-            enable_turn_prune=request.enable_turn_prune,
             enable_pivot_breach_prune=request.enable_pivot_breach_prune,
-            enable_domination_prune=request.enable_domination_prune,
         )
 
     # Update detector config (keeps current state, applies to future bars)
@@ -1919,9 +1915,7 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         origin_time_threshold=new_config.origin_time_prune_threshold,
         enable_engulfed_prune=new_config.enable_engulfed_prune,
         enable_inner_structure_prune=new_config.enable_inner_structure_prune,
-        enable_turn_prune=new_config.enable_turn_prune,
         enable_pivot_breach_prune=new_config.enable_pivot_breach_prune,
-        enable_domination_prune=new_config.enable_domination_prune,
     )
 
 
@@ -1963,7 +1957,5 @@ async def get_detection_config():
         origin_time_threshold=config.origin_time_prune_threshold,
         enable_engulfed_prune=config.enable_engulfed_prune,
         enable_inner_structure_prune=config.enable_inner_structure_prune,
-        enable_turn_prune=config.enable_turn_prune,
         enable_pivot_breach_prune=config.enable_pivot_breach_prune,
-        enable_domination_prune=config.enable_domination_prune,
     )

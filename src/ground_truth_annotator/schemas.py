@@ -709,9 +709,7 @@ class SwingConfigUpdateRequest(BaseModel):
     # Pruning algorithm toggles
     enable_engulfed_prune: Optional[bool] = None  # Enable engulfed leg deletion (default: True)
     enable_inner_structure_prune: Optional[bool] = None  # Enable inner structure pruning (default: True)
-    enable_turn_prune: Optional[bool] = None  # Enable turn-based consolidation (default: True)
     enable_pivot_breach_prune: Optional[bool] = None  # Enable pivot breach replacement (default: True)
-    enable_domination_prune: Optional[bool] = None  # Enable domination pruning (default: True)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -729,9 +727,7 @@ class SwingConfigUpdateRequest(BaseModel):
                 "origin_time_threshold": 0.10,
                 "enable_engulfed_prune": True,
                 "enable_inner_structure_prune": True,
-                "enable_turn_prune": True,
-                "enable_pivot_breach_prune": True,
-                "enable_domination_prune": True
+                "enable_pivot_breach_prune": True
             }
         }
     )
@@ -758,9 +754,7 @@ class SwingConfigResponse(BaseModel):
     # Pruning algorithm toggles
     enable_engulfed_prune: bool
     enable_inner_structure_prune: bool
-    enable_turn_prune: bool
     enable_pivot_breach_prune: bool
-    enable_domination_prune: bool
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -782,9 +776,7 @@ class SwingConfigResponse(BaseModel):
                 "origin_time_threshold": 0.10,
                 "enable_engulfed_prune": True,
                 "enable_inner_structure_prune": True,
-                "enable_turn_prune": True,
-                "enable_pivot_breach_prune": True,
-                "enable_domination_prune": True
+                "enable_pivot_breach_prune": True
             }
         }
     )

@@ -298,12 +298,11 @@ class LegPrunedEvent(SwingEvent):
 
     Prune reasons:
     - "staleness": Leg hasn't changed in 10 bars while price moved 2x its range
-    - "turn_prune": Leg is not the largest in its origin group (on directional turn)
     - "origin_proximity_prune": Leg is too close to an older leg in (time, range) space (#294)
-    - "dominated_in_turn": Leg has a worse origin than another leg in the same turn
     - "extension_prune": Invalidated leg has reached 3x extension
     - "pivot_breach": Formed leg's pivot was breached beyond threshold
     - "engulfed": Leg's origin was breached and pivot threshold exceeded
+    - "inner_structure": Leg from inner structure pivot pruned when outer exists
 
     Attributes:
         event_type: Always "LEG_PRUNED".
@@ -317,7 +316,7 @@ class LegPrunedEvent(SwingEvent):
         ...     timestamp=datetime.now(),
         ...     swing_id="",
         ...     leg_id="leg_abc123",
-        ...     reason="turn_prune",
+        ...     reason="staleness",
         ... )
         >>> event.event_type
         'LEG_PRUNED'

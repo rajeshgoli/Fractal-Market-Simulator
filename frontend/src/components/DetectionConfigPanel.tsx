@@ -35,9 +35,7 @@ interface ToggleConfig {
 const PRUNE_TOGGLES: ToggleConfig[] = [
   { key: 'enable_engulfed_prune', label: 'Engulfed', description: 'Delete legs breached on both origin and pivot sides' },
   { key: 'enable_inner_structure_prune', label: 'Inner Structure', description: 'Prune legs with same pivot as parent' },
-  { key: 'enable_turn_prune', label: 'Turn Consolidation', description: 'Consolidate legs on price direction turns' },
   { key: 'enable_pivot_breach_prune', label: 'Pivot Breach', description: 'Replace legs when pivot is breached beyond threshold' },
-  { key: 'enable_domination_prune', label: 'Domination', description: 'Prune dominated legs during turn consolidation' },
 ];
 
 interface DetectionConfigPanelProps {
@@ -114,9 +112,7 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
         // Pruning algorithm toggles
         enable_engulfed_prune: localConfig.enable_engulfed_prune,
         enable_inner_structure_prune: localConfig.enable_inner_structure_prune,
-        enable_turn_prune: localConfig.enable_turn_prune,
         enable_pivot_breach_prune: localConfig.enable_pivot_breach_prune,
-        enable_domination_prune: localConfig.enable_domination_prune,
       };
 
       const updatedConfig = await updateDetectionConfig(request);

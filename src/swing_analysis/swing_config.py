@@ -79,12 +79,8 @@ class SwingConfig:
             origin and pivot sides. Default True.
         enable_inner_structure_prune: Whether to prune counter-direction legs from
             inner structure pivots when outer structure invalidates. Default True.
-        enable_turn_prune: Whether to consolidate legs on direction change (turn).
-            Default True.
         enable_pivot_breach_prune: Whether to prune and replace formed legs when
             pivot is breached beyond threshold. Default True.
-        enable_domination_prune: Whether to prune legs dominated by legs with
-            better origins in the same turn. Default True.
 
     Example:
         >>> config = SwingConfig.default()
@@ -100,9 +96,7 @@ class SwingConfig:
     # Pruning algorithm toggles (#288)
     enable_engulfed_prune: bool = True
     enable_inner_structure_prune: bool = True
-    enable_turn_prune: bool = True
     enable_pivot_breach_prune: bool = True
-    enable_domination_prune: bool = True
 
     @classmethod
     def default(cls) -> "SwingConfig":
@@ -132,9 +126,7 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_turn_prune=self.enable_turn_prune,
             enable_pivot_breach_prune=self.enable_pivot_breach_prune,
-            enable_domination_prune=self.enable_domination_prune,
         )
 
     def with_bear(self, **kwargs: Any) -> "SwingConfig":
@@ -154,9 +146,7 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_turn_prune=self.enable_turn_prune,
             enable_pivot_breach_prune=self.enable_pivot_breach_prune,
-            enable_domination_prune=self.enable_domination_prune,
         )
 
     def with_origin_prune(
@@ -194,9 +184,7 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_turn_prune=self.enable_turn_prune,
             enable_pivot_breach_prune=self.enable_pivot_breach_prune,
-            enable_domination_prune=self.enable_domination_prune,
         )
 
     def with_stale_extension(self, stale_extension_threshold: float) -> "SwingConfig":
@@ -219,9 +207,7 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_turn_prune=self.enable_turn_prune,
             enable_pivot_breach_prune=self.enable_pivot_breach_prune,
-            enable_domination_prune=self.enable_domination_prune,
         )
 
     def with_level_crosses(self, emit_level_crosses: bool) -> "SwingConfig":
@@ -244,18 +230,14 @@ class SwingConfig:
             emit_level_crosses=emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_turn_prune=self.enable_turn_prune,
             enable_pivot_breach_prune=self.enable_pivot_breach_prune,
-            enable_domination_prune=self.enable_domination_prune,
         )
 
     def with_prune_toggles(
         self,
         enable_engulfed_prune: bool = None,
         enable_inner_structure_prune: bool = None,
-        enable_turn_prune: bool = None,
         enable_pivot_breach_prune: bool = None,
-        enable_domination_prune: bool = None,
     ) -> "SwingConfig":
         """
         Create a new config with modified pruning algorithm toggles.
@@ -266,9 +248,7 @@ class SwingConfig:
         Args:
             enable_engulfed_prune: Enable/disable engulfed leg deletion.
             enable_inner_structure_prune: Enable/disable inner structure pruning.
-            enable_turn_prune: Enable/disable turn-based consolidation.
             enable_pivot_breach_prune: Enable/disable pivot breach replacement.
-            enable_domination_prune: Enable/disable domination pruning.
         """
         return SwingConfig(
             bull=self.bull,
@@ -279,7 +259,5 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
             enable_inner_structure_prune=enable_inner_structure_prune if enable_inner_structure_prune is not None else self.enable_inner_structure_prune,
-            enable_turn_prune=enable_turn_prune if enable_turn_prune is not None else self.enable_turn_prune,
             enable_pivot_breach_prune=enable_pivot_breach_prune if enable_pivot_breach_prune is not None else self.enable_pivot_breach_prune,
-            enable_domination_prune=enable_domination_prune if enable_domination_prune is not None else self.enable_domination_prune,
         )
