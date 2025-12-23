@@ -273,10 +273,10 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
         {isUpdating ? (
           <>
             <Loader size={12} className="animate-spin" />
-            Re-calibrating...
+            Applying...
           </>
         ) : (
-          'Apply & Re-calibrate'
+          'Apply'
         )}
       </button>
 

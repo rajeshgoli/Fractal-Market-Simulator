@@ -1881,36 +1881,17 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
             enable_domination_prune=request.enable_domination_prune,
         )
 
-    # Update detector config and reset state
+    # Update detector config (keeps current state, applies to future bars)
     detector.update_config(new_config)
 
-    # Re-run calibration from the beginning
-    calibration_bar_count = _replay_cache.get("calibration_bar_count", 0)
-    if calibration_bar_count > 0 and calibration_bar_count <= len(s.source_bars):
-        calibration_bars = s.source_bars[:calibration_bar_count]
+    # Update reference layer with new config
+    ref_layer = ReferenceLayer(new_config)
+    _replay_cache["reference_layer"] = ref_layer
 
-        # Create new reference layer with updated config
-        ref_layer = ReferenceLayer(new_config)
-
-        # Re-process all calibration bars
-        for bar in calibration_bars:
-            detector.process_bar(bar)
-
-        # Update cache
-        _replay_cache["reference_layer"] = ref_layer
-        _replay_cache["last_bar_index"] = calibration_bar_count - 1
-
-        # Recalculate scale thresholds
-        all_swings = detector.state.active_swings
-        _replay_cache["scale_thresholds"] = _calculate_scale_thresholds(all_swings)
-
-        # Clear lifecycle events (they're no longer valid with new config)
-        _replay_cache["lifecycle_events"] = []
-
-        logger.info(
-            f"Config updated and re-calibrated: {calibration_bar_count} bars, "
-            f"{len(detector.get_active_swings())} active swings"
-        )
+    logger.info(
+        f"Config updated (continuing from current position): "
+        f"{len(detector.get_active_swings())} active swings"
+    )
 
     # Build response with current config values
     return SwingConfigResponse(
