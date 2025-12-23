@@ -483,7 +483,7 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
     engulfed_breach_threshold: 0.0,
   },
   stale_extension_threshold: 3.0,
-  proximity_threshold: 0.05,
+  proximity_threshold: 0.0,  // Disabled by default (was DEBUG override in replay.py)
   enable_engulfed_prune: true,
   enable_inner_structure_prune: true,
   enable_turn_prune: true,
