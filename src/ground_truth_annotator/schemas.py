@@ -183,6 +183,16 @@ class ReplayAdvanceRequest(BaseModel):
     include_per_bar_dag_states: bool = False  # Whether to include per-bar DAG states (#283)
 
 
+class ReplayReverseRequest(BaseModel):
+    """Request to reverse playback by one bar.
+
+    Implementation: resets detector and replays from bar 0 to current_bar_index - 1.
+    """
+    current_bar_index: int
+    include_aggregated_bars: Optional[List[str]] = None
+    include_dag_state: bool = False
+
+
 class ReplayBarResponse(BaseModel):
     """A single OHLC bar returned during playback advance."""
     index: int
@@ -695,6 +705,12 @@ class SwingConfigUpdateRequest(BaseModel):
     # Global thresholds
     stale_extension_threshold: Optional[float] = None  # 3x extension prune (default: 3.0)
     proximity_threshold: Optional[float] = None  # Proximity prune threshold (default: 0.10)
+    # Pruning algorithm toggles
+    enable_engulfed_prune: Optional[bool] = None  # Enable engulfed leg deletion (default: True)
+    enable_inner_structure_prune: Optional[bool] = None  # Enable inner structure pruning (default: True)
+    enable_turn_prune: Optional[bool] = None  # Enable turn-based consolidation (default: True)
+    enable_pivot_breach_prune: Optional[bool] = None  # Enable pivot breach replacement (default: True)
+    enable_domination_prune: Optional[bool] = None  # Enable domination pruning (default: True)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -708,7 +724,12 @@ class SwingConfigUpdateRequest(BaseModel):
                     "invalidation_threshold": 0.382
                 },
                 "stale_extension_threshold": 3.0,
-                "proximity_threshold": 0.10
+                "proximity_threshold": 0.10,
+                "enable_engulfed_prune": True,
+                "enable_inner_structure_prune": True,
+                "enable_turn_prune": True,
+                "enable_pivot_breach_prune": True,
+                "enable_domination_prune": True
             }
         }
     )
@@ -732,6 +753,12 @@ class SwingConfigResponse(BaseModel):
     bear: DirectionConfigResponse
     stale_extension_threshold: float
     proximity_threshold: float
+    # Pruning algorithm toggles
+    enable_engulfed_prune: bool
+    enable_inner_structure_prune: bool
+    enable_turn_prune: bool
+    enable_pivot_breach_prune: bool
+    enable_domination_prune: bool
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -751,7 +778,12 @@ class SwingConfigResponse(BaseModel):
                     "engulfed_breach_threshold": 0.20
                 },
                 "stale_extension_threshold": 3.0,
-                "proximity_threshold": 0.10
+                "proximity_threshold": 0.10,
+                "enable_engulfed_prune": True,
+                "enable_inner_structure_prune": True,
+                "enable_turn_prune": True,
+                "enable_pivot_breach_prune": True,
+                "enable_domination_prune": True
             }
         }
     )

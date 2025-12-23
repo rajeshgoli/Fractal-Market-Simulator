@@ -24,6 +24,21 @@ const GLOBAL_SLIDERS: SliderConfig[] = [
   { key: 'proximity_threshold', label: 'Proximity', min: 0.01, max: 0.5, step: 0.01, description: 'Threshold for proximity pruning' },
 ];
 
+// Toggle configurations for pruning algorithms
+interface ToggleConfig {
+  key: keyof DetectionConfig;
+  label: string;
+  description: string;
+}
+
+const PRUNE_TOGGLES: ToggleConfig[] = [
+  { key: 'enable_engulfed_prune', label: 'Engulfed', description: 'Delete legs breached on both origin and pivot sides' },
+  { key: 'enable_inner_structure_prune', label: 'Inner Structure', description: 'Prune legs with same pivot as parent' },
+  { key: 'enable_turn_prune', label: 'Turn Consolidation', description: 'Consolidate legs on price direction turns' },
+  { key: 'enable_pivot_breach_prune', label: 'Pivot Breach', description: 'Replace legs when pivot is breached beyond threshold' },
+  { key: 'enable_domination_prune', label: 'Domination', description: 'Prune dominated legs during turn consolidation' },
+];
+
 interface DetectionConfigPanelProps {
   config: DetectionConfig;
   onConfigUpdate: (config: DetectionConfig) => void;
@@ -66,6 +81,12 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
     setError(null);
   }, []);
 
+  const handleToggleChange = useCallback((key: keyof DetectionConfig, value: boolean) => {
+    setLocalConfig(prev => ({ ...prev, [key]: value }));
+    setHasChanges(true);
+    setError(null);
+  }, []);
+
   const handleApply = useCallback(async () => {
     if (!isCalibrated) {
       setError('Must calibrate before updating config');
@@ -76,7 +97,7 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
     setError(null);
 
     try {
-      // Build request with only changed values
+      // Build request with all current values
       const request: DetectionConfigUpdateRequest = {
         bull: {
           formation_fib: localConfig.bull.formation_fib,
@@ -88,6 +109,12 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
         },
         stale_extension_threshold: localConfig.stale_extension_threshold,
         proximity_threshold: localConfig.proximity_threshold,
+        // Pruning algorithm toggles
+        enable_engulfed_prune: localConfig.enable_engulfed_prune,
+        enable_inner_structure_prune: localConfig.enable_inner_structure_prune,
+        enable_turn_prune: localConfig.enable_turn_prune,
+        enable_pivot_breach_prune: localConfig.enable_pivot_breach_prune,
+        enable_domination_prune: localConfig.enable_domination_prune,
       };
 
       const updatedConfig = await updateDetectionConfig(request);
@@ -144,6 +171,39 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
     );
   };
 
+  const renderToggle = (toggle: ToggleConfig) => {
+    const value = localConfig[toggle.key] as boolean;
+    const defaultValue = DEFAULT_DETECTION_CONFIG[toggle.key] as boolean;
+    const isDefault = value === defaultValue;
+
+    return (
+      <label
+        key={toggle.key}
+        className="flex items-center justify-between cursor-pointer group"
+        title={toggle.description}
+      >
+        <span className={`text-xs ${isDefault ? 'text-app-muted' : 'text-trading-blue'}`}>
+          {toggle.label}
+        </span>
+        <div className="relative">
+          <input
+            type="checkbox"
+            checked={value}
+            onChange={(e) => handleToggleChange(toggle.key, e.target.checked)}
+            disabled={isUpdating}
+            className="sr-only peer"
+          />
+          <div className={`w-8 h-4 rounded-full transition-colors ${
+            value ? 'bg-trading-blue' : 'bg-app-border'
+          } peer-disabled:opacity-50`} />
+          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+            value ? 'translate-x-4' : 'translate-x-0'
+          }`} />
+        </div>
+      </label>
+    );
+  };
+
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Header */}
@@ -189,6 +249,14 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
         <span className="text-xs font-medium text-app-text">Global</span>
         <div className="pl-4 space-y-3">
           {GLOBAL_SLIDERS.map(slider => renderSlider('global', slider))}
+        </div>
+      </div>
+
+      {/* Pruning Algorithms */}
+      <div className="space-y-2">
+        <span className="text-xs font-medium text-app-text">Pruning Algorithms</span>
+        <div className="pl-4 space-y-2">
+          {PRUNE_TOGGLES.map(toggle => renderToggle(toggle))}
         </div>
       </div>
 

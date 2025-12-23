@@ -69,6 +69,19 @@ class SwingConfig:
             Invalidated legs WITH A PARENT are pruned when price moves N x their range
             beyond origin. Root legs (no parent) are never pruned, preserving the anchor
             that began the move. Default 3.0.
+        emit_level_crosses: Whether to emit LevelCrossEvent when price crosses Fib
+            levels. Default False (disabled for performance). Set to True when
+            level cross events are needed. Can be toggled mid-stream via update_config().
+        enable_engulfed_prune: Whether to delete legs that are breached on both
+            origin and pivot sides. Default True.
+        enable_inner_structure_prune: Whether to prune counter-direction legs from
+            inner structure pivots when outer structure invalidates. Default True.
+        enable_turn_prune: Whether to consolidate legs on direction change (turn).
+            Default True.
+        enable_pivot_breach_prune: Whether to prune and replace formed legs when
+            pivot is breached beyond threshold. Default True.
+        enable_domination_prune: Whether to prune legs dominated by legs with
+            better origins in the same turn. Default True.
 
     Example:
         >>> config = SwingConfig.default()
@@ -79,6 +92,13 @@ class SwingConfig:
     bear: DirectionConfig = field(default_factory=DirectionConfig)
     proximity_prune_threshold: float = 0.05
     stale_extension_threshold: float = 3.0
+    emit_level_crosses: bool = False
+    # Pruning algorithm toggles (#288)
+    enable_engulfed_prune: bool = True
+    enable_inner_structure_prune: bool = True
+    enable_turn_prune: bool = True
+    enable_pivot_breach_prune: bool = True
+    enable_domination_prune: bool = True
 
     @classmethod
     def default(cls) -> "SwingConfig":
@@ -104,6 +124,12 @@ class SwingConfig:
             bear=self.bear,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
+            emit_level_crosses=self.emit_level_crosses,
+            enable_engulfed_prune=self.enable_engulfed_prune,
+            enable_inner_structure_prune=self.enable_inner_structure_prune,
+            enable_turn_prune=self.enable_turn_prune,
+            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
+            enable_domination_prune=self.enable_domination_prune,
         )
 
     def with_bear(self, **kwargs: Any) -> "SwingConfig":
@@ -119,6 +145,12 @@ class SwingConfig:
             bear=DirectionConfig(**bear_dict),
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
+            emit_level_crosses=self.emit_level_crosses,
+            enable_engulfed_prune=self.enable_engulfed_prune,
+            enable_inner_structure_prune=self.enable_inner_structure_prune,
+            enable_turn_prune=self.enable_turn_prune,
+            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
+            enable_domination_prune=self.enable_domination_prune,
         )
 
     def with_proximity_prune(self, proximity_prune_threshold: float) -> "SwingConfig":
@@ -137,6 +169,12 @@ class SwingConfig:
             bear=self.bear,
             proximity_prune_threshold=proximity_prune_threshold,
             stale_extension_threshold=self.stale_extension_threshold,
+            emit_level_crosses=self.emit_level_crosses,
+            enable_engulfed_prune=self.enable_engulfed_prune,
+            enable_inner_structure_prune=self.enable_inner_structure_prune,
+            enable_turn_prune=self.enable_turn_prune,
+            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
+            enable_domination_prune=self.enable_domination_prune,
         )
 
     def with_stale_extension(self, stale_extension_threshold: float) -> "SwingConfig":
@@ -155,4 +193,68 @@ class SwingConfig:
             bear=self.bear,
             proximity_prune_threshold=self.proximity_prune_threshold,
             stale_extension_threshold=stale_extension_threshold,
+            emit_level_crosses=self.emit_level_crosses,
+            enable_engulfed_prune=self.enable_engulfed_prune,
+            enable_inner_structure_prune=self.enable_inner_structure_prune,
+            enable_turn_prune=self.enable_turn_prune,
+            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
+            enable_domination_prune=self.enable_domination_prune,
+        )
+
+    def with_level_crosses(self, emit_level_crosses: bool) -> "SwingConfig":
+        """
+        Create a new config with modified level cross emission setting.
+
+        Since SwingConfig is frozen, this creates a new instance.
+
+        Args:
+            emit_level_crosses: Whether to emit LevelCrossEvent when price
+                crosses Fib levels. Set to False to skip level cross checks
+                (~55% of process_bar time) when events are not needed.
+        """
+        return SwingConfig(
+            bull=self.bull,
+            bear=self.bear,
+            proximity_prune_threshold=self.proximity_prune_threshold,
+            stale_extension_threshold=self.stale_extension_threshold,
+            emit_level_crosses=emit_level_crosses,
+            enable_engulfed_prune=self.enable_engulfed_prune,
+            enable_inner_structure_prune=self.enable_inner_structure_prune,
+            enable_turn_prune=self.enable_turn_prune,
+            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
+            enable_domination_prune=self.enable_domination_prune,
+        )
+
+    def with_prune_toggles(
+        self,
+        enable_engulfed_prune: bool = None,
+        enable_inner_structure_prune: bool = None,
+        enable_turn_prune: bool = None,
+        enable_pivot_breach_prune: bool = None,
+        enable_domination_prune: bool = None,
+    ) -> "SwingConfig":
+        """
+        Create a new config with modified pruning algorithm toggles.
+
+        Since SwingConfig is frozen, this creates a new instance.
+        Only provided parameters are modified; others keep their current values.
+
+        Args:
+            enable_engulfed_prune: Enable/disable engulfed leg deletion.
+            enable_inner_structure_prune: Enable/disable inner structure pruning.
+            enable_turn_prune: Enable/disable turn-based consolidation.
+            enable_pivot_breach_prune: Enable/disable pivot breach replacement.
+            enable_domination_prune: Enable/disable domination pruning.
+        """
+        return SwingConfig(
+            bull=self.bull,
+            bear=self.bear,
+            proximity_prune_threshold=self.proximity_prune_threshold,
+            stale_extension_threshold=self.stale_extension_threshold,
+            emit_level_crosses=self.emit_level_crosses,
+            enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
+            enable_inner_structure_prune=enable_inner_structure_prune if enable_inner_structure_prune is not None else self.enable_inner_structure_prune,
+            enable_turn_prune=enable_turn_prune if enable_turn_prune is not None else self.enable_turn_prune,
+            enable_pivot_breach_prune=enable_pivot_breach_prune if enable_pivot_breach_prune is not None else self.enable_pivot_breach_prune,
+            enable_domination_prune=enable_domination_prune if enable_domination_prune is not None else self.enable_domination_prune,
         )

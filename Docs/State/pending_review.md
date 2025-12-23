@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-- #288 — Detection Config UI Panel epic (runtime threshold adjustments)
+- #288 — Detection Config UI Panel epic (runtime threshold adjustments + pruning algorithm toggles)
 - #261 — Re-enable 3x stale extension pruning for child legs only
 - #281 — Implement leg hierarchy (parent-child relationships)
 - #279 — Fix inner structure pruning for sequential invalidation

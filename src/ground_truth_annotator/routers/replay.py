@@ -49,6 +49,7 @@ from ..schemas import (
     CalibrationScaleStats,
     CalibrationResponse,
     ReplayAdvanceRequest,
+    ReplayReverseRequest,
     ReplayBarResponse,
     ReplayEventResponse,
     ReplaySwingState,
@@ -1202,6 +1203,154 @@ async def advance_replay(request: ReplayAdvanceRequest):
     )
 
 
+@router.post("/api/replay/reverse", response_model=ReplayAdvanceResponse)
+async def reverse_replay(request: ReplayReverseRequest):
+    """
+    Reverse playback by one bar.
+
+    Implementation: resets detector and replays from bar 0 to current_bar_index - 1.
+    This is intentionally simple (wasteful) but allows inspecting backend state
+    when going backward without complex state management.
+
+    Future optimization: snapshot every ~1k bars to avoid full replay.
+    """
+    global _replay_cache
+    from ..api import get_state
+
+    s = get_state()
+
+    # Validate we have a detector
+    if _replay_cache.get("detector") is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Must calibrate before reversing. Call /api/replay/calibrate first."
+        )
+
+    # Validate bar index
+    current_idx = request.current_bar_index
+    if current_idx != _replay_cache["last_bar_index"]:
+        logger.warning(
+            f"Bar index mismatch on reverse: cache has {_replay_cache['last_bar_index']}, "
+            f"request has {current_idx}"
+        )
+
+    target_idx = current_idx - 1
+
+    # Can't go before bar 0
+    if target_idx < 0:
+        # Already at start - return current state
+        current_bar = s.source_bars[0] if s.source_bars else None
+        if current_bar is None:
+            raise HTTPException(status_code=400, detail="No bars loaded")
+
+        detector = _replay_cache["detector"]
+        active_dag_swings = detector.get_active_swings()
+        scale_thresholds = _replay_cache.get("scale_thresholds", {})
+
+        ref_layer = _replay_cache.get("reference_layer")
+        if ref_layer:
+            ref_infos = ref_layer.get_reference_swings(active_dag_swings)
+            active_swings = [info.swing for info in ref_infos if info.is_reference]
+        else:
+            active_swings = active_dag_swings
+
+        dag_state = _build_dag_state(detector) if request.include_dag_state else None
+
+        return ReplayAdvanceResponse(
+            new_bars=[],
+            events=[],
+            swing_state=_build_swing_state(active_swings, scale_thresholds),
+            current_bar_index=0,
+            current_price=current_bar.close,
+            end_of_data=False,
+            aggregated_bars=None,
+            dag_state=dag_state,
+            dag_states=None,
+        )
+
+    # Reset detector and replay from 0 to target_idx
+    logger.info(f"Reversing: replaying bars 0 to {target_idx}")
+
+    # Get preserved config from current detector
+    old_detector = _replay_cache["detector"]
+    config = old_detector.config
+
+    # Create fresh detector with same config
+    detector = LegDetector(config)
+    ref_layer = ReferenceLayer(config)
+
+    # Replay all bars up to target
+    bars_to_process = s.source_bars[:target_idx + 1]
+    for bar in bars_to_process:
+        timestamp = datetime.fromtimestamp(bar.timestamp) if bar.timestamp else datetime.now()
+
+        # Process bar
+        events = detector.process_bar(bar)
+
+        # Apply Reference layer invalidation/completion
+        active_swings = detector.get_active_swings()
+
+        invalidated = ref_layer.update_invalidation_on_bar(active_swings, bar)
+        for swing, result in invalidated:
+            swing.invalidate()
+
+        completed = ref_layer.update_completion_on_bar(active_swings, bar)
+        for swing, result in completed:
+            swing.complete()
+
+    # Update cache
+    _replay_cache["detector"] = detector
+    _replay_cache["last_bar_index"] = target_idx
+    _replay_cache["reference_layer"] = ref_layer
+    # Clear lifecycle events beyond target (they're no longer valid)
+    _replay_cache["lifecycle_events"] = [
+        e for e in _replay_cache["lifecycle_events"]
+        if e.get("bar_index", 0) <= target_idx
+    ]
+
+    # Update app state
+    s.playback_index = target_idx
+    s.hierarchical_detector = detector
+
+    # Build response
+    current_bar = s.source_bars[target_idx]
+    active_dag_swings = detector.get_active_swings()
+    scale_thresholds = _replay_cache.get("scale_thresholds", {})
+
+    if ref_layer:
+        ref_infos = ref_layer.get_reference_swings(active_dag_swings)
+        active_swings = [info.swing for info in ref_infos if info.is_reference]
+    else:
+        active_swings = active_dag_swings
+
+    swing_state = _build_swing_state(active_swings, scale_thresholds)
+
+    # Build optional aggregated bars
+    aggregated_bars = None
+    if request.include_aggregated_bars:
+        source_resolution = _replay_cache.get("source_resolution", s.resolution_minutes)
+        aggregated_bars = _build_aggregated_bars(
+            s.source_bars,
+            request.include_aggregated_bars,
+            source_resolution,
+            limit=target_idx + 1,
+        )
+
+    dag_state = _build_dag_state(detector) if request.include_dag_state else None
+
+    return ReplayAdvanceResponse(
+        new_bars=[],  # No new bars on reverse
+        events=[],    # No events on reverse (full replay)
+        swing_state=swing_state,
+        current_bar_index=target_idx,
+        current_price=current_bar.close,
+        end_of_data=False,
+        aggregated_bars=aggregated_bars,
+        dag_state=dag_state,
+        dag_states=None,
+    )
+
+
 def _build_swing_state(
     active_swings: List[SwingNode],
     scale_thresholds: Dict[str, float],
@@ -1720,6 +1869,22 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     if request.proximity_threshold is not None:
         new_config = new_config.with_proximity_prune(request.proximity_threshold)
 
+    # Apply pruning algorithm toggles
+    if any([
+        request.enable_engulfed_prune is not None,
+        request.enable_inner_structure_prune is not None,
+        request.enable_turn_prune is not None,
+        request.enable_pivot_breach_prune is not None,
+        request.enable_domination_prune is not None,
+    ]):
+        new_config = new_config.with_prune_toggles(
+            enable_engulfed_prune=request.enable_engulfed_prune,
+            enable_inner_structure_prune=request.enable_inner_structure_prune,
+            enable_turn_prune=request.enable_turn_prune,
+            enable_pivot_breach_prune=request.enable_pivot_breach_prune,
+            enable_domination_prune=request.enable_domination_prune,
+        )
+
     # Update detector config and reset state
     detector.update_config(new_config)
 
@@ -1769,6 +1934,11 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         ),
         stale_extension_threshold=new_config.stale_extension_threshold,
         proximity_threshold=new_config.proximity_threshold,
+        enable_engulfed_prune=new_config.enable_engulfed_prune,
+        enable_inner_structure_prune=new_config.enable_inner_structure_prune,
+        enable_turn_prune=new_config.enable_turn_prune,
+        enable_pivot_breach_prune=new_config.enable_pivot_breach_prune,
+        enable_domination_prune=new_config.enable_domination_prune,
     )
 
 
@@ -1809,4 +1979,9 @@ async def get_detection_config():
         ),
         stale_extension_threshold=config.stale_extension_threshold,
         proximity_threshold=config.proximity_threshold,
+        enable_engulfed_prune=config.enable_engulfed_prune,
+        enable_inner_structure_prune=config.enable_inner_structure_prune,
+        enable_turn_prune=config.enable_turn_prune,
+        enable_pivot_breach_prune=config.enable_pivot_breach_prune,
+        enable_domination_prune=config.enable_domination_prune,
     )

@@ -71,6 +71,10 @@ class LegPruner:
         Returns:
             True if an existing leg dominates (new leg would be pruned)
         """
+        # Skip if domination pruning is disabled
+        if not self.config.enable_domination_prune:
+            return False
+
         # Get the turn boundary - only legs from current turn can dominate
         turn_start = state.last_turn_bar.get(direction, -1)
 
@@ -124,6 +128,10 @@ class LegPruner:
         Returns:
             List of LegPrunedEvent for pruned legs
         """
+        # Skip if domination pruning is disabled
+        if not self.config.enable_domination_prune:
+            return []
+
         events: List[LegPrunedEvent] = []
         direction = new_leg.direction
         new_origin = new_leg.origin_price
@@ -212,6 +220,10 @@ class LegPruner:
         Returns:
             List of LegPrunedEvent for pruned legs
         """
+        # Skip if turn pruning is disabled
+        if not self.config.enable_turn_prune:
+            return []
+
         events: List[LegPrunedEvent] = []
 
         # Get active legs of the specified direction
@@ -448,6 +460,10 @@ class LegPruner:
         Returns:
             Tuple of (LegPrunedEvent list, LegCreatedEvent list)
         """
+        # Skip if both engulfed and pivot breach pruning are disabled
+        if not self.config.enable_engulfed_prune and not self.config.enable_pivot_breach_prune:
+            return [], []
+
         prune_events: List[LegPrunedEvent] = []
         create_events: List[LegCreatedEvent] = []
 
@@ -472,53 +488,56 @@ class LegPruner:
             # Engulfed: origin was ever breached AND pivot threshold exceeded
             # Single code path for all engulfed cases
             if leg.max_origin_breach is not None:
-                legs_to_prune.append(leg)
-                prune_events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id=leg.swing_id or "",
-                    leg_id=leg.leg_id,
-                    reason="engulfed",
-                ))
+                if self.config.enable_engulfed_prune:
+                    legs_to_prune.append(leg)
+                    prune_events.append(LegPrunedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id=leg.swing_id or "",
+                        leg_id=leg.leg_id,
+                        reason="engulfed",
+                    ))
                 continue
 
             # Pivot breach with replacement: origin NEVER breached
             # Only trigger if current bar made new extreme in leg direction
             # AND the extension past pivot exceeds the threshold
-            if leg.direction == 'bull':
-                # Bull: need new high that exceeds pivot by threshold
-                pivot_threshold = Decimal(str(self.config.bull.pivot_breach_threshold))
-                extension_threshold = leg.pivot_price + (pivot_threshold * leg.range)
-                if bar_high > extension_threshold:
-                    legs_to_replace.append((leg, bar_high, "pivot_breach"))
-            else:
-                # Bear: need new low that exceeds pivot by threshold
-                pivot_threshold = Decimal(str(self.config.bear.pivot_breach_threshold))
-                extension_threshold = leg.pivot_price - (pivot_threshold * leg.range)
-                if bar_low < extension_threshold:
-                    legs_to_replace.append((leg, bar_low, "pivot_breach"))
+            if self.config.enable_pivot_breach_prune:
+                if leg.direction == 'bull':
+                    # Bull: need new high that exceeds pivot by threshold
+                    pivot_threshold = Decimal(str(self.config.bull.pivot_breach_threshold))
+                    extension_threshold = leg.pivot_price + (pivot_threshold * leg.range)
+                    if bar_high > extension_threshold:
+                        legs_to_replace.append((leg, bar_high, "pivot_breach"))
+                else:
+                    # Bear: need new low that exceeds pivot by threshold
+                    pivot_threshold = Decimal(str(self.config.bear.pivot_breach_threshold))
+                    extension_threshold = leg.pivot_price - (pivot_threshold * leg.range)
+                    if bar_low < extension_threshold:
+                        legs_to_replace.append((leg, bar_low, "pivot_breach"))
 
         # Also check invalidated legs for engulfed condition
         # Invalidated legs already have origin breached; if pivot also breached, they're engulfed
         # This cleans up noise from legs that were invalidated but still visible
-        for leg in state.active_legs:
-            if leg.status != 'invalidated' or not leg.formed:
-                continue
+        if self.config.enable_engulfed_prune:
+            for leg in state.active_legs:
+                if leg.status != 'invalidated' or not leg.formed:
+                    continue
 
-            if leg.range == 0:
-                continue
+                if leg.range == 0:
+                    continue
 
-            # Invalidated legs by definition have origin breach
-            # Check if pivot breach also occurred -> engulfed
-            if leg.max_pivot_breach is not None and leg.max_origin_breach is not None:
-                legs_to_prune.append(leg)
-                prune_events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id=leg.swing_id or "",
-                    leg_id=leg.leg_id,
-                    reason="engulfed",
-                ))
+                # Invalidated legs by definition have origin breach
+                # Check if pivot breach also occurred -> engulfed
+                if leg.max_pivot_breach is not None and leg.max_origin_breach is not None:
+                    legs_to_prune.append(leg)
+                    prune_events.append(LegPrunedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id=leg.swing_id or "",
+                        leg_id=leg.leg_id,
+                        reason="engulfed",
+                    ))
 
         # Process legs to prune (engulfed - no replacement)
         # Reparent children before removal (#281)
@@ -628,6 +647,10 @@ class LegPruner:
         Returns:
             List of LegPrunedEvent for pruned legs with reason="inner_structure"
         """
+        # Skip if inner structure pruning is disabled
+        if not self.config.enable_inner_structure_prune:
+            return []
+
         events: List[LegPrunedEvent] = []
         pruned_leg_ids: Set[str] = set()
 
@@ -700,8 +723,11 @@ class LegPruner:
         if not counter_legs:
             return events
 
-        # For each pair of invalidated legs, check containment
-        for i, inner in enumerate(invalidated_legs):
+        # For each inner leg, find the smallest containing outer (immediate container)
+        # and check if that outer is the largest at its pivot level.
+        for inner in invalidated_legs:
+            # Find all outers that contain this inner
+            containing_outers: List[Leg] = []
             for outer in invalidated_legs:
                 if inner.leg_id == outer.leg_id:
                     continue
@@ -725,48 +751,97 @@ class LegPruner:
                         inner.pivot_price < outer.pivot_price
                     )
 
-                if not is_contained:
+                if is_contained:
+                    containing_outers.append(outer)
+
+            if not containing_outers:
+                continue  # inner is not contained in any outer
+
+            # #282: Find the smallest containing outer (closest origin to inner)
+            # For bear: smallest outer has smallest origin (lowest HIGH above inner)
+            # For bull: smallest outer has largest origin (highest LOW below inner)
+            if inner.direction == 'bear':
+                outer = min(containing_outers, key=lambda l: l.origin_price)
+            else:
+                outer = max(containing_outers, key=lambda l: l.origin_price)
+
+            # #282: Only prune if outer is the largest at its pivot.
+            # If a larger leg shares outer's pivot, the inner is part of a larger
+            # structure and shouldn't be pruned.
+            all_at_outer_pivot = [
+                leg for leg in list(state.active_legs) + list(invalidated_legs)
+                if leg.direction == outer.direction
+                and leg.pivot_price == outer.pivot_price
+            ]
+            largest_at_outer_pivot = max(all_at_outer_pivot, key=lambda l: l.range)
+            if largest_at_outer_pivot.leg_id != outer.leg_id:
+                continue  # outer is not the largest - skip
+
+            # inner is contained in outer (and outer is largest at its pivot)
+            # Find counter-direction legs originating from inner's pivot
+            # Bull legs have origin at LOW (which is inner bear's pivot)
+            # Bear legs have origin at HIGH (which is inner bull's pivot)
+            for inner_leg in counter_legs:
+                if inner_leg.leg_id in pruned_leg_ids:
                     continue
 
-                # inner is contained in outer
-                # Find counter-direction legs originating from inner's pivot
-                # Bull legs have origin at LOW (which is inner bear's pivot)
-                # Bear legs have origin at HIGH (which is inner bull's pivot)
-                for inner_leg in counter_legs:
-                    if inner_leg.leg_id in pruned_leg_ids:
-                        continue
+                # Check if this counter-leg originates from inner's pivot
+                if inner_leg.origin_price != inner.pivot_price:
+                    continue
 
-                    # Check if this counter-leg originates from inner's pivot
-                    if inner_leg.origin_price != inner.pivot_price:
-                        continue
+                # Check if there's an outer-origin counter-leg with the same pivot
+                outer_leg_exists = any(
+                    leg.origin_price == outer.pivot_price and
+                    leg.pivot_price == inner_leg.pivot_price and
+                    leg.status == 'active' and
+                    leg.leg_id not in pruned_leg_ids
+                    for leg in counter_legs
+                )
 
-                    # Check if there's an outer-origin counter-leg with the same pivot
-                    outer_leg_exists = any(
-                        leg.origin_price == outer.pivot_price and
-                        leg.pivot_price == inner_leg.pivot_price and
-                        leg.status == 'active' and
-                        leg.leg_id not in pruned_leg_ids
-                        for leg in counter_legs
-                    )
+                if not outer_leg_exists:
+                    continue
 
-                    if not outer_leg_exists:
-                        continue
+                # #282: If an ACTIVE leg shares outer's pivot, the structure is still
+                # relevant - don't prune. (The earlier "largest" check handles the case
+                # where a larger invalidated leg shares the pivot.)
+                active_at_outer_pivot = any(
+                    leg.status == 'active'
+                    and leg.direction == outer.direction
+                    and leg.pivot_price == outer.pivot_price
+                    and leg.leg_id != outer.leg_id
+                    for leg in state.active_legs
+                )
+                if active_at_outer_pivot:
+                    continue
 
-                    # No swing immunity for inner_structure pruning (#264)
-                    # If the leg is structurally inner (contained in a larger structure)
-                    # and there's an outer-origin leg with the same pivot, the inner
-                    # leg is redundant regardless of whether it formed a swing.
+                # No swing immunity for inner_structure pruning (#264)
+                # If the leg is structurally inner (contained in a larger structure)
+                # and there's an outer-origin leg with the same pivot, the inner
+                # leg is redundant regardless of whether it formed a swing.
 
-                    # Prune the inner-origin counter-leg
-                    inner_leg.status = 'pruned'
-                    pruned_leg_ids.add(inner_leg.leg_id)
-                    events.append(LegPrunedEvent(
-                        bar_index=bar.index,
-                        timestamp=timestamp,
-                        swing_id=inner_leg.swing_id or "",
-                        leg_id=inner_leg.leg_id,
-                        reason="inner_structure",
-                    ))
+                # Build detailed explanation showing the containment comparison
+                # inner/outer are the same-direction legs that were invalidated
+                # inner_leg is the counter-direction leg being pruned
+                explanation = (
+                    f"Inner {inner.direction} ({float(inner.origin_price):.2f}→"
+                    f"{float(inner.pivot_price):.2f}, range={float(inner.range):.2f}) "
+                    f"contained in outer {outer.direction} ({float(outer.origin_price):.2f}→"
+                    f"{float(outer.pivot_price):.2f}, range={float(outer.range):.2f}). "
+                    f"Pruned {counter_direction} leg origin={float(inner_leg.origin_price):.2f} "
+                    f"(from inner pivot) - outer-origin leg exists."
+                )
+
+                # Prune the inner-origin counter-leg
+                inner_leg.status = 'pruned'
+                pruned_leg_ids.add(inner_leg.leg_id)
+                events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=inner_leg.swing_id or "",
+                    leg_id=inner_leg.leg_id,
+                    reason="inner_structure",
+                    explanation=explanation,
+                ))
 
         return events
 

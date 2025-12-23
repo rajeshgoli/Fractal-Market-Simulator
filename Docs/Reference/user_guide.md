@@ -397,18 +397,30 @@ The Detection Config Panel allows real-time adjustment of swing detection thresh
 | Global | Stale Extension | 3.0 | 1.0-5.0 | Extension multiple for stale pruning |
 | Global | Proximity | 0.10 | 0.01-0.5 | Threshold for proximity pruning |
 
+**Pruning Algorithm Toggles:**
+
+| Toggle | Default | Description |
+|--------|---------|-------------|
+| Engulfed | ON | Delete legs breached on both origin and pivot sides |
+| Inner Structure | ON | Prune legs with same pivot as parent leg |
+| Turn Consolidation | ON | Consolidate legs on price direction turns |
+| Pivot Breach | ON | Replace legs when pivot is breached beyond threshold |
+| Domination | ON | Prune dominated legs during turn consolidation |
+
 **How to use:**
 1. Adjust sliders for desired thresholds
-2. Modified values show in blue (defaults show in gray)
-3. Click "Apply & Re-calibrate" to apply changes
-4. Backend re-processes all bars with new config
-5. Updated config values shown in response
+2. Toggle pruning algorithms on/off to see their effect
+3. Modified values show in blue (defaults show in gray)
+4. Click "Apply & Re-calibrate" to apply changes
+5. Backend re-processes all bars with new config
+6. Updated config values shown in response
 
 **Workflow:**
 - Experiment with different thresholds during analysis
 - Use lower formation thresholds to detect more swings
 - Use higher invalidation thresholds for stricter invalidation rules
 - Adjust pruning thresholds to control leg density
+- Toggle individual pruning algorithms to understand their contribution
 
 **Reset:** Click the reset button (↺) to restore default values.
 

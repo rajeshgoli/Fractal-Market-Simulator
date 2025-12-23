@@ -188,6 +188,41 @@ export async function advanceReplay(
   return response.json();
 }
 
+// Reverse replay request
+export interface ReplayReverseRequest {
+  current_bar_index: number;
+  include_aggregated_bars?: string[];
+  include_dag_state?: boolean;
+}
+
+export async function reverseReplay(
+  currentBarIndex: number,
+  includeAggregatedBars?: string[],
+  includeDagState?: boolean
+): Promise<ReplayAdvanceResponse> {
+  const requestBody: ReplayReverseRequest = {
+    current_bar_index: currentBarIndex,
+  };
+  if (includeAggregatedBars) {
+    requestBody.include_aggregated_bars = includeAggregatedBars;
+  }
+  if (includeDagState) {
+    requestBody.include_dag_state = includeDagState;
+  }
+
+  const response = await fetch(`${API_BASE}/replay/reverse`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to reverse replay: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 // Types for playback feedback
 export interface PlaybackFeedbackEventContext {
   event_type?: string;
@@ -416,6 +451,12 @@ export interface DetectionConfigUpdateRequest {
   };
   stale_extension_threshold?: number;
   proximity_threshold?: number;
+  // Pruning algorithm toggles
+  enable_engulfed_prune?: boolean;
+  enable_inner_structure_prune?: boolean;
+  enable_turn_prune?: boolean;
+  enable_pivot_breach_prune?: boolean;
+  enable_domination_prune?: boolean;
 }
 
 /**
