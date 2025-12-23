@@ -1060,7 +1060,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
             aggregated_bars = _build_aggregated_bars(
                 s.source_bars, request.include_aggregated_bars, source_resolution
             )
-        dag_state = _build_dag_state(detector) if request.include_dag_state else None
+        dag_state = _build_dag_state(detector, s.window_offset) if request.include_dag_state else None
 
         return ReplayAdvanceResponse(
             new_bars=[],
@@ -1152,7 +1152,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
 
         # Snapshot DAG state after each bar for high-speed playback (#283)
         if request.include_per_bar_dag_states:
-            per_bar_dag_states.append(_build_dag_state(detector))
+            per_bar_dag_states.append(_build_dag_state(detector, s.window_offset))
 
     # Update cache state
     _replay_cache["last_bar_index"] = end_idx - 1
@@ -1186,7 +1186,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
     # Build optional DAG state (for batched playback)
     dag_state = None
     if request.include_dag_state:
-        dag_state = _build_dag_state(detector)
+        dag_state = _build_dag_state(detector, s.window_offset)
 
     # Include per-bar DAG states for high-speed playback (#283)
     dag_states = per_bar_dag_states if request.include_per_bar_dag_states else None
@@ -1256,7 +1256,7 @@ async def reverse_replay(request: ReplayReverseRequest):
         else:
             active_swings = active_dag_swings
 
-        dag_state = _build_dag_state(detector) if request.include_dag_state else None
+        dag_state = _build_dag_state(detector, s.window_offset) if request.include_dag_state else None
 
         return ReplayAdvanceResponse(
             new_bars=[],
@@ -1347,7 +1347,7 @@ async def reverse_replay(request: ReplayReverseRequest):
             limit=target_idx + 1,
         )
 
-    dag_state = _build_dag_state(detector) if request.include_dag_state else None
+    dag_state = _build_dag_state(detector, s.window_offset) if request.include_dag_state else None
 
     return ReplayAdvanceResponse(
         new_bars=[],  # No new bars on reverse
@@ -1478,12 +1478,13 @@ def _build_aggregated_bars(
     return result
 
 
-def _build_dag_state(detector: LegDetector) -> DagStateResponse:
+def _build_dag_state(detector: LegDetector, window_offset: int = 0) -> DagStateResponse:
     """
     Build DAG state response from detector.
 
     Args:
         detector: The LegDetector instance.
+        window_offset: CSV offset to convert bar-relative indices to csv indices (#300).
 
     Returns:
         DagStateResponse with current DAG state.
@@ -1495,9 +1496,9 @@ def _build_dag_state(detector: LegDetector) -> DagStateResponse:
             leg_id=leg.leg_id,
             direction=leg.direction,
             pivot_price=float(leg.pivot_price),
-            pivot_index=leg.pivot_index,
+            pivot_index=window_offset + leg.pivot_index,  # Convert to csv_index (#300)
             origin_price=float(leg.origin_price),
-            origin_index=leg.origin_index,
+            origin_index=window_offset + leg.origin_index,  # Convert to csv_index (#300)
             retracement_pct=float(leg.retracement_pct),
             formed=leg.formed,
             status=leg.status,
@@ -1515,7 +1516,7 @@ def _build_dag_state(detector: LegDetector) -> DagStateResponse:
     pending_origins = {
         direction: DagPendingOrigin(
             price=float(origin.price),
-            bar_index=origin.bar_index,
+            bar_index=window_offset + origin.bar_index,  # Convert to csv_index (#300)
             direction=origin.direction,
             source=origin.source,
         ) if origin else None
@@ -1608,6 +1609,8 @@ async def get_dag_state():
     - pending_origins: Potential origins for new legs awaiting temporal confirmation
     - leg_counts: Count of legs by direction
     """
+    from ..api import get_state
+
     global _replay_cache
 
     detector = _replay_cache.get("detector")
@@ -1617,17 +1620,19 @@ async def get_dag_state():
             detail="Must calibrate first. Call /api/replay/calibrate."
         )
 
+    s = get_state()
+    window_offset = s.window_offset
     state = detector.state
 
-    # Convert active legs to response
+    # Convert active legs to response with csv indices (#300)
     active_legs = [
         DagLegResponse(
             leg_id=leg.leg_id,
             direction=leg.direction,
             pivot_price=float(leg.pivot_price),
-            pivot_index=leg.pivot_index,
+            pivot_index=window_offset + leg.pivot_index,  # Convert to csv_index (#300)
             origin_price=float(leg.origin_price),
-            origin_index=leg.origin_index,
+            origin_index=window_offset + leg.origin_index,  # Convert to csv_index (#300)
             retracement_pct=float(leg.retracement_pct),
             formed=leg.formed,
             status=leg.status,
@@ -1642,11 +1647,11 @@ async def get_dag_state():
         for leg in state.active_legs
     ]
 
-    # Convert pending origins
+    # Convert pending origins with csv indices (#300)
     pending_origins = {
         direction: DagPendingOrigin(
             price=float(origin.price),
-            bar_index=origin.bar_index,
+            bar_index=window_offset + origin.bar_index,  # Convert to csv_index (#300)
             direction=origin.direction,
             source=origin.source,
         ) if origin else None
