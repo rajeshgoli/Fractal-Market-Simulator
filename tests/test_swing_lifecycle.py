@@ -168,7 +168,7 @@ class TestLevelCross:
 
     def test_level_cross_emits_event(self):
         """Level cross events are emitted when price crosses Fib levels."""
-        config = SwingConfig.default()
+        config = SwingConfig.default().with_level_crosses(True)
         detector = HierarchicalDetector(config)
 
         # Create a swing

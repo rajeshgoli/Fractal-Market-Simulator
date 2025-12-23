@@ -412,7 +412,9 @@ Invalidated legs remain visible in the DAG until pruned by one of two conditions
 
 Configuration:
 - `DirectionConfig.invalidation_threshold`: Configurable per direction (default: 0.382)
-- `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 999.0, effectively disabled)
+- `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
+- `SwingConfig.emit_level_crosses`: Enable/disable LevelCrossEvent emission (default: False for performance)
+- `SwingConfig.enable_*_prune`: Toggle individual pruning algorithms (engulfed, inner_structure, turn, pivot_breach, domination)
 
 **Inner structure pruning (#264, #266, #279):**
 
@@ -700,37 +702,24 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |
 | `Sidebar.tsx` | Event filters, feedback input, attachment display |
 | `usePlayback.ts` | Legacy playback (calibration scrubbing) |
-| `useForwardPlayback.ts` | Forward-only playback after calibration (includes history buffer for step back) |
+| `useForwardPlayback.ts` | Forward-only playback after calibration (step back via backend API) |
 | `useSwingDisplay.ts` | Scale filtering and swing ranking |
 | `useHierarchyMode.ts` | Hierarchy exploration state management (#250) |
 
-**Backward Navigation (#278):**
+**Backward Navigation:**
 
-The `useForwardPlayback` hook supports stepping back through cached DAG state snapshots:
+The `useForwardPlayback` hook supports stepping backward via backend API:
 
 ```typescript
-interface HistorySnapshot {
-  barIndex: number;
-  visibleBars: BarData[];
-  dagState: DagStateResponse | null;
-  aggregatedBars: AggregatedBarsResponse | null;
-  swingState: ReplaySwingState | null;
-  allEvents: ReplayEvent[];
-}
-
-// Hook options
-historyBufferSize?: number;  // Max positions to cache (default: 100)
-
 // Hook return values
-canStepBack: boolean;  // Whether step back is available
-historySize: number;   // Current buffer size
+canStepBack: boolean;  // true when currentPosition > 0
 ```
 
 **Implementation details:**
-- Snapshots are pushed to a sliding window buffer on each bar advance
-- `stepBack()` restores the previous snapshot via `restoreFromSnapshot()`
-- `jumpToStart()` resets the history buffer
-- `canStepBack` is `true` when `historySize >= 2` and not at oldest position
+- `stepBack()` calls `POST /api/replay/reverse` to replay from bar 0 to current-1
+- Backend resets detector and replays all bars to the target position
+- Response includes full DAG state, swing state, and aggregated bars
+- ~0.25s latency for 1k bars (acceptable for single-step backward)
 
 **Stack:** React 19, lightweight-charts v5, Tailwind CSS 4, Vite 7
 
@@ -836,6 +825,12 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 # Advance: POST /api/replay/advance
 # {calibration_bar_count, current_bar_index, advance_by}
 # Processes bars using detector.process_bar() and returns events
+
+# Reverse: POST /api/replay/reverse
+# {current_bar_index, include_aggregated_bars?, include_dag_state?}
+# Resets detector and replays from bar 0 to current_bar_index - 1
+# Returns same response format as /advance (ReplayAdvanceResponse)
+# Used for backward navigation in playback
 
 # DAG State: GET /api/dag/state
 # Returns internal leg-level state for DAG visualization:

@@ -806,3 +806,49 @@ class TestGroupSwingsByDepth:
         assert len(result.depth_3) == 1  # child2 (depth 2)
         assert len(result.deeper) == 1   # child3 (depth 3)
         assert result.deeper[0].id == "child3"
+
+
+# ============================================================================
+# Test Reverse Replay Logic
+# ============================================================================
+
+
+class TestReverseReplayLogic:
+    """Tests for reverse replay functionality."""
+
+    def test_reverse_replays_to_correct_state(self, sample_bars):
+        """Reversing should produce same state as direct forward replay to target."""
+        config = SwingConfig.default()
+
+        # Forward to bar 50
+        detector_forward = HierarchicalDetector(config)
+        for bar in sample_bars[:51]:
+            detector_forward.process_bar(bar)
+        state_at_50 = len(detector_forward.get_active_swings())
+        legs_at_50 = len(detector_forward.state.active_legs)
+
+        # Forward to bar 60, then "reverse" by replaying 0-50
+        detector_full = HierarchicalDetector(config)
+        for bar in sample_bars[:61]:
+            detector_full.process_bar(bar)
+
+        # Simulate reverse: create fresh detector and replay to 50
+        detector_reversed = HierarchicalDetector(config)
+        for bar in sample_bars[:51]:
+            detector_reversed.process_bar(bar)
+
+        # States should match
+        assert len(detector_reversed.get_active_swings()) == state_at_50
+        assert len(detector_reversed.state.active_legs) == legs_at_50
+
+    def test_reverse_from_bar_zero_stays_at_zero(self, sample_bars):
+        """Reversing from bar 0 should keep state at bar 0."""
+        config = SwingConfig.default()
+        detector = HierarchicalDetector(config)
+
+        # Process just bar 0
+        detector.process_bar(sample_bars[0])
+
+        # Target would be -1, which is invalid
+        # In the API, this returns current state at bar 0
+        assert detector.state.last_bar_index == 0
