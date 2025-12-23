@@ -57,8 +57,8 @@ interface UsePageSetupResult {
  */
 export function usePageSetup({
   sourceResolutionMinutes,
-  initialChart1Aggregation = 'L',
-  initialChart2Aggregation = 'S',
+  initialChart1Aggregation = '1H',
+  initialChart2Aggregation = '5m',
   initialSpeedMultiplier = 1,
 }: UsePageSetupOptions): UsePageSetupResult {
   // Chart aggregation state

@@ -2,22 +2,22 @@
   "schema_version": 1,
   "playback_sessions": [],
   "sessions": {
-    "test_data/es-5m.csv": {
-      "session_id": "244772ac-480c-4e43-af77-378a6ac72b6d",
-      "data_file": "test_data/es-5m.csv",
-      "offset": 1172207,
-      "started_at": "2025-12-22T00:23:06.742441+00:00",
+    "test_data/es-30m-new.csv": {
+      "session_id": "611de48a-81fe-49c8-9107-4e7841834001",
+      "data_file": "test_data/es-30m-new.csv",
+      "offset": 210929,
+      "started_at": "2025-12-23T21:05:01.296183+00:00",
       "observations": [
         {
-          "observation_id": "12180a59-1d50-47d4-a3ea-bd72f650d72d",
-          "text": "This leg is now engulfed. Why is it not deleted? ",
-          "playback_bar": 55,
-          "created_at": "2025-12-22T00:23:06.743224+00:00",
+          "observation_id": "807be010-1c3d-4af3-af55-eaf6204fdf87",
+          "text": "This leg gets deleted in next turn. Can you investigate why? ",
+          "playback_bar": 243,
+          "created_at": "2025-12-23T21:05:01.296646+00:00",
           "snapshot": {
             "state": "paused",
-            "window_offset": 1172207,
-            "bars_since_calibration": 55,
-            "current_bar_index": 55,
+            "window_offset": 210929,
+            "bars_since_calibration": 243,
+            "current_bar_index": 243,
             "calibration_bar_count": 0,
             "swings_found": {
               "XL": 0,
@@ -25,1133 +25,320 @@
               "M": 0,
               "S": 0
             },
-            "swings_invalidated": 5,
-            "swings_completed": 2,
+            "swings_invalidated": 89,
+            "swings_completed": 62,
             "event_context": null,
             "mode": "dag",
             "replay_context": null,
             "dag_context": {
               "active_legs": [
                 {
-                  "leg_id": "e5f3b458",
-                  "direction": "bull",
-                  "pivot_price": 4419.25,
-                  "pivot_index": 5,
-                  "origin_price": 4413.75,
-                  "origin_index": 3,
-                  "range": 5.5
-                },
-                {
-                  "leg_id": "f2f9aec1",
+                  "leg_id": "2f5afba2",
                   "direction": "bear",
-                  "pivot_price": 4407.25,
-                  "pivot_index": 10,
-                  "origin_price": 4419.25,
-                  "origin_index": 5,
-                  "range": 12.0
+                  "pivot_price": 5911.25,
+                  "pivot_index": 1,
+                  "origin_price": 5922.75,
+                  "origin_index": 0,
+                  "range": 11.5
                 },
                 {
-                  "leg_id": "6b76cceb",
+                  "leg_id": "2f0b5486",
                   "direction": "bull",
-                  "pivot_price": 4436.75,
-                  "pivot_index": 32,
-                  "origin_price": 4407.25,
-                  "origin_index": 10,
-                  "range": 29.5
-                },
-                {
-                  "leg_id": "f9f139c7",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4436.75,
-                  "origin_index": 32,
-                  "range": 14.5
-                },
-                {
-                  "leg_id": "476d13e6",
-                  "direction": "bull",
-                  "pivot_price": 4430.25,
-                  "pivot_index": 50,
-                  "origin_price": 4424.25,
-                  "origin_index": 49,
-                  "range": 6.0
-                },
-                {
-                  "leg_id": "6d21a310",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4430.25,
-                  "origin_index": 50,
-                  "range": 8.0
-                },
-                {
-                  "leg_id": "e63cad35",
-                  "direction": "bull",
-                  "pivot_price": 4431.5,
-                  "pivot_index": 55,
-                  "origin_price": 4422.25,
-                  "origin_index": 53,
-                  "range": 9.25
-                }
-              ],
-              "pending_origins": {
-                "bull": null,
-                "bear": {
-                  "price": 4431.5,
-                  "bar_index": 55
-                }
-              }
-            },
-            "attachments": [
-              {
-                "type": "leg",
-                "leg_id": "476d13e6",
-                "direction": "bull",
-                "pivot_price": 4430.25,
-                "origin_price": 4424.25,
-                "pivot_index": 50,
-                "origin_index": 49
-              }
-            ]
-          }
-        },
-        {
-          "observation_id": "63503c10-d8e8-4d76-8b71-a6729badc081",
-          "text": "This leg is engulfed and not deleted yet why? ",
-          "playback_bar": 261,
-          "created_at": "2025-12-22T04:23:57.142511+00:00",
-          "snapshot": {
-            "state": "paused",
-            "window_offset": 1172207,
-            "bars_since_calibration": 261,
-            "current_bar_index": 261,
-            "calibration_bar_count": 0,
-            "swings_found": {
-              "XL": 0,
-              "L": 0,
-              "M": 0,
-              "S": 0
-            },
-            "swings_invalidated": 38,
-            "swings_completed": 17,
-            "event_context": null,
-            "mode": "dag",
-            "replay_context": null,
-            "dag_context": {
-              "active_legs": [
-                {
-                  "leg_id": "8c4e8240",
-                  "direction": "bull",
-                  "pivot_price": 4419.25,
-                  "pivot_index": 5,
-                  "origin_price": 4413.75,
-                  "origin_index": 3,
-                  "range": 5.5
-                },
-                {
-                  "leg_id": "ec637d76",
-                  "direction": "bear",
-                  "pivot_price": 4407.25,
-                  "pivot_index": 10,
-                  "origin_price": 4419.25,
-                  "origin_index": 5,
-                  "range": 12.0
-                },
-                {
-                  "leg_id": "2c7924e6",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4407.25,
-                  "origin_index": 10,
-                  "range": 29.75
-                },
-                {
-                  "leg_id": "1990dffc",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4436.75,
-                  "origin_index": 32,
-                  "range": 14.5
-                },
-                {
-                  "leg_id": "b4f56d61",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4430.25,
-                  "origin_index": 50,
-                  "range": 8.0
-                },
-                {
-                  "leg_id": "8f4a432e",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4422.25,
-                  "origin_index": 53,
-                  "range": 14.75
-                },
-                {
-                  "leg_id": "dafe4103",
-                  "direction": "bear",
-                  "pivot_price": 4427.5,
-                  "pivot_index": 63,
-                  "origin_price": 4431.0,
-                  "origin_index": 60,
-                  "range": 3.5
-                },
-                {
-                  "leg_id": "20f19235",
-                  "direction": "bull",
-                  "pivot_price": 4434.5,
-                  "pivot_index": 67,
-                  "origin_price": 4427.5,
-                  "origin_index": 63,
-                  "range": 7.0
-                },
-                {
-                  "leg_id": "f993620e",
-                  "direction": "bear",
-                  "pivot_price": 4424.0,
+                  "pivot_price": 6068.25,
                   "pivot_index": 81,
-                  "origin_price": 4434.5,
-                  "origin_index": 67,
-                  "range": 10.5
+                  "origin_price": 5911.25,
+                  "origin_index": 1,
+                  "range": 157.0
                 },
                 {
-                  "leg_id": "a2fa8205",
-                  "direction": "bear",
-                  "pivot_price": 4424.0,
-                  "pivot_index": 81,
-                  "origin_price": 4432.75,
-                  "origin_index": 76,
-                  "range": 8.75
-                },
-                {
-                  "leg_id": "8cc66af9",
+                  "leg_id": "13847b55",
                   "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4424.0,
+                  "pivot_price": 6068.25,
+                  "pivot_index": 81,
+                  "origin_price": 5922.75,
+                  "origin_index": 5,
+                  "range": 145.5
+                },
+                {
+                  "leg_id": "3b8dcc45",
+                  "direction": "bull",
+                  "pivot_price": 6068.25,
+                  "pivot_index": 81,
+                  "origin_price": 5923.75,
+                  "origin_index": 12,
+                  "range": 144.5
+                },
+                {
+                  "leg_id": "2f0043b5",
+                  "direction": "bull",
+                  "pivot_price": 6068.25,
+                  "pivot_index": 81,
+                  "origin_price": 5923.75,
+                  "origin_index": 26,
+                  "range": 144.5
+                },
+                {
+                  "leg_id": "c50b25d3",
+                  "direction": "bull",
+                  "pivot_price": 6068.25,
+                  "pivot_index": 81,
+                  "origin_price": 5934.0,
+                  "origin_index": 32,
+                  "range": 134.25
+                },
+                {
+                  "leg_id": "c9a053a7",
+                  "direction": "bull",
+                  "pivot_price": 6068.25,
+                  "pivot_index": 81,
+                  "origin_price": 5969.25,
+                  "origin_index": 37,
+                  "range": 99.0
+                },
+                {
+                  "leg_id": "fba5b327",
+                  "direction": "bull",
+                  "pivot_price": 6068.25,
+                  "pivot_index": 81,
+                  "origin_price": 5980.75,
+                  "origin_index": 43,
+                  "range": 87.5
+                },
+                {
+                  "leg_id": "9e133e5a",
+                  "direction": "bull",
+                  "pivot_price": 6068.25,
+                  "pivot_index": 81,
+                  "origin_price": 5980.75,
+                  "origin_index": 52,
+                  "range": 87.5
+                },
+                {
+                  "leg_id": "7d4b0caa",
+                  "direction": "bull",
+                  "pivot_price": 6068.25,
+                  "pivot_index": 81,
+                  "origin_price": 6007.5,
+                  "origin_index": 70,
+                  "range": 60.75
+                },
+                {
+                  "leg_id": "27aac8a2",
+                  "direction": "bear",
+                  "pivot_price": 5917.0,
+                  "pivot_index": 175,
+                  "origin_price": 6068.25,
                   "origin_index": 81,
-                  "range": 13.0
+                  "range": 151.25
                 },
                 {
-                  "leg_id": "e8b22d25",
+                  "leg_id": "09868653",
                   "direction": "bull",
-                  "pivot_price": 4428.0,
-                  "pivot_index": 105,
-                  "origin_price": 4426.25,
-                  "origin_index": 100,
-                  "range": 1.75
-                },
-                {
-                  "leg_id": "d5d9580c",
-                  "direction": "bull",
-                  "pivot_price": 4428.0,
-                  "pivot_index": 105,
-                  "origin_price": 4426.75,
-                  "origin_index": 104,
-                  "range": 1.25
-                },
-                {
-                  "leg_id": "8f748ab9",
-                  "direction": "bull",
-                  "pivot_price": 4427.5,
-                  "pivot_index": 130,
-                  "origin_price": 4426.5,
-                  "origin_index": 127,
-                  "range": 1.0
-                },
-                {
-                  "leg_id": "7a5bed87",
-                  "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 144,
-                  "origin_price": 4429.0,
-                  "origin_index": 134,
-                  "range": 4.0
-                },
-                {
-                  "leg_id": "6210a48d",
-                  "direction": "bull",
-                  "pivot_price": 4427.5,
-                  "pivot_index": 140,
-                  "origin_price": 4426.5,
-                  "origin_index": 138,
-                  "range": 1.0
-                },
-                {
-                  "leg_id": "511d353c",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4425.0,
-                  "origin_index": 144,
-                  "range": 12.0
-                },
-                {
-                  "leg_id": "20a22588",
-                  "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 179,
-                  "origin_price": 4429.5,
-                  "origin_index": 160,
-                  "range": 4.5
-                },
-                {
-                  "leg_id": "09db48bb",
-                  "direction": "bull",
-                  "pivot_price": 4427.0,
-                  "pivot_index": 178,
-                  "origin_price": 4425.75,
-                  "origin_index": 174,
-                  "range": 1.25
-                },
-                {
-                  "leg_id": "dbe179af",
-                  "direction": "bear",
-                  "pivot_price": 4426.25,
-                  "pivot_index": 191,
-                  "origin_price": 4429.0,
-                  "origin_index": 189,
-                  "range": 2.75
-                },
-                {
-                  "leg_id": "170abac8",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4426.25,
-                  "origin_index": 191,
-                  "range": 10.75
-                },
-                {
-                  "leg_id": "30caad71",
-                  "direction": "bear",
-                  "pivot_price": 4427.25,
-                  "pivot_index": 206,
-                  "origin_price": 4431.75,
-                  "origin_index": 203,
-                  "range": 4.5
-                },
-                {
-                  "leg_id": "942992f0",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4427.25,
-                  "origin_index": 206,
-                  "range": 9.75
-                },
-                {
-                  "leg_id": "bbb16dd0",
-                  "direction": "bear",
-                  "pivot_price": 4424.5,
-                  "pivot_index": 260,
-                  "origin_price": 4437.0,
-                  "origin_index": 219,
-                  "range": 12.5
-                },
-                {
-                  "leg_id": "74425903",
-                  "direction": "bull",
-                  "pivot_price": 4436.25,
-                  "pivot_index": 232,
-                  "origin_price": 4432.0,
-                  "origin_index": 222,
-                  "range": 4.25
-                },
-                {
-                  "leg_id": "ae11f1fb",
-                  "direction": "bear",
-                  "pivot_price": 4424.5,
-                  "pivot_index": 260,
-                  "origin_price": 4436.25,
-                  "origin_index": 232,
-                  "range": 11.75
-                },
-                {
-                  "leg_id": "edc795a3",
-                  "direction": "bull",
-                  "pivot_price": 4430.25,
-                  "pivot_index": 250,
-                  "origin_price": 4426.25,
-                  "origin_index": 240,
-                  "range": 4.0
-                },
-                {
-                  "leg_id": "4382a2f4",
-                  "direction": "bear",
-                  "pivot_price": 4426.75,
-                  "pivot_index": 244,
-                  "origin_price": 4428.75,
-                  "origin_index": 243,
-                  "range": 2.0
-                },
-                {
-                  "leg_id": "9fa06877",
-                  "direction": "bull",
-                  "pivot_price": 4430.25,
-                  "pivot_index": 250,
-                  "origin_price": 4426.75,
-                  "origin_index": 244,
-                  "range": 3.5
-                },
-                {
-                  "leg_id": "824b6f77",
-                  "direction": "bear",
-                  "pivot_price": 4427.0,
-                  "pivot_index": 247,
-                  "origin_price": 4429.0,
-                  "origin_index": 246,
-                  "range": 2.0
-                },
-                {
-                  "leg_id": "dee7c73f",
-                  "direction": "bull",
-                  "pivot_price": 4430.25,
-                  "pivot_index": 250,
-                  "origin_price": 4427.0,
-                  "origin_index": 247,
-                  "range": 3.25
-                },
-                {
-                  "leg_id": "2bd003d1",
-                  "direction": "bear",
-                  "pivot_price": 4424.5,
-                  "pivot_index": 260,
-                  "origin_price": 4430.25,
-                  "origin_index": 250,
-                  "range": 5.75
-                },
-                {
-                  "leg_id": "2ed9520a",
-                  "direction": "bull",
-                  "pivot_price": 4429.75,
-                  "pivot_index": 254,
-                  "origin_price": 4428.25,
-                  "origin_index": 253,
-                  "range": 1.5
-                },
-                {
-                  "leg_id": "3ab92dae",
-                  "direction": "bear",
-                  "pivot_price": 4424.5,
-                  "pivot_index": 260,
-                  "origin_price": 4429.75,
-                  "origin_index": 254,
-                  "range": 5.25
-                },
-                {
-                  "leg_id": "7f1334d0",
-                  "direction": "bull",
-                  "pivot_price": 4428.75,
-                  "pivot_index": 258,
-                  "origin_price": 4426.5,
-                  "origin_index": 257,
-                  "range": 2.25
-                },
-                {
-                  "leg_id": "5ca89e20",
-                  "direction": "bear",
-                  "pivot_price": 4424.5,
-                  "pivot_index": 260,
-                  "origin_price": 4428.75,
-                  "origin_index": 258,
-                  "range": 4.25
-                }
-              ],
-              "pending_origins": {
-                "bull": {
-                  "price": 4424.5,
-                  "bar_index": 260
-                },
-                "bear": null
-              }
-            },
-            "attachments": [
-              {
-                "type": "leg",
-                "leg_id": "30caad71",
-                "direction": "bear",
-                "pivot_price": 4427.25,
-                "origin_price": 4431.75,
-                "pivot_index": 206,
-                "origin_index": 203
-              }
-            ]
-          }
-        },
-        {
-          "observation_id": "890767b4-263f-4588-9636-2e85ea0bff79",
-          "text": "That can't be right. See here. That leg forms and has a counter bull leg as well. ",
-          "playback_bar": 210,
-          "created_at": "2025-12-22T04:56:42.424193+00:00",
-          "snapshot": {
-            "state": "paused",
-            "window_offset": 1172207,
-            "bars_since_calibration": 210,
-            "current_bar_index": 210,
-            "calibration_bar_count": 0,
-            "swings_found": {
-              "XL": 0,
-              "L": 0,
-              "M": 0,
-              "S": 0
-            },
-            "swings_invalidated": 28,
-            "swings_completed": 11,
-            "event_context": null,
-            "mode": "dag",
-            "replay_context": null,
-            "dag_context": {
-              "active_legs": [
-                {
-                  "leg_id": "64a1cb10",
-                  "direction": "bull",
-                  "pivot_price": 4419.25,
-                  "pivot_index": 5,
-                  "origin_price": 4413.75,
-                  "origin_index": 3,
-                  "range": 5.5
-                },
-                {
-                  "leg_id": "1c15f24f",
-                  "direction": "bear",
-                  "pivot_price": 4407.25,
-                  "pivot_index": 10,
-                  "origin_price": 4419.25,
-                  "origin_index": 5,
-                  "range": 12.0
-                },
-                {
-                  "leg_id": "3560ff5e",
-                  "direction": "bull",
-                  "pivot_price": 4436.75,
-                  "pivot_index": 32,
-                  "origin_price": 4407.25,
-                  "origin_index": 10,
-                  "range": 29.5
-                },
-                {
-                  "leg_id": "92206578",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4436.75,
-                  "origin_index": 32,
-                  "range": 14.5
-                },
-                {
-                  "leg_id": "9b1d07a7",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4430.25,
-                  "origin_index": 50,
-                  "range": 8.0
-                },
-                {
-                  "leg_id": "674c6555",
-                  "direction": "bull",
-                  "pivot_price": 4434.5,
-                  "pivot_index": 67,
-                  "origin_price": 4422.25,
-                  "origin_index": 53,
-                  "range": 12.25
-                },
-                {
-                  "leg_id": "f67265c6",
-                  "direction": "bull",
-                  "pivot_price": 4434.5,
-                  "pivot_index": 67,
-                  "origin_price": 4426.75,
-                  "origin_index": 59,
-                  "range": 7.75
-                },
-                {
-                  "leg_id": "31203422",
-                  "direction": "bear",
-                  "pivot_price": 4427.5,
-                  "pivot_index": 63,
-                  "origin_price": 4431.0,
-                  "origin_index": 60,
-                  "range": 3.5
-                },
-                {
-                  "leg_id": "12463daf",
-                  "direction": "bull",
-                  "pivot_price": 4434.5,
-                  "pivot_index": 67,
-                  "origin_price": 4427.5,
-                  "origin_index": 63,
-                  "range": 7.0
-                },
-                {
-                  "leg_id": "aca16247",
-                  "direction": "bear",
-                  "pivot_price": 4424.0,
-                  "pivot_index": 81,
-                  "origin_price": 4434.5,
-                  "origin_index": 67,
-                  "range": 10.5
-                },
-                {
-                  "leg_id": "3b472257",
-                  "direction": "bull",
-                  "pivot_price": 4432.75,
-                  "pivot_index": 76,
-                  "origin_price": 4426.0,
-                  "origin_index": 71,
-                  "range": 6.75
-                },
-                {
-                  "leg_id": "46983b64",
-                  "direction": "bear",
-                  "pivot_price": 4424.0,
-                  "pivot_index": 81,
-                  "origin_price": 4432.75,
-                  "origin_index": 76,
-                  "range": 8.75
-                },
-                {
-                  "leg_id": "485fc6dc",
-                  "direction": "bull",
-                  "pivot_price": 4431.75,
-                  "pivot_index": 203,
-                  "origin_price": 4424.0,
-                  "origin_index": 81,
-                  "range": 7.75
-                },
-                {
-                  "leg_id": "2b97401c",
-                  "direction": "bull",
-                  "pivot_price": 4428.0,
-                  "pivot_index": 105,
-                  "origin_price": 4426.25,
-                  "origin_index": 100,
-                  "range": 1.75
-                },
-                {
-                  "leg_id": "8dd73584",
-                  "direction": "bull",
-                  "pivot_price": 4428.0,
-                  "pivot_index": 105,
-                  "origin_price": 4426.75,
-                  "origin_index": 104,
-                  "range": 1.25
-                },
-                {
-                  "leg_id": "e7a3b327",
-                  "direction": "bear",
-                  "pivot_price": 4425.5,
-                  "pivot_index": 111,
-                  "origin_price": 4428.0,
-                  "origin_index": 105,
-                  "range": 2.5
-                },
-                {
-                  "leg_id": "6c399810",
-                  "direction": "bear",
-                  "pivot_price": 4425.75,
+                  "pivot_price": 6045.5,
                   "pivot_index": 123,
-                  "origin_price": 4428.0,
-                  "origin_index": 108,
-                  "range": 2.25
+                  "origin_price": 6004.0,
+                  "origin_index": 89,
+                  "range": 41.5
                 },
                 {
-                  "leg_id": "4301b5ea",
+                  "leg_id": "c7f6daf0",
                   "direction": "bull",
-                  "pivot_price": 4427.5,
+                  "pivot_price": 6045.5,
+                  "pivot_index": 123,
+                  "origin_price": 6007.0,
+                  "origin_index": 104,
+                  "range": 38.5
+                },
+                {
+                  "leg_id": "bde8f9a9",
+                  "direction": "bull",
+                  "pivot_price": 6045.5,
+                  "pivot_index": 123,
+                  "origin_price": 6010.25,
+                  "origin_index": 107,
+                  "range": 35.25
+                },
+                {
+                  "leg_id": "51a446f6",
+                  "direction": "bear",
+                  "pivot_price": 5917.0,
+                  "pivot_index": 175,
+                  "origin_price": 6045.5,
+                  "origin_index": 123,
+                  "range": 128.5
+                },
+                {
+                  "leg_id": "7791dc13",
+                  "direction": "bull",
+                  "pivot_price": 5991.0,
                   "pivot_index": 130,
-                  "origin_price": 4426.5,
-                  "origin_index": 127,
-                  "range": 1.0
+                  "origin_price": 5962.75,
+                  "origin_index": 129,
+                  "range": 28.25
                 },
                 {
-                  "leg_id": "962dc779",
+                  "leg_id": "77f46d4c",
                   "direction": "bear",
-                  "pivot_price": 4426.0,
-                  "pivot_index": 132,
-                  "origin_price": 4428.0,
-                  "origin_index": 128,
-                  "range": 2.0
+                  "pivot_price": 5917.0,
+                  "pivot_index": 175,
+                  "origin_price": 5991.0,
+                  "origin_index": 130,
+                  "range": 74.0
                 },
                 {
-                  "leg_id": "f4da6e8d",
-                  "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 144,
-                  "origin_price": 4429.0,
-                  "origin_index": 134,
-                  "range": 4.0
-                },
-                {
-                  "leg_id": "b4d94b68",
+                  "leg_id": "0e1978e6",
                   "direction": "bull",
-                  "pivot_price": 4427.5,
-                  "pivot_index": 140,
-                  "origin_price": 4426.5,
+                  "pivot_price": 5975.0,
+                  "pivot_index": 161,
+                  "origin_price": 5935.0,
+                  "origin_index": 135,
+                  "range": 40.0
+                },
+                {
+                  "leg_id": "02865b78",
+                  "direction": "bull",
+                  "pivot_price": 5975.0,
+                  "pivot_index": 161,
+                  "origin_price": 5948.25,
                   "origin_index": 138,
-                  "range": 1.0
+                  "range": 26.75
                 },
                 {
-                  "leg_id": "fd3ff4c0",
-                  "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 144,
-                  "origin_price": 4427.5,
-                  "origin_index": 140,
-                  "range": 2.5
-                },
-                {
-                  "leg_id": "b29b59a9",
+                  "leg_id": "2f991431",
                   "direction": "bull",
-                  "pivot_price": 4431.75,
-                  "pivot_index": 203,
-                  "origin_price": 4425.0,
-                  "origin_index": 144,
-                  "range": 6.75
+                  "pivot_price": 5975.0,
+                  "pivot_index": 161,
+                  "origin_price": 5957.5,
+                  "origin_index": 154,
+                  "range": 17.5
                 },
                 {
-                  "leg_id": "2814a30c",
+                  "leg_id": "5aa48cd2",
                   "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 179,
-                  "origin_price": 4429.5,
-                  "origin_index": 160,
-                  "range": 4.5
+                  "pivot_price": 5917.0,
+                  "pivot_index": 175,
+                  "origin_price": 5975.0,
+                  "origin_index": 161,
+                  "range": 58.0
                 },
                 {
-                  "leg_id": "d7d68e8b",
+                  "leg_id": "6d2f841b",
                   "direction": "bull",
-                  "pivot_price": 4427.0,
+                  "pivot_price": 5971.75,
                   "pivot_index": 178,
-                  "origin_price": 4425.75,
-                  "origin_index": 174,
-                  "range": 1.25
+                  "origin_price": 5917.0,
+                  "origin_index": 175,
+                  "range": 54.75
                 },
                 {
-                  "leg_id": "d0d8ce0d",
+                  "leg_id": "9515781c",
                   "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 179,
-                  "origin_price": 4427.0,
+                  "pivot_price": 5920.5,
+                  "pivot_index": 217,
+                  "origin_price": 5971.75,
                   "origin_index": 178,
-                  "range": 2.0
+                  "range": 51.25
                 },
                 {
-                  "leg_id": "9e91ba71",
-                  "direction": "bear",
-                  "pivot_price": 4426.25,
-                  "pivot_index": 191,
-                  "origin_price": 4429.0,
-                  "origin_index": 189,
-                  "range": 2.75
-                },
-                {
-                  "leg_id": "38b68b51",
+                  "leg_id": "0afa1516",
                   "direction": "bull",
-                  "pivot_price": 4431.75,
-                  "pivot_index": 203,
-                  "origin_price": 4426.25,
-                  "origin_index": 191,
-                  "range": 5.5
+                  "pivot_price": 5965.25,
+                  "pivot_index": 182,
+                  "origin_price": 5944.5,
+                  "origin_index": 180,
+                  "range": 20.75
                 },
                 {
-                  "leg_id": "aa9e68fa",
+                  "leg_id": "8b7db6d7",
                   "direction": "bear",
-                  "pivot_price": 4427.25,
-                  "pivot_index": 206,
-                  "origin_price": 4431.75,
-                  "origin_index": 203,
-                  "range": 4.5
+                  "pivot_price": 5920.5,
+                  "pivot_index": 217,
+                  "origin_price": 5965.25,
+                  "origin_index": 182,
+                  "range": 44.75
                 },
                 {
-                  "leg_id": "8a82a538",
-                  "direction": "bull",
-                  "pivot_price": 4431.5,
-                  "pivot_index": 209,
-                  "origin_price": 4427.25,
+                  "leg_id": "27a6b968",
+                  "direction": "bear",
+                  "pivot_price": 5920.5,
+                  "pivot_index": 217,
+                  "origin_price": 5957.0,
                   "origin_index": 206,
-                  "range": 4.25
+                  "range": 36.5
+                },
+                {
+                  "leg_id": "bbcd5f56",
+                  "direction": "bear",
+                  "pivot_price": 5920.5,
+                  "pivot_index": 217,
+                  "origin_price": 5954.75,
+                  "origin_index": 212,
+                  "range": 34.25
+                },
+                {
+                  "leg_id": "766948fd",
+                  "direction": "bull",
+                  "pivot_price": 5959.25,
+                  "pivot_index": 239,
+                  "origin_price": 5920.5,
+                  "origin_index": 217,
+                  "range": 38.75
+                },
+                {
+                  "leg_id": "c9a949b5",
+                  "direction": "bear",
+                  "pivot_price": 5934.5,
+                  "pivot_index": 235,
+                  "origin_price": 5950.75,
+                  "origin_index": 233,
+                  "range": 16.25
+                },
+                {
+                  "leg_id": "32a825d7",
+                  "direction": "bull",
+                  "pivot_price": 5959.25,
+                  "pivot_index": 239,
+                  "origin_price": 5934.5,
+                  "origin_index": 235,
+                  "range": 24.75
+                },
+                {
+                  "leg_id": "d268b4ff",
+                  "direction": "bear",
+                  "pivot_price": 5936.5,
+                  "pivot_index": 241,
+                  "origin_price": 5959.25,
+                  "origin_index": 239,
+                  "range": 22.75
+                },
+                {
+                  "leg_id": "b44574cc",
+                  "direction": "bull",
+                  "pivot_price": 5951.5,
+                  "pivot_index": 243,
+                  "origin_price": 5936.5,
+                  "origin_index": 241,
+                  "range": 15.0
                 }
               ],
               "pending_origins": {
                 "bull": null,
                 "bear": {
-                  "price": 4431.5,
-                  "bar_index": 209
+                  "price": 5951.5,
+                  "bar_index": 243
                 }
               }
             },
             "attachments": [
               {
                 "type": "leg",
-                "leg_id": "aa9e68fa",
+                "leg_id": "d268b4ff",
                 "direction": "bear",
-                "pivot_price": 4427.25,
-                "origin_price": 4431.75,
-                "pivot_index": 206,
-                "origin_index": 203
-              },
-              {
-                "type": "leg",
-                "leg_id": "8a82a538",
-                "direction": "bull",
-                "pivot_price": 4431.5,
-                "origin_price": 4427.25,
-                "pivot_index": 209,
-                "origin_index": 206
-              }
-            ]
-          }
-        },
-        {
-          "observation_id": "e50802cf-7b18-4b31-b2e4-922c74698034",
-          "text": "Consider the attached bear and bull legs. In the next candle the bear candle will be engulfed. Should I expect the bear leg to get deleted because of the fix in #264. If not, why not? ",
-          "playback_bar": 69,
-          "created_at": "2025-12-22T05:55:41.324667+00:00",
-          "snapshot": {
-            "state": "paused",
-            "window_offset": 1172207,
-            "bars_since_calibration": 69,
-            "current_bar_index": 69,
-            "calibration_bar_count": 0,
-            "swings_found": {
-              "XL": 0,
-              "L": 0,
-              "M": 0,
-              "S": 0
-            },
-            "swings_invalidated": 7,
-            "swings_completed": 2,
-            "event_context": null,
-            "mode": "dag",
-            "replay_context": null,
-            "dag_context": {
-              "active_legs": [
-                {
-                  "leg_id": "072bdbdc",
-                  "direction": "bear",
-                  "pivot_price": 4407.25,
-                  "pivot_index": 10,
-                  "origin_price": 4419.25,
-                  "origin_index": 5,
-                  "range": 12.0
-                },
-                {
-                  "leg_id": "edb6eda1",
-                  "direction": "bull",
-                  "pivot_price": 4436.75,
-                  "pivot_index": 32,
-                  "origin_price": 4407.25,
-                  "origin_index": 10,
-                  "range": 29.5
-                },
-                {
-                  "leg_id": "984e33ba",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4436.75,
-                  "origin_index": 32,
-                  "range": 14.5
-                },
-                {
-                  "leg_id": "299acdd5",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4430.25,
-                  "origin_index": 50,
-                  "range": 8.0
-                },
-                {
-                  "leg_id": "77f644b2",
-                  "direction": "bull",
-                  "pivot_price": 4434.5,
-                  "pivot_index": 67,
-                  "origin_price": 4422.25,
-                  "origin_index": 53,
-                  "range": 12.25
-                },
-                {
-                  "leg_id": "3402d359",
-                  "direction": "bear",
-                  "pivot_price": 4426.75,
-                  "pivot_index": 59,
-                  "origin_price": 4433.5,
-                  "origin_index": 56,
-                  "range": 6.75
-                },
-                {
-                  "leg_id": "b7bd4831",
-                  "direction": "bull",
-                  "pivot_price": 4434.5,
-                  "pivot_index": 67,
-                  "origin_price": 4426.75,
-                  "origin_index": 59,
-                  "range": 7.75
-                },
-                {
-                  "leg_id": "e5e8085a",
-                  "direction": "bear",
-                  "pivot_price": 4427.5,
-                  "pivot_index": 63,
-                  "origin_price": 4431.0,
-                  "origin_index": 60,
-                  "range": 3.5
-                },
-                {
-                  "leg_id": "25b1dfca",
-                  "direction": "bull",
-                  "pivot_price": 4434.5,
-                  "pivot_index": 67,
-                  "origin_price": 4427.5,
-                  "origin_index": 63,
-                  "range": 7.0
-                },
-                {
-                  "leg_id": "383a6443",
-                  "direction": "bear",
-                  "pivot_price": 4427.75,
-                  "pivot_index": 69,
-                  "origin_price": 4434.5,
-                  "origin_index": 67,
-                  "range": 6.75
-                }
-              ],
-              "pending_origins": {
-                "bull": {
-                  "price": 4427.75,
-                  "bar_index": 69
-                },
-                "bear": null
-              }
-            },
-            "attachments": [
-              {
-                "type": "leg",
-                "leg_id": "3402d359",
-                "direction": "bear",
-                "pivot_price": 4426.75,
-                "origin_price": 4433.5,
-                "pivot_index": 59,
-                "origin_index": 56
-              },
-              {
-                "type": "leg",
-                "leg_id": "b7bd4831",
-                "direction": "bull",
-                "pivot_price": 4434.5,
-                "origin_price": 4426.75,
-                "pivot_index": 67,
-                "origin_index": 59
-              }
-            ]
-          }
-        },
-        {
-          "observation_id": "d445d657-89de-4638-8188-cb9cc9baedcf",
-          "text": "I would have expected #246 to prune this. Why this still here. Investigate. If a leg test harness doesn't exist create one. Use that to test exactly what happens to this leg and why #264 isn't triggered and give me an explanation. Do not try to speculate, just run the code path and tell me. ",
-          "playback_bar": 219,
-          "created_at": "2025-12-22T16:26:38.488871+00:00",
-          "snapshot": {
-            "state": "paused",
-            "window_offset": 1172207,
-            "bars_since_calibration": 219,
-            "current_bar_index": 219,
-            "calibration_bar_count": 0,
-            "swings_found": {
-              "XL": 0,
-              "L": 0,
-              "M": 0,
-              "S": 0
-            },
-            "swings_invalidated": 30,
-            "swings_completed": 12,
-            "event_context": null,
-            "mode": "dag",
-            "replay_context": null,
-            "dag_context": {
-              "active_legs": [
-                {
-                  "leg_id": "0891bebf",
-                  "direction": "bear",
-                  "pivot_price": 4407.25,
-                  "pivot_index": 10,
-                  "origin_price": 4419.25,
-                  "origin_index": 5,
-                  "range": 12.0
-                },
-                {
-                  "leg_id": "d3d148f6",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4407.25,
-                  "origin_index": 10,
-                  "range": 29.75
-                },
-                {
-                  "leg_id": "2fc13c32",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4436.75,
-                  "origin_index": 32,
-                  "range": 14.5
-                },
-                {
-                  "leg_id": "e54df992",
-                  "direction": "bear",
-                  "pivot_price": 4422.25,
-                  "pivot_index": 53,
-                  "origin_price": 4430.25,
-                  "origin_index": 50,
-                  "range": 8.0
-                },
-                {
-                  "leg_id": "60c40cce",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4422.25,
-                  "origin_index": 53,
-                  "range": 14.75
-                },
-                {
-                  "leg_id": "eff40c5c",
-                  "direction": "bear",
-                  "pivot_price": 4424.0,
-                  "pivot_index": 81,
-                  "origin_price": 4434.5,
-                  "origin_index": 67,
-                  "range": 10.5
-                },
-                {
-                  "leg_id": "fe307f4c",
-                  "direction": "bear",
-                  "pivot_price": 4424.0,
-                  "pivot_index": 81,
-                  "origin_price": 4432.75,
-                  "origin_index": 76,
-                  "range": 8.75
-                },
-                {
-                  "leg_id": "fc8a4dba",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4424.0,
-                  "origin_index": 81,
-                  "range": 13.0
-                },
-                {
-                  "leg_id": "10d2e95a",
-                  "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 144,
-                  "origin_price": 4429.0,
-                  "origin_index": 134,
-                  "range": 4.0
-                },
-                {
-                  "leg_id": "6b7db033",
-                  "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 144,
-                  "origin_price": 4427.5,
-                  "origin_index": 140,
-                  "range": 2.5
-                },
-                {
-                  "leg_id": "877e0175",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4425.0,
-                  "origin_index": 144,
-                  "range": 12.0
-                },
-                {
-                  "leg_id": "091471e2",
-                  "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 179,
-                  "origin_price": 4429.5,
-                  "origin_index": 160,
-                  "range": 4.5
-                },
-                {
-                  "leg_id": "ebe723dc",
-                  "direction": "bear",
-                  "pivot_price": 4425.0,
-                  "pivot_index": 179,
-                  "origin_price": 4427.0,
-                  "origin_index": 178,
-                  "range": 2.0
-                },
-                {
-                  "leg_id": "f1b66217",
-                  "direction": "bear",
-                  "pivot_price": 4426.25,
-                  "pivot_index": 191,
-                  "origin_price": 4429.0,
-                  "origin_index": 189,
-                  "range": 2.75
-                },
-                {
-                  "leg_id": "bcfe53c6",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4426.25,
-                  "origin_index": 191,
-                  "range": 10.75
-                },
-                {
-                  "leg_id": "791e0a38",
-                  "direction": "bear",
-                  "pivot_price": 4427.25,
-                  "pivot_index": 206,
-                  "origin_price": 4431.75,
-                  "origin_index": 203,
-                  "range": 4.5
-                },
-                {
-                  "leg_id": "90a4277c",
-                  "direction": "bull",
-                  "pivot_price": 4437.0,
-                  "pivot_index": 219,
-                  "origin_price": 4427.25,
-                  "origin_index": 206,
-                  "range": 9.75
-                }
-              ],
-              "pending_origins": {
-                "bull": null,
-                "bear": {
-                  "price": 4437.0,
-                  "bar_index": 219
-                }
-              }
-            },
-            "attachments": [
-              {
-                "type": "leg",
-                "leg_id": "bcfe53c6",
-                "direction": "bull",
-                "pivot_price": 4437.0,
-                "origin_price": 4426.25,
-                "pivot_index": 219,
-                "origin_index": 191
+                "pivot_price": 5936.5,
+                "origin_price": 5959.25,
+                "pivot_index": 241,
+                "origin_index": 239,
+                "csv_index": null
               }
             ]
           }

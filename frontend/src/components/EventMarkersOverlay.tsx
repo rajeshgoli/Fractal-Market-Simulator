@@ -6,7 +6,7 @@
  * Supports click detection for marker interaction.
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, Time, SeriesMarker } from 'lightweight-charts';
 import { BarData } from '../types';
 import { LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
@@ -18,6 +18,7 @@ interface EventMarkersOverlayProps {
   bars: BarData[];
   eventsByBar: Map<number, LifecycleEventWithLegInfo[]>;
   onMarkerClick?: (barIndex: number, events: LifecycleEventWithLegInfo[], position: { x: number; y: number }) => void;
+  onMarkerDoubleClick?: (events: LifecycleEventWithLegInfo[]) => void;
 }
 
 /**
@@ -89,7 +90,12 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
   bars,
   eventsByBar,
   onMarkerClick,
+  onMarkerDoubleClick,
 }) => {
+  // Track last click for double-click detection
+  const lastClickTimeRef = useRef<number>(0);
+  const lastClickBarIndexRef = useRef<number | null>(null);
+
   // Build timestamp lookup
   const getTimestampForBarIndex = useCallback((barIndex: number): number | null => {
     // Find bar with matching source index range
@@ -161,7 +167,12 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
 
   // Click handler for marker detection
   useEffect(() => {
-    if (!chart || !series || !onMarkerClick || eventsByBar.size === 0) {
+    if (!chart || !series || eventsByBar.size === 0) {
+      return;
+    }
+
+    // Need at least one handler to proceed
+    if (!onMarkerClick && !onMarkerDoubleClick) {
       return;
     }
 
@@ -170,6 +181,7 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
 
     const timeScale = chart.timeScale();
     const CLICK_THRESHOLD = 20; // pixels
+    const DOUBLE_CLICK_THRESHOLD = 300; // ms
 
     const handleClick = (e: MouseEvent) => {
       const rect = chartElement.getBoundingClientRect();
@@ -218,12 +230,41 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
         }
       }
 
-      // If we found a close marker, trigger the callback
-      if (closestBarIndex !== null) {
-        const events = eventsByBar.get(closestBarIndex);
-        if (events) {
-          onMarkerClick(closestBarIndex, events, { x: e.clientX, y: e.clientY });
-        }
+      // If no marker was clicked, reset tracking
+      if (closestBarIndex === null) {
+        lastClickTimeRef.current = 0;
+        lastClickBarIndexRef.current = null;
+        return;
+      }
+
+      const events = eventsByBar.get(closestBarIndex);
+      if (!events) return;
+
+      const now = Date.now();
+
+      // Check for double-click (same marker clicked within threshold)
+      if (
+        lastClickBarIndexRef.current === closestBarIndex &&
+        now - lastClickTimeRef.current < DOUBLE_CLICK_THRESHOLD
+      ) {
+        // Double-click detected
+        onMarkerDoubleClick?.(events);
+        lastClickTimeRef.current = 0;
+        lastClickBarIndexRef.current = null;
+      } else {
+        // Single click - delay to see if it becomes a double-click
+        lastClickTimeRef.current = now;
+        lastClickBarIndexRef.current = closestBarIndex;
+
+        // Fire single-click after threshold if no second click
+        setTimeout(() => {
+          if (
+            lastClickBarIndexRef.current === closestBarIndex &&
+            now === lastClickTimeRef.current
+          ) {
+            onMarkerClick?.(closestBarIndex, events, { x: e.clientX, y: e.clientY });
+          }
+        }, DOUBLE_CLICK_THRESHOLD);
       }
     };
 
@@ -232,7 +273,7 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
     return () => {
       chartElement.removeEventListener('click', handleClick);
     };
-  }, [chart, series, onMarkerClick, eventsByBar, bars, getTimestampForBarIndex]);
+  }, [chart, series, onMarkerClick, onMarkerDoubleClick, eventsByBar, bars, getTimestampForBarIndex]);
 
   // This component only manages markers via the plugin, no visual render
   return null;

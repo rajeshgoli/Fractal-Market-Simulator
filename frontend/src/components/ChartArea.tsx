@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries } from 'lightweight-charts';
 import { ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
-import { BarData, AGGREGATION_OPTIONS, AggregationScale } from '../types';
+import { BarData, AggregationScale, getFilteredAggregationOptions } from '../types';
 
 interface ChartHeaderProps {
   title: string;
@@ -10,6 +10,7 @@ interface ChartHeaderProps {
   onAggregationChange: (scale: AggregationScale) => void;
   isMaximized: boolean;
   onToggleMaximize: () => void;
+  sourceResolutionMinutes: number;
 }
 
 const ChartHeader: React.FC<ChartHeaderProps> = ({
@@ -18,8 +19,11 @@ const ChartHeader: React.FC<ChartHeaderProps> = ({
   barCount,
   onAggregationChange,
   isMaximized,
-  onToggleMaximize
+  onToggleMaximize,
+  sourceResolutionMinutes
 }) => {
+  const filteredOptions = getFilteredAggregationOptions(sourceResolutionMinutes);
+
   return (
     <>
       <div className="absolute top-2 left-2 z-10 flex items-center gap-2 bg-app-card/80 backdrop-blur border border-app-border rounded px-2 py-1 shadow-sm">
@@ -32,7 +36,7 @@ const ChartHeader: React.FC<ChartHeaderProps> = ({
             onChange={(e) => onAggregationChange(e.target.value as AggregationScale)}
             className="appearance-none bg-transparent text-xs text-trading-blue hover:text-blue-400 font-mono pr-4 cursor-pointer focus:outline-none"
           >
-            {AGGREGATION_OPTIONS.map(option => (
+            {filteredOptions.map(option => (
               <option key={option.value} value={option.value} className="bg-app-card text-app-text">
                 {option.label}
               </option>
@@ -181,6 +185,7 @@ interface ChartAreaProps {
   onChart2AggregationChange: (scale: AggregationScale) => void;
   onChart1Ready?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void;
   onChart2Ready?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void;
+  sourceResolutionMinutes?: number;
 }
 
 export const ChartArea: React.FC<ChartAreaProps> = ({
@@ -192,6 +197,7 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
   onChart2AggregationChange,
   onChart1Ready,
   onChart2Ready,
+  sourceResolutionMinutes = 1,
 }) => {
   // Track which chart is maximized: null = both visible, 1 = chart 1 maximized, 2 = chart 2 maximized
   const [maximizedChart, setMaximizedChart] = useState<1 | 2 | null>(null);
@@ -216,6 +222,7 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
             onAggregationChange={onChart1AggregationChange}
             isMaximized={maximizedChart === 1}
             onToggleMaximize={toggleChart1Maximize}
+            sourceResolutionMinutes={sourceResolutionMinutes}
           />
           <SingleChart data={chart1Data} onChartReady={onChart1Ready} />
         </div>
@@ -231,6 +238,7 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
             onAggregationChange={onChart2AggregationChange}
             isMaximized={maximizedChart === 2}
             onToggleMaximize={toggleChart2Maximize}
+            sourceResolutionMinutes={sourceResolutionMinutes}
           />
           <SingleChart data={chart2Data} onChartReady={onChart2Ready} />
         </div>

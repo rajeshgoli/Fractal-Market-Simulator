@@ -154,20 +154,29 @@ async def get_session():
     }
 
 
-# Scale code to timeframe minutes mapping
-SCALE_TO_MINUTES = {"S": 5, "M": 15, "L": 60, "XL": 240}
+# Scale code to timeframe minutes mapping - standard timeframes
+SCALE_TO_MINUTES = {
+    "1M": 1, "1m": 1,
+    "5M": 5, "5m": 5,
+    "15M": 15, "15m": 15,
+    "30M": 30, "30m": 30,
+    "1H": 60, "1h": 60,
+    "4H": 240, "4h": 240,
+    "1D": 1440, "1d": 1440,
+    "1W": 10080, "1w": 10080,
+}
 
 
 @app.get("/api/bars", response_model=List[BarResponse])
 async def get_bars(
-    scale: Optional[str] = Query(None, description="Scale for aggregation (XL, L, M, S)"),
+    scale: Optional[str] = Query(None, description="Timeframe for aggregation (1m, 5m, 15m, 30m, 1H, 4H, 1D, 1W)"),
     limit: Optional[int] = Query(None, description="Limit to first N source bars")
 ):
     """
     Get bars for chart display.
 
     Returns bars aggregated to the appropriate timeframe for visualization.
-    Scale maps to timeframe: S=5m, M=15m, L=1H, XL=4H.
+    Supported scales: 1m, 5m, 15m, 30m, 1H, 4H, 1D, 1W.
     """
     s = get_state()
 

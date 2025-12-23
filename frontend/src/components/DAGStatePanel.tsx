@@ -3,12 +3,13 @@ import { DagStateResponse, DagLeg, DagPendingOrigin } from '../lib/api';
 import { LegEvent, HighlightedDagItem } from '../types';
 import { GitBranch, Circle, History, ChevronDown, Paperclip } from 'lucide-react';
 import { FollowedLegsPanel } from './FollowedLegsPanel';
-import { FollowedLeg } from '../hooks/useFollowLeg';
+import { FollowedLeg, LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
 
 // Types for attachable items
 export type AttachableItem =
   | { type: 'leg'; data: DagLeg }
-  | { type: 'pending_origin'; data: DagPendingOrigin };
+  | { type: 'pending_origin'; data: DagPendingOrigin }
+  | { type: 'lifecycle_event'; data: LifecycleEventWithLegInfo };
 
 interface DAGStatePanelProps {
   dagState: DagStateResponse | null;
