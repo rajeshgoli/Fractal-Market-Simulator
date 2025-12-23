@@ -1208,7 +1208,15 @@ class LegDetector:
         turn. During an opposite direction's turn (e.g., bear turn for bull pending
         origins), always track the pending origin since the old legs are from a
         previous turn and shouldn't block tracking for the next turn.
+
+        NOTE: This check is bypassed when domination pruning is disabled, to allow
+        all potential legs to be created for debugging purposes.
         """
+        # If domination pruning is disabled, always track pending origins
+        # This allows users to see all potential legs for debugging
+        if not self.config.enable_domination_prune:
+            return True
+
         # #202: If we're currently in the opposite direction's turn, always track.
         # This allows pending origins to accumulate during retracements.
         # For example, during a bear turn, always track bull pending origins
