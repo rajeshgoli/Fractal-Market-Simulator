@@ -675,11 +675,10 @@ class DirectionConfigRequest(BaseModel):
     These control swing detection thresholds for bull or bear directions.
     All values are floats representing Fibonacci ratios (0.0 - 1.0+).
     """
-    formation_fib: Optional[float] = None  # Formation threshold (default: 0.382)
+    formation_fib: Optional[float] = None  # Formation threshold (default: 0.287)
     invalidation_threshold: Optional[float] = None  # Invalidation threshold (default: 0.382)
-    completion_fib: Optional[float] = None  # Completion level (default: 2.0)
     pivot_breach_threshold: Optional[float] = None  # Pivot breach threshold (default: 0.10)
-    engulfed_breach_threshold: Optional[float] = None  # Engulfed threshold (default: 0.20)
+    engulfed_breach_threshold: Optional[float] = None  # Engulfed threshold (default: 0.0)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -739,7 +738,6 @@ class DirectionConfigResponse(BaseModel):
     """Per-direction configuration values in response."""
     formation_fib: float
     invalidation_threshold: float
-    completion_fib: float
     pivot_breach_threshold: float
     engulfed_breach_threshold: float
 

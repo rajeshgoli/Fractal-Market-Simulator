@@ -1305,7 +1305,7 @@ async def reverse_replay(request: ReplayReverseRequest):
     # Clear lifecycle events beyond target (they're no longer valid)
     _replay_cache["lifecycle_events"] = [
         e for e in _replay_cache["lifecycle_events"]
-        if e.get("bar_index", 0) <= target_idx
+        if e.bar_index <= target_idx
     ]
 
     # Update app state
@@ -1843,8 +1843,6 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
             new_config = new_config.with_bull(formation_fib=request.bull.formation_fib)
         if request.bull.invalidation_threshold is not None:
             new_config = new_config.with_bull(invalidation_threshold=request.bull.invalidation_threshold)
-        if request.bull.completion_fib is not None:
-            new_config = new_config.with_bull(completion_fib=request.bull.completion_fib)
         if request.bull.pivot_breach_threshold is not None:
             new_config = new_config.with_bull(pivot_breach_threshold=request.bull.pivot_breach_threshold)
         if request.bull.engulfed_breach_threshold is not None:
@@ -1856,8 +1854,6 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
             new_config = new_config.with_bear(formation_fib=request.bear.formation_fib)
         if request.bear.invalidation_threshold is not None:
             new_config = new_config.with_bear(invalidation_threshold=request.bear.invalidation_threshold)
-        if request.bear.completion_fib is not None:
-            new_config = new_config.with_bear(completion_fib=request.bear.completion_fib)
         if request.bear.pivot_breach_threshold is not None:
             new_config = new_config.with_bear(pivot_breach_threshold=request.bear.pivot_breach_threshold)
         if request.bear.engulfed_breach_threshold is not None:
@@ -1921,19 +1917,17 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         bull=DirectionConfigResponse(
             formation_fib=new_config.bull.formation_fib,
             invalidation_threshold=new_config.bull.invalidation_threshold,
-            completion_fib=new_config.bull.completion_fib,
             pivot_breach_threshold=new_config.bull.pivot_breach_threshold,
             engulfed_breach_threshold=new_config.bull.engulfed_breach_threshold,
         ),
         bear=DirectionConfigResponse(
             formation_fib=new_config.bear.formation_fib,
             invalidation_threshold=new_config.bear.invalidation_threshold,
-            completion_fib=new_config.bear.completion_fib,
             pivot_breach_threshold=new_config.bear.pivot_breach_threshold,
             engulfed_breach_threshold=new_config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=new_config.stale_extension_threshold,
-        proximity_threshold=new_config.proximity_threshold,
+        proximity_threshold=new_config.proximity_prune_threshold,
         enable_engulfed_prune=new_config.enable_engulfed_prune,
         enable_inner_structure_prune=new_config.enable_inner_structure_prune,
         enable_turn_prune=new_config.enable_turn_prune,
@@ -1966,19 +1960,17 @@ async def get_detection_config():
         bull=DirectionConfigResponse(
             formation_fib=config.bull.formation_fib,
             invalidation_threshold=config.bull.invalidation_threshold,
-            completion_fib=config.bull.completion_fib,
             pivot_breach_threshold=config.bull.pivot_breach_threshold,
             engulfed_breach_threshold=config.bull.engulfed_breach_threshold,
         ),
         bear=DirectionConfigResponse(
             formation_fib=config.bear.formation_fib,
             invalidation_threshold=config.bear.invalidation_threshold,
-            completion_fib=config.bear.completion_fib,
             pivot_breach_threshold=config.bear.pivot_breach_threshold,
             engulfed_breach_threshold=config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=config.stale_extension_threshold,
-        proximity_threshold=config.proximity_threshold,
+        proximity_threshold=config.proximity_prune_threshold,
         enable_engulfed_prune=config.enable_engulfed_prune,
         enable_inner_structure_prune=config.enable_inner_structure_prune,
         enable_turn_prune=config.enable_turn_prune,

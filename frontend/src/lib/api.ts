@@ -438,14 +438,12 @@ export interface DetectionConfigUpdateRequest {
   bull?: {
     formation_fib?: number;
     invalidation_threshold?: number;
-    completion_fib?: number;
     pivot_breach_threshold?: number;
     engulfed_breach_threshold?: number;
   };
   bear?: {
     formation_fib?: number;
     invalidation_threshold?: number;
-    completion_fib?: number;
     pivot_breach_threshold?: number;
     engulfed_breach_threshold?: number;
   };

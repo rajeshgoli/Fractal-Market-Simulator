@@ -441,11 +441,10 @@ export function getAggregationMinutes(scale: AggregationScale): number {
  * Per-direction detection configuration.
  */
 export interface DirectionConfig {
-  formation_fib: number;       // Formation threshold (default: 0.382)
+  formation_fib: number;       // Formation threshold (default: 0.287)
   invalidation_threshold: number;  // Invalidation threshold (default: 0.382)
-  completion_fib: number;      // Completion level (default: 2.0)
   pivot_breach_threshold: number;  // Pivot breach threshold (default: 0.10)
-  engulfed_breach_threshold: number;  // Engulfed threshold (default: 0.20)
+  engulfed_breach_threshold: number;  // Engulfed threshold (default: 0.0)
 }
 
 /**
@@ -471,19 +470,17 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   bull: {
     formation_fib: 0.287,
     invalidation_threshold: 0.382,
-    completion_fib: 2.0,
     pivot_breach_threshold: 0.10,
     engulfed_breach_threshold: 0.0,
   },
   bear: {
     formation_fib: 0.287,
     invalidation_threshold: 0.382,
-    completion_fib: 2.0,
     pivot_breach_threshold: 0.10,
     engulfed_breach_threshold: 0.0,
   },
   stale_extension_threshold: 3.0,
-  proximity_threshold: 0.0,  // Disabled by default (was DEBUG override in replay.py)
+  proximity_threshold: 0.0,
   enable_engulfed_prune: true,
   enable_inner_structure_prune: true,
   enable_turn_prune: true,
