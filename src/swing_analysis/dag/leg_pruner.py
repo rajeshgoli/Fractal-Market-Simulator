@@ -95,11 +95,13 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Apply origin-proximity based consolidation (#294).
+        Apply origin-proximity based consolidation within pivot groups (#294, #298).
 
-        Prunes legs that are close in origin (time, range) space:
+        **Step 1: Group by pivot** (pivot_price, pivot_index)
+        Legs with different pivots are independent - a newer leg can validly have
+        a larger range if it found a better pivot.
 
-        **Prune newer leg if BOTH conditions are true:**
+        **Step 2: Within each pivot group, prune newer leg if BOTH conditions are true:**
         - time_ratio < origin_time_prune_threshold: Legs formed around same time
         - range_ratio < origin_range_prune_threshold: Legs have similar ranges
 
@@ -107,8 +109,8 @@ class LegPruner:
         - time_ratio = (bars_since_older_origin - bars_since_newer_origin) / bars_since_older_origin
         - range_ratio = |older_range - newer_range| / max(older_range, newer_range)
 
-        Defensive check: If newer leg is longer than older leg, raise exception.
-        Per design, this should be impossible (breach/engulfing mechanics prevent it).
+        Within a pivot group, newer leg should not be longer than older leg because
+        all legs in the group share the same pivot, so range = |pivot - origin|.
 
         Active swing immunity: Legs with active swings are never pruned.
 
@@ -144,80 +146,80 @@ class LegPruner:
             if swing.status == 'active'
         }
 
-        # Sort by origin_index ascending (older legs first)
-        legs.sort(key=lambda l: l.origin_index)
-
         current_bar = bar.index
         pruned_leg_ids: Set[str] = set()
 
-        # Track survivors (legs that won't be pruned)
-        survivors: List[Leg] = []
-
+        # Step 1: Group legs by pivot (pivot_price, pivot_index)
+        pivot_groups: Dict[Tuple[Decimal, int], List[Leg]] = defaultdict(list)
         for leg in legs:
-            # Active swing immunity
-            if leg.swing_id and leg.swing_id in active_swing_ids:
-                survivors.append(leg)
-                continue
+            key = (leg.pivot_price, leg.pivot_index)
+            pivot_groups[key].append(leg)
 
-            # Check against all older survivors
-            should_prune = False
-            prune_explanation = ""
+        # Step 2: Within each pivot group, apply proximity pruning
+        for pivot_key, group_legs in pivot_groups.items():
+            if len(group_legs) <= 1:
+                continue  # Single leg in group, nothing to prune
 
-            for older in survivors:
-                # Calculate bars since origin for both legs
-                bars_since_older = current_bar - older.origin_index
-                bars_since_newer = current_bar - leg.origin_index
+            # Sort by origin_index ascending (older legs first)
+            group_legs.sort(key=lambda l: l.origin_index)
 
-                # Avoid division by zero
-                if bars_since_older <= 0:
+            # Track survivors within this pivot group
+            survivors: List[Leg] = []
+
+            for leg in group_legs:
+                # Active swing immunity
+                if leg.swing_id and leg.swing_id in active_swing_ids:
+                    survivors.append(leg)
                     continue
 
-                # Time ratio: how close in time were they formed?
-                # 0 = same time, 1 = newer is at current bar while older is distant
-                time_ratio = Decimal(bars_since_older - bars_since_newer) / Decimal(bars_since_older)
+                # Check against all older survivors in this pivot group
+                should_prune = False
+                prune_explanation = ""
 
-                # Range ratio: relative difference in range
-                max_range = max(older.range, leg.range)
-                if max_range == 0:
-                    continue
+                for older in survivors:
+                    # Calculate bars since origin for both legs
+                    bars_since_older = current_bar - older.origin_index
+                    bars_since_newer = current_bar - leg.origin_index
 
-                range_diff = abs(older.range - leg.range)
-                range_ratio = range_diff / max_range
+                    # Avoid division by zero
+                    if bars_since_older <= 0:
+                        continue
 
-                # Defensive check: newer leg should not be longer than older
-                # If this happens, it indicates a bug in breach/engulfing mechanics
-                if leg.range > older.range:
-                    raise ValueError(
-                        f"Origin proximity prune: newer leg {leg.leg_id} "
-                        f"(origin_index={leg.origin_index}, range={leg.range}) "
-                        f"is longer than older leg {older.leg_id} "
-                        f"(origin_index={older.origin_index}, range={older.range}). "
-                        f"This should be impossible per design - check breach/engulfing logic."
-                    )
+                    # Time ratio: how close in time were they formed?
+                    # 0 = same time, 1 = newer is at current bar while older is distant
+                    time_ratio = Decimal(bars_since_older - bars_since_newer) / Decimal(bars_since_older)
 
-                # Prune if BOTH conditions are true
-                if time_ratio < time_threshold and range_ratio < range_threshold:
-                    should_prune = True
-                    prune_explanation = (
-                        f"Pruned by older leg {older.leg_id}: "
-                        f"time_ratio={float(time_ratio):.3f} < {float(time_threshold):.3f}, "
-                        f"range_ratio={float(range_ratio):.3f} < {float(range_threshold):.3f}"
-                    )
-                    break
+                    # Range ratio: relative difference in range
+                    max_range = max(older.range, leg.range)
+                    if max_range == 0:
+                        continue
 
-            if should_prune:
-                leg.status = 'pruned'
-                pruned_leg_ids.add(leg.leg_id)
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id="",
-                    leg_id=leg.leg_id,
-                    reason="origin_proximity_prune",
-                    explanation=prune_explanation,
-                ))
-            else:
-                survivors.append(leg)
+                    range_diff = abs(older.range - leg.range)
+                    range_ratio = range_diff / max_range
+
+                    # Prune if BOTH conditions are true
+                    if time_ratio < time_threshold and range_ratio < range_threshold:
+                        should_prune = True
+                        prune_explanation = (
+                            f"Pruned by older leg {older.leg_id} (same pivot): "
+                            f"time_ratio={float(time_ratio):.3f} < {float(time_threshold):.3f}, "
+                            f"range_ratio={float(range_ratio):.3f} < {float(range_threshold):.3f}"
+                        )
+                        break
+
+                if should_prune:
+                    leg.status = 'pruned'
+                    pruned_leg_ids.add(leg.leg_id)
+                    events.append(LegPrunedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id="",
+                        leg_id=leg.leg_id,
+                        reason="origin_proximity_prune",
+                        explanation=prune_explanation,
+                    ))
+                else:
+                    survivors.append(leg)
 
         # Reparent children of pruned legs before removal (#281)
         for leg in state.active_legs:

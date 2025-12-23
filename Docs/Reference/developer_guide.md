@@ -381,24 +381,25 @@ During strong trends, the DAG creates many parallel legs with different origins 
 2. For each group: keep ONLY the leg with the largest range
 3. Emit `LegPrunedEvent` with `reason="turn_prune"` for discarded legs
 
-**Origin-proximity consolidation (#294)**
+**Origin-proximity consolidation (#294, #298)**
 
-After turn pruning, legs close together in origin (time, range) space are consolidated. This replaces the previous pivot-based proximity pruning (#203).
+After turn pruning, legs close together in origin (time, range) space are consolidated within pivot groups.
 
 Algorithm:
-1. Sort remaining legs by origin_index ascending (older legs first)
-2. First leg (oldest) becomes a survivor
-3. For each remaining leg: compare against all older survivors
+1. **Group by pivot** `(pivot_price, pivot_index)` — legs with different pivots are independent
+2. Within each pivot group, sort remaining legs by origin_index ascending (older legs first)
+3. First leg (oldest) becomes a survivor
+4. For each remaining leg: compare against all older survivors in the same pivot group
    - Calculate time_ratio = (bars_since_older - bars_since_newer) / bars_since_older
    - Calculate range_ratio = |older_range - newer_range| / max(older_range, newer_range)
-4. Prune newer leg if BOTH conditions are true:
+5. Prune newer leg if BOTH conditions are true:
    - time_ratio < `origin_time_prune_threshold`
    - range_ratio < `origin_range_prune_threshold`
-5. Thresholds controlled by `SwingConfig.origin_range_prune_threshold` (default: 0.0 = disabled)
+6. Thresholds controlled by `SwingConfig.origin_range_prune_threshold` (default: 0.0 = disabled)
    and `SwingConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
-6. Emit `LegPrunedEvent` with `reason="origin_proximity_prune"` for discarded legs
+7. Emit `LegPrunedEvent` with `reason="origin_proximity_prune"` for discarded legs
 
-**Defensive check:** If a newer leg is longer than an older leg, an exception is raised. This should be impossible per design (breach/engulfing mechanics prevent it).
+**Why pivot grouping is required:** Legs with different pivots can validly have newer legs with larger ranges (e.g., a leg that found a better origin AND a later pivot). Cross-pivot comparisons would incorrectly flag this as invalid.
 
 Example with 10% time threshold and 20% range threshold at bar 100:
 | Origin Index | Range | Time Ratio | Range Ratio | Action |

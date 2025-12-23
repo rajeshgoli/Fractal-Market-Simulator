@@ -224,11 +224,15 @@ class TestOriginProximityPruningLogic:
         assert len(state.active_legs) == 2
 
 
-class TestOriginProximityDefensiveCheck:
-    """Test the defensive check for newer leg longer than older."""
+class TestOriginProximityPivotGrouping:
+    """Test that proximity pruning only compares legs within the same pivot group (#298)."""
 
-    def test_raises_when_newer_leg_longer(self):
-        """Should raise ValueError when newer leg is longer than older."""
+    def test_no_comparison_across_different_pivots(self):
+        """Legs with different pivots should NOT be compared (#298).
+
+        Scenario from issue: newer leg has larger range but different pivot.
+        This is valid market structure (found better pivot), not a bug.
+        """
         config = SwingConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
@@ -236,16 +240,105 @@ class TestOriginProximityDefensiveCheck:
         pruner = LegPruner(config)
 
         state = DetectorState()
-        # Older leg: smaller range
-        leg1 = make_bull_leg(105.0, 0, 110.0, 10)  # range = 5
-        # Newer leg: LARGER range (should be impossible per design)
-        leg2 = make_bull_leg(100.0, 5, 110.0, 10)  # range = 10
+        # Older leg at bar 0: origin=1218.75, pivot at bar 18, range=1.50
+        leg1 = make_bull_leg(1218.75, 0, 1220.25, 18)  # range = 1.50
+        # Newer leg at bar 39: origin=1218.5, pivot at bar 60, range=1.75
+        # This leg found a better origin AND later pivot → larger range. This is VALID.
+        leg2 = make_bull_leg(1218.5, 39, 1220.25, 60)  # range = 1.75
+
         state.active_legs = [leg1, leg2]
 
-        bar = make_bar(20)
+        bar = make_bar(100)
+        # Should NOT raise ValueError - different pivots are independent
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
-        with pytest.raises(ValueError, match="newer leg.*is longer than older leg"):
-            pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
+        # No pruning should occur - legs have different pivots
+        prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
+        assert len(prox_events) == 0
+        assert len(state.active_legs) == 2
+
+    def test_prunes_within_same_pivot_group(self):
+        """Legs sharing the same pivot should be compared and pruned if close."""
+        config = SwingConfig.default().with_origin_prune(
+            origin_range_prune_threshold=0.30,  # 30% range difference
+            origin_time_prune_threshold=0.50,   # 50% time difference
+        )
+        pruner = LegPruner(config)
+
+        state = DetectorState()
+        # Both legs share the same pivot (110.0, bar 20)
+        leg1 = make_bull_leg(100.0, 0, 110.0, 20)   # range = 10
+        leg2 = make_bull_leg(101.0, 5, 110.0, 20)   # range = 9 (same pivot!)
+
+        state.active_legs = [leg1, leg2]
+
+        # Current bar = 30
+        # bars_since_older = 30 - 0 = 30
+        # bars_since_newer = 30 - 5 = 25
+        # time_ratio = (30 - 25) / 30 ≈ 0.167 < 0.50 ✓
+        # range_ratio = |10 - 9| / 10 = 0.10 < 0.30 ✓
+        # Both conditions met, SAME pivot -> prune newer leg
+
+        bar = make_bar(30)
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
+
+        prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
+        assert len(prox_events) == 1
+        assert prox_events[0].leg_id == leg2.leg_id
+        assert len(state.active_legs) == 1
+
+    def test_multiple_pivot_groups_prune_independently(self):
+        """Each pivot group should be pruned independently."""
+        config = SwingConfig.default().with_origin_prune(
+            origin_range_prune_threshold=0.30,
+            origin_time_prune_threshold=0.50,
+        )
+        pruner = LegPruner(config)
+
+        state = DetectorState()
+        # Pivot group 1: (110.0, 20)
+        leg1a = make_bull_leg(100.0, 0, 110.0, 20)   # range = 10
+        leg1b = make_bull_leg(101.0, 5, 110.0, 20)   # range = 9, should be pruned
+
+        # Pivot group 2: (115.0, 25)
+        leg2a = make_bull_leg(105.0, 10, 115.0, 25)  # range = 10
+        leg2b = make_bull_leg(106.0, 12, 115.0, 25)  # range = 9, should be pruned
+
+        state.active_legs = [leg1a, leg1b, leg2a, leg2b]
+
+        bar = make_bar(30)
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
+
+        prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
+        # One from each pivot group should be pruned
+        assert len(prox_events) == 2
+        pruned_ids = {e.leg_id for e in prox_events}
+        assert leg1b.leg_id in pruned_ids
+        assert leg2b.leg_id in pruned_ids
+        assert len(state.active_legs) == 2
+
+    def test_different_pivot_index_same_price_are_separate_groups(self):
+        """Legs with same pivot price but different pivot index are in separate groups."""
+        config = SwingConfig.default().with_origin_prune(
+            origin_range_prune_threshold=0.50,
+            origin_time_prune_threshold=0.50,
+        )
+        pruner = LegPruner(config)
+
+        state = DetectorState()
+        # Same pivot price (110.0) but different pivot index
+        leg1 = make_bull_leg(100.0, 0, 110.0, 20)   # pivot at bar 20
+        leg2 = make_bull_leg(101.0, 5, 110.0, 25)   # pivot at bar 25 (different!)
+
+        state.active_legs = [leg1, leg2]
+
+        bar = make_bar(30)
+        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
+
+        # No pruning - different pivot groups
+        prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
+        assert len(prox_events) == 0
+        assert len(state.active_legs) == 2
 
 
 class TestOriginProximityActiveSwingImmunity:
@@ -292,7 +385,7 @@ class TestOriginProximityMultipleLegs:
     """Test origin-proximity pruning with multiple legs."""
 
     def test_prunes_multiple_newer_legs(self):
-        """Should prune multiple newer legs when conditions are met."""
+        """Should prune multiple newer legs within same pivot group when conditions are met."""
         config = SwingConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.30,
             origin_time_prune_threshold=0.50,
@@ -300,12 +393,13 @@ class TestOriginProximityMultipleLegs:
         pruner = LegPruner(config)
 
         state = DetectorState()
-        # Oldest leg: largest range
+        # All legs share the SAME pivot (115.0, bar 10)
+        # Oldest leg: largest range (range = 15)
         leg1 = make_bull_leg(100.0, 0, 115.0, 10)  # range = 15
-        # Middle leg: similar range, similar time
-        leg2 = make_bull_leg(101.0, 2, 114.0, 10)  # range = 13
-        # Newest leg: similar range, similar time
-        leg3 = make_bull_leg(102.0, 4, 113.0, 10)  # range = 11
+        # Middle leg: similar range, similar time (range = 14)
+        leg2 = make_bull_leg(101.0, 2, 115.0, 10)  # range = 14
+        # Newest leg: similar range, similar time (range = 13)
+        leg3 = make_bull_leg(102.0, 4, 115.0, 10)  # range = 13
 
         state.active_legs = [leg1, leg2, leg3]
 
@@ -313,7 +407,7 @@ class TestOriginProximityMultipleLegs:
         events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
         prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
-        # Both leg2 and leg3 should be pruned (newer than leg1, similar range/time)
+        # Both leg2 and leg3 should be pruned (newer than leg1, same pivot, similar range/time)
         assert len(prox_events) == 2
         assert len(state.active_legs) == 1
         assert state.active_legs[0].leg_id == leg1.leg_id
