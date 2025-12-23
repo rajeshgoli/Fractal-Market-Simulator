@@ -137,6 +137,7 @@ export interface ReplayAdvanceResponse {
   current_bar_index: number;
   current_price: number;
   end_of_data: boolean;
+  csv_index: number;  // Authoritative CSV row index (window_offset + current_bar_index)
   // Optional fields for batched playback
   aggregated_bars?: AggregatedBarsResponse;
   dag_state?: DagStateResponse;  // DAG state at final bar only
@@ -241,8 +242,8 @@ export interface PlaybackFeedbackEventContext {
 export interface PlaybackFeedbackSnapshot {
   // Current state
   state: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
-  // Session offset
-  window_offset: number;
+  // Authoritative CSV row index for current position (from backend)
+  csv_index: number;
   // Bars elapsed since calibration
   bars_since_calibration: number;
   // Current bar index

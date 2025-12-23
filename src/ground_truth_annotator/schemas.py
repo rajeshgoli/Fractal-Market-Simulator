@@ -243,6 +243,7 @@ class ReplayAdvanceResponse(BaseModel):
     current_bar_index: int
     current_price: float
     end_of_data: bool
+    csv_index: int  # Authoritative CSV row index (window_offset + current_bar_index)
     # Optional fields for batched playback (reduces API calls)
     aggregated_bars: Optional[AggregatedBarsResponse] = None
     dag_state: Optional["DagStateResponse"] = None  # DAG state at final bar only
@@ -347,7 +348,7 @@ class FeedbackAttachmentLifecycleEvent(BaseModel):
 class PlaybackFeedbackSnapshot(BaseModel):
     """Rich context snapshot for feedback capture."""
     state: str  # calibrating, calibration_complete, playing, paused
-    window_offset: int
+    csv_index: int  # Authoritative CSV row index for current position
     bars_since_calibration: int
     current_bar_index: int
     calibration_bar_count: int

@@ -28,6 +28,7 @@ interface UseForwardPlaybackOptions {
 interface UseForwardPlaybackReturn {
   playbackState: PlaybackState;
   currentPosition: number;
+  csvIndex: number;  // Authoritative CSV row index from backend (#297)
   visibleBars: BarData[];
   isLingering: boolean;
   lingerTimeLeft: number;
@@ -77,6 +78,7 @@ export function useForwardPlayback({
   // Playback state
   const [playbackState, setPlaybackState] = useState<PlaybackState>(PlaybackState.STOPPED);
   const [currentPosition, setCurrentPosition] = useState(calibrationBarCount - 1);
+  const [csvIndex, setCsvIndex] = useState(0);  // Authoritative CSV row index from backend (#297)
   const [visibleBars, setVisibleBars] = useState<BarData[]>(calibrationBars);
   const [endOfData, setEndOfData] = useState(false);
 
@@ -123,6 +125,8 @@ export function useForwardPlayback({
   const pendingSwingStateRef = useRef<ReplaySwingState | null>(null);
   // Track which bar index the pending state corresponds to (for deferred application)
   const pendingStateBarIndexRef = useRef<number>(-1);
+  // Track pending csvIndex from batch responses (#297)
+  const pendingCsvIndexRef = useRef<number>(0);
 
   // Ref to hold the latest functions (avoids stale closures)
   const showCurrentEventRef = useRef<() => void>(() => {});
@@ -322,6 +326,7 @@ export function useForwardPlayback({
         }
         pendingSwingStateRef.current = response.swing_state;
         pendingStateBarIndexRef.current = response.current_bar_index;
+        pendingCsvIndexRef.current = response.csv_index;  // Store authoritative CSV index (#297)
 
         // Accumulate events for navigation
         if (response.events.length > 0) {
@@ -392,6 +397,8 @@ export function useForwardPlayback({
         onSwingStateChange?.(pendingSwingStateRef.current);
         pendingSwingStateRef.current = null;  // Clear after applying
       }
+      // Apply authoritative CSV index from backend (#297)
+      setCsvIndex(pendingCsvIndexRef.current);
       pendingStateBarIndexRef.current = -1;  // Reset
     }
 
@@ -477,6 +484,9 @@ export function useForwardPlayback({
       // Update swing state
       setCurrentSwingState(response.swing_state);
       onSwingStateChange?.(response.swing_state);
+
+      // Update authoritative CSV index from backend (#297)
+      setCsvIndex(response.csv_index);
 
       // Accumulate all events for navigation history (unfiltered)
       if (response.events.length > 0) {
@@ -665,6 +675,9 @@ export function useForwardPlayback({
         onDagStateChange(response.dag_state);
         latestDagStateRef.current = response.dag_state;
       }
+
+      // Update authoritative CSV index from backend (#297)
+      setCsvIndex(response.csv_index);
 
       // Update last fetched position to stay in sync
       lastFetchedPositionRef.current = response.current_bar_index;
@@ -928,6 +941,8 @@ export function useForwardPlayback({
             if (response.dag_state && onDagStateChange) {
               onDagStateChange(response.dag_state);
             }
+            // Update authoritative CSV index from backend (#297)
+            setCsvIndex(response.csv_index);
           }
           break;
         }
@@ -959,6 +974,9 @@ export function useForwardPlayback({
         // Update swing state
         setCurrentSwingState(response.swing_state);
         onSwingStateChange?.(response.swing_state);
+
+        // Update authoritative CSV index from backend (#297)
+        setCsvIndex(response.csv_index);
 
         // Accumulate all events for navigation history
         if (response.events.length > 0) {
@@ -999,6 +1017,7 @@ export function useForwardPlayback({
   return {
     playbackState,
     currentPosition,
+    csvIndex,  // Authoritative CSV row index from backend (#297)
     visibleBars,
     isLingering: playbackState === PlaybackState.LINGERING,
     lingerTimeLeft,

@@ -457,7 +457,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     return {
       playbackState: forwardPlayback.playbackState,
       calibrationPhase: stateString,
-      windowOffset: sessionInfo?.windowOffset || 0,
+      csvIndex: forwardPlayback.csvIndex,  // Authoritative CSV index from backend (#297)
       calibrationBarCount: calibrationData?.calibration_bar_count || 0,
       currentBarIndex: currentPlaybackPosition,
       swingsFoundByScale: { XL: 0, L: 0, M: 0, S: 0 }, // Not used in DAG mode
@@ -469,7 +469,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     calibrationPhase,
     forwardPlayback.playbackState,
     forwardPlayback.allEvents,
-    sessionInfo?.windowOffset,
+    forwardPlayback.csvIndex,
     calibrationData?.calibration_bar_count,
     currentPlaybackPosition,
   ]);

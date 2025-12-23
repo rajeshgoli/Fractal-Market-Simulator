@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-23
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-*None*
+- #297: Replace window_offset with csv_index in feedback snapshots
 
 ---
 

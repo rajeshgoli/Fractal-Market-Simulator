@@ -70,7 +70,7 @@ interface FeedbackContext {
   // Playback state information
   playbackState: PlaybackState;
   calibrationPhase: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
-  windowOffset: number;
+  csvIndex: number;  // Authoritative CSV row index from backend (#297)
   calibrationBarCount: number;
   currentBarIndex: number;
   // Swing counts
@@ -178,7 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       // Build rich context snapshot
       const snapshot: PlaybackFeedbackSnapshot = {
         state: feedbackContext.calibrationPhase,
-        window_offset: feedbackContext.windowOffset,
+        csv_index: feedbackContext.csvIndex,  // Authoritative CSV index from backend (#297)
         bars_since_calibration: feedbackContext.currentBarIndex - feedbackContext.calibrationBarCount,
         current_bar_index: feedbackContext.currentBarIndex,
         calibration_bar_count: feedbackContext.calibrationBarCount,
