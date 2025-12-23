@@ -1,49 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 0
 
-**Last Review:** 2025-12-22
+**Last Review:** 2025-12-23
 
 ---
 
 ## Pending Changes
 
-- #294 — Origin-proximity pruning epic (replaces pivot-based proximity with origin-based time+range consolidation)
-- #288 — Detection Config UI Panel epic (runtime threshold adjustments + pruning algorithm toggles)
-- #261 — Re-enable 3x stale extension pruning for child legs only
-- #281 — Implement leg hierarchy (parent-child relationships)
-- #279 — Fix inner structure pruning for sequential invalidation
-- #278 — Enable backward navigation through cached DAG states
-- Standard timeframe aggregation options (1m, 5m, 15m, 30m, 1H, 4H, 1D, 1W) with dynamic filtering based on source resolution
-- #283 — Return per-bar DAG states in batch replay response for high-speed playback
-
-### #267: Follow Leg Feature
-
-Track specific legs through their complete lifecycle with visual markers.
-
-**Sub-issues completed:**
-- #268: Add csv_index to bar data and attachments
-- #269: Lifecycle event tracking API
-- #270: Color palette and leg recoloring
-- #271: Follow icon and interaction
-- #272: Followed Legs panel
-- #273: Candle event markers
-- #274: Event inspection popup with attach
-- #275: Tests for Follow Leg feature
-- #276: Documentation updates
-
-**Files changed:**
-- `src/ground_truth_annotator/schemas.py` - Added csv_index to attachments, lifecycle event models
-- `src/ground_truth_annotator/routers/replay.py` - Added lifecycle event tracking, GET /api/followed-legs/events endpoint
-- `frontend/src/lib/api.ts` - Added csv_index, lifecycle event types, API function
-- `frontend/src/hooks/useFollowLeg.ts` - New hook for follow leg state management
-- `frontend/src/components/LegOverlay.tsx` - Added eye icon, follow colors support
-- `frontend/src/components/DAGStatePanel.tsx` - Integrated FollowedLegsPanel
-- `frontend/src/components/FollowedLegsPanel.tsx` - New panel component
-- `frontend/src/components/EventMarkersOverlay.tsx` - New candle markers component
-- `frontend/src/components/EventInspectionPopup.tsx` - New popup component
-- `tests/test_follow_leg.py` - New test file
-- `Docs/Reference/user_guide.md` - Added Follow Leg Feature documentation
+*None*
 
 ---
 
@@ -51,6 +16,8 @@ Track specific legs through their complete lifecycle with visual markers.
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 23 | #294, #288, #261, #281, #279, #278, #283, #267, aggregation (9 changes) | All Accepted; #282 follow-up noted |
+| Dec 22 | #241, #248-#250, #260-#266, bugfixes — Impulse metrics, hierarchy exploration, inner structure pruning (10 changes) | All Accepted |
 | Dec 21 | #210, #219, #228, #236 — Cleanup epics + impulse score (4 epics, 25 subissues) | All Accepted; minor doc fixes #248, #249 |
 | Dec 21 | #199-#208, #211 — Modularization, pruning redesign, UX enhancements (10 issues) | All Accepted |
 | Dec 20 | #190-#197, #198 — Pivot/origin semantics cascade + architectural audit | All Accepted; design sound post-#197 |
