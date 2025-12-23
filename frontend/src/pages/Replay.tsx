@@ -503,6 +503,7 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
       currentBarIndex: calibrationPhase === CalibrationPhase.PLAYING
         ? forwardPlayback.currentPosition
         : (calibrationData?.calibration_bar_count || 0) - 1,
+      csvIndex: forwardPlayback.csvIndex,
       swingsFoundByScale,
       totalEvents: forwardPlayback.allEvents.length,
       swingsInvalidated,
@@ -514,6 +515,7 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     forwardPlayback.playbackState,
     forwardPlayback.currentSwingState,
     forwardPlayback.currentPosition,
+    forwardPlayback.csvIndex,
     forwardPlayback.allEvents,
     sessionInfo?.windowOffset,
   ]);
