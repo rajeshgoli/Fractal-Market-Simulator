@@ -883,7 +883,7 @@ async def calibrate_replay(
     # DAG mode: Allow bar_count=0 for incremental build from scratch (#179)
     if actual_bar_count == 0:
         logger.info("DAG mode: initializing detector with 0 bars for incremental build")
-        config = SwingConfig.default().with_proximity_prune(0.0)  # Proximity pruning disabled by default
+        config = SwingConfig.default()
         ref_layer = ReferenceLayer(config)
         detector = LegDetector(config)
 
@@ -934,7 +934,7 @@ async def calibrate_replay(
     # This ensures tolerance-based invalidation and completion are applied
     # during calibration, not just at response time.
     calibration_bars = s.source_bars[:actual_bar_count]
-    config = SwingConfig.default().with_proximity_prune(0.0)  # Proximity pruning disabled by default
+    config = SwingConfig.default()
     ref_layer = ReferenceLayer(config)
     detector, events = calibrate(calibration_bars, config, ref_layer=ref_layer)
 

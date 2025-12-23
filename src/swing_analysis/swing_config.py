@@ -64,7 +64,7 @@ class SwingConfig:
         bear: Configuration for bear swing detection.
         proximity_prune_threshold: Threshold for proximity-based leg consolidation (#203).
             Legs within this relative difference of each other are consolidated.
-            Default 0.05 (5%). Set to 0.0 to disable.
+            Default 0.0 (disabled). Set > 0 to enable (e.g., 0.05 = 5%).
         stale_extension_threshold: Multiplier for removing invalidated child legs (#203, #261).
             Invalidated legs WITH A PARENT are pruned when price moves N x their range
             beyond origin. Root legs (no parent) are never pruned, preserving the anchor
@@ -90,7 +90,7 @@ class SwingConfig:
     """
     bull: DirectionConfig = field(default_factory=DirectionConfig)
     bear: DirectionConfig = field(default_factory=DirectionConfig)
-    proximity_prune_threshold: float = 0.05
+    proximity_prune_threshold: float = 0.0  # Disabled by default; set > 0 to enable
     stale_extension_threshold: float = 3.0
     emit_level_crosses: bool = False
     # Pruning algorithm toggles (#288)

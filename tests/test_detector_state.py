@@ -78,7 +78,7 @@ class TestHierarchicalDetectorInitialization:
         """Detector initializes with default config."""
         detector = HierarchicalDetector()
         assert detector.config is not None
-        assert detector.config.proximity_prune_threshold == 0.05
+        assert detector.config.proximity_prune_threshold == 0.0
 
     def test_custom_config(self):
         """Detector accepts custom config."""

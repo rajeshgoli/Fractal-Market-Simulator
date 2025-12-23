@@ -125,7 +125,7 @@ class TestSwingConfig:
     def test_proximity_prune_threshold_default(self):
         """proximity_prune_threshold should default to 0.05."""
         config = SwingConfig()
-        assert config.proximity_prune_threshold == 0.05
+        assert config.proximity_prune_threshold == 0.0
 
     def test_stale_extension_threshold_default(self):
         """stale_extension_threshold should default to 3.0 (#261)."""
@@ -172,7 +172,7 @@ class TestSwingConfigBuilders:
         modified = original.with_proximity_prune(0.10)
 
         # Original unchanged
-        assert original.proximity_prune_threshold == 0.05
+        assert original.proximity_prune_threshold == 0.0
 
         # Modified has new value
         assert modified.proximity_prune_threshold == 0.10
