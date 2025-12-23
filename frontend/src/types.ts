@@ -469,21 +469,21 @@ export interface DetectionConfig {
  */
 export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   bull: {
-    formation_fib: 0.382,
+    formation_fib: 0.287,
     invalidation_threshold: 0.382,
     completion_fib: 2.0,
     pivot_breach_threshold: 0.10,
-    engulfed_breach_threshold: 0.20,
+    engulfed_breach_threshold: 0.0,
   },
   bear: {
-    formation_fib: 0.382,
+    formation_fib: 0.287,
     invalidation_threshold: 0.382,
     completion_fib: 2.0,
     pivot_breach_threshold: 0.10,
-    engulfed_breach_threshold: 0.20,
+    engulfed_breach_threshold: 0.0,
   },
   stale_extension_threshold: 3.0,
-  proximity_threshold: 0.10,
+  proximity_threshold: 0.05,
   enable_engulfed_prune: true,
   enable_inner_structure_prune: true,
   enable_turn_prune: true,
