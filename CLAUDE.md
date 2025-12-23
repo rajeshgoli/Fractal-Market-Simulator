@@ -69,6 +69,23 @@ Docs/
 tests/          # 600+ tests
 ```
 
+## Data Files
+
+The `test_data/es-*.csv` files use a non-standard format:
+
+| Aspect | Format |
+|--------|--------|
+| Delimiter | Semicolon (`;`) |
+| Header | None |
+| Columns | date;time;open;high;low;close;volume |
+| Date format | `dd/mm/yyyy` |
+| Time format | `HH:MM:SS` (EDT/EST) |
+
+**Example row:**
+```
+01/04/2007;17:30:00;1431;1431.5;1430.25;1430.5;725
+```
+
 ## Development Guidelines
 
 ### Dependencies
