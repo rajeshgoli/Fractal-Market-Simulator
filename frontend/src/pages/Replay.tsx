@@ -9,7 +9,7 @@ import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
 import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
-import { fetchBars, fetchSession, fetchCalibration, fetchDagState, ReplayEvent, DagStateResponse } from '../lib/api';
+import { fetchBars, fetchSession, fetchCalibration, fetchDagState, fetchDetectionConfig, ReplayEvent, DagStateResponse } from '../lib/api';
 import { LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
@@ -25,6 +25,8 @@ import {
   parseResolutionToMinutes,
   getAggregationLabel,
   getAggregationMinutes,
+  getSmallestValidAggregation,
+  clampAggregationToSource,
   SwingData,
   // Hierarchical types (Issue #166)
   HierarchicalDisplayConfig,
@@ -34,6 +36,8 @@ import {
   SwingStatusKey,
   SwingDirectionKey,
   LegEvent,
+  DetectionConfig,
+  DEFAULT_DETECTION_CONFIG,
 } from '../types';
 import { useHierarchicalDisplay } from '../hooks/useSwingDisplay';
 import { ViewMode } from '../App';
@@ -164,13 +168,13 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Chart aggregation state
-  const [chart1Aggregation, setChart1Aggregation] = useState<AggregationScale>('L');
-  const [chart2Aggregation, setChart2Aggregation] = useState<AggregationScale>('S');
+  const [chart1Aggregation, setChart1Aggregation] = useState<AggregationScale>('1H');
+  const [chart2Aggregation, setChart2Aggregation] = useState<AggregationScale>('5m');
 
   // Speed control state
   const [sourceResolutionMinutes, setSourceResolutionMinutes] = useState<number>(5); // Default 5m
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
-  const [speedAggregation, setSpeedAggregation] = useState<AggregationScale>('L'); // Default to chart1
+  const [speedAggregation, setSpeedAggregation] = useState<AggregationScale>('1H'); // Default to chart1
 
   // Data state
   const [sourceBars, setSourceBars] = useState<BarData[]>([]);
@@ -219,6 +223,9 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
 
   // Feedback attachment state (max 5 items)
   const [attachedItems, setAttachedItems] = useState<AttachableItem[]>([]);
+
+  // Detection config state (#288)
+  const [detectionConfig, setDetectionConfig] = useState<DetectionConfig>(DEFAULT_DETECTION_CONFIG);
 
   const handleAttachItem = useCallback((item: AttachableItem) => {
     setAttachedItems(prev => {
@@ -328,15 +335,15 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
 
   // Handler for aggregated bars from API response (replaces separate fetchBars calls)
   const handleAggregatedBarsChange = useCallback((aggBars: import('../lib/api').AggregatedBarsResponse) => {
-    const scaleToAggKey = { 'S': 'S', 'M': 'M', 'L': 'L', 'XL': 'XL' } as const;
-    const chart1Key = scaleToAggKey[chart1Aggregation as keyof typeof scaleToAggKey];
-    const chart2Key = scaleToAggKey[chart2Aggregation as keyof typeof scaleToAggKey];
+    // Aggregation keys match the AggregationScale values directly
+    const chart1BarsData = aggBars[chart1Aggregation as keyof typeof aggBars];
+    const chart2BarsData = aggBars[chart2Aggregation as keyof typeof aggBars];
 
-    if (chart1Key && aggBars[chart1Key]) {
-      setChart1Bars(aggBars[chart1Key]!);
+    if (chart1BarsData) {
+      setChart1Bars(chart1BarsData);
     }
-    if (chart2Key && aggBars[chart2Key]) {
-      setChart2Bars(aggBars[chart2Key]!);
+    if (chart2BarsData) {
+      setChart2Bars(chart2BarsData);
     }
   }, [chart1Aggregation, chart2Aggregation]);
 
@@ -611,14 +618,21 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
           totalSourceBars: session.total_source_bars,
         });
 
-        // Load source bars
-        const source = await fetchBars('S');
+        // Adjust chart aggregations if they're below source resolution
+        const smallestValid = getSmallestValidAggregation(resolutionMinutes);
+        const validChart1 = clampAggregationToSource(chart1Aggregation, resolutionMinutes);
+        const validChart2 = clampAggregationToSource(chart2Aggregation, resolutionMinutes);
+        if (validChart1 !== chart1Aggregation) setChart1Aggregation(validChart1);
+        if (validChart2 !== chart2Aggregation) setChart2Aggregation(validChart2);
+
+        // Load source bars at smallest valid aggregation
+        const source = await fetchBars(smallestValid);
         setSourceBars(source);
 
         // Load chart bars
         const [bars1, bars2] = await Promise.all([
-          fetchBars(chart1Aggregation),
-          fetchBars(chart2Aggregation),
+          fetchBars(validChart1),
+          fetchBars(validChart2),
         ]);
         setChart1Bars(bars1);
         setChart2Bars(bars2);
@@ -631,9 +645,9 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
         // Re-fetch chart bars now that playback_index is set
         // (initial fetch happened before calibration when playback_index was None)
         const [newBars1, newBars2, newSourceBars] = await Promise.all([
-          fetchBars(chart1Aggregation),
-          fetchBars(chart2Aggregation),
-          fetchBars('S'),
+          fetchBars(validChart1),
+          fetchBars(validChart2),
+          fetchBars(smallestValid),
         ]);
         setChart1Bars(newBars1);
         setChart2Bars(newBars2);
@@ -642,6 +656,14 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
         // Store calibration bars for forward playback
         const calBars = newSourceBars.slice(0, calibration.calibration_bar_count);
         setCalibrationBars(calBars);
+
+        // Fetch detection config (#288)
+        try {
+          const config = await fetchDetectionConfig();
+          setDetectionConfig(config);
+        } catch (err) {
+          console.warn('Failed to fetch detection config, using defaults:', err);
+        }
 
         // Reset index and transition to calibrated phase
         // (filteredActiveSwings will be computed by useSwingDisplay hook)
@@ -1188,6 +1210,9 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
             attachedItems={attachedItems}
             onDetachItem={handleDetachItem}
             onClearAttachments={handleClearAttachments}
+            detectionConfig={detectionConfig}
+            onDetectionConfigUpdate={setDetectionConfig}
+            isCalibrated={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
           />
         </div>
 
@@ -1203,6 +1228,7 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
             onChart2AggregationChange={handleChart2AggregationChange}
             onChart1Ready={handleChart1Ready}
             onChart2Ready={handleChart2Ready}
+            sourceResolutionMinutes={sourceResolutionMinutes}
           />
 
           {/* Swing Overlays - render Fib level price lines on charts */}

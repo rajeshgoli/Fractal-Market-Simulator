@@ -1,4 +1,4 @@
-import { BarData, AggregationScale, DetectedSwing, CalibrationData, CalibrationSwing } from '../types';
+import { BarData, AggregationScale, DetectedSwing, CalibrationData, CalibrationSwing, DetectionConfig } from '../types';
 
 const API_BASE = '/api';
 
@@ -387,6 +387,66 @@ export async function fetchFollowedLegsEvents(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(errorData.detail || `Failed to fetch followed legs events: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ============================================================================
+// Detection Config API (Issue #288 - Detection Config UI Panel)
+// ============================================================================
+
+/**
+ * Request to update detection configuration.
+ * Only provided fields are updated; omitted fields keep defaults.
+ */
+export interface DetectionConfigUpdateRequest {
+  bull?: {
+    formation_fib?: number;
+    invalidation_threshold?: number;
+    completion_fib?: number;
+    pivot_breach_threshold?: number;
+    engulfed_breach_threshold?: number;
+  };
+  bear?: {
+    formation_fib?: number;
+    invalidation_threshold?: number;
+    completion_fib?: number;
+    pivot_breach_threshold?: number;
+    engulfed_breach_threshold?: number;
+  };
+  stale_extension_threshold?: number;
+  proximity_threshold?: number;
+}
+
+/**
+ * Fetch current detection configuration.
+ */
+export async function fetchDetectionConfig(): Promise<DetectionConfig> {
+  const response = await fetch(`${API_BASE}/replay/config`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch detection config: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Update detection configuration and re-calibrate.
+ * Returns the updated configuration after re-calibration.
+ */
+export async function updateDetectionConfig(
+  request: DetectionConfigUpdateRequest
+): Promise<DetectionConfig> {
+  const response = await fetch(`${API_BASE}/replay/config`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to update detection config: ${response.statusText}`);
   }
   return response.json();
 }

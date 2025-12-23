@@ -352,15 +352,48 @@ export const LEG_STATUS_STYLES: Record<LegStatus, {
   },
 };
 
-// Aggregation scale options (timeframes not S/M/L/XL)
+// Aggregation scale options - standard timeframes
 export const AGGREGATION_OPTIONS = [
-  { value: 'S', label: '5m', minutes: 5 },
-  { value: 'M', label: '15m', minutes: 15 },
-  { value: 'L', label: '1H', minutes: 60 },
-  { value: 'XL', label: '4H', minutes: 240 },
+  { value: '1m', label: '1m', minutes: 1 },
+  { value: '5m', label: '5m', minutes: 5 },
+  { value: '15m', label: '15m', minutes: 15 },
+  { value: '30m', label: '30m', minutes: 30 },
+  { value: '1H', label: '1H', minutes: 60 },
+  { value: '4H', label: '4H', minutes: 240 },
+  { value: '1D', label: '1D', minutes: 1440 },
+  { value: '1W', label: '1W', minutes: 10080 },
 ] as const;
 
 export type AggregationScale = typeof AGGREGATION_OPTIONS[number]['value'];
+
+/**
+ * Get aggregation options filtered by minimum source resolution.
+ * Options smaller than the source resolution are excluded.
+ */
+export function getFilteredAggregationOptions(sourceResolutionMinutes: number) {
+  return AGGREGATION_OPTIONS.filter(opt => opt.minutes >= sourceResolutionMinutes);
+}
+
+/**
+ * Get the smallest valid aggregation scale for a given source resolution.
+ * Returns the first option that is >= sourceResolutionMinutes.
+ */
+export function getSmallestValidAggregation(sourceResolutionMinutes: number): AggregationScale {
+  const filtered = getFilteredAggregationOptions(sourceResolutionMinutes);
+  return filtered.length > 0 ? filtered[0].value : '1H';
+}
+
+/**
+ * Clamp an aggregation scale to at least the source resolution.
+ * If the current scale is smaller than source resolution, return the smallest valid scale.
+ */
+export function clampAggregationToSource(scale: AggregationScale, sourceResolutionMinutes: number): AggregationScale {
+  const scaleMinutes = getAggregationMinutes(scale);
+  if (scaleMinutes >= sourceResolutionMinutes) {
+    return scale;
+  }
+  return getSmallestValidAggregation(sourceResolutionMinutes);
+}
 
 /**
  * Parse a resolution string (e.g., "5m", "1h", "1D") into minutes.
@@ -397,5 +430,52 @@ export function getAggregationLabel(scale: AggregationScale): string {
  */
 export function getAggregationMinutes(scale: AggregationScale): number {
   const option = AGGREGATION_OPTIONS.find(o => o.value === scale);
-  return option?.minutes ?? 5;
+  return option?.minutes ?? 1;
 }
+
+// ============================================================================
+// Detection Config Types (Issue #288 - Detection Config UI Panel)
+// ============================================================================
+
+/**
+ * Per-direction detection configuration.
+ */
+export interface DirectionConfig {
+  formation_fib: number;       // Formation threshold (default: 0.382)
+  invalidation_threshold: number;  // Invalidation threshold (default: 0.382)
+  completion_fib: number;      // Completion level (default: 2.0)
+  pivot_breach_threshold: number;  // Pivot breach threshold (default: 0.10)
+  engulfed_breach_threshold: number;  // Engulfed threshold (default: 0.20)
+}
+
+/**
+ * Full detection configuration for swing detection.
+ */
+export interface DetectionConfig {
+  bull: DirectionConfig;
+  bear: DirectionConfig;
+  stale_extension_threshold: number;  // 3x extension prune (default: 3.0)
+  proximity_threshold: number;  // Proximity prune threshold (default: 0.10)
+}
+
+/**
+ * Default detection configuration values.
+ */
+export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
+  bull: {
+    formation_fib: 0.382,
+    invalidation_threshold: 0.382,
+    completion_fib: 2.0,
+    pivot_breach_threshold: 0.10,
+    engulfed_breach_threshold: 0.20,
+  },
+  bear: {
+    formation_fib: 0.382,
+    invalidation_threshold: 0.382,
+    completion_fib: 2.0,
+    pivot_breach_threshold: 0.10,
+    engulfed_breach_threshold: 0.20,
+  },
+  stale_extension_threshold: 3.0,
+  proximity_threshold: 0.10,
+};

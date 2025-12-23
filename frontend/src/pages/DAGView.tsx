@@ -18,6 +18,7 @@ import {
   fetchSession,
   fetchCalibration,
   fetchDagState,
+  fetchDetectionConfig,
   DagStateResponse,
   DagLeg,
 } from '../lib/api';
@@ -31,9 +32,13 @@ import {
   parseResolutionToMinutes,
   getAggregationLabel,
   getAggregationMinutes,
+  getSmallestValidAggregation,
+  clampAggregationToSource,
   ActiveLeg,
   LegEvent,
   HighlightedDagItem,
+  DetectionConfig,
+  DEFAULT_DETECTION_CONFIG,
 } from '../types';
 import { ViewMode } from '../App';
 
@@ -76,13 +81,13 @@ interface DAGViewProps {
 
 export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) => {
   // Chart aggregation state
-  const [chart1Aggregation, setChart1Aggregation] = useState<AggregationScale>('L');
-  const [chart2Aggregation, setChart2Aggregation] = useState<AggregationScale>('S');
+  const [chart1Aggregation, setChart1Aggregation] = useState<AggregationScale>('1H');
+  const [chart2Aggregation, setChart2Aggregation] = useState<AggregationScale>('5m');
 
   // Speed control state
   const [sourceResolutionMinutes, setSourceResolutionMinutes] = useState<number>(5);
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
-  const [speedAggregation, setSpeedAggregation] = useState<AggregationScale>('L');
+  const [speedAggregation, setSpeedAggregation] = useState<AggregationScale>('1H');
 
   // Data state
   const [sourceBars, setSourceBars] = useState<BarData[]>([]);
@@ -133,6 +138,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     position: { x: number; y: number };
   } | null>(null);
 
+  // Detection config state (#288)
+  const [detectionConfig, setDetectionConfig] = useState<DetectionConfig>(DEFAULT_DETECTION_CONFIG);
+
   const handleAttachItem = useCallback((item: AttachableItem) => {
     setAttachedItems(prev => {
       if (prev.length >= 5) return prev; // Max 5 attachments
@@ -141,9 +149,17 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         if (existing.type !== item.type) return false;
         if (item.type === 'leg') {
           return (existing.data as { leg_id: string }).leg_id === (item.data as { leg_id: string }).leg_id;
-        } else {
+        } else if (item.type === 'pending_origin') {
           return (existing.data as { direction: string }).direction === (item.data as { direction: string }).direction;
+        } else if (item.type === 'lifecycle_event') {
+          // Lifecycle events are unique by leg_id + event_type + bar_index
+          const existingEvent = existing.data as { leg_id: string; event_type: string; bar_index: number };
+          const newEvent = item.data as { leg_id: string; event_type: string; bar_index: number };
+          return existingEvent.leg_id === newEvent.leg_id &&
+                 existingEvent.event_type === newEvent.event_type &&
+                 existingEvent.bar_index === newEvent.bar_index;
         }
+        return false;
       });
       if (isDuplicate) return prev;
       return [...prev, item];
@@ -155,9 +171,16 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
       if (existing.type !== item.type) return true;
       if (item.type === 'leg') {
         return (existing.data as { leg_id: string }).leg_id !== (item.data as { leg_id: string }).leg_id;
-      } else {
+      } else if (item.type === 'pending_origin') {
         return (existing.data as { direction: string }).direction !== (item.data as { direction: string }).direction;
+      } else if (item.type === 'lifecycle_event') {
+        const existingEvent = existing.data as { leg_id: string; event_type: string; bar_index: number };
+        const itemEvent = item.data as { leg_id: string; event_type: string; bar_index: number };
+        return !(existingEvent.leg_id === itemEvent.leg_id &&
+                 existingEvent.event_type === itemEvent.event_type &&
+                 existingEvent.bar_index === itemEvent.bar_index);
       }
+      return true;
     }));
   }, []);
 
@@ -228,29 +251,38 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     return options;
   }, [chart1Aggregation, chart2Aggregation]);
 
-  // Calculate bars per advance
-  const barsPerAdvance = useMemo(() => {
+  // Calculate bars per advance (aggregation factor)
+  const aggregationBarsPerAdvance = useMemo(() => {
     const aggMinutes = getAggregationMinutes(speedAggregation);
     return Math.max(1, Math.round(aggMinutes / sourceResolutionMinutes));
   }, [speedAggregation, sourceResolutionMinutes]);
 
-  // Calculate playback interval
-  const effectivePlaybackIntervalMs = useMemo(() => {
-    return Math.max(50, Math.round(1000 / speedMultiplier));
-  }, [speedMultiplier]);
+  // Calculate playback interval and speed compensation
+  // When speed exceeds 20x, the 50ms floor kicks in - compensate by advancing more bars per tick
+  const MIN_INTERVAL_MS = 50;
+  const { effectivePlaybackIntervalMs, barsPerAdvance } = useMemo(() => {
+    const rawIntervalMs = 1000 / speedMultiplier;
+    // If raw interval is below minimum, calculate how many bars to advance per tick to compensate
+    const speedCompensationMultiplier = rawIntervalMs < MIN_INTERVAL_MS
+      ? Math.ceil(MIN_INTERVAL_MS / rawIntervalMs)
+      : 1;
+    return {
+      effectivePlaybackIntervalMs: Math.max(MIN_INTERVAL_MS, Math.round(rawIntervalMs)),
+      barsPerAdvance: aggregationBarsPerAdvance * speedCompensationMultiplier,
+    };
+  }, [speedMultiplier, aggregationBarsPerAdvance]);
 
   // Handler for aggregated bars from API response (replaces separate fetchBars calls)
   const handleAggregatedBarsChange = useCallback((aggBars: import('../lib/api').AggregatedBarsResponse) => {
-    // Map scale to the aggregated bars
-    const scaleToAggKey = { 'S': 'S', 'M': 'M', 'L': 'L', 'XL': 'XL' } as const;
-    const chart1Key = scaleToAggKey[chart1Aggregation as keyof typeof scaleToAggKey];
-    const chart2Key = scaleToAggKey[chart2Aggregation as keyof typeof scaleToAggKey];
+    // Aggregation keys match the AggregationScale values directly
+    const chart1Bars = aggBars[chart1Aggregation as keyof typeof aggBars];
+    const chart2Bars = aggBars[chart2Aggregation as keyof typeof aggBars];
 
-    if (chart1Key && aggBars[chart1Key]) {
-      setChart1Bars(aggBars[chart1Key]!);
+    if (chart1Bars) {
+      setChart1Bars(chart1Bars);
     }
-    if (chart2Key && aggBars[chart2Key]) {
-      setChart2Bars(aggBars[chart2Key]!);
+    if (chart2Bars) {
+      setChart2Bars(chart2Bars);
     }
   }, [chart1Aggregation, chart2Aggregation]);
 
@@ -359,11 +391,17 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
 
   // Handle attaching an event to feedback (#267)
   const handleAttachEvent = useCallback((event: LifecycleEventWithLegInfo) => {
-    // TODO: Extend AttachableItem type to support lifecycle events
-    // For now, log and close popup
-    console.log('Attach event:', event);
+    handleAttachItem({ type: 'lifecycle_event', data: event });
     setEventPopup(null);
-  }, []);
+  }, [handleAttachItem]);
+
+  // Handle marker double-click - attach all events from marker (#267)
+  const handleMarkerDoubleClick = useCallback((events: LifecycleEventWithLegInfo[]) => {
+    // Attach the primary (most significant) event
+    if (events.length > 0) {
+      handleAttachItem({ type: 'lifecycle_event', data: events[0] });
+    }
+  }, [handleAttachItem]);
 
   // Handler to start playback
   const handleStartPlayback = useCallback(() => {
@@ -476,8 +514,15 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
           totalSourceBars: session.total_source_bars,
         });
 
+        // Adjust chart aggregations if they're below source resolution
+        const smallestValid = getSmallestValidAggregation(resolutionMinutes);
+        const validChart1 = clampAggregationToSource(chart1Aggregation, resolutionMinutes);
+        const validChart2 = clampAggregationToSource(chart2Aggregation, resolutionMinutes);
+        if (validChart1 !== chart1Aggregation) setChart1Aggregation(validChart1);
+        if (validChart2 !== chart2Aggregation) setChart2Aggregation(validChart2);
+
         // Load source bars (need these for total count display, but won't show initially)
-        const source = await fetchBars('S');
+        const source = await fetchBars(smallestValid);
 
         // DAG mode: Initialize with bar_count=0 for incremental build
         // This creates an empty detector ready to process bars one by one
@@ -491,8 +536,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
 
         // Load empty chart bars (backend returns empty when no bars processed)
         const [bars1, bars2] = await Promise.all([
-          fetchBars(chart1Aggregation),
-          fetchBars(chart2Aggregation),
+          fetchBars(validChart1),
+          fetchBars(validChart2),
         ]);
         setChart1Bars(bars1);
         setChart2Bars(bars2);
@@ -500,6 +545,14 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         // Fetch initial DAG state (should be empty)
         const initialDagState = await fetchDagState();
         setDagState(initialDagState);
+
+        // Fetch initial detection config (#288)
+        try {
+          const config = await fetchDetectionConfig();
+          setDetectionConfig(config);
+        } catch (err) {
+          console.warn('Failed to fetch detection config, using defaults:', err);
+        }
 
         // Ready to play - user presses play to start incremental build
         setCalibrationPhase(CalibrationPhase.CALIBRATED);
@@ -824,6 +877,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             attachedItems={attachedItems}
             onDetachItem={handleDetachItem}
             onClearAttachments={handleClearAttachments}
+            detectionConfig={detectionConfig}
+            onDetectionConfigUpdate={setDetectionConfig}
+            isCalibrated={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
           />
         </div>
 
@@ -838,6 +894,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             onChart2AggregationChange={handleChart2AggregationChange}
             onChart1Ready={handleChart1Ready}
             onChart2Ready={handleChart2Ready}
+            sourceResolutionMinutes={sourceResolutionMinutes}
           />
 
           {/* Leg Overlays - render diagonal leg lines on charts */}
@@ -936,6 +993,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             bars={chart1Bars}
             eventsByBar={followLeg.eventsByBar}
             onMarkerClick={handleMarkerClick}
+            onMarkerDoubleClick={handleMarkerDoubleClick}
           />
           <EventMarkersOverlay
             chart={chart2Ref.current}
@@ -944,6 +1002,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             bars={chart2Bars}
             eventsByBar={followLeg.eventsByBar}
             onMarkerClick={handleMarkerClick}
+            onMarkerDoubleClick={handleMarkerDoubleClick}
           />
 
           {/* Playback Controls */}

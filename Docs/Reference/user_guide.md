@@ -199,16 +199,22 @@ Zoom levels and scroll position are preserved through maximize/minimize.
 
 ### Aggregation Options
 
-Each chart has an independent aggregation selector:
+Each chart has an independent aggregation selector with standard timeframes:
 
-| Scale | Timeframe | Description |
-|-------|-----------|-------------|
-| S | 5m | Small-scale (source resolution) |
-| M | 15m | Medium-scale |
-| L | 1H | Large-scale |
-| XL | 4H | Extra-large scale |
+| Timeframe | Description |
+|-----------|-------------|
+| 1m | 1-minute bars |
+| 5m | 5-minute bars |
+| 15m | 15-minute bars |
+| 30m | 30-minute bars |
+| 1H | 1-hour bars |
+| 4H | 4-hour bars |
+| 1D | Daily bars |
+| 1W | Weekly bars |
 
-Note: Timeframe labels depend on source resolution. The table above assumes 5m source data.
+**Dynamic filtering:** The dropdown only shows timeframes at or above the source data resolution. For example, if you load 30m source data, only 30m, 1H, 4H, 1D, and 1W are available—you cannot aggregate to finer resolution than the source.
+
+**Default behavior:** Chart 1 defaults to 1H and Chart 2 defaults to the smallest valid aggregation (matches source resolution).
 
 ### Time Synchronization
 
@@ -375,6 +381,38 @@ When using Market Structure View or the Current Structure Panel, you can attach 
 
 **In saved feedback:**
 Attachments are stored in the snapshot with full context (leg_id, prices, bar indices) for later debugging.
+
+### Detection Config Panel
+
+The Detection Config Panel allows real-time adjustment of swing detection thresholds without restarting the session. Changes trigger automatic re-calibration from bar 0.
+
+**Location:** Sidebar, below the Stats toggle (visible after calibration)
+
+**Available Parameters:**
+
+| Direction | Parameter | Default | Range | Description |
+|-----------|-----------|---------|-------|-------------|
+| Bull/Bear | Formation | 0.382 | 0.1-1.0 | Retracement required to form leg |
+| Bull/Bear | Invalidation | 0.382 | 0.1-1.0 | Breach threshold for invalidation |
+| Global | Stale Extension | 3.0 | 1.0-5.0 | Extension multiple for stale pruning |
+| Global | Proximity | 0.10 | 0.01-0.5 | Threshold for proximity pruning |
+
+**How to use:**
+1. Adjust sliders for desired thresholds
+2. Modified values show in blue (defaults show in gray)
+3. Click "Apply & Re-calibrate" to apply changes
+4. Backend re-processes all bars with new config
+5. Updated config values shown in response
+
+**Workflow:**
+- Experiment with different thresholds during analysis
+- Use lower formation thresholds to detect more swings
+- Use higher invalidation thresholds for stricter invalidation rules
+- Adjust pruning thresholds to control leg density
+
+**Reset:** Click the reset button (↺) to restore default values.
+
+**Note:** The panel is only enabled after calibration. Changes clear lifecycle events (they're no longer valid with new config).
 
 ---
 

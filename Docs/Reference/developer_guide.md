@@ -325,6 +325,10 @@ state_dict = state.to_dict()  # JSON-serializable
 
 restored_state = DetectorState.from_dict(state_dict)
 detector2 = LegDetector.from_state(restored_state, config)
+
+# Update config and reset state (Issue #288)
+new_config = SwingConfig.default().with_bull(formation_fib=0.5)
+detector.update_config(new_config)  # Resets internal state, re-run calibration
 ```
 
 **Calibration functions:**
@@ -846,6 +850,23 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 # - ancestors: Chain from this leg to root (parent, grandparent, ...)
 # - descendants: All legs whose ancestry includes this leg
 # - depth: How deep this leg is (0 = root)
+
+# Detection Config: GET /api/replay/config
+# Returns current detection configuration:
+# - bull/bear: Per-direction thresholds (formation_fib, invalidation_threshold, etc.)
+# - stale_extension_threshold: Extension multiplier for stale pruning
+# - proximity_threshold: Threshold for proximity pruning
+
+# Detection Config Update: PUT /api/replay/config
+# Updates detection config and re-calibrates from bar 0:
+# Request body (all fields optional):
+# {
+#   "bull": {"formation_fib": 0.382, "invalidation_threshold": 0.382},
+#   "bear": {"formation_fib": 0.382, "invalidation_threshold": 0.382},
+#   "stale_extension_threshold": 3.0,
+#   "proximity_threshold": 0.10
+# }
+# Returns updated configuration after re-calibration
 ```
 
 **Reference Layer Integration:**

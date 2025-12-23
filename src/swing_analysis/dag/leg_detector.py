@@ -1257,8 +1257,9 @@ class LegDetector:
         # Create timestamp from bar
         timestamp = datetime.fromtimestamp(bar.timestamp) if bar.timestamp else datetime.now()
 
-        # 1. Check level crosses (structural tracking)
-        events.extend(self._check_level_crosses(bar, timestamp))
+        # 1. Check level crosses (structural tracking) - skip if disabled
+        if self.config.emit_level_crosses:
+            events.extend(self._check_level_crosses(bar, timestamp))
 
         # 4. Update DAG state and form new swings (O(1) per bar)
         dag_events = self._update_dag_state(bar, timestamp)
@@ -1537,6 +1538,32 @@ class LegDetector:
         detector = cls(config)
         detector.state = state
         return detector
+
+    def update_config(self, config: SwingConfig) -> None:
+        """
+        Update the detector's configuration.
+
+        This replaces the config and resets internal state so the detector
+        can be re-calibrated with the new parameters. Use this when you want
+        to change detection thresholds mid-session without recreating the
+        detector instance.
+
+        After calling this method, you should re-run calibration from bar 0
+        to apply the new config to all bars.
+
+        Args:
+            config: New SwingConfig to use.
+
+        Example:
+            >>> detector = LegDetector()
+            >>> # Change formation threshold
+            >>> new_config = SwingConfig.default().with_bull(formation_fib=0.382)
+            >>> detector.update_config(new_config)
+            >>> # Now re-process bars with new config
+        """
+        self.config = config
+        self.state = DetectorState()
+        self._pruner = LegPruner(self.config)
 
 
 # Backward compatibility alias

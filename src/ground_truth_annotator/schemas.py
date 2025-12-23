@@ -652,3 +652,106 @@ class FollowedLegsEventsRequest(BaseModel):
 class FollowedLegsEventsResponse(BaseModel):
     """Response with lifecycle events for followed legs."""
     events: List[LifecycleEvent]
+
+
+# ============================================================================
+# Detection Config Models (Issue #288 - Detection Config UI Panel)
+# ============================================================================
+
+
+class DirectionConfigRequest(BaseModel):
+    """Per-direction detection configuration parameters.
+
+    These control swing detection thresholds for bull or bear directions.
+    All values are floats representing Fibonacci ratios (0.0 - 1.0+).
+    """
+    formation_fib: Optional[float] = None  # Formation threshold (default: 0.382)
+    invalidation_threshold: Optional[float] = None  # Invalidation threshold (default: 0.382)
+    completion_fib: Optional[float] = None  # Completion level (default: 2.0)
+    pivot_breach_threshold: Optional[float] = None  # Pivot breach threshold (default: 0.10)
+    engulfed_breach_threshold: Optional[float] = None  # Engulfed threshold (default: 0.20)
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "formation_fib": 0.382,
+                "invalidation_threshold": 0.382,
+                "completion_fib": 2.0,
+                "pivot_breach_threshold": 0.10,
+                "engulfed_breach_threshold": 0.20,
+            }
+        }
+    )
+
+
+class SwingConfigUpdateRequest(BaseModel):
+    """Request to update swing detection configuration.
+
+    Allows updating bull/bear direction configs and global thresholds.
+    Only provided fields are updated; omitted fields keep their defaults.
+    """
+    bull: Optional[DirectionConfigRequest] = None
+    bear: Optional[DirectionConfigRequest] = None
+    # Global thresholds
+    stale_extension_threshold: Optional[float] = None  # 3x extension prune (default: 3.0)
+    proximity_threshold: Optional[float] = None  # Proximity prune threshold (default: 0.10)
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "bull": {
+                    "formation_fib": 0.382,
+                    "invalidation_threshold": 0.382
+                },
+                "bear": {
+                    "formation_fib": 0.382,
+                    "invalidation_threshold": 0.382
+                },
+                "stale_extension_threshold": 3.0,
+                "proximity_threshold": 0.10
+            }
+        }
+    )
+
+
+class DirectionConfigResponse(BaseModel):
+    """Per-direction configuration values in response."""
+    formation_fib: float
+    invalidation_threshold: float
+    completion_fib: float
+    pivot_breach_threshold: float
+    engulfed_breach_threshold: float
+
+
+class SwingConfigResponse(BaseModel):
+    """Response with current swing detection configuration.
+
+    Returns all current values after an update, or the current defaults.
+    """
+    bull: DirectionConfigResponse
+    bear: DirectionConfigResponse
+    stale_extension_threshold: float
+    proximity_threshold: float
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "bull": {
+                    "formation_fib": 0.382,
+                    "invalidation_threshold": 0.382,
+                    "completion_fib": 2.0,
+                    "pivot_breach_threshold": 0.10,
+                    "engulfed_breach_threshold": 0.20
+                },
+                "bear": {
+                    "formation_fib": 0.382,
+                    "invalidation_threshold": 0.382,
+                    "completion_fib": 2.0,
+                    "pivot_breach_threshold": 0.10,
+                    "engulfed_breach_threshold": 0.20
+                },
+                "stale_extension_threshold": 3.0,
+                "proximity_threshold": 0.10
+            }
+        }
+    )

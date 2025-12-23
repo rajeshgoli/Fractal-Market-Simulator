@@ -885,6 +885,40 @@ All thresholds are configurable. Defaults shown:
 
 Bull and bear can have different configs for asymmetric markets.
 
+### Dynamic Configuration (Issue #288)
+
+The detector supports **runtime configuration updates** via `LegDetector.update_config()`:
+
+```python
+from src.swing_analysis.dag import LegDetector
+from src.swing_analysis.swing_config import SwingConfig
+
+# Create detector with defaults
+detector = LegDetector()
+
+# Later, update config (resets state)
+new_config = SwingConfig.default().with_bull(formation_fib=0.5)
+detector.update_config(new_config)
+
+# Must re-calibrate after config change
+for bar in bars:
+    detector.process_bar(bar)
+```
+
+**Key behaviors:**
+- `update_config()` resets internal state (clears legs, pending origins, etc.)
+- Caller must re-run calibration from bar 0 to apply new thresholds
+- Useful for experimenting with different thresholds during analysis
+
+**Frontend integration:**
+The Detection Config Panel in the sidebar provides sliders for adjusting thresholds:
+- Bull/Bear Formation threshold (0.1-1.0)
+- Bull/Bear Invalidation threshold (0.1-1.0)
+- Stale Extension threshold (1.0-5.0)
+- Proximity threshold (0.01-0.5)
+
+Changes trigger automatic re-calibration via `PUT /api/replay/config`.
+
 ---
 
 ## Complete Example: Walking Through Real Data <a name="complete-example"></a>

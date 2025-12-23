@@ -70,6 +70,10 @@ from ..schemas import (
     # Follow Leg models (Issue #267)
     LifecycleEvent,
     FollowedLegsEventsResponse,
+    # Detection config models (Issue #288)
+    SwingConfigUpdateRequest,
+    SwingConfigResponse,
+    DirectionConfigResponse,
 )
 
 if TYPE_CHECKING:
@@ -1636,3 +1640,173 @@ async def get_followed_legs_events(
     ]
 
     return FollowedLegsEventsResponse(events=filtered_events)
+
+
+# ============================================================================
+# Detection Config Endpoints (Issue #288)
+# ============================================================================
+
+
+@router.put("/api/replay/config", response_model=SwingConfigResponse)
+async def update_detection_config(request: SwingConfigUpdateRequest):
+    """
+    Update swing detection configuration and re-calibrate.
+
+    This endpoint allows changing detection thresholds (formation, invalidation,
+    completion, etc.) and automatically re-runs calibration with the new config.
+
+    The detector is reset and all bars are re-processed with the updated
+    configuration, so the DAG state reflects the new thresholds.
+
+    Args:
+        request: SwingConfigUpdateRequest with new threshold values.
+                 Only provided fields are updated; omitted fields keep defaults.
+
+    Returns:
+        SwingConfigResponse with the current configuration after update.
+
+    Example:
+        PUT /api/replay/config
+        {
+            "bull": {"formation_fib": 0.5},
+            "stale_extension_threshold": 2.0
+        }
+    """
+    global _replay_cache
+    from ..api import get_state
+
+    s = get_state()
+
+    # Get current detector
+    detector = _replay_cache.get("detector")
+    if detector is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Must calibrate before updating config. Call /api/replay/calibrate first."
+        )
+
+    # Start with default config
+    new_config = SwingConfig.default()
+
+    # Apply bull direction updates
+    if request.bull:
+        if request.bull.formation_fib is not None:
+            new_config = new_config.with_bull(formation_fib=request.bull.formation_fib)
+        if request.bull.invalidation_threshold is not None:
+            new_config = new_config.with_bull(invalidation_threshold=request.bull.invalidation_threshold)
+        if request.bull.completion_fib is not None:
+            new_config = new_config.with_bull(completion_fib=request.bull.completion_fib)
+        if request.bull.pivot_breach_threshold is not None:
+            new_config = new_config.with_bull(pivot_breach_threshold=request.bull.pivot_breach_threshold)
+        if request.bull.engulfed_breach_threshold is not None:
+            new_config = new_config.with_bull(engulfed_breach_threshold=request.bull.engulfed_breach_threshold)
+
+    # Apply bear direction updates
+    if request.bear:
+        if request.bear.formation_fib is not None:
+            new_config = new_config.with_bear(formation_fib=request.bear.formation_fib)
+        if request.bear.invalidation_threshold is not None:
+            new_config = new_config.with_bear(invalidation_threshold=request.bear.invalidation_threshold)
+        if request.bear.completion_fib is not None:
+            new_config = new_config.with_bear(completion_fib=request.bear.completion_fib)
+        if request.bear.pivot_breach_threshold is not None:
+            new_config = new_config.with_bear(pivot_breach_threshold=request.bear.pivot_breach_threshold)
+        if request.bear.engulfed_breach_threshold is not None:
+            new_config = new_config.with_bear(engulfed_breach_threshold=request.bear.engulfed_breach_threshold)
+
+    # Apply global threshold updates
+    if request.stale_extension_threshold is not None:
+        new_config = new_config.with_stale_extension(request.stale_extension_threshold)
+    if request.proximity_threshold is not None:
+        new_config = new_config.with_proximity_prune(request.proximity_threshold)
+
+    # Update detector config and reset state
+    detector.update_config(new_config)
+
+    # Re-run calibration from the beginning
+    calibration_bar_count = _replay_cache.get("calibration_bar_count", 0)
+    if calibration_bar_count > 0 and calibration_bar_count <= len(s.source_bars):
+        calibration_bars = s.source_bars[:calibration_bar_count]
+
+        # Create new reference layer with updated config
+        ref_layer = ReferenceLayer(new_config)
+
+        # Re-process all calibration bars
+        for bar in calibration_bars:
+            detector.process_bar(bar)
+
+        # Update cache
+        _replay_cache["reference_layer"] = ref_layer
+        _replay_cache["last_bar_index"] = calibration_bar_count - 1
+
+        # Recalculate scale thresholds
+        all_swings = detector.state.active_swings
+        _replay_cache["scale_thresholds"] = _calculate_scale_thresholds(all_swings)
+
+        # Clear lifecycle events (they're no longer valid with new config)
+        _replay_cache["lifecycle_events"] = []
+
+        logger.info(
+            f"Config updated and re-calibrated: {calibration_bar_count} bars, "
+            f"{len(detector.get_active_swings())} active swings"
+        )
+
+    # Build response with current config values
+    return SwingConfigResponse(
+        bull=DirectionConfigResponse(
+            formation_fib=new_config.bull.formation_fib,
+            invalidation_threshold=new_config.bull.invalidation_threshold,
+            completion_fib=new_config.bull.completion_fib,
+            pivot_breach_threshold=new_config.bull.pivot_breach_threshold,
+            engulfed_breach_threshold=new_config.bull.engulfed_breach_threshold,
+        ),
+        bear=DirectionConfigResponse(
+            formation_fib=new_config.bear.formation_fib,
+            invalidation_threshold=new_config.bear.invalidation_threshold,
+            completion_fib=new_config.bear.completion_fib,
+            pivot_breach_threshold=new_config.bear.pivot_breach_threshold,
+            engulfed_breach_threshold=new_config.bear.engulfed_breach_threshold,
+        ),
+        stale_extension_threshold=new_config.stale_extension_threshold,
+        proximity_threshold=new_config.proximity_threshold,
+    )
+
+
+@router.get("/api/replay/config", response_model=SwingConfigResponse)
+async def get_detection_config():
+    """
+    Get current swing detection configuration.
+
+    Returns the current configuration values being used by the detector.
+    If no detector is initialized, returns the default configuration.
+
+    Returns:
+        SwingConfigResponse with current configuration values.
+    """
+    global _replay_cache
+
+    # Get detector config or use defaults
+    detector = _replay_cache.get("detector")
+    if detector is not None:
+        config = detector.config
+    else:
+        config = SwingConfig.default()
+
+    return SwingConfigResponse(
+        bull=DirectionConfigResponse(
+            formation_fib=config.bull.formation_fib,
+            invalidation_threshold=config.bull.invalidation_threshold,
+            completion_fib=config.bull.completion_fib,
+            pivot_breach_threshold=config.bull.pivot_breach_threshold,
+            engulfed_breach_threshold=config.bull.engulfed_breach_threshold,
+        ),
+        bear=DirectionConfigResponse(
+            formation_fib=config.bear.formation_fib,
+            invalidation_threshold=config.bear.invalidation_threshold,
+            completion_fib=config.bear.completion_fib,
+            pivot_breach_threshold=config.bear.pivot_breach_threshold,
+            engulfed_breach_threshold=config.bear.engulfed_breach_threshold,
+        ),
+        stale_extension_threshold=config.stale_extension_threshold,
+        proximity_threshold=config.proximity_threshold,
+    )

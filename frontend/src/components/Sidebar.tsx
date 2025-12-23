@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useRef, RefObject } from 'react';
 import { toPng } from 'html-to-image';
-import { EventType, PlaybackState } from '../types';
+import { EventType, PlaybackState, DetectionConfig } from '../types';
 import { Toggle } from './ui/Toggle';
 import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent, DagLeg } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
+import { LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
+import { DetectionConfigPanel } from './DetectionConfigPanel';
 
 // Linger event configuration for mode-specific toggles
 export interface LingerEventConfig {
@@ -125,6 +127,11 @@ interface SidebarProps {
   attachedItems: AttachableItem[];
   onDetachItem: (item: AttachableItem) => void;
   onClearAttachments: () => void;
+
+  // Detection config panel (Issue #288)
+  detectionConfig?: DetectionConfig;
+  onDetectionConfigUpdate?: (config: DetectionConfig) => void;
+  isCalibrated?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -151,6 +158,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   attachedItems,
   onDetachItem,
   onClearAttachments,
+  detectionConfig,
+  onDetectionConfigUpdate,
+  isCalibrated = false,
 }) => {
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -242,7 +252,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               pivot_index: leg.pivot_index,
               origin_index: leg.origin_index,
             };
-          } else {
+          } else if (item.type === 'pending_origin') {
             const pending = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear'; source: string };
             return {
               type: 'pending_origin' as const,
@@ -250,6 +260,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
               price: pending.price,
               bar_index: pending.bar_index,
               source: pending.source,
+            };
+          } else {
+            // lifecycle_event
+            const event = item.data as LifecycleEventWithLegInfo;
+            return {
+              type: 'lifecycle_event' as const,
+              leg_id: event.leg_id,
+              leg_direction: event.legDirection,
+              event_type: event.event_type,
+              bar_index: event.bar_index,
+              csv_index: event.csv_index,
+              timestamp: event.timestamp,
+              explanation: event.explanation,
             };
           }
         });
@@ -451,6 +474,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
+      {/* Detection Config Panel (Issue #288) */}
+      {detectionConfig && onDetectionConfigUpdate && (
+        <div className="p-4 border-t border-app-border">
+          <DetectionConfigPanel
+            config={detectionConfig}
+            onConfigUpdate={onDetectionConfigUpdate}
+            isCalibrated={isCalibrated}
+          />
+        </div>
+      )}
+
       {/* Feedback Section (always visible during playback) */}
       {showFeedback && feedbackContext && (
         <div className="p-4 border-t border-app-border bg-app-bg/30">
@@ -481,10 +515,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   const leg = item.data as DagLeg;
                   label = `${leg.direction.toUpperCase()} Leg @${leg.pivot_index}`;
                   colorClass = leg.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
-                } else {
+                } else if (item.type === 'pending_origin') {
                   const pending = item.data as { price: number; bar_index: number; direction: 'bull' | 'bear' };
                   label = `${pending.direction.toUpperCase()} Pending @${pending.bar_index}`;
                   colorClass = pending.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
+                } else {
+                  // lifecycle_event
+                  const event = item.data as LifecycleEventWithLegInfo;
+                  const eventName = event.event_type.replace('_', ' ').toUpperCase();
+                  label = `${event.legDirection.toUpperCase()} ${eventName} @${event.bar_index}`;
+                  colorClass = event.legDirection === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
                 }
                 return (
                   <div
