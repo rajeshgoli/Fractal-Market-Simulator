@@ -1282,6 +1282,10 @@ async def reverse_replay(request: ReplayReverseRequest):
     detector = LegDetector(config)
     ref_layer = ReferenceLayer(config)
 
+    # Clear lifecycle events - we'll rebuild them during replay (#299)
+    # This ensures events have correct deterministic IDs after BE reset
+    _replay_cache["lifecycle_events"] = []
+
     # Replay all bars up to target
     bars_to_process = s.source_bars[:target_idx + 1]
     for bar in bars_to_process:
@@ -1301,15 +1305,19 @@ async def reverse_replay(request: ReplayReverseRequest):
         for swing, result in completed:
             swing.complete()
 
+        # Capture lifecycle events during replay (#299)
+        # This ensures Follow Leg feature works correctly after step-back
+        csv_index = s.window_offset + bar.index
+        ts_iso = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
+        for event in events:
+            lifecycle_event = _event_to_lifecycle_event(event, bar.index, csv_index, ts_iso)
+            if lifecycle_event:
+                _replay_cache["lifecycle_events"].append(lifecycle_event)
+
     # Update cache
     _replay_cache["detector"] = detector
     _replay_cache["last_bar_index"] = target_idx
     _replay_cache["reference_layer"] = ref_layer
-    # Clear lifecycle events beyond target (they're no longer valid)
-    _replay_cache["lifecycle_events"] = [
-        e for e in _replay_cache["lifecycle_events"]
-        if e.bar_index <= target_idx
-    ]
 
     # Update app state
     s.playback_index = target_idx
