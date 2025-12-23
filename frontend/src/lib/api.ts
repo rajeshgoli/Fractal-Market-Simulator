@@ -120,10 +120,14 @@ export interface ReplaySwingState {
 
 // Aggregated bars by scale (for batched playback)
 export interface AggregatedBarsResponse {
-  S?: BarData[];
-  M?: BarData[];
-  L?: BarData[];
-  XL?: BarData[];
+  '1m'?: BarData[];
+  '5m'?: BarData[];
+  '15m'?: BarData[];
+  '30m'?: BarData[];
+  '1H'?: BarData[];
+  '4H'?: BarData[];
+  '1D'?: BarData[];
+  '1W'?: BarData[];
 }
 
 export interface ReplayAdvanceResponse {
@@ -135,7 +139,8 @@ export interface ReplayAdvanceResponse {
   end_of_data: boolean;
   // Optional fields for batched playback
   aggregated_bars?: AggregatedBarsResponse;
-  dag_state?: DagStateResponse;
+  dag_state?: DagStateResponse;  // DAG state at final bar only
+  dag_states?: DagStateResponse[];  // Per-bar DAG states (#283)
 }
 
 export interface ReplayAdvanceRequest {
@@ -143,7 +148,8 @@ export interface ReplayAdvanceRequest {
   current_bar_index: number;
   advance_by?: number;
   include_aggregated_bars?: string[];  // Scales to include (e.g., ["S", "M"])
-  include_dag_state?: boolean;
+  include_dag_state?: boolean;  // DAG state at final bar only
+  include_per_bar_dag_states?: boolean;  // Per-bar DAG states (#283)
 }
 
 export async function advanceReplay(
@@ -151,7 +157,8 @@ export async function advanceReplay(
   currentBarIndex: number,
   advanceBy: number = 1,
   includeAggregatedBars?: string[],
-  includeDagState?: boolean
+  includeDagState?: boolean,
+  includePerBarDagStates?: boolean
 ): Promise<ReplayAdvanceResponse> {
   const requestBody: ReplayAdvanceRequest = {
     calibration_bar_count: calibrationBarCount,
@@ -163,6 +170,9 @@ export async function advanceReplay(
   }
   if (includeDagState) {
     requestBody.include_dag_state = includeDagState;
+  }
+  if (includePerBarDagStates) {
+    requestBody.include_per_bar_dag_states = includePerBarDagStates;
   }
 
   const response = await fetch(`${API_BASE}/replay/advance`, {

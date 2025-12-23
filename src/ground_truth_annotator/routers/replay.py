@@ -80,8 +80,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["replay"])
 
 
-# Scale to timeframe mapping (matches api.py)
-SCALE_TO_MINUTES = {"S": 5, "M": 15, "L": 60, "XL": 240}
+# Scale to timeframe mapping (matches api.py) - standard timeframes
+SCALE_TO_MINUTES = {
+    "1M": 1, "1m": 1,
+    "5M": 5, "5m": 5,
+    "15M": 15, "15m": 15,
+    "30M": 30, "30m": 30,
+    "1H": 60, "1h": 60,
+    "4H": 240, "4h": 240,
+    "1D": 1440, "1d": 1440,
+    "1W": 10080, "1w": 10080,
+}
 
 # Global cache for replay state
 _replay_cache: Dict[str, Any] = {
@@ -423,10 +432,11 @@ def _event_to_lifecycle_event(
         elif reason in ("turn_prune", "proximity_prune", "dominated_in_turn",
                        "extension_prune", "inner_structure"):
             event_type = "pruned"
-            explanation = f"Pruned: {reason.replace('_', ' ')}"
+            # Use event's explanation if provided, otherwise build generic one
+            explanation = event.explanation if event.explanation else f"Pruned: {reason.replace('_', ' ')}"
         else:
             event_type = "pruned"
-            explanation = f"Pruned: {reason}"
+            explanation = event.explanation if event.explanation else f"Pruned: {reason}"
 
         return LifecycleEvent(
             leg_id=event.leg_id,
@@ -1063,6 +1073,9 @@ async def advance_replay(request: ReplayAdvanceRequest):
     all_events: List[ReplayEventResponse] = []
     scale_thresholds = _replay_cache.get("scale_thresholds", {})
 
+    # Per-bar DAG states for high-speed playback (#283)
+    per_bar_dag_states: List[DagStateResponse] = []
+
     # Get Reference layer from cache for tolerance-based checks (#175)
     ref_layer = _replay_cache.get("reference_layer")
 
@@ -1131,6 +1144,10 @@ async def advance_replay(request: ReplayAdvanceRequest):
             if lifecycle_event:
                 _replay_cache["lifecycle_events"].append(lifecycle_event)
 
+        # Snapshot DAG state after each bar for high-speed playback (#283)
+        if request.include_per_bar_dag_states:
+            per_bar_dag_states.append(_build_dag_state(detector))
+
     # Update cache state
     _replay_cache["last_bar_index"] = end_idx - 1
     s.playback_index = end_idx - 1
@@ -1165,6 +1182,9 @@ async def advance_replay(request: ReplayAdvanceRequest):
     if request.include_dag_state:
         dag_state = _build_dag_state(detector)
 
+    # Include per-bar DAG states for high-speed playback (#283)
+    dag_states = per_bar_dag_states if request.include_per_bar_dag_states else None
+
     return ReplayAdvanceResponse(
         new_bars=new_bars,
         events=all_events,
@@ -1174,6 +1194,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
         end_of_data=end_of_data,
         aggregated_bars=aggregated_bars,
         dag_state=dag_state,
+        dag_states=dag_states,
     )
 
 
@@ -1246,12 +1267,12 @@ def _build_aggregated_bars(
     """
     bars_to_use = source_bars[:limit] if limit else source_bars
     if not bars_to_use:
-        return AggregatedBarsResponse()
+        return {}
 
     # Create aggregator for the bars
     aggregator = BarAggregator(bars_to_use, source_resolution)
 
-    result = AggregatedBarsResponse()
+    result: AggregatedBarsResponse = {}
 
     for scale in scales:
         scale_upper = scale.upper()
@@ -1285,7 +1306,7 @@ def _build_aggregated_bars(
                     source_end_index=src_end,
                 ))
 
-            setattr(result, scale_upper, bar_responses)
+            result[scale] = bar_responses  # Use original scale key (preserves case)
         except Exception as e:
             logger.warning(f"Failed to aggregate bars for scale {scale}: {e}")
 

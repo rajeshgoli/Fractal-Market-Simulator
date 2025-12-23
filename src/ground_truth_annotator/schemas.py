@@ -179,7 +179,8 @@ class ReplayAdvanceRequest(BaseModel):
     current_bar_index: int
     advance_by: int = 1
     include_aggregated_bars: Optional[List[str]] = None  # Scales to include (e.g., ["S", "M"])
-    include_dag_state: bool = False  # Whether to include DAG state
+    include_dag_state: bool = False  # Whether to include DAG state (at final bar only)
+    include_per_bar_dag_states: bool = False  # Whether to include per-bar DAG states (#283)
 
 
 class ReplayBarResponse(BaseModel):
@@ -217,12 +218,11 @@ class ReplaySwingState(BaseModel):
     deeper: List[CalibrationSwingResponse] = []  # Depth 3+
 
 
-class AggregatedBarsResponse(BaseModel):
-    """Aggregated bars by scale for chart display."""
-    S: Optional[List[BarResponse]] = None
-    M: Optional[List[BarResponse]] = None
-    L: Optional[List[BarResponse]] = None
-    XL: Optional[List[BarResponse]] = None
+AggregatedBarsResponse = Dict[str, List[BarResponse]]
+"""Aggregated bars by scale for chart display.
+
+Uses a dictionary to support arbitrary timeframe keys (1m, 5m, 15m, 30m, 1H, 4H, 1D, 1W).
+"""
 
 
 class ReplayAdvanceResponse(BaseModel):
@@ -235,7 +235,8 @@ class ReplayAdvanceResponse(BaseModel):
     end_of_data: bool
     # Optional fields for batched playback (reduces API calls)
     aggregated_bars: Optional[AggregatedBarsResponse] = None
-    dag_state: Optional["DagStateResponse"] = None
+    dag_state: Optional["DagStateResponse"] = None  # DAG state at final bar only
+    dag_states: Optional[List["DagStateResponse"]] = None  # Per-bar DAG states (#283)
 
 
 # ============================================================================

@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2025-12-22
 
@@ -8,9 +8,12 @@
 
 ## Pending Changes
 
+- #261 — Re-enable 3x stale extension pruning for child legs only
 - #281 — Implement leg hierarchy (parent-child relationships)
 - #279 — Fix inner structure pruning for sequential invalidation
 - #278 — Enable backward navigation through cached DAG states
+- Standard timeframe aggregation options (1m, 5m, 15m, 30m, 1H, 4H, 1D, 1W) with dynamic filtering based on source resolution
+- #283 — Return per-bar DAG states in batch replay response for high-speed playback
 
 ### #267: Follow Leg Feature
 
