@@ -364,7 +364,7 @@ The pipeline order per bar:
 | `SwingCompletedEvent` | Price reaches 2.0 extension target |
 | `LevelCrossEvent` | Price crosses Fib level boundary |
 | `LegCreatedEvent` | New candidate leg is created (pre-formation) |
-| `LegPrunedEvent` | Leg is removed (reasons: `turn_prune`, `proximity_prune`, `breach_prune`, `extension_prune`, `inner_structure`) |
+| `LegPrunedEvent` | Leg is removed (reasons: `turn_prune`, `origin_proximity_prune`, `breach_prune`, `extension_prune`, `inner_structure`) |
 | `LegInvalidatedEvent` | Leg breaches invalidation threshold (configurable, default 0.382) |
 
 **Tolerance rules (Rule 2.2):**
@@ -381,23 +381,31 @@ During strong trends, the DAG creates many parallel legs with different origins 
 2. For each group: keep ONLY the leg with the largest range
 3. Emit `LegPrunedEvent` with `reason="turn_prune"` for discarded legs
 
-**Proximity-based consolidation (#203)**
+**Origin-proximity consolidation (#294)**
 
-After turn pruning, legs within a configurable relative difference threshold are consolidated:
-1. Sort remaining legs by range (descending)
-2. Keep first (largest) as survivor
-3. For each remaining leg: if relative_diff(leg, nearest_survivor) < threshold, prune
-4. Uses bisect for O(log N) nearest-neighbor lookup
-5. Threshold controlled by `SwingConfig.proximity_prune_threshold` (default: 0.05 = 5%)
-6. Emit `LegPrunedEvent` with `reason="proximity_prune"` for discarded legs
+After turn pruning, legs close together in origin (time, range) space are consolidated. This replaces the previous pivot-based proximity pruning (#203).
 
-Example with 5% threshold:
-| Leg Range | Nearest Survivor | Rel Diff | Action |
-|-----------|------------------|----------|--------|
-| 113.5 | — | — | Keep (largest) |
-| 100.5 | 113.5 | 11.5% | Keep |
-| 98.5 | 100.5 | 2.0% | Prune |
-| 38.5 | 100.5 | 62% | Keep (distinct) |
+Algorithm:
+1. Sort remaining legs by origin_index ascending (older legs first)
+2. First leg (oldest) becomes a survivor
+3. For each remaining leg: compare against all older survivors
+   - Calculate time_ratio = (bars_since_older - bars_since_newer) / bars_since_older
+   - Calculate range_ratio = |older_range - newer_range| / max(older_range, newer_range)
+4. Prune newer leg if BOTH conditions are true:
+   - time_ratio < `origin_time_prune_threshold`
+   - range_ratio < `origin_range_prune_threshold`
+5. Thresholds controlled by `SwingConfig.origin_range_prune_threshold` (default: 0.0 = disabled)
+   and `SwingConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
+6. Emit `LegPrunedEvent` with `reason="origin_proximity_prune"` for discarded legs
+
+**Defensive check:** If a newer leg is longer than an older leg, an exception is raised. This should be impossible per design (breach/engulfing mechanics prevent it).
+
+Example with 10% time threshold and 20% range threshold at bar 100:
+| Origin Index | Range | Time Ratio | Range Ratio | Action |
+|--------------|-------|------------|-------------|--------|
+| 0 | 10.0 | — | — | Keep (oldest) |
+| 5 | 9.5 | 0.05 < 0.10 | 0.05 < 0.20 | Prune |
+| 50 | 8.0 | 0.50 > 0.10 | — | Keep (time far apart) |
 
 **Active swing immunity:**
 Legs that have formed into active swings are never pruned. If an origin has any active swings, the entire origin is immune from pruning.
@@ -522,7 +530,7 @@ for swing, result in completed:
 | `update_invalidation_on_bar(swings, bar)` | Batch invalidation check |
 | `update_completion_on_bar(swings, bar)` | Batch completion check |
 
-*Note: Separation filtering (Rules 4.1, 4.2) has been removed (#164). The DAG handles separation at formation time via proximity and breach pruning.*
+*Note: Separation filtering (Rules 4.1, 4.2) has been removed (#164). The DAG handles separation at formation time via origin-proximity and breach pruning.*
 
 **Invalidation thresholds (Rule 2.2):**
 | Swing Size | Touch Tolerance | Close Tolerance |
@@ -850,7 +858,8 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 # Returns current detection configuration:
 # - bull/bear: Per-direction thresholds (formation_fib, invalidation_threshold, etc.)
 # - stale_extension_threshold: Extension multiplier for stale pruning
-# - proximity_threshold: Threshold for proximity pruning
+# - origin_range_threshold: Range similarity threshold for origin-proximity pruning (#294)
+# - origin_time_threshold: Time proximity threshold for origin-proximity pruning (#294)
 
 # Detection Config Update: PUT /api/replay/config
 # Updates detection config and re-calibrates from bar 0:
@@ -859,7 +868,8 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 #   "bull": {"formation_fib": 0.382, "invalidation_threshold": 0.382},
 #   "bear": {"formation_fib": 0.382, "invalidation_threshold": 0.382},
 #   "stale_extension_threshold": 3.0,
-#   "proximity_threshold": 0.10
+#   "origin_range_threshold": 0.05,
+#   "origin_time_threshold": 0.10
 # }
 # Returns updated configuration after re-calibration
 ```

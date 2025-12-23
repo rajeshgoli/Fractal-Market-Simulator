@@ -548,20 +548,37 @@ Rationale: Multiple legs from same origin are redundant.
            Keep the one that extended furthest.
 ```
 
-### 3. Proximity Pruning
+### 3. Origin-Proximity Pruning (#294)
 
-**Rule:** Legs with very similar ranges (within 5%) in the same pivot group are consolidated.
+**Rule:** Legs close together in origin (time, range) space are consolidated. Newer legs are pruned when BOTH conditions are true:
+- **Time ratio** < threshold: Legs formed around the same time
+- **Range ratio** < threshold: Legs have similar ranges
 
 ```
-Two bear legs with same pivot but different origins:
-  Leg A: Origin = 4000.00, Range = 20.00
-  Leg B: Origin = 3999.00, Range = 19.00
+Formula:
+  time_ratio = (bars_since_older_origin - bars_since_newer_origin) / bars_since_older_origin
+  range_ratio = |older_range - newer_range| / max(older_range, newer_range)
 
-Relative difference = |20 - 19| / max(20, 19) = 5%
+  Prune newer leg if: time_ratio < time_threshold AND range_ratio < range_threshold
 
-At 5% threshold: These are considered redundant.
-Leg B (smaller) is pruned. Leg A (larger) survives.
+Example at bar 100:
+  Leg A: origin_index=0, range=10 (older, larger)
+  Leg B: origin_index=5, range=9  (newer, smaller)
+
+  time_ratio = (100-0 - 100-5) / (100-0) = 5/100 = 0.05
+  range_ratio = |10-9| / max(10,9) = 0.10
+
+  With thresholds: time=0.10, range=0.20
+  0.05 < 0.10 ✓ AND 0.10 < 0.20 ✓ → Leg B pruned
+
+Rationale:
+  - Legs formed close together in time = redundant structure (noise)
+  - Legs formed far apart in time = distinct structures (keep both)
+  - Similar ranges = same structural significance
+  - Different ranges = different structural significance
 ```
+
+**Defensive Check:** If a newer leg is longer than an older leg, an exception is raised. This should be impossible per design (breach/engulfing mechanics prevent it). If it happens, there's a bug upstream.
 
 ### 4. Pivot Breach Pruning
 
@@ -880,7 +897,8 @@ All thresholds are configurable. Defaults shown:
 | `formation_fib` | 0.287 | Retracement % to confirm swing |
 | `invalidation_threshold` | 0.382 | Origin breach % to invalidate |
 | `pivot_breach_threshold` | 0.10 | Pivot extension % to trigger replacement |
-| `proximity_prune_threshold` | 0.05 | Range similarity % for consolidation |
+| `origin_range_prune_threshold` | 0.0 | Range similarity % for origin-proximity consolidation (#294) |
+| `origin_time_prune_threshold` | 0.0 | Time proximity % for origin-proximity consolidation (#294) |
 | `stale_extension_threshold` | 3.0 | Prune invalidated child legs at 3x range (root legs preserved) |
 
 Bull and bear can have different configs for asymmetric markets.
@@ -915,7 +933,8 @@ The Detection Config Panel in the sidebar provides sliders for adjusting thresho
 - Bull/Bear Formation threshold (0.1-1.0)
 - Bull/Bear Invalidation threshold (0.1-1.0)
 - Stale Extension threshold (1.0-5.0)
-- Proximity threshold (0.01-0.5)
+- Origin Range % threshold (0.0-0.5) — Range similarity for origin-proximity pruning (#294)
+- Origin Time % threshold (0.0-0.5) — Time proximity for origin-proximity pruning (#294)
 
 Changes trigger automatic re-calibration via `PUT /api/replay/config`.
 
@@ -1276,7 +1295,8 @@ Current defaults are symmetric. If asymmetric behavior isn't needed, simplify to
 | Formation Fibonacci | 0.287 | Retracement to confirm swing |
 | Invalidation Threshold | 0.382 | Origin breach to invalidate |
 | Pivot Breach Threshold | 0.10 | Pivot extension to replace |
-| Proximity Prune | 0.05 | Range similarity for consolidation |
+| Origin Range Prune | 0.0 | Range similarity for origin-proximity pruning (#294) |
+| Origin Time Prune | 0.0 | Time proximity for origin-proximity pruning (#294) |
 | Big Swing Threshold | 0.10 | Top 10% by range = "big" |
 | Big Swing Price Tolerance | 0.15 | Touch tolerance for big swings |
 | Big Swing Close Tolerance | 0.10 | Close tolerance for big swings |

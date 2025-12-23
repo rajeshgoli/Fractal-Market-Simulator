@@ -21,7 +21,8 @@ const DIRECTION_SLIDERS: SliderConfig[] = [
 // Slider configurations for global parameters
 const GLOBAL_SLIDERS: SliderConfig[] = [
   { key: 'stale_extension_threshold', label: 'Stale Extension', min: 1.0, max: 5.0, step: 0.1, description: 'Extension multiple for stale pruning' },
-  { key: 'proximity_threshold', label: 'Proximity', min: 0.01, max: 0.5, step: 0.01, description: 'Threshold for proximity pruning' },
+  { key: 'origin_range_threshold', label: 'Origin Range %', min: 0.0, max: 0.5, step: 0.01, description: 'Range similarity threshold for origin-proximity pruning' },
+  { key: 'origin_time_threshold', label: 'Origin Time %', min: 0.0, max: 0.5, step: 0.01, description: 'Time proximity threshold for origin-proximity pruning' },
 ];
 
 // Toggle configurations for pruning algorithms
@@ -108,7 +109,8 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
           invalidation_threshold: localConfig.bear.invalidation_threshold,
         },
         stale_extension_threshold: localConfig.stale_extension_threshold,
-        proximity_threshold: localConfig.proximity_threshold,
+        origin_range_threshold: localConfig.origin_range_threshold,
+        origin_time_threshold: localConfig.origin_time_threshold,
         // Pruning algorithm toggles
         enable_engulfed_prune: localConfig.enable_engulfed_prune,
         enable_inner_structure_prune: localConfig.enable_inner_structure_prune,

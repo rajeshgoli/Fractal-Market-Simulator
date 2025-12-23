@@ -120,12 +120,13 @@ class TestSwingConfig:
         config = SwingConfig()
 
         with pytest.raises(AttributeError):
-            config.proximity_prune_threshold = 0.1  # type: ignore
+            config.origin_range_prune_threshold = 0.1  # type: ignore
 
-    def test_proximity_prune_threshold_default(self):
-        """proximity_prune_threshold should default to 0.05."""
+    def test_origin_prune_thresholds_default(self):
+        """Origin prune thresholds should default to 0.0 (disabled) (#294)."""
         config = SwingConfig()
-        assert config.proximity_prune_threshold == 0.0
+        assert config.origin_range_prune_threshold == 0.0
+        assert config.origin_time_prune_threshold == 0.0
 
     def test_stale_extension_threshold_default(self):
         """stale_extension_threshold should default to 3.0 (#261)."""
@@ -166,16 +167,21 @@ class TestSwingConfigBuilders:
         assert modified.bull == original.bull
         assert modified.bear.formation_fib == 0.287
 
-    def test_with_proximity_prune(self):
-        """with_proximity_prune should create new config with modified threshold."""
+    def test_with_origin_prune(self):
+        """with_origin_prune should create new config with modified thresholds (#294)."""
         original = SwingConfig.default()
-        modified = original.with_proximity_prune(0.10)
+        modified = original.with_origin_prune(
+            origin_range_prune_threshold=0.10,
+            origin_time_prune_threshold=0.20,
+        )
 
         # Original unchanged
-        assert original.proximity_prune_threshold == 0.0
+        assert original.origin_range_prune_threshold == 0.0
+        assert original.origin_time_prune_threshold == 0.0
 
-        # Modified has new value
-        assert modified.proximity_prune_threshold == 0.10
+        # Modified has new values
+        assert modified.origin_range_prune_threshold == 0.10
+        assert modified.origin_time_prune_threshold == 0.20
 
         # Other values preserved
         assert modified.bull == original.bull
@@ -198,12 +204,13 @@ class TestSwingConfigBuilders:
             SwingConfig.default()
             .with_bull(formation_fib=0.382)
             .with_bear(formation_fib=0.236)
-            .with_proximity_prune(0.10)
+            .with_origin_prune(origin_range_prune_threshold=0.10, origin_time_prune_threshold=0.20)
         )
 
         assert config.bull.formation_fib == 0.382
         assert config.bear.formation_fib == 0.236
-        assert config.proximity_prune_threshold == 0.10
+        assert config.origin_range_prune_threshold == 0.10
+        assert config.origin_time_prune_threshold == 0.20
 
 
 class TestSwingConfigEquality:
@@ -230,10 +237,10 @@ class TestSwingConfigEquality:
 
         assert config1 != config2
 
-    def test_unequal_proximity_prune(self):
-        """Configs with different proximity_prune should not be equal."""
+    def test_unequal_origin_prune(self):
+        """Configs with different origin_prune should not be equal (#294)."""
         config1 = SwingConfig.default()
-        config2 = config1.with_proximity_prune(0.10)
+        config2 = config1.with_origin_prune(origin_range_prune_threshold=0.10)
 
         assert config1 != config2
 

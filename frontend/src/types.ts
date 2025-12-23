@@ -454,7 +454,8 @@ export interface DetectionConfig {
   bull: DirectionConfig;
   bear: DirectionConfig;
   stale_extension_threshold: number;  // 3x extension prune (default: 3.0)
-  proximity_threshold: number;  // Proximity prune threshold (default: 0.10)
+  origin_range_threshold: number;  // Origin proximity range threshold (#294)
+  origin_time_threshold: number;  // Origin proximity time threshold (#294)
   // Pruning algorithm toggles
   enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
   enable_inner_structure_prune: boolean;  // Enable inner structure pruning (default: true)
@@ -480,7 +481,8 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
     engulfed_breach_threshold: 0.0,
   },
   stale_extension_threshold: 3.0,
-  proximity_threshold: 0.0,
+  origin_range_threshold: 0.0,
+  origin_time_threshold: 0.0,
   enable_engulfed_prune: true,
   enable_inner_structure_prune: true,
   enable_turn_prune: true,

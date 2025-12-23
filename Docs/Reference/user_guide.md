@@ -395,7 +395,8 @@ The Detection Config Panel allows real-time adjustment of swing detection thresh
 | Bull/Bear | Formation | 0.382 | 0.1-1.0 | Retracement required to form leg |
 | Bull/Bear | Invalidation | 0.382 | 0.1-1.0 | Breach threshold for invalidation |
 | Global | Stale Extension | 3.0 | 1.0-5.0 | Extension multiple for stale pruning |
-| Global | Proximity | 0.10 | 0.01-0.5 | Threshold for proximity pruning |
+| Global | Origin Range % | 0.0 | 0.0-0.5 | Range similarity threshold for origin-proximity pruning (#294) |
+| Global | Origin Time % | 0.0 | 0.0-0.5 | Time proximity threshold for origin-proximity pruning (#294) |
 
 **Pruning Algorithm Toggles:**
 
@@ -559,7 +560,7 @@ You can interact with legs directly on the chart (not just in the panel):
 | Event | Description |
 |-------|-------------|
 | LEG_CREATED | New candidate leg created from pivot + origin pair |
-| LEG_PRUNED | Leg removed (turn pruning, inner structure pruning, proximity consolidation, or staleness) |
+| LEG_PRUNED | Leg removed (turn pruning, inner structure pruning, origin-proximity consolidation, or staleness) |
 | LEG_INVALIDATED | Leg fell below 0.382 threshold (decisive invalidation) |
 
 ### Playback Controls
@@ -680,6 +681,6 @@ The Follow Leg feature lets you track specific legs through their complete lifec
 
 - **Algorithm debugging**: Watch how legs form, get pruned, and eventually become swings
 - **Understanding swing formation**: See why certain price patterns form swings and others don't
-- **Pruning behavior**: Observe how proximity and breach pruning keep the leg count manageable
+- **Pruning behavior**: Observe how origin-proximity and breach pruning keep the leg count manageable
 - **Hierarchy exploration**: Visualize parent-child relationships and structural nesting
 - **Lifecycle tracking**: Follow specific legs to understand their complete lifecycle with visual event markers

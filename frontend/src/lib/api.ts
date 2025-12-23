@@ -448,7 +448,8 @@ export interface DetectionConfigUpdateRequest {
     engulfed_breach_threshold?: number;
   };
   stale_extension_threshold?: number;
-  proximity_threshold?: number;
+  origin_range_threshold?: number;  // Origin proximity range threshold (#294)
+  origin_time_threshold?: number;  // Origin proximity time threshold (#294)
   // Pruning algorithm toggles
   enable_engulfed_prune?: boolean;
   enable_inner_structure_prune?: boolean;

@@ -1862,8 +1862,11 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     # Apply global threshold updates
     if request.stale_extension_threshold is not None:
         new_config = new_config.with_stale_extension(request.stale_extension_threshold)
-    if request.proximity_threshold is not None:
-        new_config = new_config.with_proximity_prune(request.proximity_threshold)
+    if request.origin_range_threshold is not None or request.origin_time_threshold is not None:
+        new_config = new_config.with_origin_prune(
+            origin_range_prune_threshold=request.origin_range_threshold,
+            origin_time_prune_threshold=request.origin_time_threshold,
+        )
 
     # Apply pruning algorithm toggles
     if any([
@@ -1908,7 +1911,8 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
             engulfed_breach_threshold=new_config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=new_config.stale_extension_threshold,
-        proximity_threshold=new_config.proximity_prune_threshold,
+        origin_range_threshold=new_config.origin_range_prune_threshold,
+        origin_time_threshold=new_config.origin_time_prune_threshold,
         enable_engulfed_prune=new_config.enable_engulfed_prune,
         enable_inner_structure_prune=new_config.enable_inner_structure_prune,
         enable_turn_prune=new_config.enable_turn_prune,
@@ -1951,7 +1955,8 @@ async def get_detection_config():
             engulfed_breach_threshold=config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=config.stale_extension_threshold,
-        proximity_threshold=config.proximity_prune_threshold,
+        origin_range_threshold=config.origin_range_prune_threshold,
+        origin_time_threshold=config.origin_time_prune_threshold,
         enable_engulfed_prune=config.enable_engulfed_prune,
         enable_inner_structure_prune=config.enable_inner_structure_prune,
         enable_turn_prune=config.enable_turn_prune,

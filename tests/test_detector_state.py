@@ -78,13 +78,18 @@ class TestHierarchicalDetectorInitialization:
         """Detector initializes with default config."""
         detector = HierarchicalDetector()
         assert detector.config is not None
-        assert detector.config.proximity_prune_threshold == 0.0
+        assert detector.config.origin_range_prune_threshold == 0.0
+        assert detector.config.origin_time_prune_threshold == 0.0
 
     def test_custom_config(self):
-        """Detector accepts custom config."""
-        config = SwingConfig.default().with_proximity_prune(0.10)
+        """Detector accepts custom config (#294)."""
+        config = SwingConfig.default().with_origin_prune(
+            origin_range_prune_threshold=0.10,
+            origin_time_prune_threshold=0.20,
+        )
         detector = HierarchicalDetector(config)
-        assert detector.config.proximity_prune_threshold == 0.10
+        assert detector.config.origin_range_prune_threshold == 0.10
+        assert detector.config.origin_time_prune_threshold == 0.20
 
     def test_initial_state(self):
         """Detector starts with empty state."""

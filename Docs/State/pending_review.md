@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 8
+**Unreviewed Change Count:** 9
 
 **Last Review:** 2025-12-22
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- #294 — Origin-proximity pruning epic (replaces pivot-based proximity with origin-based time+range consolidation)
 - #288 — Detection Config UI Panel epic (runtime threshold adjustments + pruning algorithm toggles)
 - #261 — Re-enable 3x stale extension pruning for child legs only
 - #281 — Implement leg hierarchy (parent-child relationships)

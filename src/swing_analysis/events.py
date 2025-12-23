@@ -299,7 +299,7 @@ class LegPrunedEvent(SwingEvent):
     Prune reasons:
     - "staleness": Leg hasn't changed in 10 bars while price moved 2x its range
     - "turn_prune": Leg is not the largest in its origin group (on directional turn)
-    - "proximity_prune": Leg is too similar to a larger survivor
+    - "origin_proximity_prune": Leg is too close to an older leg in (time, range) space (#294)
     - "dominated_in_turn": Leg has a worse origin than another leg in the same turn
     - "extension_prune": Invalidated leg has reached 3x extension
     - "pivot_breach": Formed leg's pivot was breached beyond threshold
@@ -326,6 +326,7 @@ class LegPrunedEvent(SwingEvent):
     event_type: Literal["LEG_PRUNED"] = field(default="LEG_PRUNED", init=False)
     leg_id: str = ""
     reason: str = ""
+    explanation: str = ""  # Optional detailed explanation (e.g., comparison values)
 
 
 @dataclass
