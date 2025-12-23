@@ -224,7 +224,9 @@ class DetectorState:
                 gap_count=leg_data.get("gap_count", 0),
                 last_modified_bar=leg_data.get("last_modified_bar", 0),
                 price_at_creation=Decimal(leg_data.get("price_at_creation", "0")),
-                leg_id=leg_data.get("leg_id", SwingNode.generate_id()),
+                # Prefer stored leg_id for backward compatibility; if missing,
+                # __post_init__ will compute deterministic ID from properties (#299)
+                leg_id=leg_data.get("leg_id", ""),
                 swing_id=leg_data.get("swing_id"),
                 impulse=leg_data.get("impulse", 0.0),
                 impulsiveness=leg_data.get("impulsiveness"),

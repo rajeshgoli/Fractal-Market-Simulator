@@ -967,9 +967,13 @@ class LegDetector:
         # Create SwingNode
         # Bull leg: origin at LOW -> pivot at HIGH
         # Bear leg: origin at HIGH -> pivot at LOW
+        # Use deterministic swing_id derived from leg properties (#299)
+        deterministic_swing_id = Leg.make_swing_id(
+            leg.direction, leg.origin_price, leg.origin_index
+        )
         if leg.direction == 'bull':
             swing = SwingNode(
-                swing_id=SwingNode.generate_id(),
+                swing_id=deterministic_swing_id,
                 low_bar_index=leg.origin_index,  # origin is at LOW
                 low_price=leg.origin_price,
                 high_bar_index=leg.pivot_index,  # pivot is at HIGH
@@ -980,7 +984,7 @@ class LegDetector:
             )
         else:
             swing = SwingNode(
-                swing_id=SwingNode.generate_id(),
+                swing_id=deterministic_swing_id,
                 high_bar_index=leg.origin_index,  # origin is at HIGH
                 high_price=leg.origin_price,
                 low_bar_index=leg.pivot_index,  # pivot is at LOW

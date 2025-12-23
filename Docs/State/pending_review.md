@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-23
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- #299: Deterministic leg/swing IDs to survive BE reset
 - #298: Restore pivot-based grouping in proximity pruning (fixes #294 regression)
 - #297: Replace window_offset with csv_index in feedback snapshots
 - #296: Remove deprecated turn consolidation and domination pruning
