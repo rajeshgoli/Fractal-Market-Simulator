@@ -1543,13 +1543,8 @@ class LegDetector:
         """
         Update the detector's configuration.
 
-        This replaces the config and resets internal state so the detector
-        can be re-calibrated with the new parameters. Use this when you want
-        to change detection thresholds mid-session without recreating the
-        detector instance.
-
-        After calling this method, you should re-run calibration from bar 0
-        to apply the new config to all bars.
+        This replaces the config while preserving existing state (legs, swings).
+        The new config applies to future bar processing only.
 
         Args:
             config: New SwingConfig to use.
@@ -1559,10 +1554,9 @@ class LegDetector:
             >>> # Change formation threshold
             >>> new_config = SwingConfig.default().with_bull(formation_fib=0.382)
             >>> detector.update_config(new_config)
-            >>> # Now re-process bars with new config
+            >>> # Future bars use new config, existing legs preserved
         """
         self.config = config
-        self.state = DetectorState()
         self._pruner = LegPruner(self.config)
 
 
