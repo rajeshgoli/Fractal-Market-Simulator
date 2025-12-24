@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { AggregationScale } from '../types';
+import { AggregationScale, DetectionConfig } from '../types';
 import { LogicalRange } from 'lightweight-charts';
 
 const STORAGE_KEY = 'chart-preferences';
 const ZOOM_DEBOUNCE_MS = 500; // Debounce zoom saves to avoid performance issues
+
+// Store linger event enabled states as a simple record
+type LingerEventStates = Record<string, boolean>;
 
 interface ChartPreferences {
   chart1Aggregation: AggregationScale;
@@ -14,6 +17,11 @@ interface ChartPreferences {
   chart2Zoom: LogicalRange | null;
   maximizedChart: 1 | 2 | null;
   explanationPanelHeight: number; // Height in pixels
+  // Detection and linger settings
+  detectionConfig: DetectionConfig | null; // null = use server defaults
+  lingerEnabled: boolean;
+  replayLingerEvents: LingerEventStates; // Replay mode linger toggles
+  dagLingerEvents: LingerEventStates; // DAG mode linger toggles
 }
 
 const DEFAULT_PREFERENCES: ChartPreferences = {
@@ -25,6 +33,10 @@ const DEFAULT_PREFERENCES: ChartPreferences = {
   chart2Zoom: null,
   maximizedChart: null,
   explanationPanelHeight: 224, // ~14rem, matching md:h-56
+  detectionConfig: null,
+  lingerEnabled: true,
+  replayLingerEvents: {},
+  dagLingerEvents: {},
 };
 
 function loadPreferences(): ChartPreferences {
@@ -60,6 +72,10 @@ interface UseChartPreferencesReturn {
   chart2Zoom: LogicalRange | null;
   maximizedChart: 1 | 2 | null;
   explanationPanelHeight: number;
+  detectionConfig: DetectionConfig | null;
+  lingerEnabled: boolean;
+  replayLingerEvents: LingerEventStates;
+  dagLingerEvents: LingerEventStates;
   setChart1Aggregation: (value: AggregationScale) => void;
   setChart2Aggregation: (value: AggregationScale) => void;
   setSpeedMultiplier: (value: number) => void;
@@ -68,6 +84,10 @@ interface UseChartPreferencesReturn {
   setChart2Zoom: (value: LogicalRange | null) => void;
   setMaximizedChart: (value: 1 | 2 | null) => void;
   setExplanationPanelHeight: (value: number) => void;
+  setDetectionConfig: (value: DetectionConfig | null) => void;
+  setLingerEnabled: (value: boolean) => void;
+  setReplayLingerEvents: (value: LingerEventStates) => void;
+  setDagLingerEvents: (value: LingerEventStates) => void;
 }
 
 export function useChartPreferences(): UseChartPreferencesReturn {
@@ -132,6 +152,22 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setPreferences(prev => ({ ...prev, explanationPanelHeight: value }));
   }, []);
 
+  const setDetectionConfig = useCallback((value: DetectionConfig | null) => {
+    setPreferences(prev => ({ ...prev, detectionConfig: value }));
+  }, []);
+
+  const setLingerEnabled = useCallback((value: boolean) => {
+    setPreferences(prev => ({ ...prev, lingerEnabled: value }));
+  }, []);
+
+  const setReplayLingerEvents = useCallback((value: LingerEventStates) => {
+    setPreferences(prev => ({ ...prev, replayLingerEvents: value }));
+  }, []);
+
+  const setDagLingerEvents = useCallback((value: LingerEventStates) => {
+    setPreferences(prev => ({ ...prev, dagLingerEvents: value }));
+  }, []);
+
   return {
     chart1Aggregation: preferences.chart1Aggregation,
     chart2Aggregation: preferences.chart2Aggregation,
@@ -141,6 +177,10 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     chart2Zoom: preferences.chart2Zoom,
     maximizedChart: preferences.maximizedChart,
     explanationPanelHeight: preferences.explanationPanelHeight,
+    detectionConfig: preferences.detectionConfig,
+    lingerEnabled: preferences.lingerEnabled,
+    replayLingerEvents: preferences.replayLingerEvents,
+    dagLingerEvents: preferences.dagLingerEvents,
     setChart1Aggregation,
     setChart2Aggregation,
     setSpeedMultiplier,
@@ -149,5 +189,9 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setChart2Zoom,
     setMaximizedChart,
     setExplanationPanelHeight,
+    setDetectionConfig,
+    setLingerEnabled,
+    setReplayLingerEvents,
+    setDagLingerEvents,
   };
 }

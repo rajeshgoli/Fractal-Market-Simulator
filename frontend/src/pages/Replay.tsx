@@ -179,6 +179,9 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     chart2Zoom,
     maximizedChart,
     explanationPanelHeight,
+    detectionConfig: savedDetectionConfig,
+    lingerEnabled: savedLingerEnabled,
+    replayLingerEvents: savedLingerEvents,
     setChart1Aggregation,
     setChart2Aggregation,
     setSpeedMultiplier,
@@ -187,6 +190,9 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
     setChart2Zoom,
     setMaximizedChart,
     setExplanationPanelHeight,
+    setDetectionConfig: saveDetectionConfig,
+    setLingerEnabled: saveLingerEnabled,
+    setReplayLingerEvents: saveLingerEvents,
   } = useChartPreferences();
 
   // Handle panel resize
@@ -230,11 +236,36 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
   // Show stats toggle (for displaying calibration stats during playback)
   const [showStats, setShowStats] = useState(false);
 
-  // Linger toggle (pause on events)
-  const [lingerEnabled, setLingerEnabled] = useState(true);
+  // Linger toggle (pause on events) - initialized from saved preferences
+  const [lingerEnabled, setLingerEnabledState] = useState(savedLingerEnabled);
 
-  // Linger event toggles (Replay-specific events)
-  const [lingerEvents, setLingerEvents] = useState<LingerEventConfig[]>(REPLAY_LINGER_EVENTS);
+  // Wrap setLingerEnabled to also save to preferences
+  const setLingerEnabled = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setLingerEnabledState(prev => {
+      const newValue = typeof value === 'function' ? value(prev) : value;
+      saveLingerEnabled(newValue);
+      return newValue;
+    });
+  }, [saveLingerEnabled]);
+
+  // Linger event toggles (Replay-specific events) - merge with saved preferences
+  const [lingerEvents, setLingerEventsState] = useState<LingerEventConfig[]>(() =>
+    REPLAY_LINGER_EVENTS.map(event => ({
+      ...event,
+      isEnabled: savedLingerEvents[event.id] ?? event.isEnabled,
+    }))
+  );
+
+  // Wrap setLingerEvents to also save to preferences
+  const setLingerEvents = useCallback((value: LingerEventConfig[] | ((prev: LingerEventConfig[]) => LingerEventConfig[])) => {
+    setLingerEventsState(prev => {
+      const newEvents = typeof value === 'function' ? value(prev) : value;
+      const eventStates: Record<string, boolean> = {};
+      newEvents.forEach(e => { eventStates[e.id] = e.isEnabled; });
+      saveLingerEvents(eventStates);
+      return newEvents;
+    });
+  }, [saveLingerEvents]);
 
   // DAG visualization mode state (Issue #171)
   const [dagVisualizationMode, setDagVisualizationMode] = useState(false);
@@ -245,8 +276,16 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
   // Feedback attachment state (max 5 items)
   const [attachedItems, setAttachedItems] = useState<AttachableItem[]>([]);
 
-  // Detection config state (#288)
-  const [detectionConfig, setDetectionConfig] = useState<DetectionConfig>(DEFAULT_DETECTION_CONFIG);
+  // Detection config state (#288) - initialized from saved preferences if available
+  const [detectionConfig, setDetectionConfigState] = useState<DetectionConfig>(
+    savedDetectionConfig ?? DEFAULT_DETECTION_CONFIG
+  );
+
+  // Wrap setDetectionConfig to also save to preferences
+  const setDetectionConfig = useCallback((value: DetectionConfig) => {
+    setDetectionConfigState(value);
+    saveDetectionConfig(value);
+  }, [saveDetectionConfig]);
 
   const handleAttachItem = useCallback((item: AttachableItem) => {
     setAttachedItems(prev => {
@@ -680,12 +719,14 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
         const calBars = newSourceBars.slice(0, calibration.calibration_bar_count);
         setCalibrationBars(calBars);
 
-        // Fetch detection config (#288)
-        try {
-          const config = await fetchDetectionConfig();
-          setDetectionConfig(config);
-        } catch (err) {
-          console.warn('Failed to fetch detection config, using defaults:', err);
+        // Fetch detection config (#288) - only apply server config if no saved preferences
+        if (!savedDetectionConfig) {
+          try {
+            const config = await fetchDetectionConfig();
+            setDetectionConfig(config);
+          } catch (err) {
+            console.warn('Failed to fetch detection config, using defaults:', err);
+          }
         }
 
         // Reset index and transition to calibrated phase

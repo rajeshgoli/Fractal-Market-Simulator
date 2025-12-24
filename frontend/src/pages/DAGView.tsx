@@ -98,6 +98,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     chart2Zoom,
     maximizedChart,
     explanationPanelHeight,
+    detectionConfig: savedDetectionConfig,
+    lingerEnabled: savedLingerEnabled,
+    dagLingerEvents: savedLingerEvents,
     setChart1Aggregation,
     setChart2Aggregation,
     setSpeedMultiplier,
@@ -106,6 +109,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     setChart2Zoom,
     setMaximizedChart,
     setExplanationPanelHeight,
+    setDetectionConfig: saveDetectionConfig,
+    setLingerEnabled: saveLingerEnabled,
+    setDagLingerEvents: saveLingerEvents,
   } = useChartPreferences();
 
   // Handle panel resize
@@ -146,14 +152,39 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   // Focus state for chart-clicked leg (scrolls panel to leg)
   const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
 
-  // Linger toggle state (for DAG mode, default OFF for continuous observation)
-  const [lingerEnabled, setLingerEnabled] = useState(false);
+  // Linger toggle state - initialized from saved preferences (DAG mode defaults to OFF if no saved pref)
+  const [lingerEnabled, setLingerEnabledState] = useState(savedLingerEnabled);
+
+  // Wrap setLingerEnabled to also save to preferences
+  const setLingerEnabled = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    setLingerEnabledState(prev => {
+      const newValue = typeof value === 'function' ? value(prev) : value;
+      saveLingerEnabled(newValue);
+      return newValue;
+    });
+  }, [saveLingerEnabled]);
 
   // Sidebar state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Linger event toggles (DAG-specific events)
-  const [lingerEvents, setLingerEvents] = useState<LingerEventConfig[]>(DAG_LINGER_EVENTS);
+  // Linger event toggles (DAG-specific events) - merge with saved preferences
+  const [lingerEvents, setLingerEventsState] = useState<LingerEventConfig[]>(() =>
+    DAG_LINGER_EVENTS.map(event => ({
+      ...event,
+      isEnabled: savedLingerEvents[event.id] ?? event.isEnabled,
+    }))
+  );
+
+  // Wrap setLingerEvents to also save to preferences
+  const setLingerEvents = useCallback((value: LingerEventConfig[] | ((prev: LingerEventConfig[]) => LingerEventConfig[])) => {
+    setLingerEventsState(prev => {
+      const newEvents = typeof value === 'function' ? value(prev) : value;
+      const eventStates: Record<string, boolean> = {};
+      newEvents.forEach(e => { eventStates[e.id] = e.isEnabled; });
+      saveLingerEvents(eventStates);
+      return newEvents;
+    });
+  }, [saveLingerEvents]);
 
   // Feedback attachment state (max 5 items)
   const [attachedItems, setAttachedItems] = useState<AttachableItem[]>([]);
@@ -168,8 +199,16 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   // Highlighted event marker (shown when clicking Recent Events panel)
   const [highlightedEvent, setHighlightedEvent] = useState<LifecycleEventWithLegInfo | null>(null);
 
-  // Detection config state (#288)
-  const [detectionConfig, setDetectionConfig] = useState<DetectionConfig>(DEFAULT_DETECTION_CONFIG);
+  // Detection config state (#288) - initialized from saved preferences if available
+  const [detectionConfig, setDetectionConfigState] = useState<DetectionConfig>(
+    savedDetectionConfig ?? DEFAULT_DETECTION_CONFIG
+  );
+
+  // Wrap setDetectionConfig to also save to preferences
+  const setDetectionConfig = useCallback((value: DetectionConfig) => {
+    setDetectionConfigState(value);
+    saveDetectionConfig(value);
+  }, [saveDetectionConfig]);
 
   const handleAttachItem = useCallback((item: AttachableItem) => {
     setAttachedItems(prev => {
@@ -697,12 +736,14 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         const initialDagState = await fetchDagState();
         setDagState(initialDagState);
 
-        // Fetch initial detection config (#288)
-        try {
-          const config = await fetchDetectionConfig();
-          setDetectionConfig(config);
-        } catch (err) {
-          console.warn('Failed to fetch detection config, using defaults:', err);
+        // Fetch initial detection config (#288) - only apply server config if no saved preferences
+        if (!savedDetectionConfig) {
+          try {
+            const config = await fetchDetectionConfig();
+            setDetectionConfig(config);
+          } catch (err) {
+            console.warn('Failed to fetch detection config, using defaults:', err);
+          }
         }
 
         // Ready to play - user presses play to start incremental build
