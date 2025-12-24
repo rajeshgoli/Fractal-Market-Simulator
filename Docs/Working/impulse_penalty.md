@@ -47,18 +47,36 @@ When a child leg is engulfed:
 
 The impulse score should answer: *"How much of this leg's move was sustained vs. given back?"*
 
-### The Model
+### The Model: Two Impulse Scores
+
+The key insight is that a parent leg's segment (before child takes over) has **two distinct moves**:
+
+```
+Parent origin (A) ────→ Deepest point (D) ←──── Child origin (C)
+                   impulse_to_deepest      impulse_back
+```
+
+**Two scores needed:**
+
+1. **`impulse_to_deepest`**: How impulsively did price move from parent origin (A) to the deepest level achieved (D)?
+
+2. **`impulse_back`**: How impulsively did price move back from deepest (D) to child origin (C)?
+
+**Net segment impulse = impulse_to_deepest - impulse_back**
+
+- **Typically reduces:** Counter-move gives back some of the impulsive move
+- **Can increase:** If the down-move was very fast but the up-move was a slow grind
 
 **On child formation:**
-- Parent's impulse gets "fixed" at that moment
-- We know the segment being handed off: parent.origin → child.origin
+- Calculate and store both impulse scores for the parent's segment
+- Parent's effective impulse is the difference
 
-**On child engulfment:**
-- Child's entire range was overwhelmed
-- A new child forms with deeper origin (further back)
-- Parent absorbs a **penalty** proportional to how much progress was given back
+**On new child at higher origin:**
+- A new child forming at a higher origin means deeper counter-move
+- Update the `impulse_back` score (the reversal went further)
+- Net impulse decreases
 
-**Key principle:** The market's own behavior (engulfment depth) determines the penalty — no magic thresholds required.
+**Key principle:** The market's own behavior determines the score — no magic thresholds required.
 
 ---
 
@@ -85,163 +103,185 @@ def _calculate_impulse(range_value, origin_index, pivot_index):
 - Child is deleted, children reparented to grandparent
 - Currently: no impulse transfer or penalty
 
-### Design Options
+### Design: Two-Impulse Segment Tracking
 
-#### Option A: Impulse-at-Formation (Minimal)
+Based on user feedback, the recommended approach is **segment-based impulse tracking** with two components:
 
-Add a separate `impulse_at_formation` field:
-- Captured once at leg creation, never recalculated
-- Provides stable signal for ranking/filtering
-- **Does not address** the engulfment penalty question
+#### Data Model
 
-**Pros:** Simple, low-risk, immediately useful
-**Cons:** Doesn't capture the parent-child impulse transfer model
-
-#### Option B: Parent Impulse Penalty on Engulfment
-
-When child is engulfed:
-1. Calculate how much progress was given back (engulfment depth)
-2. Apply penalty to parent's impulsiveness score
-3. Penalty is market-derived, not threshold-based
-
-**Formula approach:**
-```
-engulfment_depth = |child.origin - new_child.origin|
-child_contribution = child.range  # What the child represented
-penalty_ratio = engulfment_depth / child_contribution
-parent.impulsiveness *= (1 - penalty_ratio)  # Reduce by what was given back
+Add to Leg:
+```python
+# Segment impulse tracking (parent.origin → child.origin)
+segment_deepest_price: Optional[Decimal] = None  # Deepest point reached before child
+segment_deepest_index: Optional[int] = None      # Bar index of deepest point
+impulse_to_deepest: Optional[float] = None       # Impulse: origin → deepest
+impulse_back: Optional[float] = None             # Impulse: deepest → child.origin
 ```
 
-**Pros:** Captures the semantic meaning of engulfment
-**Cons:** More complex, needs careful handling of edge cases
+#### Calculation
 
-#### Option C: Segment-Based Impulse Tracking
+**On child formation** (when parent hands off to child):
+```python
+def calculate_segment_impulse(parent: Leg, child_origin_price: Decimal, child_origin_index: int):
+    # The deepest point is the current pivot (before child takes over)
+    deepest_price = parent.pivot_price
+    deepest_index = parent.pivot_index
 
-Track impulse per segment:
-- When child forms: record `segment_impulse` for parent.origin → child.origin
-- When child engulfed: record the reversal segment's impulse
-- Parent's effective impulse = weighted combination
+    # Impulse TO deepest (the primary move)
+    range_to_deepest = abs(parent.origin_price - deepest_price)
+    bars_to_deepest = abs(deepest_index - parent.origin_index)
+    impulse_to_deepest = float(range_to_deepest) / bars_to_deepest if bars_to_deepest > 0 else 0.0
 
-**Pros:** Most accurate model of what happened
-**Cons:** Significant complexity, storage overhead, merge logic
+    # Impulse BACK to child origin (the counter-move)
+    range_back = abs(deepest_price - child_origin_price)
+    bars_back = abs(child_origin_index - deepest_index)
+    impulse_back = float(range_back) / bars_back if bars_back > 0 else 0.0
+
+    # Store on parent
+    parent.segment_deepest_price = deepest_price
+    parent.segment_deepest_index = deepest_index
+    parent.impulse_to_deepest = impulse_to_deepest
+    parent.impulse_back = impulse_back
+
+@property
+def net_segment_impulse(self) -> Optional[float]:
+    """Net impulse = forward move - counter move."""
+    if self.impulse_to_deepest is None or self.impulse_back is None:
+        return None
+    return self.impulse_to_deepest - self.impulse_back
+```
+
+#### Update on New Child at Higher Origin
+
+When a new child forms at a higher origin (deeper counter-move):
+```python
+def update_segment_impulse_for_new_child(parent: Leg, new_child_origin_price: Decimal, new_child_origin_index: int):
+    """Update impulse_back when new child forms at higher origin."""
+    if parent.segment_deepest_price is None:
+        return  # No segment established yet
+
+    # Only update if new child origin is "higher" (further counter-move)
+    # Bull parent: higher origin = higher price
+    # Bear parent: higher origin = lower price
+
+    # Recalculate impulse_back with new child origin
+    range_back = abs(parent.segment_deepest_price - new_child_origin_price)
+    bars_back = abs(new_child_origin_index - parent.segment_deepest_index)
+    parent.impulse_back = float(range_back) / bars_back if bars_back > 0 else 0.0
+```
+
+#### Interpretation
+
+| Scenario | impulse_to_deepest | impulse_back | net_segment_impulse | Meaning |
+|----------|-------------------|--------------|---------------------|---------|
+| Sharp move, weak counter | High | Low | **High positive** | Strong conviction, sustained |
+| Sharp move, sharp counter | High | High | **Near zero** | Contested, no clear winner |
+| Weak move, sharp counter | Low | High | **Negative** | Counter-move won |
+| Grind both ways | Low | Low | **Near zero** | Low conviction overall |
 
 ### Recommendation
 
-**Implement Option A first, then Option B.**
+**Implement the two-impulse segment tracking directly.**
 
-**Rationale:**
-
-1. **Option A is immediately useful** — `impulse_at_formation` gives you a stable signal today without waiting for the full penalty model.
-
-2. **Option B depends on A** — you need stable formation impulse to know what's being penalized.
-
-3. **Option C is over-engineering** — the 67% engulfment dominance suggests the penalty model captures most of the story. Per-segment tracking adds complexity without proportional value.
+The earlier "Option A then B" approach was superseded by user feedback. The two-impulse model:
+- Captures both the primary move AND the counter-move
+- Updates dynamically when new children form
+- Provides net impulse as a single comparable metric
+- Is conceptually clean: difference of two impulses
 
 **Implementation sequence:**
 
-1. Add `impulse_at_formation` field to Leg (set at creation, never modified)
-2. Expose in API for ranking/filtering experiments
-3. Implement engulfment penalty using formation impulse as baseline
-4. Iterate on penalty formula based on empirical results
+1. Add segment tracking fields to Leg dataclass
+2. Calculate on child formation (in `_find_parent_for_leg` or leg creation)
+3. Update when new child forms at higher origin
+4. Expose `net_segment_impulse` in API for ranking/filtering
 
 ### Technical Considerations
 
-**Where penalty is applied:**
+**Where segment impulse is calculated:**
 
-The engulfment detection happens in `prune_breach_legs()` (leg_pruner.py:238-420). The penalty should be applied *before* reparenting:
+The calculation happens when a child leg is created and assigned a parent:
 
 ```python
-# In prune_breach_legs, when engulfment detected:
-if leg.max_origin_breach is not None and leg.max_pivot_breach is not None:
-    # Apply penalty to parent before pruning
-    if leg.parent_leg_id:
-        parent = find_leg_by_id(state, leg.parent_leg_id)
-        if parent:
-            apply_engulfment_penalty(parent, leg, new_child_origin)
-
-    # Then prune as normal
-    legs_to_prune.append(leg)
+# In _find_parent_for_leg or leg creation:
+if parent_leg_id:
+    parent = find_leg_by_id(state, parent_leg_id)
+    if parent:
+        calculate_segment_impulse(parent, new_leg.origin_price, new_leg.origin_index)
 ```
 
-**What is "new_child_origin"?**
+**Where segment impulse is updated:**
 
-The engulfment happens because price reversed through the child's origin. The new child that forms will have an origin further back. The difference between `child.origin` and `new_child.origin` is the engulfment depth.
+When a new child forms at a higher origin (deeper counter-move), the parent's `impulse_back` is updated:
 
-**Challenge:** At the moment of engulfment, the new child may not exist yet. Options:
-1. Use the current bar's extreme as proxy for new_child_origin
-2. Defer penalty calculation until new child forms
-3. Use `max_origin_breach` directly (it tracks how far price went past origin)
-
-**Recommendation:** Use `max_origin_breach` — it's already tracked and represents exactly what we need (how far the reversal went).
-
-**Penalty formula (proposed):**
 ```python
-def apply_engulfment_penalty(parent: Leg, engulfed_child: Leg) -> None:
-    """
-    Reduce parent's impulsiveness when child is engulfed.
-
-    The penalty is proportional to how much of the child's range
-    was "given back" (origin breach depth).
-    """
-    if parent.impulsiveness is None:
-        return
-
-    child_range = float(engulfed_child.range)
-    if child_range == 0:
-        return
-
-    # How much was given back beyond child's origin?
-    breach_depth = float(engulfed_child.max_origin_breach or 0)
-
-    # Penalty ratio: breach_depth relative to child's range
-    # Clamped to [0, 1] to prevent over-penalization
-    penalty_ratio = min(breach_depth / child_range, 1.0)
-
-    # Apply penalty
-    parent.impulsiveness *= (1 - penalty_ratio * 0.5)  # 50% max penalty per child
+# In _find_parent_for_leg when parent already has segment data:
+if parent.segment_deepest_price is not None:
+    # Check if new child origin is "higher" (deeper counter-move)
+    if is_deeper_counter_move(parent, new_leg.origin_price):
+        update_segment_impulse_for_new_child(parent, new_leg.origin_price, new_leg.origin_index)
 ```
 
-**Why 50% max per child?**
+**What is "deepest point"?**
 
-A parent may have multiple children engulfed sequentially. Each should reduce impulsiveness, but no single child should devastate the score. The 0.5 factor is conservative — can be tuned empirically.
+At the moment a child forms, the parent's current pivot IS the deepest point. The segment is:
+- `parent.origin` → `parent.pivot` (deepest) → `child.origin`
 
-**Alternatively:** Make penalty multiplicative without cap, but apply diminishing returns:
-```python
-parent.impulsiveness *= (1 - penalty_ratio) ** 0.5  # Square root for diminishing returns
-```
+**What about engulfment?**
+
+Engulfment doesn't require a separate penalty mechanism with the two-impulse model. When a child is engulfed and a new child forms at higher origin:
+- The parent's `impulse_back` gets updated to reflect the deeper counter-move
+- The `net_segment_impulse` automatically decreases
+- The market's behavior is captured without explicit penalties
 
 ### Edge Cases
 
-1. **Root legs have no parent:** Engulfment penalty only applies when `parent_leg_id` exists.
+1. **Root legs have no parent:** No segment impulse to calculate — root legs track their own impulse via existing mechanism.
 
-2. **Parent already pruned:** If parent was pruned before child engulfment, no penalty to apply. Penalty targets grandparent via reparenting.
+2. **First child of parent:** This is when segment impulse is first calculated. Before any child, parent has no segment data.
 
-3. **Multiple children engulfed in same bar:** Apply penalties sequentially. Order may matter — consider sorting by engulfment depth.
+3. **Multiple children in sequence:** Each child formation can update the segment if it represents a deeper counter-move.
 
-4. **Child never formed (stayed pre-formation):** Still apply penalty — the structure existed even if it didn't reach swing status.
+4. **Child at same or shallower origin:** Don't update `impulse_back` — only deeper counter-moves warrant update.
 
-5. **Impulsiveness is None:** If parent's impulsiveness hasn't been calculated yet (too few bars), skip penalty.
+5. **Parent pruned before child forms:** No segment to calculate — parent's segment data was already finalized or never existed.
+
+### Calibration Requirement
+
+**Critical note for algo consumption:**
+
+Raw impulse scores require **calibration against historical context** before they can be meaningfully compared or used for weighting.
+
+**The problem:** If the first sample starts in a high-volatility domain, all legs might seem "normal" until a lower-volatility domain returns. A leg with impulse=10 in a high-vol period is different from impulse=10 in a low-vol period.
+
+**Implication:** The existing `impulsiveness` percentile ranking (against all formed legs) partially addresses this, but may not be sufficient if the volatility regime is persistent.
+
+**Possible approaches:**
+- Rolling window for percentile calculation
+- Volatility-adjusted normalization
+- Regime detection and separate percentile pools
+
+**This doesn't change implementation** of the two-impulse tracking, but needs to be noted for downstream consumers. The algo cannot blindly compare raw impulse scores across different market regimes.
 
 ### Migration Path
 
-**Phase 1: Add impulse_at_formation**
-- New field on Leg, set at creation
-- Backward compatible (existing legs get current impulse as default)
+**Phase 1: Add segment tracking fields**
+- New fields on Leg: `segment_deepest_price`, `segment_deepest_index`, `impulse_to_deepest`, `impulse_back`
+- Backward compatible (defaults to None)
 - No behavior change yet
 
-**Phase 2: Expose in API**
-- Add to leg/swing API responses
-- Enable filtering/ranking experiments in UI
+**Phase 2: Calculate on child formation**
+- Hook into leg creation when parent is assigned
+- Calculate segment impulse for parent
 
-**Phase 3: Implement penalty**
-- Add `apply_engulfment_penalty()` to LegPruner
-- Call in `prune_breach_legs()` before pruning
-- Monitor impact on impulsiveness distribution
+**Phase 3: Update on new child at higher origin**
+- Detect when new child has deeper counter-move
+- Update parent's `impulse_back`
 
-**Phase 4: Tune and validate**
-- Empirically adjust penalty formula
-- Compare to human judgment on significant levels
-- Document findings
+**Phase 4: Expose in API**
+- Add `net_segment_impulse` property
+- Include in leg/swing API responses
+- Enable filtering/ranking experiments
 
 ---
 
@@ -291,6 +331,20 @@ parent.impulsiveness *= (1 - penalty_ratio) ** 0.5  # Square root for diminishin
 
 **User:** "Stale extension means the origin breached, it's long time since impulse updates as no child can form one tick above origin. That pruning method is no-op."
 
+### User on Two-Impulse Model (Final Refinement)
+
+> "My sense is that you need two impulse scores. Impulse to deepest level the parent achieved before child's origin. Impulse back to child's origin. This needs to be updated if a new child at higher origin forms. The impulse score is a difference of the two."
+
+> "It might increase if it made even deeper inroads very fast but was a grind up, but typically we expect it to reduce."
+
+> "This gives you segment-wide impulse score."
+
+### User on Calibration Requirement
+
+> "Also this needs to be calibrated at appropriate level before it can be considered useful (this doesn't change implementation, but needs to be noted in docs). For example if first sample starts in high volatility domain, then all legs might seem 'normal' until lower volatility domain comes back."
+
+> "This probably also addresses open questions 2 and 4. 3 is orthogonal. We could later add another pruning method empirically."
+
 ### Profiling Results (es-1m.csv)
 
 ```
@@ -325,13 +379,13 @@ BASE PRUNING RESULTS (proximity disabled)
 
 ## Part 4: Open Questions
 
-1. **Penalty formula tuning:** The 0.5 max penalty per child is arbitrary. Should be tuned empirically against cases where human judgment identifies "important" inner levels.
+1. ~~**Penalty formula tuning:**~~ **RESOLVED** — The two-impulse model replaces explicit penalties. Net segment impulse automatically reflects market behavior.
 
-2. **Counter-trend magnitude:** The user also identified lack of "counter-trend depth" signal. This spec focuses on engulfment penalty, but counter-trend magnitude may be a separate metric worth capturing.
+2. ~~**Counter-trend magnitude:**~~ **RESOLVED** — The `impulse_back` field directly captures counter-trend intensity. Net segment impulse = impulse_to_deepest - impulse_back.
 
-3. **Disabling inner structure pruning:** User has decided to disable by default (#303). This preserves more levels but increases algo's feature space. Need to validate that impulse-based ranking can separate signal from noise.
+3. **Disabling inner structure pruning:** (ORTHOGONAL) User has decided to disable by default (#303). This preserves more levels but increases algo's feature space. Could later add a new pruning method empirically based on segment impulse data.
 
-4. **Algo consumption:** The ultimate consumer is an algo, not a trader. The impulse scores become feature weights. How these get combined into directional probability is outside this spec's scope.
+4. ~~**Algo consumption:**~~ **RESOLVED** — The `net_segment_impulse` provides a single comparable metric per leg segment. Algo can weight legs by this score, adjusted for proximity to fib levels. Calibration section addresses regime-awareness requirement.
 
 ---
 
@@ -339,9 +393,14 @@ BASE PRUNING RESULTS (proximity disabled)
 
 | Phase | Deliverable | Complexity |
 |-------|-------------|------------|
-| 1 | `impulse_at_formation` field | Low |
-| 2 | API exposure for experiments | Low |
-| 3 | Engulfment penalty implementation | Medium |
-| 4 | Empirical tuning | Ongoing |
+| 1 | Segment tracking fields on Leg | Low |
+| 2 | Calculate on child formation | Medium |
+| 3 | Update on new child at higher origin | Medium |
+| 4 | API exposure (`net_segment_impulse`) | Low |
 
-**Recommendation:** Proceed with Phase 1-2 as immediate work. Phase 3 can follow once inner structure is disabled and we observe the larger feature space.
+**Recommendation:** Implement phases 1-4 as a single coherent feature. The two-impulse model is self-contained and provides the counter-trend magnitude signal directly.
+
+**Related issues:**
+- #303 — Default inner structure pruning to OFF (orthogonal, already filed)
+- #304 — Proximity O(N²) performance (orthogonal)
+- #305 — Pivot breach investigation (orthogonal)
