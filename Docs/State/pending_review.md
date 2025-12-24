@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2025-12-23
 
@@ -8,6 +8,8 @@
 
 ## Pending Changes
 
+- #314: Fix glitching leg overlay with aggregated timeframes (live bar computation, index mapping fix, remove 1W)
+- #313: Remove swing immunity from proximity pruning, add swing transfer
 - #305: Remove dead pivot_breach replacement code path
 - #309: Add leg event serialization to API (`LEG_CREATED`, `LEG_PRUNED`, `LEG_INVALIDATED`)
 - #310: Sidebar collapsible sections (auto-collapse Detection Config when Linger enabled, collapsible event filters)
