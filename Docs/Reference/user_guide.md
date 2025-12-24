@@ -263,8 +263,13 @@ When significant events occur during playback, the view auto-pauses:
 - A 30-second timer wheel appears around the pause button
 - Timer countdown displays remaining seconds
 - When timer completes, playback auto-resumes
-- Press **Escape** or click X to dismiss and resume immediately
-- Click Pause to freeze the timer
+
+**Linger Controls (#311):**
+| Action | Result |
+|--------|--------|
+| **Space** or **Pause button** | Exit linger and **pause** playback |
+| **Escape** or **X dismiss** | Exit linger and **resume** playback |
+| Timer expires | Auto-advance to next event or resume |
 
 **Linger Toggle:**
 The "Linger" button next to speed controls toggles pause-on-event behavior:
@@ -455,6 +460,7 @@ The Detection Config Panel allows real-time adjustment of swing detection thresh
 | `Shift+]` | Playing | Step forward one bar (fine control) |
 | `←` | Linger (multi-event) | Previous event in queue |
 | `→` | Linger (multi-event) | Next event in queue |
+| `Space` | Linger | Exit linger and **pause** (#311) |
 | `Escape` | Linger | Dismiss linger and resume playback |
 
 ### Market Structure View
@@ -468,6 +474,7 @@ The Detection Config Panel allows real-time adjustment of swing detection thresh
 | `]` or `→` | Playing | Step forward one bar |
 | `←` | Linger (multi-event) | Previous event in queue |
 | `→` | Linger (multi-event) | Next event in queue |
+| `Space` | Linger | Exit linger and **pause** (#311) |
 | `Escape` | Linger | Dismiss linger and resume playback |
 
 ---

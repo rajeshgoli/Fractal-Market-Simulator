@@ -120,13 +120,17 @@ export function useForwardPlayback({
   const barBufferRef = useRef<BufferedBar[]>([]);
   const lastFetchedPositionRef = useRef(calibrationBarCount - 1);
   const isFetchingRef = useRef(false);
-  const pendingAggregatedBarsRef = useRef<import('../lib/api').AggregatedBarsResponse | null>(null);
-  const pendingDagStateRef = useRef<import('../lib/api').DagStateResponse | null>(null);
-  const pendingSwingStateRef = useRef<ReplaySwingState | null>(null);
-  // Track which bar index the pending state corresponds to (for deferred application)
-  const pendingStateBarIndexRef = useRef<number>(-1);
-  // Track pending csvIndex from batch responses (#297)
-  const pendingCsvIndexRef = useRef<number>(0);
+
+  // Queue of pending states from batch fetches - each entry is applied when we reach its target bar
+  // This prevents the overwrite race condition where a new batch overwrites pending state before it's applied
+  interface PendingBatchState {
+    targetBarIndex: number;
+    aggregatedBars: import('../lib/api').AggregatedBarsResponse | null;
+    dagState: import('../lib/api').DagStateResponse | null;  // Fallback only
+    swingState: ReplaySwingState | null;
+    csvIndex: number;
+  }
+  const pendingBatchStatesRef = useRef<PendingBatchState[]>([]);
 
   // Ref to hold the latest functions (avoids stale closures)
   const showCurrentEventRef = useRef<() => void>(() => {});
@@ -276,13 +280,15 @@ export function useForwardPlayback({
     try {
       // Fetch from the last fetched position using fixed batch size
       // In DAG mode, request per-bar DAG states for accurate per-bar visualization (#283)
+      // Pass fromIndex for BE resync if needed (#310)
       const response = await advanceReplay(
         calibrationBarCount,
         lastFetchedPositionRef.current,
         FETCH_BATCH_SIZE,
         chartAggregationScales,
         false,  // include_dag_state (final bar only) - we use per-bar instead
-        includeDagState  // include_per_bar_dag_states - reuse the includeDagState prop
+        includeDagState,  // include_per_bar_dag_states - reuse the includeDagState prop
+        lastFetchedPositionRef.current  // fromIndex for BE resync
       );
 
       // Convert bars to buffered format with per-bar events
@@ -315,18 +321,21 @@ export function useForwardPlayback({
         barBufferRef.current = [...barBufferRef.current, ...newBufferedBars];
         lastFetchedPositionRef.current = response.current_bar_index;
 
-        // Store aggregated bars to apply when we reach the corresponding bar
-        // For DAG state, we now use per-bar states instead of final-bar state
-        if (response.aggregated_bars) {
-          pendingAggregatedBarsRef.current = response.aggregated_bars;
+        // Apply aggregated bars IMMEDIATELY so chart has candles for legs to render against
+        // Legs update incrementally via per-bar DAG states in the buffer
+        if (response.aggregated_bars && onAggregatedBarsChange) {
+          onAggregatedBarsChange(response.aggregated_bars);
+          latestAggregatedBarsRef.current = response.aggregated_bars;
         }
-        // Fallback to dag_state if dag_states not available (backward compatibility)
-        if (response.dag_state && !response.dag_states) {
-          pendingDagStateRef.current = response.dag_state;
-        }
-        pendingSwingStateRef.current = response.swing_state;
-        pendingStateBarIndexRef.current = response.current_bar_index;
-        pendingCsvIndexRef.current = response.csv_index;  // Store authoritative CSV index (#297)
+
+        // Queue other batch state (swing state, csv index) - these are deferred
+        pendingBatchStatesRef.current.push({
+          targetBarIndex: response.current_bar_index,
+          aggregatedBars: null,  // Already applied above
+          dagState: (response.dag_state && !response.dag_states) ? response.dag_state : null,
+          swingState: response.swing_state,
+          csvIndex: response.csv_index,
+        });
 
         // Accumulate events for navigation
         if (response.events.length > 0) {
@@ -342,7 +351,7 @@ export function useForwardPlayback({
     } finally {
       isFetchingRef.current = false;
     }
-  }, [calibrationBarCount, chartAggregationScales, includeDagState, endOfData]);
+  }, [calibrationBarCount, chartAggregationScales, includeDagState, endOfData, onAggregatedBarsChange]);
 
   // Render one bar from the buffer (called by animation timer)
   const renderNextBar = useCallback(() => {
@@ -377,29 +386,38 @@ export function useForwardPlayback({
       latestDagStateRef.current = dagState;
     }
 
-    // Apply pending aggregated bars, DAG state, and swing state ONLY when we reach the bar they correspond to
-    // This prevents showing "future" state before we've actually rendered those bars
-    const shouldApplyPendingState = bar.index >= pendingStateBarIndexRef.current && pendingStateBarIndexRef.current >= 0;
+    // Apply pending batch states when we reach their target bar index
+    // Process all batch states that have been reached (queue may have multiple entries)
+    while (pendingBatchStatesRef.current.length > 0) {
+      const nextState = pendingBatchStatesRef.current[0];
+      if (bar.index >= nextState.targetBarIndex) {
+        // Remove from queue
+        pendingBatchStatesRef.current.shift();
 
-    if (shouldApplyPendingState) {
-      if (pendingAggregatedBarsRef.current && onAggregatedBarsChange) {
-        onAggregatedBarsChange(pendingAggregatedBarsRef.current);
-        latestAggregatedBarsRef.current = pendingAggregatedBarsRef.current;
-        pendingAggregatedBarsRef.current = null;  // Clear after applying
+        // Apply aggregated bars
+        if (nextState.aggregatedBars && onAggregatedBarsChange) {
+          onAggregatedBarsChange(nextState.aggregatedBars);
+          latestAggregatedBarsRef.current = nextState.aggregatedBars;
+        }
+
+        // Fallback DAG state (only used when per-bar dag_states not available)
+        if (nextState.dagState && onDagStateChange) {
+          onDagStateChange(nextState.dagState);
+          latestDagStateRef.current = nextState.dagState;
+        }
+
+        // Apply swing state
+        if (nextState.swingState) {
+          setCurrentSwingState(nextState.swingState);
+          onSwingStateChange?.(nextState.swingState);
+        }
+
+        // Apply authoritative CSV index from backend (#297)
+        setCsvIndex(nextState.csvIndex);
+      } else {
+        // Not yet reached, stop processing queue
+        break;
       }
-      if (pendingDagStateRef.current && onDagStateChange) {
-        onDagStateChange(pendingDagStateRef.current);
-        latestDagStateRef.current = pendingDagStateRef.current;
-        pendingDagStateRef.current = null;  // Clear after applying
-      }
-      if (pendingSwingStateRef.current) {
-        setCurrentSwingState(pendingSwingStateRef.current);
-        onSwingStateChange?.(pendingSwingStateRef.current);
-        pendingSwingStateRef.current = null;  // Clear after applying
-      }
-      // Apply authoritative CSV index from backend (#297)
-      setCsvIndex(pendingCsvIndexRef.current);
-      pendingStateBarIndexRef.current = -1;  // Reset
     }
 
     // Accumulate events for history snapshot
@@ -433,12 +451,15 @@ export function useForwardPlayback({
     try {
       // Request aggregated bars and DAG state in the same API call
       // Use barsPerAdvance to step by speed aggregation unit (e.g., 12 5m bars for 1H speed)
+      // Pass fromIndex (currentPosition) for BE resync if needed (#310)
       const response = await advanceReplay(
         calibrationBarCount,
         currentPosition,
         barsPerAdvance,
         chartAggregationScales,
-        includeDagState
+        includeDagState,
+        false,  // include_per_bar_dag_states
+        currentPosition  // fromIndex for BE resync
       );
 
       // Track new state for history snapshot
@@ -462,11 +483,14 @@ export function useForwardPlayback({
           newVisibleBars = [...prev, ...newBarData];
           return newVisibleBars;
         });
-        setCurrentPosition(response.current_bar_index);
+        // Use the last bar's index from new_bars, not response.current_bar_index
+        // This prevents jumping ahead when backend state is ahead of rendered state
+        const lastBarIndex = newBarData[newBarData.length - 1].index;
+        setCurrentPosition(lastBarIndex);
         onNewBars?.(newBarData);
 
-        // Update lastFetchedPosition to stay in sync
-        lastFetchedPositionRef.current = response.current_bar_index;
+        // Update lastFetchedPosition to the actual position we rendered to
+        lastFetchedPositionRef.current = lastBarIndex;
       }
 
       // Update aggregated bars from response (replaces separate API call)
@@ -563,8 +587,9 @@ export function useForwardPlayback({
     setPlaybackState(PlaybackState.PLAYING);
 
     // Buffered fetching for smooth high-speed playback in both modes (#283)
-    // Clear buffer and reset position tracking for clean start
+    // Clear buffer, pending batch queue, and reset position tracking for clean start
     barBufferRef.current = [];
+    pendingBatchStatesRef.current = [];
     lastFetchedPositionRef.current = currentPosition;
 
     // Initial fetch to fill buffer
@@ -604,10 +629,11 @@ export function useForwardPlayback({
   }, [clearTimers]);
 
   // Toggle play/pause
+  // When lingering, space/click should PAUSE (not resume) - gives user control (#311)
   const togglePlayPause = useCallback(() => {
     if (playbackState === PlaybackState.LINGERING) {
       exitLinger();
-      startPlayback();
+      setPlaybackState(PlaybackState.PAUSED);
     } else if (playbackState === PlaybackState.PLAYING) {
       pause();
     } else {
@@ -624,6 +650,9 @@ export function useForwardPlayback({
       isPlayingRef.current = false;
       clearTimers();
     }
+    // Clear buffer and pending queue to prevent in-flight fetchBatch from overwriting state
+    barBufferRef.current = [];
+    pendingBatchStatesRef.current = [];
     setPlaybackState(PlaybackState.PAUSED);
     await advanceBar();
   }, [playbackState, clearTimers, exitLinger, advanceBar]);
@@ -703,6 +732,7 @@ export function useForwardPlayback({
     setAllEvents([]); // Reset events when resetting to start
     latestDagStateRef.current = null;
     latestAggregatedBarsRef.current = null;
+    pendingBatchStatesRef.current = [];  // Clear pending batch queue
   }, [clearTimers, exitLinger, calibrationBars, calibrationBarCount]);
 
   // Navigate to previous event in linger queue
@@ -723,14 +753,12 @@ export function useForwardPlayback({
     showCurrentEventRef.current();
   }, [playbackState]);
 
-  // Dismiss linger and resume playback only if it was playing before
+  // Dismiss linger (ESC/X) and resume playback - user wants to skip the linger
+  // Use Space/pause button to actually pause (#311)
   const dismissLinger = useCallback(() => {
     if (playbackState !== PlaybackState.LINGERING) return;
-    const wasPlaying = wasPlayingBeforeLingerRef.current;
     exitLinger();
-    if (wasPlaying) {
-      startPlayback();
-    }
+    startPlayback();
   }, [playbackState, exitLinger, startPlayback]);
 
   // Pause linger timer (for feedback input focus)
@@ -909,12 +937,16 @@ export function useForwardPlayback({
 
       try {
         // For jumpToNextEvent, include aggregated bars and DAG state on the last iteration
+        // Pass fromIndex for BE resync if needed (#310)
+        const expectedPosition = currentPosition + iterations - 1;
         const response = await advanceReplay(
           calibrationBarCount,
-          currentPosition + iterations - 1,
+          expectedPosition,
           1,
           chartAggregationScales,
-          includeDagState
+          includeDagState,
+          false,  // include_per_bar_dag_states
+          expectedPosition  // fromIndex for BE resync
         );
 
         if (response.end_of_data) {
