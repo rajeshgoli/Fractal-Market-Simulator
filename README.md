@@ -20,14 +20,9 @@ For full specification, see [Product North Star](Docs/Reference/product_north_st
 
 The system uses a **hierarchical DAG model** where swings form a tree structure with parent-child relationships, replacing the previous S/M/L/XL scale buckets.
 
-### Replay View
+### Market Structure View
 
-The primary tool for understanding swing detection behavior. Two visualization modes:
-
-| Mode | Command | Purpose |
-|------|---------|---------|
-| **Calibration** | `--mode calibration` | Swing calibration and forward playback |
-| **Market Structure** | `--mode dag` | Watch legs form incrementally from bar 0 |
+The primary tool for understanding swing detection. Watch the hierarchical DAG build incrementally from bar 0.
 
 ```bash
 # Setup
@@ -38,34 +33,32 @@ pip install -r requirements.txt
 # Build frontend (one-time)
 cd frontend && npm install && npm run build && cd ..
 
-# Launch Replay View (calibration mode)
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000
-open http://127.0.0.1:8000/replay
-
-# Launch Market Structure View (DAG mode)
+# Launch Market Structure View
 python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000 --mode dag
+open http://127.0.0.1:8000/replay
 ```
 
 **Features:**
-- **Hierarchical tree model**: Swings organized by depth (root, depth 2, depth 3, etc.)
-- **Dual-chart view**: Independent timeframe aggregation (1m to 1W) on top/bottom charts
-- **Forward/backward navigation**: Step through bars, jump between events
+- **Incremental build**: Watch legs form as each bar is processed
+- **Dual-chart view**: Independent timeframe aggregation (1m to 1W)
 - **Hierarchy exploration**: Visualize parent-child relationships between legs
 - **Follow leg**: Track specific legs through their lifecycle with event markers
 - **Detection config panel**: Adjust thresholds at runtime without restart
-- **Linger pauses**: Auto-pause on structural events with dismiss/resume controls
+- **Hover/click interaction**: Highlight legs on chart, inspect in panel
+
+**Also available:** Calibration mode (`--mode calibration`) pre-analyzes 10K bars before playback.
 
 See [User Guide](Docs/Reference/user_guide.md) for detailed documentation.
 
 ### Quick Start
 
 ```bash
-# Replay View (recommended starting point)
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000
+# Market Structure View (recommended)
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000 --mode dag
 open http://127.0.0.1:8000/replay
 
-# Market Structure View (watch DAG build)
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000 --mode dag
+# Calibration mode (pre-analyze before playback)
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000
 
 # Run tests
 source venv/bin/activate && python -m pytest tests/ -v
