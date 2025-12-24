@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 10
+**Unreviewed Change Count:** 11
 
 **Last Review:** 2025-12-24
 
@@ -19,6 +19,7 @@
   - #330 — CLI Cleanup
   - #331 — Documentation Update
 - #332 — Fix #324 regressions: session persistence, 10K button, resolution detection
+- #335 — Process Till (10K>>) doesn't update stats panel
 
 ---
 
