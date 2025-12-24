@@ -687,7 +687,6 @@ class DirectionConfigRequest(BaseModel):
     """
     formation_fib: Optional[float] = None  # Formation threshold (default: 0.287)
     invalidation_threshold: Optional[float] = None  # Invalidation threshold (default: 0.382)
-    pivot_breach_threshold: Optional[float] = None  # Pivot breach threshold (default: 0.10)
     engulfed_breach_threshold: Optional[float] = None  # Engulfed threshold (default: 0.0)
 
     model_config = ConfigDict(
@@ -695,8 +694,6 @@ class DirectionConfigRequest(BaseModel):
             "example": {
                 "formation_fib": 0.382,
                 "invalidation_threshold": 0.382,
-                "completion_fib": 2.0,
-                "pivot_breach_threshold": 0.10,
                 "engulfed_breach_threshold": 0.20,
             }
         }
@@ -718,7 +715,6 @@ class SwingConfigUpdateRequest(BaseModel):
     # Pruning algorithm toggles
     enable_engulfed_prune: Optional[bool] = None  # Enable engulfed leg deletion (default: True)
     enable_inner_structure_prune: Optional[bool] = None  # Enable inner structure pruning (default: True)
-    enable_pivot_breach_prune: Optional[bool] = None  # Enable pivot breach replacement (default: True)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -735,8 +731,7 @@ class SwingConfigUpdateRequest(BaseModel):
                 "origin_range_threshold": 0.05,
                 "origin_time_threshold": 0.10,
                 "enable_engulfed_prune": True,
-                "enable_inner_structure_prune": True,
-                "enable_pivot_breach_prune": True
+                "enable_inner_structure_prune": True
             }
         }
     )
@@ -746,7 +741,6 @@ class DirectionConfigResponse(BaseModel):
     """Per-direction configuration values in response."""
     formation_fib: float
     invalidation_threshold: float
-    pivot_breach_threshold: float
     engulfed_breach_threshold: float
 
 
@@ -763,7 +757,6 @@ class SwingConfigResponse(BaseModel):
     # Pruning algorithm toggles
     enable_engulfed_prune: bool
     enable_inner_structure_prune: bool
-    enable_pivot_breach_prune: bool
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -771,21 +764,18 @@ class SwingConfigResponse(BaseModel):
                 "bull": {
                     "formation_fib": 0.382,
                     "invalidation_threshold": 0.382,
-                    "pivot_breach_threshold": 0.10,
                     "engulfed_breach_threshold": 0.20
                 },
                 "bear": {
                     "formation_fib": 0.382,
                     "invalidation_threshold": 0.382,
-                    "pivot_breach_threshold": 0.10,
                     "engulfed_breach_threshold": 0.20
                 },
                 "stale_extension_threshold": 3.0,
                 "origin_range_threshold": 0.05,
                 "origin_time_threshold": 0.10,
                 "enable_engulfed_prune": True,
-                "enable_inner_structure_prune": True,
-                "enable_pivot_breach_prune": True
+                "enable_inner_structure_prune": True
             }
         }
     )

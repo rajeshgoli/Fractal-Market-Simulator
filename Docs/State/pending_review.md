@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-23
 
@@ -8,15 +8,7 @@
 
 ## Pending Changes
 
-- #307: Segment impulse tracking (two-impulse model for parent segments)
-- #306: Optimize proximity pruning to O(N log N) using time-bounded binary search
-- #302: Cache leg.range property for performance
-- #301: Remove unused swing hierarchy and discretization module
-- #300: Convert leg origin_index/pivot_index to csv_index in API responses
-- #299: Deterministic leg/swing IDs to survive BE reset
-- #298: Restore pivot-based grouping in proximity pruning (fixes #294 regression)
-- #297: Replace window_offset with csv_index in feedback snapshots
-- #296: Remove deprecated turn consolidation and domination pruning
+- #305: Remove dead pivot_breach replacement code path
 
 ---
 
@@ -24,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 23 | #296-#303, #306, #307 — Performance, cleanup, segment impulse (10 changes) | All Accepted; docs debt noted |
 | Dec 23 | #294, #288, #261, #281, #279, #278, #283, #267, aggregation (9 changes) | All Accepted; #282 follow-up noted |
 | Dec 22 | #241, #248-#250, #260-#266, bugfixes — Impulse metrics, hierarchy exploration, inner structure pruning (10 changes) | All Accepted |
 | Dec 21 | #210, #219, #228, #236 — Cleanup epics + impulse score (4 epics, 25 subissues) | All Accepted; minor doc fixes #248, #249 |

@@ -35,8 +35,6 @@ class DirectionConfig:
             swings as fraction of range. Default 0.10.
         invalidation_threshold: Fraction of leg range beyond origin that
             marks decisive invalidation. Default 0.382 (#203).
-        pivot_breach_threshold: Fraction of leg range beyond pivot that
-            triggers pruning of formed legs. Default 0.10 (10%) (#208).
         engulfed_breach_threshold: Combined breach fraction (origin + pivot)
             that marks a leg as engulfed and deletes it. Default 0.0 (strict
             deletion while collecting impulse data for threshold tuning) (#236).
@@ -48,7 +46,6 @@ class DirectionConfig:
     big_swing_close_tolerance: float = 0.10
     child_swing_tolerance: float = 0.10
     invalidation_threshold: float = 0.382
-    pivot_breach_threshold: float = 0.10
     engulfed_breach_threshold: float = 0.0  # Strict: any engulfed leg is deleted (#236)
 
 
@@ -79,8 +76,6 @@ class SwingConfig:
             origin and pivot sides. Default True.
         enable_inner_structure_prune: Whether to prune counter-direction legs from
             inner structure pivots when outer structure invalidates. Default False.
-        enable_pivot_breach_prune: Whether to prune and replace formed legs when
-            pivot is breached beyond threshold. Default True.
 
     Example:
         >>> config = SwingConfig.default()
@@ -96,7 +91,6 @@ class SwingConfig:
     # Pruning algorithm toggles (#288)
     enable_engulfed_prune: bool = True
     enable_inner_structure_prune: bool = False
-    enable_pivot_breach_prune: bool = True
 
     @classmethod
     def default(cls) -> "SwingConfig":
@@ -126,7 +120,6 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
         )
 
     def with_bear(self, **kwargs: Any) -> "SwingConfig":
@@ -146,7 +139,6 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
         )
 
     def with_origin_prune(
@@ -184,7 +176,6 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
         )
 
     def with_stale_extension(self, stale_extension_threshold: float) -> "SwingConfig":
@@ -207,7 +198,6 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
         )
 
     def with_level_crosses(self, emit_level_crosses: bool) -> "SwingConfig":
@@ -230,14 +220,12 @@ class SwingConfig:
             emit_level_crosses=emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
-            enable_pivot_breach_prune=self.enable_pivot_breach_prune,
         )
 
     def with_prune_toggles(
         self,
         enable_engulfed_prune: bool = None,
         enable_inner_structure_prune: bool = None,
-        enable_pivot_breach_prune: bool = None,
     ) -> "SwingConfig":
         """
         Create a new config with modified pruning algorithm toggles.
@@ -248,7 +236,6 @@ class SwingConfig:
         Args:
             enable_engulfed_prune: Enable/disable engulfed leg deletion.
             enable_inner_structure_prune: Enable/disable inner structure pruning.
-            enable_pivot_breach_prune: Enable/disable pivot breach replacement.
         """
         return SwingConfig(
             bull=self.bull,
@@ -259,5 +246,4 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
             enable_inner_structure_prune=enable_inner_structure_prune if enable_inner_structure_prune is not None else self.enable_inner_structure_prune,
-            enable_pivot_breach_prune=enable_pivot_breach_prune if enable_pivot_breach_prune is not None else self.enable_pivot_breach_prune,
         )

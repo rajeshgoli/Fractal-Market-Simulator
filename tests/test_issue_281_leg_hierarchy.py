@@ -7,7 +7,6 @@ Tests cover:
 - Price tie tiebreaker (latest origin_index wins)
 - Breach filtering (origin-breached legs cannot be parents)
 - Reparenting when parent is pruned
-- Replacement legs inherit parent
 - Sibling scenario (same price level legs)
 """
 
@@ -324,54 +323,6 @@ class TestReparentChildren:
         pruner.reparent_children(state, L5)
         # L6 should point to None (L5's former parent)
         assert L6.parent_leg_id is None
-
-
-class TestReplacementLegInheritsParent:
-    """Test that replacement legs inherit parent from original."""
-
-    def test_replacement_inherits_parent(self):
-        """When leg is replaced due to pivot breach, replacement inherits parent."""
-        config = SwingConfig.default()
-        pruner = LegPruner(config)
-        state = DetectorState()
-
-        # Create parent leg
-        parent_leg = Leg(
-            leg_id="parent",
-            direction='bull',
-            origin_price=Decimal("90"),
-            origin_index=0,
-            pivot_price=Decimal("100"),
-            pivot_index=1,
-            parent_leg_id=None,
-            formed=True,
-        )
-
-        # Create child leg that will be replaced
-        original_leg = Leg(
-            leg_id="original",
-            direction='bull',
-            origin_price=Decimal("95"),
-            origin_index=2,
-            pivot_price=Decimal("105"),
-            pivot_index=3,
-            parent_leg_id="parent",
-            formed=True,
-            max_pivot_breach=Decimal("15"),  # Pivot was breached
-        )
-        state.active_legs = [parent_leg, original_leg]
-
-        # Process breach prune - should create replacement
-        bar = make_bar(5, 110, 125, 108, 122)  # New high at 125
-        timestamp = datetime.now()
-        prune_events, create_events = pruner.prune_breach_legs(state, bar, timestamp)
-
-        # Find the replacement leg
-        replacement_legs = [l for l in state.active_legs
-                          if l.leg_id != "parent" and l.leg_id != "original"]
-        assert len(replacement_legs) == 1
-        # Replacement should inherit parent
-        assert replacement_legs[0].parent_leg_id == "parent"
 
 
 class TestSiblingScenario:

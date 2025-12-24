@@ -422,7 +422,7 @@ Configuration:
 - `DirectionConfig.invalidation_threshold`: Configurable per direction (default: 0.382)
 - `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
 - `SwingConfig.emit_level_crosses`: Enable/disable LevelCrossEvent emission (default: False for performance)
-- `SwingConfig.enable_*_prune`: Toggle individual pruning algorithms (engulfed, inner_structure, turn, pivot_breach, domination)
+- `SwingConfig.enable_*_prune`: Toggle individual pruning algorithms (engulfed, inner_structure)
 
 **Inner structure pruning (#264, #266, #279):**
 

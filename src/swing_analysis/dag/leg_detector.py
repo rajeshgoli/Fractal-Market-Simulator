@@ -493,14 +493,11 @@ class LegDetector:
         bar_close = Decimal(str(bar.close))
         bar_open = Decimal(str(bar.open))
 
-        # Prune legs with breached pivots or engulfed legs (#208)
-        # This must happen BEFORE pivot extension so we can create replacement
-        # legs at the new extreme (bar_high/bar_low) before the original pivot extends
-        prune_events, create_events = self._pruner.prune_breach_legs(
+        # Prune engulfed legs (both origin and pivot breached) (#208, #305)
+        engulfed_events = self._pruner.prune_engulfed_legs(
             self.state, bar, timestamp
         )
-        events.extend(prune_events)
-        events.extend(create_events)
+        events.extend(engulfed_events)
 
         # Extend leg pivots on new extremes (#188, #192, #197)
         # This must happen BEFORE bar type classification because bars with

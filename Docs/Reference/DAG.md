@@ -859,7 +859,7 @@ All thresholds are configurable. Defaults shown:
 |-----------|---------|---------|
 | `formation_fib` | 0.287 | Retracement % to confirm swing |
 | `invalidation_threshold` | 0.382 | Origin breach % to invalidate |
-| `pivot_breach_threshold` | 0.10 | Pivot extension % to trigger replacement |
+| `engulfed_breach_threshold` | 0.0 | Combined breach % for engulfed deletion (#236) |
 | `origin_range_prune_threshold` | 0.0 | Range similarity % for origin-proximity consolidation (#294) |
 | `origin_time_prune_threshold` | 0.0 | Time proximity % for origin-proximity consolidation (#294) |
 | `stale_extension_threshold` | 3.0 | Prune invalidated child legs at 3x range (root legs preserved) |
@@ -1139,20 +1139,21 @@ Big swings get different invalidation tolerances — they're more significant le
 
 The combination tells you both *how fast* and *how* the move happened.
 
-### Q7: Why is pivot breach different from invalidation?
+### Q7: What's the difference between pivot extension and engulfed?
 
 **A:** They represent different scenarios:
 
-**Invalidation (origin breach):**
-- The defended level was violated
-- Structure is broken — swing is no longer valid
-- Action: Mark as invalidated, stop extending
+**Pivot extension (origin NOT breached):**
+- Origin is still defended
+- Price moves beyond the current pivot in the leg's direction
+- Structure is intact and growing
+- Action: Pivot extends to the new extreme
 
-**Pivot breach (without origin breach):**
-- The *origin* is still defended
-- Price just extended further than the original pivot
-- Structure is intact, just extended
-- Action: Replace with updated pivot
+**Engulfed (BOTH origin AND pivot breached over time):**
+- Origin was breached at some point (leg invalidated)
+- Later, price also went past the frozen pivot
+- Structure is completely violated — price hit both ends
+- Action: Delete the leg entirely (#208, #305)
 
 ### Q8: Can a swing have multiple parents? What does that mean?
 

@@ -402,7 +402,6 @@ export function getAggregationMinutes(scale: AggregationScale): number {
 export interface DirectionConfig {
   formation_fib: number;       // Formation threshold (default: 0.287)
   invalidation_threshold: number;  // Invalidation threshold (default: 0.382)
-  pivot_breach_threshold: number;  // Pivot breach threshold (default: 0.10)
   engulfed_breach_threshold: number;  // Engulfed threshold (default: 0.0)
 }
 
@@ -418,7 +417,6 @@ export interface DetectionConfig {
   // Pruning algorithm toggles
   enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
   enable_inner_structure_prune: boolean;  // Enable inner structure pruning (default: false)
-  enable_pivot_breach_prune: boolean;  // Enable pivot breach replacement (default: true)
 }
 
 /**
@@ -428,13 +426,11 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   bull: {
     formation_fib: 0.287,
     invalidation_threshold: 0.382,
-    pivot_breach_threshold: 0.10,
     engulfed_breach_threshold: 0.0,
   },
   bear: {
     formation_fib: 0.287,
     invalidation_threshold: 0.382,
-    pivot_breach_threshold: 0.10,
     engulfed_breach_threshold: 0.0,
   },
   stale_extension_threshold: 3.0,
@@ -442,5 +438,4 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   origin_time_threshold: 0.0,
   enable_engulfed_prune: true,
   enable_inner_structure_prune: false,
-  enable_pivot_breach_prune: true,
 };

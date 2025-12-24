@@ -1808,8 +1808,6 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
             new_config = new_config.with_bull(formation_fib=request.bull.formation_fib)
         if request.bull.invalidation_threshold is not None:
             new_config = new_config.with_bull(invalidation_threshold=request.bull.invalidation_threshold)
-        if request.bull.pivot_breach_threshold is not None:
-            new_config = new_config.with_bull(pivot_breach_threshold=request.bull.pivot_breach_threshold)
         if request.bull.engulfed_breach_threshold is not None:
             new_config = new_config.with_bull(engulfed_breach_threshold=request.bull.engulfed_breach_threshold)
 
@@ -1819,8 +1817,6 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
             new_config = new_config.with_bear(formation_fib=request.bear.formation_fib)
         if request.bear.invalidation_threshold is not None:
             new_config = new_config.with_bear(invalidation_threshold=request.bear.invalidation_threshold)
-        if request.bear.pivot_breach_threshold is not None:
-            new_config = new_config.with_bear(pivot_breach_threshold=request.bear.pivot_breach_threshold)
         if request.bear.engulfed_breach_threshold is not None:
             new_config = new_config.with_bear(engulfed_breach_threshold=request.bear.engulfed_breach_threshold)
 
@@ -1837,12 +1833,10 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     if any([
         request.enable_engulfed_prune is not None,
         request.enable_inner_structure_prune is not None,
-        request.enable_pivot_breach_prune is not None,
     ]):
         new_config = new_config.with_prune_toggles(
             enable_engulfed_prune=request.enable_engulfed_prune,
             enable_inner_structure_prune=request.enable_inner_structure_prune,
-            enable_pivot_breach_prune=request.enable_pivot_breach_prune,
         )
 
     # Update detector config (keeps current state, applies to future bars)
@@ -1862,13 +1856,11 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         bull=DirectionConfigResponse(
             formation_fib=new_config.bull.formation_fib,
             invalidation_threshold=new_config.bull.invalidation_threshold,
-            pivot_breach_threshold=new_config.bull.pivot_breach_threshold,
             engulfed_breach_threshold=new_config.bull.engulfed_breach_threshold,
         ),
         bear=DirectionConfigResponse(
             formation_fib=new_config.bear.formation_fib,
             invalidation_threshold=new_config.bear.invalidation_threshold,
-            pivot_breach_threshold=new_config.bear.pivot_breach_threshold,
             engulfed_breach_threshold=new_config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=new_config.stale_extension_threshold,
@@ -1876,7 +1868,6 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         origin_time_threshold=new_config.origin_time_prune_threshold,
         enable_engulfed_prune=new_config.enable_engulfed_prune,
         enable_inner_structure_prune=new_config.enable_inner_structure_prune,
-        enable_pivot_breach_prune=new_config.enable_pivot_breach_prune,
     )
 
 
@@ -1904,13 +1895,11 @@ async def get_detection_config():
         bull=DirectionConfigResponse(
             formation_fib=config.bull.formation_fib,
             invalidation_threshold=config.bull.invalidation_threshold,
-            pivot_breach_threshold=config.bull.pivot_breach_threshold,
             engulfed_breach_threshold=config.bull.engulfed_breach_threshold,
         ),
         bear=DirectionConfigResponse(
             formation_fib=config.bear.formation_fib,
             invalidation_threshold=config.bear.invalidation_threshold,
-            pivot_breach_threshold=config.bear.pivot_breach_threshold,
             engulfed_breach_threshold=config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=config.stale_extension_threshold,
@@ -1918,5 +1907,4 @@ async def get_detection_config():
         origin_time_threshold=config.origin_time_prune_threshold,
         enable_engulfed_prune=config.enable_engulfed_prune,
         enable_inner_structure_prune=config.enable_inner_structure_prune,
-        enable_pivot_breach_prune=config.enable_pivot_breach_prune,
     )
