@@ -126,6 +126,74 @@ async def health():
     }
 
 
+# ============================================================================
+# File Discovery Endpoint (#325)
+# ============================================================================
+
+
+def infer_resolution_from_filename(filename: str) -> str:
+    """
+    Infer resolution from filename patterns like es-5m.csv, es-1h.csv.
+
+    Returns resolution string (e.g., '5m', '1h', '1d') or 'unknown'.
+    """
+    import re
+    # Match patterns like -5m., -1h., -30m., -1d., -1w., -1mo.
+    match = re.search(r'-(\d+[mhdw]|1mo)\.', filename.lower())
+    if match:
+        return match.group(1)
+    return 'unknown'
+
+
+@app.get("/api/files")
+async def list_data_files():
+    """
+    List available CSV data files for selection.
+
+    Scans the test_data/ directory for CSV files and returns metadata
+    including bar count and date range. Files that fail to parse are
+    silently skipped.
+
+    Returns:
+        List of file info objects with path, name, total_bars, resolution,
+        start_date, and end_date.
+    """
+    from ..data.ohlc_loader import get_file_metrics
+
+    project_root = Path(__file__).parent.parent.parent
+    test_data_dir = project_root / "test_data"
+
+    files = []
+
+    if not test_data_dir.exists():
+        return files
+
+    for csv_file in sorted(test_data_dir.glob("*.csv")):
+        # Skip subdirectories and hidden files
+        if not csv_file.is_file() or csv_file.name.startswith('.'):
+            continue
+
+        try:
+            metrics = get_file_metrics(str(csv_file))
+            resolution = infer_resolution_from_filename(csv_file.name)
+
+            file_info = {
+                "path": str(csv_file),
+                "name": csv_file.name,
+                "total_bars": metrics.total_bars,
+                "resolution": resolution,
+                "start_date": metrics.first_timestamp.isoformat() if metrics.first_timestamp else None,
+                "end_date": metrics.last_timestamp.isoformat() if metrics.last_timestamp else None,
+            }
+            files.append(file_info)
+        except (FileNotFoundError, ValueError, OSError) as e:
+            # Skip files that fail to parse
+            logger.debug(f"Skipping {csv_file.name}: {e}")
+            continue
+
+    return files
+
+
 @app.get("/api/config")
 async def get_config():
     """Get application configuration including mode."""
@@ -138,7 +206,23 @@ async def get_config():
 @app.get("/api/session")
 async def get_session():
     """Get current session info."""
-    s = get_state()
+    if state is None:
+        # No session initialized yet - return empty state
+        return {
+            "session_id": "",
+            "data_file": "",
+            "resolution": "",
+            "window_size": 0,
+            "window_offset": 0,
+            "total_source_bars": 0,
+            "calibration_bar_count": None,
+            "scale": "S",
+            "created_at": "",
+            "annotation_count": 0,
+            "completed_scales": [],
+            "initialized": False,
+        }
+    s = state
     return {
         "session_id": "replay-session",
         "data_file": s.data_file or "",
@@ -151,7 +235,114 @@ async def get_session():
         "created_at": "",
         "annotation_count": 0,
         "completed_scales": [],
+        "initialized": True,
     }
+
+
+# ============================================================================
+# Session Restart Endpoint (#326, #327)
+# ============================================================================
+
+
+from pydantic import BaseModel
+
+
+class SessionRestartRequest(BaseModel):
+    """Request to restart session with new settings."""
+    data_file: str
+    start_date: Optional[str] = None  # ISO date string (YYYY-MM-DD)
+
+
+@app.post("/api/session/restart")
+async def restart_session(request: SessionRestartRequest):
+    """
+    Restart session with new data file and/or start date.
+
+    Reinitializes the application state with the specified file and
+    optionally starts from a specific date. This clears all existing
+    detection state.
+
+    Args:
+        request: SessionRestartRequest with data_file and optional start_date.
+
+    Returns:
+        New session info after restart.
+    """
+    from datetime import datetime
+    from ..data.ohlc_loader import load_ohlc, get_file_metrics
+
+    global state
+
+    data_file = request.data_file
+    start_date_str = request.start_date
+
+    # Validate file exists
+    if not Path(data_file).exists():
+        raise HTTPException(status_code=400, detail=f"Data file not found: {data_file}")
+
+    try:
+        # Infer resolution from filename
+        resolution = infer_resolution_from_filename(Path(data_file).name)
+        resolution_minutes = {
+            '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+            '1h': 60, '4h': 240, '1d': 1440, '1w': 10080, '1mo': 43200
+        }.get(resolution, 5)
+
+        # Get file metrics
+        metrics = get_file_metrics(data_file)
+
+        # Calculate offset from start date if provided
+        offset = 0
+        if start_date_str:
+            try:
+                start_date = datetime.fromisoformat(start_date_str)
+                # Load data to find offset
+                df, _ = load_ohlc(data_file)
+
+                if df.index.tz is not None:
+                    start_dt = pd.Timestamp(start_date, tz='UTC')
+                else:
+                    start_dt = pd.Timestamp(start_date)
+
+                mask = df.index >= start_dt
+                if mask.any():
+                    first_match_idx = df.index.get_indexer([df.index[mask][0]])[0]
+                    offset = int(first_match_idx)
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"No data found at or after {start_date_str}. "
+                               f"Data range: {df.index.min()} to {df.index.max()}"
+                    )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
+
+        # Initialize the application with new settings
+        init_app(
+            data_file=data_file,
+            resolution_minutes=resolution_minutes,
+            window_size=50000,
+            target_bars=200,
+            window_offset=offset,
+            mode="dag"  # Always DAG mode
+        )
+
+        logger.info(f"Session restarted: {data_file}, offset={offset}")
+
+        # Return new session info
+        return {
+            "success": True,
+            "session_id": "replay-session",
+            "data_file": data_file,
+            "resolution": f"{resolution_minutes}m",
+            "window_size": len(state.source_bars),
+            "window_offset": offset,
+            "total_source_bars": metrics.total_bars,
+            "start_date": start_date_str,
+        }
+
+    except (FileNotFoundError, ValueError, OSError, pd.errors.ParserError) as e:
+        raise HTTPException(status_code=400, detail=f"Failed to load data: {e}")
 
 
 # Scale code to timeframe minutes mapping - standard timeframes

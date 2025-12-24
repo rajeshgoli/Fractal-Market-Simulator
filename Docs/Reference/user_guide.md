@@ -27,19 +27,59 @@ Market Structure View provides the primary interface for observing how the hiera
 ### Quick Start
 
 ```bash
-# Launch Market Structure View
+# Activate environment
 source venv/bin/activate
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000
+
+# Start the server (no data file required)
+python -m src.ground_truth_annotator.main
+
+# Or start with a specific data file
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv
+
+# Start at a specific date
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --start-date 2023-01-15
 ```
+
+Then open http://127.0.0.1:8000/replay in your browser.
+
+### First-Time Setup (No CLI Arguments)
+
+When you start the server without a `--data` argument, the frontend prompts you to select a data file:
+
+1. The Settings panel opens automatically
+2. Select a CSV file from the dropdown
+3. Optionally set a start date to jump to a specific point
+4. Click "Apply & Restart" to load the data
+
+Your selection is remembered in your browser (localStorage) for future sessions.
+
+### Settings Panel
+
+Click the **gear icon** in the header to access the Settings panel at any time. Use this to:
+
+- **Change data file**: Switch to a different CSV source
+- **Jump to a date**: Start analysis from a specific date in the data
+
+Changes take effect immediately after restart. Session settings persist across browser sessions.
+
+### Process Till
+
+Use the "Till" input in the playback controls to quickly advance to a specific CSV index:
+
+1. Enter a target CSV index (must be greater than current position)
+2. Click the forward arrow or press Enter
+3. The system processes all bars up to that index
+
+This is useful for jumping to a known point of interest in the data.
 
 ### Layout
 
 Market Structure View has a focused layout for observing leg formation:
 
-- **Header**: Timestamp display, bar count indicator
+- **Header**: Timestamp display, data file indicator, bar count, and settings gear icon
 - **Top Chart**: Overview chart (macro) with leg overlays
 - **Bottom Chart**: Detail chart (micro) with leg overlays
-- **Playback Controls**: Transport buttons, speed control, linger toggle
+- **Playback Controls**: Transport buttons, speed control, linger toggle, Process Till input
 - **Current Structure Panel**: Always-visible algorithm state display
 
 ### Incremental Build (Fixes #179)

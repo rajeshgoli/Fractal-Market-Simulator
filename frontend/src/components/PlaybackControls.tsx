@@ -1,5 +1,5 @@
-import React from 'react';
-import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock, ChevronDown, ChevronLeft, ChevronRight, X, Timer, TimerOff } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play, Pause, SkipBack, SkipForward, FastForward, Rewind, Clock, ChevronDown, ChevronLeft, ChevronRight, X, Timer, TimerOff, Forward, Loader2 } from 'lucide-react';
 import { PLAYBACK_SPEEDS } from '../constants';
 import { PlaybackState, AggregationScale } from '../types';
 
@@ -48,6 +48,11 @@ interface PlaybackControlsProps {
   // Linger toggle
   lingerEnabled?: boolean;
   onToggleLinger?: () => void;
+  // Process Till feature (#328)
+  currentCsvIndex?: number;
+  maxCsvIndex?: number;
+  onProcessTill?: (targetCsvIndex: number) => Promise<void>;
+  isProcessingTill?: boolean;
 }
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
@@ -84,8 +89,16 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onDismissLinger,
   lingerEnabled = true,
   onToggleLinger,
+  currentCsvIndex,
+  maxCsvIndex,
+  onProcessTill,
+  isProcessingTill = false,
 }) => {
   const isPlaying = playbackState === PlaybackState.PLAYING;
+
+  // Process Till state (#328)
+  const [processTillInput, setProcessTillInput] = useState('');
+  const [processTillError, setProcessTillError] = useState<string | null>(null);
 
   // Check if we're in forward playback mode (have calibration data)
   const isForwardPlayback = calibrationBarCount !== undefined && calibrationBarCount > 0;
@@ -110,6 +123,33 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
   // Progress bar percentage
   const progressPercent = totalBars > 0 ? (currentBar / totalBars) * 100 : 0;
+
+  // Handle Process Till submit (#328)
+  const handleProcessTill = async () => {
+    if (!onProcessTill) return;
+
+    const targetIndex = parseInt(processTillInput.trim(), 10);
+    if (isNaN(targetIndex)) {
+      setProcessTillError('Enter a valid number');
+      return;
+    }
+    if (currentCsvIndex !== undefined && targetIndex <= currentCsvIndex) {
+      setProcessTillError('Target must be > current');
+      return;
+    }
+    if (maxCsvIndex !== undefined && targetIndex > maxCsvIndex) {
+      setProcessTillError(`Max is ${maxCsvIndex}`);
+      return;
+    }
+
+    setProcessTillError(null);
+    try {
+      await onProcessTill(targetIndex);
+      setProcessTillInput(''); // Clear on success
+    } catch (err) {
+      setProcessTillError(err instanceof Error ? err.message : 'Failed');
+    }
+  };
 
   return (
     <div className="bg-app-secondary border-t border-b border-app-border p-3 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
@@ -271,6 +311,45 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             {lingerEnabled ? <Timer size={14} /> : <TimerOff size={14} />}
             <span className="text-xs font-medium">Linger</span>
           </button>
+        )}
+
+        {/* Process Till (#328) */}
+        {onProcessTill && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-app-muted">Till:</span>
+            <input
+              type="text"
+              value={processTillInput}
+              onChange={(e) => {
+                setProcessTillInput(e.target.value);
+                setProcessTillError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleProcessTill();
+              }}
+              placeholder={currentCsvIndex !== undefined ? `> ${currentCsvIndex}` : 'CSV index'}
+              disabled={isProcessingTill || isPlaying}
+              className={`w-20 px-2 py-1 text-xs font-mono bg-app-bg border rounded focus:outline-none focus:ring-1 focus:ring-trading-blue ${
+                processTillError ? 'border-trading-bear' : 'border-app-border'
+              } disabled:opacity-50`}
+            />
+            <button
+              onClick={handleProcessTill}
+              disabled={isProcessingTill || isPlaying || !processTillInput.trim()}
+              className="p-1.5 rounded border border-app-border bg-app-bg text-app-muted hover:text-white hover:bg-app-card transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={isPlaying ? "Stop playback first" : "Process till target index"}
+              aria-label="Process till target"
+            >
+              {isProcessingTill ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Forward size={14} />
+              )}
+            </button>
+            {processTillError && (
+              <span className="text-xs text-trading-bear">{processTillError}</span>
+            )}
+          </div>
         )}
       </div>
 

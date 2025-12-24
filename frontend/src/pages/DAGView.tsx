@@ -11,18 +11,23 @@ import { PendingOriginsOverlay } from '../components/PendingOriginsOverlay';
 import { HierarchyModeOverlay } from '../components/HierarchyModeOverlay';
 import { EventMarkersOverlay } from '../components/EventMarkersOverlay';
 import { EventInspectionPopup } from '../components/EventInspectionPopup';
+import { SettingsPanel } from '../components/SettingsPanel';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { useHierarchyMode } from '../hooks/useHierarchyMode';
 import { useFollowLeg, LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
 import { useChartPreferences } from '../hooks/useChartPreferences';
+import { useSessionSettings } from '../hooks/useSessionSettings';
 import {
   fetchBars,
   fetchSession,
   fetchCalibration,
   fetchDagState,
   fetchDetectionConfig,
+  restartSession,
+  advanceReplay,
   DagStateResponse,
   DagLeg,
+  ReplayBarData,
 } from '../lib/api';
 import { LINGER_DURATION_MS } from '../constants';
 import {
@@ -113,6 +118,13 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     setLingerEnabled: saveLingerEnabled,
     setDagLingerEvents: saveLingerEvents,
   } = useChartPreferences();
+
+  // Session settings (persisted to localStorage) - #326
+  const sessionSettings = useSessionSettings();
+
+  // Settings panel state (#327)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [dataFileName, setDataFileName] = useState<string>('');
 
   // Handle panel resize
   const handlePanelResize = useCallback((deltaY: number) => {
@@ -593,6 +605,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     }
   }, [handleAttachItem]);
 
+  // Process Till state (#328)
+  const [isProcessingTill, setIsProcessingTill] = useState(false);
+
   // Handler to start playback
   const handleStartPlayback = useCallback(() => {
     if (calibrationPhase === CalibrationPhase.CALIBRATED) {
@@ -600,6 +615,83 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
       forwardPlayback.play();
     }
   }, [calibrationPhase, forwardPlayback]);
+
+  // Handle Process Till (#328) - advance to a specific CSV index
+  const handleProcessTill = useCallback(async (targetCsvIndex: number) => {
+    if (calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.playbackState === PlaybackState.PLAYING) {
+      throw new Error('Stop playback first');
+    }
+
+    const currentCsv = forwardPlayback.csvIndex;
+    if (targetCsvIndex <= currentCsv) {
+      throw new Error('Target must be greater than current position');
+    }
+
+    // Calculate how many bars to advance
+    const advanceBy = targetCsvIndex - currentCsv;
+    if (advanceBy <= 0) {
+      return;
+    }
+
+    setIsProcessingTill(true);
+    try {
+      // Start playing if not already
+      if (calibrationPhase === CalibrationPhase.CALIBRATED) {
+        setCalibrationPhase(CalibrationPhase.PLAYING);
+      }
+
+      // Use the advanceReplay API to process multiple bars at once
+      const response = await advanceReplay(
+        0,  // calibrationBarCount (0 for DAG mode)
+        currentPlaybackPosition,
+        advanceBy,
+        [chart1Aggregation, chart2Aggregation],  // Request aggregated bars
+        true  // Include DAG state
+      );
+
+      // Update state with the response
+      if (response.new_bars && response.new_bars.length > 0) {
+        const newBars = response.new_bars.map((bar: ReplayBarData) => ({
+          index: bar.index,
+          timestamp: bar.timestamp,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          volume: 0,
+          source_start_index: bar.index,
+          source_end_index: bar.index,
+        }));
+        setSourceBars(prev => [...prev, ...newBars]);
+      }
+
+      // Update aggregated bars
+      if (response.aggregated_bars) {
+        handleAggregatedBarsChange(response.aggregated_bars);
+      }
+
+      // Update DAG state
+      if (response.dag_state) {
+        handleDagStateChange(response.dag_state);
+      }
+
+      // Sync charts to new position
+      if (response.current_bar_index >= 0) {
+        syncChartsToPositionRef.current(response.current_bar_index);
+      }
+    } finally {
+      setIsProcessingTill(false);
+    }
+  }, [
+    calibrationPhase,
+    forwardPlayback.playbackState,
+    forwardPlayback.csvIndex,
+    currentPlaybackPosition,
+    chart1Aggregation,
+    chart2Aggregation,
+    handleAggregatedBarsChange,
+    handleDagStateChange,
+  ]);
 
   // Handler to step forward one bar (without starting continuous playback)
   const handleStepForward = useCallback(() => {
@@ -688,21 +780,77 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     };
   }, [dagState]);
 
-  // Load initial data
-  // DAG mode: Initialize with bar_count=0 for incremental build from bar 0 (#179)
+  // Load initial data with startup flow (#329)
+  // 1. Check if backend has an active session
+  // 2. If not, restore from localStorage or show file picker
+  // 3. DAG mode: Initialize with bar_count=0 for incremental build from bar 0 (#179)
   useEffect(() => {
     const loadData = async () => {
+      // Wait for session settings to load from localStorage
+      if (!sessionSettings.isLoaded) return;
+
       setIsLoading(true);
       setError(null);
       try {
-        // Load session info
+        // Check backend session status
         const session = await fetchSession();
+
+        // If backend not initialized, we need to start a session
+        if (!session.initialized) {
+          // Try to restore from saved session settings
+          if (sessionSettings.hasSavedSession && sessionSettings.dataFile) {
+            try {
+              await restartSession({
+                data_file: sessionSettings.dataFile,
+                start_date: sessionSettings.startDate || undefined,
+              });
+              // Reload session info after restart
+              const newSession = await fetchSession();
+              if (!newSession.initialized) {
+                throw new Error('Failed to initialize session after restart');
+              }
+              // Continue with the new session
+              return loadSessionData(newSession);
+            } catch (restartErr) {
+              console.warn('Failed to restore saved session:', restartErr);
+              // Clear invalid saved session and show file picker
+              sessionSettings.clearSession();
+              setIsSettingsOpen(true);
+              setIsLoading(false);
+              return;
+            }
+          } else {
+            // No saved session - show file picker for first-time setup
+            setIsSettingsOpen(true);
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // Backend is initialized, load the session data
+        await loadSessionData(session);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+        setIsLoading(false);
+      }
+    };
+
+    // Helper to load session data once we have an initialized session
+    const loadSessionData = async (session: Awaited<ReturnType<typeof fetchSession>>) => {
+      try {
         const resolutionMinutes = parseResolutionToMinutes(session.resolution);
         setSourceResolutionMinutes(resolutionMinutes);
         setSessionInfo({
           windowOffset: session.window_offset,
           totalSourceBars: session.total_source_bars,
         });
+
+        // Extract file name from path
+        const fileName = session.data_file.split('/').pop() || session.data_file;
+        setDataFileName(fileName);
+
+        // Save successful session to localStorage
+        sessionSettings.saveSession(session.data_file, null);
 
         // Adjust chart aggregations if they're below source resolution
         const smallestValid = getSmallestValidAggregation(resolutionMinutes);
@@ -753,15 +901,13 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
           ...prev,
           totalSourceBars: source.length,
         } : { windowOffset: session.window_offset, totalSourceBars: source.length });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
         setIsLoading(false);
       }
     };
 
     loadData();
-  }, []);
+  }, [sessionSettings.isLoaded]);
 
   // Load chart bars when aggregation changes
   const loadChart1Bars = useCallback(async (scale: AggregationScale) => {
@@ -1048,6 +1194,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         }
         currentMode={currentMode}
         onModeChange={onModeChange}
+        dataFileName={dataFileName}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Main Layout */}
@@ -1261,6 +1409,10 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
               onDismissLinger={forwardPlayback.dismissLinger}
               lingerEnabled={lingerEnabled}
               onToggleLinger={() => setLingerEnabled(prev => !prev)}
+              currentCsvIndex={forwardPlayback.csvIndex}
+              maxCsvIndex={sessionInfo ? sessionInfo.windowOffset + sessionInfo.totalSourceBars - 1 : undefined}
+              onProcessTill={handleProcessTill}
+              isProcessingTill={isProcessingTill}
             />
           </div>
 
@@ -1312,6 +1464,15 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             }}
           />
         )}
+
+        {/* Settings Panel (#327) */}
+        <SettingsPanel
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          currentDataFile={sessionSettings.dataFile || ''}
+          onSessionRestart={() => window.location.reload()}
+          onSaveSession={sessionSettings.saveSession}
+        />
       </div>
     </div>
   );

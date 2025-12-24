@@ -2,6 +2,62 @@ import { BarData, AggregationScale, CalibrationData, CalibrationSwing, Detection
 
 const API_BASE = '/api';
 
+// ============================================================================
+// File Discovery Types (#325)
+// ============================================================================
+
+export interface DataFileInfo {
+  path: string;
+  name: string;
+  total_bars: number;
+  resolution: string;
+  start_date: string | null;
+  end_date: string | null;
+}
+
+export async function fetchDataFiles(): Promise<DataFileInfo[]> {
+  const response = await fetch(`${API_BASE}/files`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch data files: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ============================================================================
+// Session Restart Types (#326, #327)
+// ============================================================================
+
+export interface SessionRestartRequest {
+  data_file: string;
+  start_date?: string;  // ISO date string (YYYY-MM-DD)
+}
+
+export interface SessionRestartResponse {
+  success: boolean;
+  session_id: string;
+  data_file: string;
+  resolution: string;
+  window_size: number;
+  window_offset: number;
+  total_source_bars: number;
+  start_date?: string;
+}
+
+export async function restartSession(request: SessionRestartRequest): Promise<SessionRestartResponse> {
+  const response = await fetch(`${API_BASE}/session/restart`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to restart session: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 // App configuration (mode, etc.)
 export interface AppConfig {
   mode: 'calibration' | 'dag';
@@ -27,6 +83,7 @@ export interface SessionInfo {
   created_at: string;
   annotation_count: number;
   completed_scales: string[];
+  initialized?: boolean;  // Whether backend has an active session
 }
 
 export async function fetchSession(): Promise<SessionInfo> {

@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 9
 
 **Last Review:** 2025-12-24
 
@@ -9,6 +9,15 @@
 ## Pending Changes
 
 - #322 — Min counter-trend ratio filter for leg quality pruning
+- #323 — Delete Replay.tsx and ~4,000 lines of dead code
+- #324 — In-App Settings Epic (sub-issues #325-#331):
+  - #325 — File Discovery API
+  - #326 — Session Persistence (localStorage)
+  - #327 — Settings Panel UI
+  - #328 — Process Till Feature
+  - #329 — Startup Flow Without CLI Args
+  - #330 — CLI Cleanup
+  - #331 — Documentation Update
 
 ---
 

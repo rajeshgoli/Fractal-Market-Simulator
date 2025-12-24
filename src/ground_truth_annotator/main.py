@@ -1,8 +1,15 @@
 """
-Main entry point for the Replay View Server.
+Main entry point for the Market Structure Analyzer Server.
 
 Usage:
-    python -m src.ground_truth_annotator.main --data test.csv --resolution 1m --window 50000
+    # Start without data (frontend prompts for file selection):
+    python -m src.ground_truth_annotator.main
+
+    # Start with specific data file:
+    python -m src.ground_truth_annotator.main --data test_data/es-5m.csv
+
+    # Start at specific date:
+    python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --start-date 2023-01-15
 """
 
 import argparse
@@ -149,12 +156,13 @@ def find_offset_for_date(data_file: str, start_date: datetime) -> int:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Replay View Server - Swing detection with HierarchicalDetector"
+        description="Market Structure Analyzer - View market structure as it forms"
     )
     parser.add_argument(
         "--data",
-        required=True,
-        help="Path to OHLC CSV data file"
+        required=False,
+        default=None,
+        help="Path to OHLC CSV data file. If not provided, frontend prompts for selection."
     )
     parser.add_argument(
         "--port",
@@ -170,9 +178,9 @@ def main():
     parser.add_argument(
         "--resolution",
         type=str,
-        default="1m",
+        default="5m",
         choices=SUPPORTED_RESOLUTIONS,
-        help=f"Source data resolution (default: 1m). Supported: {', '.join(SUPPORTED_RESOLUTIONS)}"
+        help=f"Source data resolution (default: 5m). Supported: {', '.join(SUPPORTED_RESOLUTIONS)}"
     )
     parser.add_argument(
         "--window",
@@ -201,14 +209,7 @@ def main():
         "--start-date",
         type=str,
         default=None,
-        help="Filter data to start at this date. Formats: 2020-Jan-01, 2020-01-01. Overrides --offset."
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        choices=["calibration", "dag"],
-        default="calibration",
-        help="Visualization mode: 'calibration' (default) for swing calibration, 'dag' for DAG build visualization"
+        help="Start at this date. Formats: 2020-Jan-01, 2020-01-01. Overrides --offset."
     )
 
     args = parser.parse_args()
@@ -222,70 +223,80 @@ def main():
 
     # Print startup info
     print(f"\n{'='*60}")
-    mode_label = "DAG Build" if args.mode == "dag" else "Calibration"
-    print(f"Replay View Server — {mode_label} Mode")
+    print("Market Structure Analyzer")
     print(f"{'='*60}")
 
-    offset = 0
-    start_date_used = None
-    try:
-        metrics = get_file_metrics(args.data)
-
-        if args.start_date:
-            try:
-                start_date_used = parse_start_date(args.start_date)
-                offset = find_offset_for_date(args.data, start_date_used)
-            except ValueError as e:
-                logger.error(str(e))
-                sys.exit(1)
-        else:
-            offset = parse_offset(args.offset, metrics.total_bars, args.window)
-
-        print(f"Data file:   {args.data}")
-        print(f"Resolution:  {args.resolution}")
-        print(f"Total bars:  {format_number(metrics.total_bars)}")
-        print(f"Window:      {format_number(args.window)} bars")
-        if start_date_used:
-            print(f"Start date:  {start_date_used.strftime('%Y-%m-%d')}")
-            print(f"Offset:      {format_number(offset)} (from start date)")
-        else:
-            print(f"Offset:      {format_number(offset)} {'(random)' if args.offset.lower() == 'random' else ''}")
-        print(f"Target bars: {args.target_bars}")
-        if metrics.first_timestamp and metrics.last_timestamp:
-            print(f"Date range:  {metrics.first_timestamp.strftime('%Y-%m-%d')} to {metrics.last_timestamp.strftime('%Y-%m-%d')}")
+    # If no data file provided, start server without initialization
+    # Frontend will prompt user to select a file
+    if args.data is None:
+        print("No data file specified.")
+        print("The app will prompt for file selection in the browser.")
         print()
-    except FileNotFoundError:
-        logger.error(f"Data file not found: {args.data}")
-        sys.exit(1)
-    except (ValueError, OSError, pd.errors.ParserError) as e:
-        logger.error(f"Failed to read file metrics: {e}")
-        sys.exit(1)
+        print(f"Server:         http://{args.host}:{args.port}/replay")
+        print(f"{'='*60}")
+        print("\nOpen the URL above in your browser.\n")
+    else:
+        # Initialize with provided data file
+        offset = 0
+        start_date_used = None
+        try:
+            metrics = get_file_metrics(args.data)
 
-    # Initialize the application
-    start_time = time.time()
-    try:
-        init_app(
-            data_file=args.data,
-            resolution_minutes=resolution_minutes,
-            window_size=args.window,
-            target_bars=args.target_bars,
-            window_offset=offset,
-            mode=args.mode
-        )
-        init_time = time.time() - start_time
-    except FileNotFoundError as e:
-        logger.error(f"Data file not found: {e}")
-        sys.exit(1)
-    except (ValueError, OSError, RuntimeError, TypeError) as e:
-        logger.error(f"Failed to initialize: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+            if args.start_date:
+                try:
+                    start_date_used = parse_start_date(args.start_date)
+                    offset = find_offset_for_date(args.data, start_date_used)
+                except ValueError as e:
+                    logger.error(str(e))
+                    sys.exit(1)
+            else:
+                offset = parse_offset(args.offset, metrics.total_bars, args.window)
 
-    print(f"Initialization: {init_time:.2f}s")
-    print(f"Server:         http://{args.host}:{args.port}/replay")
-    print(f"{'='*60}")
-    print("\nOpen the URL above in your browser to start replay.\n")
+            print(f"Data file:   {args.data}")
+            print(f"Resolution:  {args.resolution}")
+            print(f"Total bars:  {format_number(metrics.total_bars)}")
+            print(f"Window:      {format_number(args.window)} bars")
+            if start_date_used:
+                print(f"Start date:  {start_date_used.strftime('%Y-%m-%d')}")
+                print(f"Offset:      {format_number(offset)} (from start date)")
+            else:
+                print(f"Offset:      {format_number(offset)} {'(random)' if args.offset.lower() == 'random' else ''}")
+            print(f"Target bars: {args.target_bars}")
+            if metrics.first_timestamp and metrics.last_timestamp:
+                print(f"Date range:  {metrics.first_timestamp.strftime('%Y-%m-%d')} to {metrics.last_timestamp.strftime('%Y-%m-%d')}")
+            print()
+        except FileNotFoundError:
+            logger.error(f"Data file not found: {args.data}")
+            sys.exit(1)
+        except (ValueError, OSError, pd.errors.ParserError) as e:
+            logger.error(f"Failed to read file metrics: {e}")
+            sys.exit(1)
+
+        # Initialize the application
+        start_time = time.time()
+        try:
+            init_app(
+                data_file=args.data,
+                resolution_minutes=resolution_minutes,
+                window_size=args.window,
+                target_bars=args.target_bars,
+                window_offset=offset,
+                mode="dag"  # Always DAG mode
+            )
+            init_time = time.time() - start_time
+        except FileNotFoundError as e:
+            logger.error(f"Data file not found: {e}")
+            sys.exit(1)
+        except (ValueError, OSError, RuntimeError, TypeError) as e:
+            logger.error(f"Failed to initialize: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+        print(f"Initialization: {init_time:.2f}s")
+        print(f"Server:         http://{args.host}:{args.port}/replay")
+        print(f"{'='*60}")
+        print("\nOpen the URL above in your browser.\n")
 
     # Run the server
     uvicorn.run(

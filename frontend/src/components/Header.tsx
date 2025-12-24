@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Monitor, Clock, ChevronDown, GitBranch } from 'lucide-react';
+import { Menu, Monitor, Clock, ChevronDown, GitBranch, Settings } from 'lucide-react';
 
 // ViewMode kept for backward compatibility (DAGView is now the sole view)
 type ViewMode = 'dag';
@@ -11,6 +11,8 @@ interface HeaderProps {
   calibrationStatus?: 'calibrating' | 'calibrated' | 'playing';
   currentMode?: ViewMode;
   onModeChange?: (mode: ViewMode) => void;
+  dataFileName?: string;
+  onOpenSettings?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +22,8 @@ export const Header: React.FC<HeaderProps> = ({
   calibrationStatus,
   currentMode = 'dag',
   onModeChange,
+  dataFileName,
+  onOpenSettings,
 }) => {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
@@ -152,7 +156,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right Side Info */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4">
         {/* Current Time Position */}
         <div className="flex items-center gap-2 text-sm font-mono tabular-nums text-app-text bg-app-card px-3 py-1 rounded border border-app-border/50">
           <Clock size={14} className="text-app-muted" />
@@ -161,12 +165,31 @@ export const Header: React.FC<HeaderProps> = ({
           <span>{time}</span>
         </div>
 
-        {/* Source Bar Info */}
-        <div className="hidden md:flex items-center gap-2 text-xs">
+        {/* Source Bar Info with Settings Button */}
+        <div className="hidden md:flex items-center gap-3 text-xs">
+          {dataFileName && (
+            <>
+              <span className="text-app-muted">File:</span>
+              <span className="font-mono text-app-text">{dataFileName}</span>
+              <span className="text-app-border">|</span>
+            </>
+          )}
           <span className="text-app-muted">Source:</span>
           <span className="font-mono tabular-nums text-app-text">
             {sourceBarCount.toLocaleString()} bars
           </span>
+
+          {/* Settings Button */}
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className="ml-2 p-1.5 text-app-muted hover:text-white hover:bg-app-card rounded transition-colors"
+              aria-label="Open settings"
+              title="Data source settings"
+            >
+              <Settings size={14} />
+            </button>
+          )}
         </div>
       </div>
     </header>
