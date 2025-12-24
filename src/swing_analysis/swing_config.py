@@ -65,6 +65,10 @@ class SwingConfig:
         origin_time_prune_threshold: Threshold for origin-proximity consolidation by time (#294).
             Legs formed close together in time (relative to older leg's age) are candidates
             for consolidation. Default 0.0 (disabled). Set > 0 to enable (e.g., 0.10 = 10%).
+        proximity_prune_strategy: Strategy for which leg survives proximity pruning (#319).
+            'oldest': Keep oldest leg in each cluster (legacy geometric approach).
+            'counter_trend': Keep leg with highest counter-trend range (market-structure
+            aware, uses segment_deepest_price from parent). Default 'counter_trend'.
         stale_extension_threshold: Multiplier for removing invalidated child legs (#203, #261).
             Invalidated legs WITH A PARENT are pruned when price moves N x their range
             beyond origin. Root legs (no parent) are never pruned, preserving the anchor
@@ -86,6 +90,10 @@ class SwingConfig:
     bear: DirectionConfig = field(default_factory=DirectionConfig)
     origin_range_prune_threshold: float = 0.0  # Disabled by default; set > 0 to enable
     origin_time_prune_threshold: float = 0.0  # Disabled by default; set > 0 to enable
+    # Proximity pruning strategy (#319): 'oldest' (legacy) or 'counter_trend' (default)
+    # 'oldest': Keep oldest leg in each cluster (purely geometric)
+    # 'counter_trend': Keep leg with highest counter-trend range (market-structure aware)
+    proximity_prune_strategy: str = 'counter_trend'
     stale_extension_threshold: float = 3.0
     emit_level_crosses: bool = False
     # Pruning algorithm toggles (#288)
@@ -116,6 +124,7 @@ class SwingConfig:
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
+            proximity_prune_strategy=self.proximity_prune_strategy,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -135,6 +144,7 @@ class SwingConfig:
             bear=DirectionConfig(**bear_dict),
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
+            proximity_prune_strategy=self.proximity_prune_strategy,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -145,9 +155,10 @@ class SwingConfig:
         self,
         origin_range_prune_threshold: float = None,
         origin_time_prune_threshold: float = None,
+        proximity_prune_strategy: str = None,
     ) -> "SwingConfig":
         """
-        Create a new config with modified origin-proximity prune thresholds (#294).
+        Create a new config with modified origin-proximity prune thresholds (#294, #319).
 
         Since SwingConfig is frozen, this creates a new instance.
 
@@ -158,6 +169,9 @@ class SwingConfig:
             origin_time_prune_threshold: Time threshold for consolidation.
                 0.10 means legs formed within 10% of older leg's age are candidates.
                 0.0 disables time-based proximity pruning.
+            proximity_prune_strategy: Strategy for which leg wins in a cluster (#319).
+                'oldest': Keep oldest leg (legacy behavior).
+                'counter_trend': Keep leg with highest counter-trend range (default).
         """
         return SwingConfig(
             bull=self.bull,
@@ -171,6 +185,11 @@ class SwingConfig:
                 origin_time_prune_threshold
                 if origin_time_prune_threshold is not None
                 else self.origin_time_prune_threshold
+            ),
+            proximity_prune_strategy=(
+                proximity_prune_strategy
+                if proximity_prune_strategy is not None
+                else self.proximity_prune_strategy
             ),
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
@@ -194,6 +213,7 @@ class SwingConfig:
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
+            proximity_prune_strategy=self.proximity_prune_strategy,
             stale_extension_threshold=stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -216,6 +236,7 @@ class SwingConfig:
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
+            proximity_prune_strategy=self.proximity_prune_strategy,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -242,6 +263,7 @@ class SwingConfig:
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
+            proximity_prune_strategy=self.proximity_prune_strategy,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,

@@ -513,9 +513,9 @@ The invalidation correctly signaled structure breakdown.
 
 Multiple legs can exist simultaneously. Pruning removes redundant or dominated legs.
 
-### 1. Origin-Proximity Pruning (#294)
+### 1. Origin-Proximity Pruning (#294, #319)
 
-**Rule:** Legs close together in origin (time, range) space are consolidated. Newer legs are pruned when BOTH conditions are true:
+**Rule:** Legs close together in origin (time, range) space are consolidated. Legs are grouped into clusters where BOTH conditions are true:
 - **Time ratio** < threshold: Legs formed around the same time
 - **Range ratio** < threshold: Legs have similar ranges
 
@@ -524,7 +524,7 @@ Formula:
   time_ratio = (bars_since_older_origin - bars_since_newer_origin) / bars_since_older_origin
   range_ratio = |older_range - newer_range| / max(older_range, newer_range)
 
-  Prune newer leg if: time_ratio < time_threshold AND range_ratio < range_threshold
+  Legs are in proximity if: time_ratio < time_threshold AND range_ratio < range_threshold
 
 Example at bar 100:
   Leg A: origin_index=0, range=10 (older, larger)
@@ -534,14 +534,36 @@ Example at bar 100:
   range_ratio = |10-9| / max(10,9) = 0.10
 
   With thresholds: time=0.10, range=0.20
-  0.05 < 0.10 ✓ AND 0.10 < 0.20 ✓ → Leg B pruned
-
-Rationale:
-  - Legs formed close together in time = redundant structure (noise)
-  - Legs formed far apart in time = distinct structures (keep both)
-  - Similar ranges = same structural significance
-  - Different ranges = different structural significance
+  0.05 < 0.10 ✓ AND 0.10 < 0.20 ✓ → Legs A and B are in same cluster
 ```
+
+**Survivor Selection Strategy (#319):**
+
+Two strategies determine which leg survives from each cluster:
+
+| Strategy | Survivor Rule | Use Case |
+|----------|---------------|----------|
+| `oldest` | Oldest leg (by origin_index) wins | Simple, deterministic, O(N log N) |
+| `counter_trend` (default) | Highest counter-trend range wins | Prioritizes structural significance |
+
+**Counter-Trend Scoring:**
+When `counter_trend` strategy is active, each leg is scored by how far price traveled against the trend to reach its origin:
+
+```
+For a leg with parent:
+  counter_range = |leg.origin_price - parent.segment_deepest_price|
+
+For a leg without parent (root leg):
+  score = leg.range (fallback to simple range)
+
+Tie-breaker: If scores are equal, oldest leg wins.
+```
+
+**Rationale:**
+- Legs formed close together in time = redundant structure (noise)
+- Legs formed far apart in time = distinct structures (keep both)
+- Counter-trend scoring favors legs that required significant market reversal to form
+- These are more likely to represent meaningful structural levels
 
 **Defensive Check:** If a newer leg is longer than an older leg, an exception is raised. This should be impossible per design (breach/engulfing mechanics prevent it). If it happens, there's a bug upstream.
 
@@ -862,6 +884,7 @@ All thresholds are configurable. Defaults shown:
 | `engulfed_breach_threshold` | 0.0 | Combined breach % for engulfed deletion (#236) |
 | `origin_range_prune_threshold` | 0.0 | Range similarity % for origin-proximity consolidation (#294) |
 | `origin_time_prune_threshold` | 0.0 | Time proximity % for origin-proximity consolidation (#294) |
+| `proximity_prune_strategy` | 'counter_trend' | Strategy for selecting survivor: 'oldest' or 'counter_trend' (#319) |
 | `stale_extension_threshold` | 3.0 | Prune invalidated child legs at 3x range (root legs preserved) |
 
 Bull and bear can have different configs for asymmetric markets.

@@ -95,31 +95,25 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Apply origin-proximity based consolidation within pivot groups (#294, #298).
+        Apply origin-proximity based consolidation within pivot groups (#294, #298, #319).
 
-        **Complexity:** O(N log N) via time-bounded binary search (#306).
+        Two strategies are available (configured via proximity_prune_strategy):
 
-        The time_ratio formula bounds which older legs need checking:
-            older_idx > (newer_idx - threshold * current_bar) / (1 - threshold)
-        Binary search finds this bound in O(log N), reducing overall complexity
-        from O(N^2) to O(N log N).
+        **'oldest' (legacy):** O(N log N) via time-bounded binary search.
+        Keeps the oldest leg in each proximity cluster.
+
+        **'counter_trend' (default):** O(N^2) for cluster building.
+        Keeps the leg with highest counter-trend range — the level where price
+        traveled furthest against the trend to establish the origin.
 
         **Step 1: Group by pivot** (pivot_price, pivot_index)
         Legs with different pivots are independent - a newer leg can validly have
         a larger range if it found a better pivot.
 
-        **Step 2: Within each pivot group, prune newer leg if BOTH conditions are true:**
-        - time_ratio < origin_time_prune_threshold: Legs formed around same time
-        - range_ratio < origin_range_prune_threshold: Legs have similar ranges
-
-        Where:
-        - time_ratio = (bars_since_older_origin - bars_since_newer_origin) / bars_since_older_origin
-        - range_ratio = |older_range - newer_range| / max(older_range, newer_range)
-
-        Within a pivot group, newer leg should not be longer than older leg because
-        all legs in the group share the same pivot, so range = |pivot - origin|.
-
-        Active swing immunity: Legs with active swings are never pruned.
+        **Step 2: Within each pivot group:**
+        - Build proximity clusters (legs within time/range thresholds)
+        - Apply strategy to select winner per cluster
+        - Prune non-winners
 
         Args:
             state: Current detector state (mutated)
@@ -158,92 +152,26 @@ class LegPruner:
             key = (leg.pivot_price, leg.pivot_index)
             pivot_groups[key].append(leg)
 
-        # Step 2: Within each pivot group, apply proximity pruning
+        # Choose strategy
+        strategy = self.config.proximity_prune_strategy
+
+        # Step 2: Process each pivot group
         for pivot_key, group_legs in pivot_groups.items():
             if len(group_legs) <= 1:
                 continue  # Single leg in group, nothing to prune
 
-            # Sort by origin_index ascending (older legs first)
-            group_legs.sort(key=lambda l: l.origin_index)
-
-            # Track survivors within this pivot group
-            # Use parallel arrays for O(log N) binary search (#306)
-            survivors: List[Leg] = []
-            survivor_indices: List[int] = []  # origin_index values, kept sorted
-
-            for leg in group_legs:
-                # Calculate lower bound for older legs that could satisfy time proximity
-                # From time_ratio < threshold:
-                #   (newer_idx - older_idx) / (current_bar - older_idx) < threshold
-                # Rearranging: older_idx > (newer_idx - threshold * current_bar) / (1 - threshold)
-                if time_threshold < Decimal("1"):
-                    min_older_idx = int(
-                        (leg.origin_index - float(time_threshold) * current_bar)
-                        / (1 - float(time_threshold))
-                    )
-                else:
-                    min_older_idx = -1  # No bound, check all (edge case)
-
-                # Binary search for first survivor with origin_index >= min_older_idx
-                start_pos = bisect.bisect_left(survivor_indices, min_older_idx)
-
-                # Only check survivors in bounded window [start_pos:]
-                should_prune = False
-                prune_by_leg: Optional[Leg] = None
-                prune_explanation = ""
-
-                for i in range(start_pos, len(survivors)):
-                    older = survivors[i]
-
-                    # Calculate bars since origin for both legs
-                    bars_since_older = current_bar - older.origin_index
-                    bars_since_newer = current_bar - leg.origin_index
-
-                    # Avoid division by zero
-                    if bars_since_older <= 0:
-                        continue
-
-                    # Time ratio: how close in time were they formed?
-                    # 0 = same time, 1 = newer is at current bar while older is distant
-                    time_ratio = Decimal(bars_since_older - bars_since_newer) / Decimal(bars_since_older)
-
-                    # Range ratio: relative difference in range
-                    max_range = max(older.range, leg.range)
-                    if max_range == 0:
-                        continue
-
-                    range_diff = abs(older.range - leg.range)
-                    range_ratio = range_diff / max_range
-
-                    # Prune if BOTH conditions are true
-                    if time_ratio < time_threshold and range_ratio < range_threshold:
-                        should_prune = True
-                        prune_by_leg = older
-                        prune_explanation = (
-                            f"Pruned by older leg {older.leg_id} (same pivot): "
-                            f"time_ratio={float(time_ratio):.3f} < {float(time_threshold):.3f}, "
-                            f"range_ratio={float(range_ratio):.3f} < {float(range_threshold):.3f}"
-                        )
-                        break
-
-                if should_prune:
-                    leg.status = 'pruned'
-                    pruned_leg_ids.add(leg.leg_id)
-                    # Track swing transfer if pruned leg has a swing
-                    if leg.swing_id:
-                        swing_transfers[leg.leg_id] = prune_by_leg
-                    events.append(LegPrunedEvent(
-                        bar_index=bar.index,
-                        timestamp=timestamp,
-                        swing_id=leg.swing_id or "",
-                        leg_id=leg.leg_id,
-                        reason="origin_proximity_prune",
-                        explanation=prune_explanation,
-                    ))
-                else:
-                    # Legs are processed in origin_index order, so append maintains sort
-                    survivors.append(leg)
-                    survivor_indices.append(leg.origin_index)
+            if strategy == 'counter_trend':
+                # Counter-trend scoring: build clusters, score by counter-trend range
+                events.extend(self._apply_counter_trend_prune(
+                    state, group_legs, range_threshold, time_threshold,
+                    current_bar, bar, timestamp, pruned_leg_ids, swing_transfers
+                ))
+            else:
+                # Legacy 'oldest' strategy
+                events.extend(self._apply_oldest_wins_prune(
+                    state, group_legs, range_threshold, time_threshold,
+                    current_bar, bar, timestamp, pruned_leg_ids, swing_transfers
+                ))
 
         # Transfer swings from pruned legs to their survivor legs
         for pruned_leg in state.active_legs:
@@ -266,6 +194,295 @@ class LegPruner:
             ]
 
         return events
+
+    def _apply_oldest_wins_prune(
+        self,
+        state: DetectorState,
+        group_legs: List[Leg],
+        range_threshold: Decimal,
+        time_threshold: Decimal,
+        current_bar: int,
+        bar: Bar,
+        timestamp: datetime,
+        pruned_leg_ids: Set[str],
+        swing_transfers: Dict[str, Leg],
+    ) -> List[LegPrunedEvent]:
+        """
+        Apply oldest-wins proximity pruning (legacy strategy).
+
+        O(N log N) via time-bounded binary search (#306).
+        """
+        events: List[LegPrunedEvent] = []
+
+        # Sort by origin_index ascending (older legs first)
+        group_legs.sort(key=lambda l: l.origin_index)
+
+        # Track survivors within this pivot group
+        # Use parallel arrays for O(log N) binary search (#306)
+        survivors: List[Leg] = []
+        survivor_indices: List[int] = []  # origin_index values, kept sorted
+
+        for leg in group_legs:
+            # Calculate lower bound for older legs that could satisfy time proximity
+            # From time_ratio < threshold:
+            #   (newer_idx - older_idx) / (current_bar - older_idx) < threshold
+            # Rearranging: older_idx > (newer_idx - threshold * current_bar) / (1 - threshold)
+            if time_threshold < Decimal("1"):
+                min_older_idx = int(
+                    (leg.origin_index - float(time_threshold) * current_bar)
+                    / (1 - float(time_threshold))
+                )
+            else:
+                min_older_idx = -1  # No bound, check all (edge case)
+
+            # Binary search for first survivor with origin_index >= min_older_idx
+            start_pos = bisect.bisect_left(survivor_indices, min_older_idx)
+
+            # Only check survivors in bounded window [start_pos:]
+            should_prune = False
+            prune_by_leg: Optional[Leg] = None
+            prune_explanation = ""
+
+            for i in range(start_pos, len(survivors)):
+                older = survivors[i]
+
+                # Calculate bars since origin for both legs
+                bars_since_older = current_bar - older.origin_index
+                bars_since_newer = current_bar - leg.origin_index
+
+                # Avoid division by zero
+                if bars_since_older <= 0:
+                    continue
+
+                # Time ratio: how close in time were they formed?
+                # 0 = same time, 1 = newer is at current bar while older is distant
+                time_ratio = Decimal(bars_since_older - bars_since_newer) / Decimal(bars_since_older)
+
+                # Range ratio: relative difference in range
+                max_range = max(older.range, leg.range)
+                if max_range == 0:
+                    continue
+
+                range_diff = abs(older.range - leg.range)
+                range_ratio = range_diff / max_range
+
+                # Prune if BOTH conditions are true
+                if time_ratio < time_threshold and range_ratio < range_threshold:
+                    should_prune = True
+                    prune_by_leg = older
+                    prune_explanation = (
+                        f"Pruned by older leg {older.leg_id} (same pivot): "
+                        f"time_ratio={float(time_ratio):.3f} < {float(time_threshold):.3f}, "
+                        f"range_ratio={float(range_ratio):.3f} < {float(range_threshold):.3f}"
+                    )
+                    break
+
+            if should_prune:
+                leg.status = 'pruned'
+                pruned_leg_ids.add(leg.leg_id)
+                # Track swing transfer if pruned leg has a swing
+                if leg.swing_id:
+                    swing_transfers[leg.leg_id] = prune_by_leg
+                events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=leg.swing_id or "",
+                    leg_id=leg.leg_id,
+                    reason="origin_proximity_prune",
+                    explanation=prune_explanation,
+                ))
+            else:
+                # Legs are processed in origin_index order, so append maintains sort
+                survivors.append(leg)
+                survivor_indices.append(leg.origin_index)
+
+        return events
+
+    def _apply_counter_trend_prune(
+        self,
+        state: DetectorState,
+        group_legs: List[Leg],
+        range_threshold: Decimal,
+        time_threshold: Decimal,
+        current_bar: int,
+        bar: Bar,
+        timestamp: datetime,
+        pruned_leg_ids: Set[str],
+        swing_transfers: Dict[str, Leg],
+    ) -> List[LegPrunedEvent]:
+        """
+        Apply counter-trend scoring proximity pruning (#319).
+
+        Builds proximity clusters and keeps the leg with highest counter-trend
+        range in each cluster — the level where price traveled furthest against
+        the trend to establish the origin.
+
+        Counter-trend range = |leg.origin_price - parent.segment_deepest_price|
+        Fallback to leg.range when parent data unavailable.
+        """
+        events: List[LegPrunedEvent] = []
+
+        # Build proximity clusters
+        clusters = self._build_proximity_clusters(
+            group_legs, range_threshold, time_threshold, current_bar
+        )
+
+        # For each cluster, keep highest counter-trend scorer
+        for cluster in clusters:
+            if len(cluster) <= 1:
+                continue
+
+            # Score each leg
+            scored = self._score_legs_by_counter_trend(cluster, state)
+
+            # Sort by score descending, then by origin_index ascending (tie-breaker)
+            scored.sort(key=lambda x: (-x[1], x[0].origin_index))
+
+            # Keep the best, prune the rest
+            best_leg, best_score = scored[0]
+
+            for leg, score in scored[1:]:
+                leg.status = 'pruned'
+                pruned_leg_ids.add(leg.leg_id)
+                # Track swing transfer if pruned leg has a swing
+                if leg.swing_id:
+                    swing_transfers[leg.leg_id] = best_leg
+                events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=leg.swing_id or "",
+                    leg_id=leg.leg_id,
+                    reason="origin_proximity_prune",
+                    explanation=(
+                        f"Cluster winner: {best_leg.leg_id} "
+                        f"(counter_trend={best_score:.2f} vs {score:.2f})"
+                    ),
+                ))
+
+        return events
+
+    def _build_proximity_clusters(
+        self,
+        legs: List[Leg],
+        range_threshold: Decimal,
+        time_threshold: Decimal,
+        current_bar: int,
+    ) -> List[List[Leg]]:
+        """
+        Group legs into proximity clusters using union-find (#319).
+
+        Two legs are in the same cluster if:
+        - time_ratio < time_threshold (formed around same time)
+        - range_ratio < range_threshold (similar ranges)
+
+        Args:
+            legs: Legs to cluster (all share same pivot)
+            range_threshold: Max relative range difference
+            time_threshold: Max relative time difference
+            current_bar: Current bar index
+
+        Returns:
+            List of clusters, each cluster is a list of legs
+        """
+        n = len(legs)
+        if n <= 1:
+            return [legs] if legs else []
+
+        # Sort by origin_index for consistent processing
+        legs = sorted(legs, key=lambda l: l.origin_index)
+
+        # Union-find structure
+        parent = list(range(n))
+
+        def find(x: int) -> int:
+            if parent[x] != x:
+                parent[x] = find(parent[x])
+            return parent[x]
+
+        def union(x: int, y: int) -> None:
+            px, py = find(x), find(y)
+            if px != py:
+                parent[px] = py
+
+        # Check all pairs for proximity
+        for i in range(n):
+            for j in range(i + 1, n):
+                leg_i, leg_j = legs[i], legs[j]
+
+                # Time ratio
+                bars_since_i = current_bar - leg_i.origin_index
+                bars_since_j = current_bar - leg_j.origin_index
+
+                if bars_since_i <= 0:
+                    continue
+
+                time_ratio = Decimal(abs(bars_since_i - bars_since_j)) / Decimal(bars_since_i)
+
+                # Range ratio
+                max_range = max(leg_i.range, leg_j.range)
+                if max_range == 0:
+                    continue
+
+                range_ratio = abs(leg_i.range - leg_j.range) / max_range
+
+                # If both conditions met, same cluster
+                if time_ratio < time_threshold and range_ratio < range_threshold:
+                    union(i, j)
+
+        # Build clusters
+        clusters_dict: Dict[int, List[Leg]] = defaultdict(list)
+        for i, leg in enumerate(legs):
+            clusters_dict[find(i)].append(leg)
+
+        return list(clusters_dict.values())
+
+    def _score_legs_by_counter_trend(
+        self,
+        cluster: List[Leg],
+        state: DetectorState,
+    ) -> List[Tuple[Leg, float]]:
+        """
+        Score each leg by counter-trend range (#319).
+
+        Counter-trend range = distance from parent's segment_deepest_price
+        to this leg's origin. Higher = more significant level (price traveled
+        further against the trend to reach it).
+
+        Fallback for legs without parent data:
+        - Use the leg's own range (bigger legs are more significant)
+
+        Args:
+            cluster: Legs to score
+            state: Detector state for parent lookup
+
+        Returns:
+            List of (leg, score) tuples
+        """
+        scored: List[Tuple[Leg, float]] = []
+
+        # Build parent lookup
+        leg_by_id = {l.leg_id: l for l in state.active_legs}
+
+        for leg in cluster:
+            score = 0.0
+
+            if leg.parent_leg_id and leg.parent_leg_id in leg_by_id:
+                parent = leg_by_id[leg.parent_leg_id]
+
+                if parent.segment_deepest_price is not None:
+                    # Counter-trend range: how far price moved to reach this origin
+                    counter_range = abs(float(leg.origin_price) - float(parent.segment_deepest_price))
+                    score = counter_range
+                else:
+                    # Parent exists but no segment data - use leg's own range
+                    score = float(leg.range)
+            else:
+                # No parent (root leg) - use leg's own range as fallback
+                score = float(leg.range)
+
+            scored.append((leg, score))
+
+        return scored
 
     def prune_engulfed_legs(
         self,

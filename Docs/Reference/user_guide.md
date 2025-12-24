@@ -671,6 +671,7 @@ The Detection Config Panel allows real-time adjustment of swing detection thresh
 | Global | Stale Extension | 3.0 | 1.0-5.0 | Extension multiple for stale pruning |
 | Global | Origin Range % | 0.0 | 0.0-0.5 | Range similarity threshold for origin-proximity pruning (#294) |
 | Global | Origin Time % | 0.0 | 0.0-0.5 | Time proximity threshold for origin-proximity pruning (#294) |
+| Global | Proximity Strategy | counter_trend | oldest/counter_trend | Strategy for selecting survivor in proximity pruning (#319) |
 
 **Pruning Algorithm Toggles:**
 

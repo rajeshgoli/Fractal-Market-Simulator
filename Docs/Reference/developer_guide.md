@@ -382,23 +382,32 @@ During strong trends, the DAG creates many parallel legs with different origins 
 2. For each group: keep ONLY the leg with the largest range
 3. Emit `LegPrunedEvent` with `reason="turn_prune"` for discarded legs
 
-**Origin-proximity consolidation (#294, #298)**
+**Origin-proximity consolidation (#294, #298, #319)**
 
 After turn pruning, legs close together in origin (time, range) space are consolidated within pivot groups.
 
-Algorithm:
+**Two strategies available** (configured via `SwingConfig.proximity_prune_strategy`):
+
+| Strategy | Description | Complexity |
+|----------|-------------|------------|
+| `'oldest'` | Keep oldest leg in each cluster (legacy, purely geometric) | O(N log N) |
+| `'counter_trend'` | Keep leg with highest counter-trend range (default, market-structure aware) | O(N²) |
+
+**Counter-trend scoring (#319):** Uses `parent.segment_deepest_price` to compute how far price traveled against the trend to reach each origin. Higher counter-trend range = more significant structural level (price worked harder to establish it). Fallback to leg's own range when parent data unavailable.
+
+Algorithm (both strategies):
 1. **Group by pivot** `(pivot_price, pivot_index)` — legs with different pivots are independent
-2. Within each pivot group, sort remaining legs by origin_index ascending (older legs first)
-3. First leg (oldest) becomes a survivor
-4. For each remaining leg: compare against all older survivors in the same pivot group
-   - Calculate time_ratio = (bars_since_older - bars_since_newer) / bars_since_older
-   - Calculate range_ratio = |older_range - newer_range| / max(older_range, newer_range)
-5. Prune newer leg if BOTH conditions are true:
-   - time_ratio < `origin_time_prune_threshold`
-   - range_ratio < `origin_range_prune_threshold`
-6. Thresholds controlled by `SwingConfig.origin_range_prune_threshold` (default: 0.0 = disabled)
-   and `SwingConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
-7. Emit `LegPrunedEvent` with `reason="origin_proximity_prune"` for discarded legs
+2. **Build proximity clusters** — legs within time/range thresholds using union-find
+3. **Apply strategy** to select winner per cluster:
+   - `'oldest'`: Keep oldest leg (O(N log N) via binary search)
+   - `'counter_trend'`: Keep highest counter-trend scorer (tie-breaker: oldest)
+4. Prune non-winners
+5. Emit `LegPrunedEvent` with `reason="origin_proximity_prune"` for discarded legs
+
+Configuration:
+- `SwingConfig.origin_range_prune_threshold` (default: 0.0 = disabled)
+- `SwingConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
+- `SwingConfig.proximity_prune_strategy` (default: `'counter_trend'`)
 
 **Why pivot grouping is required:** Legs with different pivots can validly have newer legs with larger ranges (e.g., a leg that found a better origin AND a later pivot). Cross-pivot comparisons would incorrectly flag this as invalid.
 

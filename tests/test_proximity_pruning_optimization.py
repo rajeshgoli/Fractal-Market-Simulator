@@ -254,8 +254,13 @@ class TestPerformanceScaling:
 
         O(N^2) would have times[1000] / times[100] ~= 100
         O(N log N) would have times[1000] / times[100] ~= 15
+
+        Note: This test uses the 'oldest' strategy which is O(N log N).
+        The 'counter_trend' strategy (#319) uses O(N^2) for cluster building,
+        which is acceptable since N (legs per pivot group) is typically small.
         """
-        config = SwingConfig.default().with_origin_prune(0.10, 0.10)
+        # Use 'oldest' strategy for O(N log N) optimization test
+        config = SwingConfig.default().with_origin_prune(0.10, 0.10, 'oldest')
         pruner = LegPruner(config)
 
         times = {}
