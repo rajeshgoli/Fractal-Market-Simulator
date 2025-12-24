@@ -27,6 +27,8 @@ interface DAGStatePanelProps {
   followedLegs?: FollowedLeg[];
   onUnfollowLeg?: (legId: string) => void;
   onFollowedLegClick?: (legId: string) => void;
+  // Recent event click support
+  onEventClick?: (event: LegEvent, clickEvent: React.MouseEvent) => void;
 }
 
 // Format price for display
@@ -190,6 +192,7 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
   followedLegs = [],
   onUnfollowLeg,
   onFollowedLegClick,
+  onEventClick,
 }) => {
   // Expansion state for each section
   const [bullLegsLimit, setBullLegsLimit] = useState(6);
@@ -386,7 +389,10 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
               recentLegEvents.slice(0, 10).map((event, idx) => (
                 <div
                   key={`${event.leg_id}-${idx}`}
-                  className="text-xs p-1.5 rounded bg-app-card/30 border border-app-border/30"
+                  className={`text-xs p-1.5 rounded bg-app-card/30 border border-app-border/30 transition-all duration-150 ${
+                    onEventClick ? 'cursor-pointer hover:border-trading-blue/50 hover:bg-app-card/50' : ''
+                  }`}
+                  onClick={(e) => onEventClick?.(event, e)}
                 >
                   <div className="flex items-center gap-2 mb-0.5">
                     <EventTypeBadge type={event.type} />

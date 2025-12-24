@@ -144,6 +144,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     position: { x: number; y: number };
   } | null>(null);
 
+  // Highlighted event marker (shown when clicking Recent Events panel)
+  const [highlightedEvent, setHighlightedEvent] = useState<LifecycleEventWithLegInfo | null>(null);
+
   // Detection config state (#288)
   const [detectionConfig, setDetectionConfig] = useState<DetectionConfig>(DEFAULT_DETECTION_CONFIG);
 
@@ -224,6 +227,51 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
       handleAttachItem({ type: 'leg', data: leg });
     }
   }, [dagState, handleAttachItem]);
+
+  // Handle recent event click - show popup and highlight leg (no chart scrolling)
+  const handleRecentEventClick = useCallback((event: LegEvent, clickEvent: React.MouseEvent) => {
+    // Capture position before any async operations
+    const popupPosition = { x: clickEvent.clientX, y: clickEvent.clientY - 100 };
+
+    // Convert LegEvent to LifecycleEventWithLegInfo for the popup
+    const eventTypeMap: Record<LegEvent['type'], LifecycleEventWithLegInfo['event_type']> = {
+      'LEG_CREATED': 'formed',
+      'LEG_PRUNED': 'pruned',
+      'LEG_INVALIDATED': 'invalidated',
+    };
+
+    const lifecycleEvent: LifecycleEventWithLegInfo = {
+      leg_id: event.leg_id,
+      event_type: eventTypeMap[event.type],
+      bar_index: event.bar_index,
+      csv_index: (sessionInfo?.windowOffset ?? 0) + event.bar_index,
+      timestamp: new Date().toISOString(),
+      explanation: event.reason || `${event.type} at bar ${event.bar_index}`,
+      legColor: event.direction === 'bull' ? '#22c55e' : '#ef4444',
+      legDirection: event.direction,
+    };
+
+    // Defer all state updates to next frame to avoid chart disposal race
+    requestAnimationFrame(() => {
+      // If the leg still exists, highlight and focus it
+      const leg = dagState?.active_legs.find(l => l.leg_id === event.leg_id);
+      if (leg) {
+        setFocusedLegId(event.leg_id);
+        setHighlightedDagItem({ type: 'leg', id: event.leg_id, direction: leg.direction });
+      } else {
+        setFocusedLegId(null);
+        setHighlightedDagItem(null);
+      }
+
+      // Show popup and marker
+      setHighlightedEvent(lifecycleEvent);
+      setEventPopup({
+        events: [lifecycleEvent],
+        barIndex: event.bar_index,
+        position: popupPosition,
+      });
+    });
+  }, [dagState, sessionInfo?.windowOffset]);
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -363,6 +411,25 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     }
     return 0;
   }, [calibrationPhase, forwardPlayback.currentPosition, calibrationData]);
+
+  // Filter chart bars to only show candles up to current playback position
+  // This ensures smooth incremental rendering - candles appear one at a time like movie playback
+  // The full aggregated bars are prefetched for performance, but we only render up to current position
+  const visibleChart1Bars = useMemo(() => {
+    // Only filter during playback - show all bars otherwise (calibration, stopped, etc.)
+    if (calibrationPhase !== CalibrationPhase.PLAYING) {
+      return chart1Bars;
+    }
+    // Filter to only include aggregated bars that END at or before current position
+    return chart1Bars.filter(bar => bar.source_end_index <= currentPlaybackPosition);
+  }, [chart1Bars, currentPlaybackPosition, calibrationPhase]);
+
+  const visibleChart2Bars = useMemo(() => {
+    if (calibrationPhase !== CalibrationPhase.PLAYING) {
+      return chart2Bars;
+    }
+    return chart2Bars.filter(bar => bar.source_end_index <= currentPlaybackPosition);
+  }, [chart2Bars, currentPlaybackPosition, calibrationPhase]);
 
   // Handle eye icon click - toggle follow state (#267)
   const handleEyeIconClick = useCallback((legId: string) => {
@@ -627,7 +694,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     return bars.length - 1;
   }, []);
 
-  // Sync charts to position
+  // Sync charts to position (used during playback - avoids scrolling if already visible)
   const syncChartsToPosition = useCallback((sourceIndex: number) => {
     const syncChart = (chart: IChartApi | null, bars: BarData[]) => {
       if (!chart || bars.length === 0) return;
@@ -671,10 +738,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     syncChart(chart2Ref.current, chart2Bars);
   }, [chart1Bars, chart2Bars, findAggBarForSourceIndex]);
 
-  // Keep sync ref updated
+  // Keep sync refs updated
   useEffect(() => {
     syncChartsToPositionRef.current = syncChartsToPosition;
   }, [syncChartsToPosition]);
+
 
   // Scroll charts when entering CALIBRATED phase
   useEffect(() => {
@@ -893,8 +961,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         <main ref={mainContentRef} className="flex-1 flex flex-col min-w-0">
           {/* Charts Area */}
           <ChartArea
-            chart1Data={chart1Bars}
-            chart2Data={chart2Bars}
+            chart1Data={visibleChart1Bars}
+            chart2Data={visibleChart2Bars}
             chart1Aggregation={chart1Aggregation}
             chart2Aggregation={chart2Aggregation}
             onChart1AggregationChange={handleChart1AggregationChange}
@@ -909,7 +977,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             chart={chart1Ref.current}
             series={series1Ref.current}
             legs={activeLegs}
-            bars={chart1Bars}
+            bars={visibleChart1Bars}
             currentPosition={currentPlaybackPosition}
             highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
             onLegHover={handleChartLegHover}
@@ -928,7 +996,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             chart={chart2Ref.current}
             series={series2Ref.current}
             legs={activeLegs}
-            bars={chart2Bars}
+            bars={visibleChart2Bars}
             currentPosition={currentPlaybackPosition}
             highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
             onLegHover={handleChartLegHover}
@@ -973,7 +1041,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             chart={chart1Ref.current}
             series={series1Ref.current}
             legs={activeLegs}
-            bars={chart1Bars}
+            bars={visibleChart1Bars}
             lineage={hierarchyMode.state.lineage}
             focusedLegId={hierarchyMode.state.focusedLegId}
             isActive={hierarchyMode.state.isActive}
@@ -984,7 +1052,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             chart={chart2Ref.current}
             series={series2Ref.current}
             legs={activeLegs}
-            bars={chart2Bars}
+            bars={visibleChart2Bars}
             lineage={hierarchyMode.state.lineage}
             focusedLegId={hierarchyMode.state.focusedLegId}
             isActive={hierarchyMode.state.isActive}
@@ -997,19 +1065,21 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             chart={chart1Ref.current}
             series={series1Ref.current}
             markersPlugin={markers1Ref.current}
-            bars={chart1Bars}
+            bars={visibleChart1Bars}
             eventsByBar={followLeg.eventsByBar}
             onMarkerClick={handleMarkerClick}
             onMarkerDoubleClick={handleMarkerDoubleClick}
+            highlightedEvent={highlightedEvent}
           />
           <EventMarkersOverlay
             chart={chart2Ref.current}
             series={series2Ref.current}
             markersPlugin={markers2Ref.current}
-            bars={chart2Bars}
+            bars={visibleChart2Bars}
             eventsByBar={followLeg.eventsByBar}
             onMarkerClick={handleMarkerClick}
             onMarkerDoubleClick={handleMarkerDoubleClick}
+            highlightedEvent={highlightedEvent}
           />
 
           {/* Playback Controls */}
@@ -1082,6 +1152,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
                   setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
                 }
               }}
+              onEventClick={handleRecentEventClick}
             />
           </div>
         </main>
@@ -1093,7 +1164,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             barIndex={eventPopup.barIndex}
             csvIndex={sessionInfo ? sessionInfo.windowOffset + eventPopup.barIndex : undefined}
             position={eventPopup.position}
-            onClose={() => setEventPopup(null)}
+            onClose={() => { setEventPopup(null); setHighlightedEvent(null); }}
             onAttachEvent={handleAttachEvent}
             onFocusLeg={(legId) => {
               setFocusedLegId(legId);

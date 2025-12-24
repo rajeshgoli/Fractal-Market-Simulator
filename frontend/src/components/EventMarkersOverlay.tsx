@@ -19,6 +19,8 @@ interface EventMarkersOverlayProps {
   eventsByBar: Map<number, LifecycleEventWithLegInfo[]>;
   onMarkerClick?: (barIndex: number, events: LifecycleEventWithLegInfo[], position: { x: number; y: number }) => void;
   onMarkerDoubleClick?: (events: LifecycleEventWithLegInfo[]) => void;
+  // Temporary highlighted event (from Recent Events panel click)
+  highlightedEvent?: LifecycleEventWithLegInfo | null;
 }
 
 /**
@@ -91,6 +93,7 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
   eventsByBar,
   onMarkerClick,
   onMarkerDoubleClick,
+  highlightedEvent,
 }) => {
   // Track last click for double-click detection
   const lastClickTimeRef = useRef<number>(0);
@@ -153,6 +156,22 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
       });
     }
 
+    // Add highlighted event marker (from Recent Events panel click)
+    if (highlightedEvent) {
+      const timestamp = getTimestampForBarIndex(highlightedEvent.bar_index);
+      if (timestamp !== null) {
+        const position = getMarkerPosition(highlightedEvent.event_type);
+        markers.push({
+          time: timestamp as Time,
+          position,
+          color: highlightedEvent.legColor,
+          shape: getMarkerShape(highlightedEvent.event_type),
+          text: getMarkerText(highlightedEvent.event_type),
+          size: 2, // Larger size for visibility
+        });
+      }
+    }
+
     // Sort markers by time (required by lightweight-charts)
     markers.sort((a, b) => (a.time as number) - (b.time as number));
 
@@ -163,7 +182,7 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
     return () => {
       markersPlugin.setMarkers([]);
     };
-  }, [markersPlugin, bars, eventsByBar, getTimestampForBarIndex]);
+  }, [markersPlugin, bars, eventsByBar, getTimestampForBarIndex, highlightedEvent]);
 
   // Click handler for marker detection
   useEffect(() => {
