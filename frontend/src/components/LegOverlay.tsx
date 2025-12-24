@@ -419,35 +419,45 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
   useEffect(() => {
     if (!chart || !series || bars.length === 0) return;
 
-    // Clear existing lines
-    clearLineSeries();
+    // Wrap in try-catch to handle chart disposal during animations
+    try {
+      // Clear existing lines
+      clearLineSeries();
 
-    // Filter legs to only show those visible up to current position
-    // (#203: now includes invalidated legs with dotted line style)
-    const visibleLegs = legs.filter(leg => {
-      // Only show legs where pivot is at or before current position
-      return leg.pivot_index <= currentPosition;
-    });
+      // Filter legs to only show those visible up to current position
+      // (#203: now includes invalidated legs with dotted line style)
+      const visibleLegs = legs.filter(leg => {
+        // Only show legs where pivot is at or before current position
+        return leg.pivot_index <= currentPosition;
+      });
 
-    // Create line series for each visible leg
-    // Render non-highlighted legs first, then highlighted leg on top
-    const sortedLegs = [...visibleLegs].sort((a, b) => {
-      const aHighlighted = a.leg_id === highlightedLegId ? 1 : 0;
-      const bHighlighted = b.leg_id === highlightedLegId ? 1 : 0;
-      return aHighlighted - bHighlighted;
-    });
+      // Create line series for each visible leg
+      // Render non-highlighted legs first, then highlighted leg on top
+      const sortedLegs = [...visibleLegs].sort((a, b) => {
+        const aHighlighted = a.leg_id === highlightedLegId ? 1 : 0;
+        const bHighlighted = b.leg_id === highlightedLegId ? 1 : 0;
+        return aHighlighted - bHighlighted;
+      });
 
-    for (const leg of sortedLegs) {
-      const isHighlighted = leg.leg_id === highlightedLegId;
-      const lineSeries = createLegLine(leg, isHighlighted);
-      if (lineSeries) {
-        lineSeriesRef.current.set(leg.leg_id, lineSeries);
+      for (const leg of sortedLegs) {
+        const isHighlighted = leg.leg_id === highlightedLegId;
+        const lineSeries = createLegLine(leg, isHighlighted);
+        if (lineSeries) {
+          lineSeriesRef.current.set(leg.leg_id, lineSeries);
+        }
       }
+    } catch (e) {
+      // Chart may have been disposed during re-render - ignore
+      console.warn('LegOverlay update failed (chart disposed):', e);
     }
 
     // Cleanup on unmount
     return () => {
-      clearLineSeries();
+      try {
+        clearLineSeries();
+      } catch {
+        // Ignore disposal errors during cleanup
+      }
     };
   }, [chart, series, legs, bars, currentPosition, highlightedLegId, hierarchyMode, clearLineSeries, createLegLine]);
 
