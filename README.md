@@ -53,12 +53,9 @@ See [User Guide](Docs/Reference/user_guide.md) for detailed documentation.
 ### Quick Start
 
 ```bash
-# Market Structure View (recommended)
+# Launch Market Structure View
 python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000 --mode dag
 open http://127.0.0.1:8000/replay
-
-# Calibration mode (pre-analyze before playback)
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000
 
 # Run tests
 source venv/bin/activate && python -m pytest tests/ -v
