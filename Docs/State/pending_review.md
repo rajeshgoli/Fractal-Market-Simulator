@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-23
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - #305: Remove dead pivot_breach replacement code path
+- #309: Add leg event serialization to API (`LEG_CREATED`, `LEG_PRUNED`, `LEG_INVALIDATED`)
 
 ---
 

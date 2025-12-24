@@ -356,15 +356,17 @@ The pipeline order per bar:
 - **Leg terminology** — Origin is where the move started (fixed), Pivot is the defended extreme (extends). Bull leg: origin=LOW, pivot=HIGH. Bear leg: origin=HIGH, pivot=LOW (#197)
 
 **Event types:**
-| Event | When emitted |
-|-------|--------------|
-| `SwingFormedEvent` | Price breaches formation threshold from candidate pair |
-| `SwingInvalidatedEvent` | Defended pivot violated beyond tolerance |
-| `SwingCompletedEvent` | Price reaches 2.0 extension target |
-| `LevelCrossEvent` | Price crosses Fib level boundary |
-| `LegCreatedEvent` | New candidate leg is created (pre-formation) |
-| `LegPrunedEvent` | Leg is removed (reasons: `turn_prune`, `origin_proximity_prune`, `breach_prune`, `extension_prune`, `inner_structure`) |
-| `LegInvalidatedEvent` | Leg breaches invalidation threshold (configurable, default 0.382) |
+| Event | API Type | When emitted |
+|-------|----------|--------------|
+| `SwingFormedEvent` | `SWING_FORMED` | Price breaches formation threshold from candidate pair |
+| `SwingInvalidatedEvent` | `SWING_INVALIDATED` | Defended pivot violated beyond tolerance |
+| `SwingCompletedEvent` | `SWING_COMPLETED` | Price reaches 2.0 extension target |
+| `LevelCrossEvent` | `LEVEL_CROSS` | Price crosses Fib level boundary |
+| `LegCreatedEvent` | `LEG_CREATED` | New candidate leg is created (pre-formation) |
+| `LegPrunedEvent` | `LEG_PRUNED` | Leg is removed (reasons: `turn_prune`, `origin_proximity_prune`, `breach_prune`, `extension_prune`, `inner_structure`) |
+| `LegInvalidatedEvent` | `LEG_INVALIDATED` | Leg breaches invalidation threshold (configurable, default 0.382) |
+
+All event types are serialized with their API type string (second column) in API responses. Leg events include their specific metadata: `LegPrunedEvent` includes `reason` and `explanation` fields in the `trigger_explanation`.
 
 **Tolerance rules (Rule 2.2):**
 - Big swings (top 10% by range): full tolerance (0.15)

@@ -229,6 +229,16 @@ def _event_to_response(
     elif isinstance(event, LevelCrossEvent):
         event_type = "LEVEL_CROSS"
         direction = swing.direction if swing else "bull"
+    # Leg events (#309)
+    elif isinstance(event, LegCreatedEvent):
+        event_type = "LEG_CREATED"
+        direction = event.direction
+    elif isinstance(event, LegPrunedEvent):
+        event_type = "LEG_PRUNED"
+        direction = swing.direction if swing else "bull"
+    elif isinstance(event, LegInvalidatedEvent):
+        event_type = "LEG_INVALIDATED"
+        direction = swing.direction if swing else "bull"
     else:
         event_type = "UNKNOWN"
         direction = "bull"
@@ -293,6 +303,28 @@ def _format_trigger_explanation(
     Returns:
         Human-readable explanation string.
     """
+    # Handle leg events first - they don't require swing context (#309)
+    if isinstance(event, LegCreatedEvent):
+        pivot_price = float(event.pivot_price)
+        origin_price = float(event.origin_price)
+        range_size = abs(origin_price - pivot_price)
+        return (
+            f"Leg created: {event.direction}\n"
+            f"Pivot: {pivot_price:.2f}, Origin: {origin_price:.2f}, Range: {range_size:.2f}"
+        )
+
+    if isinstance(event, LegPrunedEvent):
+        # Pass through reason and explanation from the event
+        reason = event.reason.replace("_", " ").title()
+        if event.explanation:
+            return f"Pruned ({reason}): {event.explanation}"
+        return f"Pruned: {reason}"
+
+    if isinstance(event, LegInvalidatedEvent):
+        invalidation_price = float(event.invalidation_price)
+        return f"Leg invalidated at {invalidation_price:.2f}"
+
+    # Swing events require swing context
     if swing is None:
         return ""
 
