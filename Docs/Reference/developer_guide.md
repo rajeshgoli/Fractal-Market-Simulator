@@ -37,10 +37,6 @@ src/
 │   ├── reference_frame.py          # Oriented coordinate system for ratios
 │   ├── bar_aggregator.py           # Multi-timeframe OHLC aggregation
 │   └── constants.py                # Fibonacci level sets
-└── discretization/
-    ├── schema.py                   # DiscretizationEvent, SwingEntry, etc.
-    ├── discretizer.py              # Batch OHLC → event log processor
-    └── io.py                       # JSON read/write for logs
 
 frontend/                           # React + Vite Replay View
 ├── src/
@@ -102,20 +98,6 @@ scripts/                            # Dev utilities
                                        │
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           DISCRETIZATION                                     │
-│                                                                              │
-│   discretizer.py                                                            │
-│   └── Discretizer.discretize(ohlc, swings) ──► DiscretizationLog            │
-│            │                                                                 │
-│            │ produces                                                        │
-│            ▼                                                                 │
-│   schema.py ────► DiscretizationEvent, SwingEntry, side-channels            │
-│   io.py ────────► read_log(), write_log()                                   │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
 │                         FRONTEND (React)                                     │
 │                                                                              │
 │   frontend/src/                                                             │
@@ -136,12 +118,8 @@ scripts/                            # Dev utilities
    calibrate_from_dataframe(df) → (detector, events)
    detector.get_active_nodes() → List[SwingNode]  # Hierarchical tree
 
-3. Discretize (by depth or custom grouping)
-   swings_by_depth = group_swings_by_depth(detector.get_active_nodes())
-   Discretizer().discretize(df, swings_by_depth) → DiscretizationLog
-
-4. Analyze
-   log.events → filter, aggregate, visualize
+3. Analyze
+   swings = detector.get_active_swings()  # Filter, aggregate, visualize
 ```
 
 
@@ -270,6 +248,27 @@ Modular DAG-based leg detection with incremental swing formation. The main entry
 - **Impulsiveness** measures how fast a move is relative to the historical population. Calculated using bisect for O(log n) percentile lookup against `DetectorState.formed_leg_impulses`.
 - **Spikiness** measures whether the move was spike-driven or evenly distributed. Uses running moments (n, sum_x, sum_x2, sum_x3) for O(1) per-bar updates.
 - Both are updated only for "live" legs (where `max_origin_breach is None`). Once a leg's origin is breached, values are frozen.
+
+**Segment impulse tracking (#307):**
+
+When a child leg forms within a parent leg, segment impulse fields capture the two-phase movement pattern:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `segment_deepest_price` | `Decimal | None` | Parent's pivot price when first child formed |
+| `segment_deepest_index` | `int | None` | Bar index of the deepest point |
+| `impulse_to_deepest` | `float | None` | Impulse from parent origin to deepest point |
+| `impulse_back` | `float | None` | Impulse from deepest back to child origin (counter-move) |
+| `net_segment_impulse` | `float | None` | Property: `impulse_to_deepest - impulse_back` |
+
+- **Impulse to deepest** measures the primary move intensity (parent origin → segment extreme)
+- **Impulse back** measures the counter-move intensity (segment extreme → child origin)
+- **Net segment impulse** captures sustained conviction:
+  - High positive: Sharp primary move, weak counter-move (sustained trend)
+  - Near zero: Both moves similar (contested)
+  - Negative: Counter-move was more impulsive (gave back progress)
+
+These fields are set on the **child leg** when it is created, capturing the parent's segment state at that moment. The deepest point may extend after child creation if the parent's pivot extends.
 
 ```python
 from src.swing_analysis.dag import (
@@ -608,61 +607,6 @@ frame.get_fib_price(0.618)                        # Returns Decimal("5061.8")
 
 ---
 
-### Discretization
-
-**File:** `src/discretization/discretizer.py`
-
-Batch processor: OHLC + detected swings → structural event log.
-
-```python
-from src.discretization import Discretizer, DiscretizerConfig
-from src.swing_analysis import calibrate_from_dataframe
-
-# Calibrate to get SwingNode tree
-detector, events = calibrate_from_dataframe(df)
-
-# Group by depth for discretization
-swings_by_depth = {}
-for node in detector.get_active_nodes():
-    depth = node.get_depth()
-    key = f"depth_{depth}" if depth < 3 else "deeper"
-    swings_by_depth.setdefault(key, []).append(node)
-
-config = DiscretizerConfig(
-    level_set=[0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.382, 1.5, 1.618, 1.786, 2.0, 2.618, 3.0, 4.0],
-    crossing_semantics="close_cross",
-)
-
-discretizer = Discretizer(config)
-
-log = discretizer.discretize(
-    ohlc=df,                              # DataFrame with timestamp, open, high, low, close
-    swings=swings_by_depth,               # Dict[depth_key, List[SwingNode]]
-    instrument="ES",
-    source_resolution="1m",
-)
-
-# log.events: List[DiscretizationEvent]
-# log.swings: List[SwingEntry]
-# log.meta: DiscretizationMeta (config, date range, etc.)
-```
-
-**Event types:**
-| Event | Meaning |
-|-------|---------|
-| `SWING_FORMED` | New swing registered |
-| `LEVEL_CROSS` | Price crossed Fib level |
-| `COMPLETION` | Ratio crossed 2.0 |
-| `INVALIDATION` | Ratio crossed below threshold |
-| `SWING_TERMINATED` | Swing ended (completed/invalidated) |
-
-**Side-channels on events:**
-- `effort`: `EffortAnnotation(dwell_bars, test_count, max_probe_r)`
-- `shock`: `ShockAnnotation(levels_jumped, range_multiple, gap_multiple, is_gap)`
-- `parent_context`: `ParentContext(scale, swing_id, band, direction, ratio)`
-
----
-
 ### Bar Aggregation
 
 **File:** `src/swing_analysis/bar_aggregator.py`
@@ -756,12 +700,6 @@ canStepBack: boolean;  // true when currentPosition > 0
    ```
 
 4. Add tests following `TestProminenceFilter` pattern
-
-### Adding a New Event Type
-
-1. Add to `EventType` enum in `src/discretization/schema.py`
-2. Implement detection logic in `Discretizer.discretize()` loop
-3. Update validation in `validate_log()`
 
 ### Adding a New Data Format
 

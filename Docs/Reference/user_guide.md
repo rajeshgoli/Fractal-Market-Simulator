@@ -403,7 +403,7 @@ The Detection Config Panel allows real-time adjustment of swing detection thresh
 | Toggle | Default | Description |
 |--------|---------|-------------|
 | Engulfed | ON | Delete legs breached on both origin and pivot sides |
-| Inner Structure | ON | Prune legs with same pivot as parent leg |
+| Inner Structure | OFF | Prune legs with same pivot as parent leg |
 | Pivot Breach | ON | Replace legs when pivot is breached beyond threshold |
 
 **How to use:**
