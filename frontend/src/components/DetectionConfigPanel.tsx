@@ -10,19 +10,21 @@ interface SliderConfig {
   max: number;
   step: number;
   description: string;
+  displayAsPercent?: boolean;  // Display value as percentage (multiply by 100, add %)
+  colorMode?: 'restrictive-right' | 'restrictive-left';  // Which direction is more restrictive
 }
 
 // Slider configurations for direction-specific parameters
 const DIRECTION_SLIDERS: SliderConfig[] = [
-  { key: 'formation_fib', label: 'Formation', min: 0.1, max: 1.0, step: 0.01, description: 'Retracement required to form leg' },
-  { key: 'invalidation_threshold', label: 'Invalidation', min: 0.1, max: 1.0, step: 0.01, description: 'Breach threshold for invalidation' },
+  { key: 'formation_fib', label: 'Formation', min: 0.1, max: 1.0, step: 0.01, description: 'Retracement required to form leg', displayAsPercent: true, colorMode: 'restrictive-right' },
+  { key: 'invalidation_threshold', label: 'Invalidation', min: 0.1, max: 1.0, step: 0.01, description: 'Breach threshold for invalidation', displayAsPercent: true, colorMode: 'restrictive-right' },
 ];
 
 // Slider configurations for global parameters
 const GLOBAL_SLIDERS: SliderConfig[] = [
-  { key: 'stale_extension_threshold', label: 'Stale Extension', min: 1.0, max: 5.0, step: 0.1, description: 'Extension multiple for stale pruning' },
-  { key: 'origin_range_threshold', label: 'Origin Range %', min: 0.0, max: 0.5, step: 0.01, description: 'Range similarity threshold for origin-proximity pruning' },
-  { key: 'origin_time_threshold', label: 'Origin Time %', min: 0.0, max: 0.5, step: 0.01, description: 'Time proximity threshold for origin-proximity pruning' },
+  { key: 'stale_extension_threshold', label: 'Stale Extension', min: 1.0, max: 5.0, step: 0.1, description: 'Extension multiple for stale pruning', colorMode: 'restrictive-left' },
+  { key: 'origin_range_threshold', label: 'Origin Range %', min: 0.0, max: 0.10, step: 0.01, description: 'Range similarity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
+  { key: 'origin_time_threshold', label: 'Origin Time %', min: 0.0, max: 0.10, step: 0.01, description: 'Time proximity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
 ];
 
 // Toggle configurations for pruning algorithms
@@ -145,14 +147,41 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
 
     const isDefault = Math.abs(value - defaultValue) < 0.001;
 
+    // Format display value (as percentage if configured)
+    const displayValue = slider.displayAsPercent
+      ? `${Math.round(value * 100)}%`
+      : value.toFixed(slider.step >= 0.1 ? 1 : 2);
+
+    // Calculate position ratio for color gradient (0 = min, 1 = max)
+    const positionRatio = (value - slider.min) / (slider.max - slider.min);
+
+    // Calculate color based on position and restrictiveness mode
+    // restrictive-right: left=green, right=red (higher values are more restrictive)
+    // restrictive-left: left=red, right=green (lower values are more restrictive)
+    const getSliderColor = () => {
+      if (!slider.colorMode) return 'rgb(59, 130, 246)'; // default blue
+
+      const ratio = slider.colorMode === 'restrictive-right' ? positionRatio : 1 - positionRatio;
+      // Interpolate from green (relaxed) to red (restrictive)
+      const r = Math.round(34 + ratio * (239 - 34));  // 34 (green) -> 239 (red)
+      const g = Math.round(197 - ratio * (197 - 68)); // 197 (green) -> 68 (red)
+      const b = Math.round(94 - ratio * (94 - 68));   // 94 (green) -> 68 (red)
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+
+    const sliderColor = getSliderColor();
+
     return (
       <div key={`${direction}-${slider.key}`} className="space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-xs text-app-muted" title={slider.description}>
             {slider.label}
           </span>
-          <span className={`text-xs font-mono ${isDefault ? 'text-app-muted' : 'text-trading-blue'}`}>
-            {value.toFixed(slider.step >= 0.1 ? 1 : 2)}
+          <span
+            className={`text-xs font-mono ${isDefault ? 'text-app-muted' : ''}`}
+            style={!isDefault ? { color: sliderColor } : undefined}
+          >
+            {displayValue}
           </span>
         </div>
         <input
@@ -162,7 +191,8 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
           step={slider.step}
           value={value}
           onChange={(e) => handleSliderChange(direction, slider.key, parseFloat(e.target.value))}
-          className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-trading-blue"
+          className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
+          style={{ accentColor: sliderColor }}
           disabled={isUpdating}
         />
       </div>
