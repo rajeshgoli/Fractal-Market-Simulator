@@ -693,6 +693,37 @@ The Follow Leg feature lets you track specific legs through their complete lifec
 - Click the X button next to the leg in the Followed Legs Panel
 - Or click the eye icon on the leg again (when it's already followed)
 
+### Recent Events Panel Interaction
+
+The Recent Events panel (Column 4) displays leg lifecycle events and supports click-to-inspect:
+
+**How to use:**
+1. Click on any event in the Recent Events panel
+2. A popup appears with event details (type, bar index, CSV index, reason)
+3. A marker appears on both charts at the bar where the event occurred
+4. If the leg still exists (for LEG_CREATED events), it highlights on the chart
+
+**Event markers:**
+| Marker | Event Type | Shape |
+|--------|------------|-------|
+| F | Formed | Arrow up |
+| P | Pruned | Square |
+| X | Invalidated | Arrow down |
+
+**Popup actions:**
+- **Attach**: Add the event to your current observation
+- **Focus**: Highlight the leg on the chart and scroll the panel to it
+
+**Marker behavior:**
+- Markers appear in the leg's direction color (bull: green, bear: red)
+- Markers disappear when you close the popup
+- Size 2 (larger) for visibility
+
+**Use cases:**
+- **Event investigation**: Click to see exactly where and why a leg event occurred
+- **Quick reference**: View event details without following the leg
+- **Feedback capture**: Attach specific events to observations for debugging
+
 ### Use Cases
 
 - **Algorithm debugging**: Watch how legs form, get pruned, and eventually become swings
@@ -700,3 +731,4 @@ The Follow Leg feature lets you track specific legs through their complete lifec
 - **Pruning behavior**: Observe how origin-proximity and breach pruning keep the leg count manageable
 - **Hierarchy exploration**: Visualize parent-child relationships and structural nesting
 - **Lifecycle tracking**: Follow specific legs to understand their complete lifecycle with visual event markers
+- **Event investigation**: Click recent events to see details and chart markers for specific lifecycle events
