@@ -175,12 +175,21 @@ export const EventMarkersOverlay: React.FC<EventMarkersOverlayProps> = ({
     // Sort markers by time (required by lightweight-charts)
     markers.sort((a, b) => (a.time as number) - (b.time as number));
 
-    // Update the markers plugin
-    markersPlugin.setMarkers(markers);
+    // Update the markers plugin (with error handling for disposed charts)
+    try {
+      markersPlugin.setMarkers(markers);
+    } catch (e) {
+      // Chart may have been disposed during re-render - ignore
+      console.warn('Markers update failed (chart disposed):', e);
+    }
 
     // Cleanup: clear markers on unmount
     return () => {
-      markersPlugin.setMarkers([]);
+      try {
+        markersPlugin.setMarkers([]);
+      } catch {
+        // Ignore disposal errors during cleanup
+      }
     };
   }, [markersPlugin, bars, eventsByBar, getTimestampForBarIndex, highlightedEvent]);
 
