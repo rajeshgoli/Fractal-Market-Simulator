@@ -110,6 +110,7 @@ export function useForwardPlayback({
   const lingerPausedRef = useRef(false); // Whether linger timer is paused (for feedback input)
   const lingerRemainingRef = useRef(0); // Remaining time when paused
   const wasPlayingBeforeLingerRef = useRef(false); // Track if playback was active before linger
+  const playbackIntervalMsRef = useRef(playbackIntervalMs); // Ref for interval to allow mid-playback speed changes (#316)
 
   // Bar buffer for smooth animation (batched fetch, individual render)
   interface BufferedBar {
@@ -142,6 +143,11 @@ export function useForwardPlayback({
     setVisibleBars(calibrationBars);
     setCurrentPosition(calibrationBarCount - 1);
   }, [calibrationBars, calibrationBarCount]);
+
+  // Keep playbackIntervalMsRef updated for mid-playback speed changes (#316)
+  useEffect(() => {
+    playbackIntervalMsRef.current = playbackIntervalMs;
+  }, [playbackIntervalMs]);
 
   // Clear all timers
   const clearTimers = useCallback(() => {
@@ -596,6 +602,7 @@ export function useForwardPlayback({
     fetchBatchRef.current();
 
     // Animation timer - renders one bar at a time from buffer
+    // Uses ref for interval to support mid-playback speed changes (#316)
     const scheduleNext = () => {
       if (!isPlayingRef.current) return;
 
@@ -609,12 +616,12 @@ export function useForwardPlayback({
           // Buffer empty but not end of data - wait and retry
           setTimeout(scheduleNext, 50);
         }
-      }, playbackIntervalMs);
+      }, playbackIntervalMsRef.current);  // Use ref for live speed updates
     };
 
     // Start animation after a short delay to let buffer fill
     setTimeout(scheduleNext, 100);
-  }, [playbackState, endOfData, playbackIntervalMs, exitLinger, currentPosition]);
+  }, [playbackState, endOfData, exitLinger, currentPosition]);
 
   // Keep startPlaybackRef updated
   useEffect(() => {
