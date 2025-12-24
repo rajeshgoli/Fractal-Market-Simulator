@@ -152,7 +152,6 @@ class DetectorState:
                     "direction": s.direction,
                     "status": s.status,
                     "formed_at_bar": s.formed_at_bar,
-                    "parent_ids": [p.swing_id for p in s.parents],
                 }
                 for s in self.active_swings
             ],
@@ -178,10 +177,8 @@ class DetectorState:
     @classmethod
     def from_dict(cls, data: Dict) -> "DetectorState":
         """Create from dictionary."""
-        # First pass: create all swing nodes without parent links
-        swing_map: Dict[str, SwingNode] = {}
-        parent_map: Dict[str, List[str]] = {}
-
+        # Create swing nodes
+        swings: List[SwingNode] = []
         for swing_data in data.get("active_swings", []):
             swing = SwingNode(
                 swing_id=swing_data["swing_id"],
@@ -193,15 +190,7 @@ class DetectorState:
                 status=swing_data["status"],
                 formed_at_bar=swing_data["formed_at_bar"],
             )
-            swing_map[swing.swing_id] = swing
-            parent_map[swing.swing_id] = swing_data.get("parent_ids", [])
-
-        # Second pass: link parents
-        for swing_id, parent_ids in parent_map.items():
-            swing = swing_map[swing_id]
-            for parent_id in parent_ids:
-                if parent_id in swing_map:
-                    swing.add_parent(swing_map[parent_id])
+            swings.append(swing)
 
         # Restore cache fields if present (they'll be recomputed on first use anyway)
         cached_bull = data.get("_cached_big_threshold_bull")
@@ -272,7 +261,7 @@ class DetectorState:
         formed_leg_impulses = data.get("formed_leg_impulses", [])
 
         return cls(
-            active_swings=list(swing_map.values()),
+            active_swings=swings,
             last_bar_index=data.get("last_bar_index", -1),
             fib_levels_crossed=data.get("fib_levels_crossed", {}),
             all_swing_ranges=[

@@ -1,25 +1,22 @@
 """
-Hierarchical Swing Node
+Swing Node
 
-Defines the SwingNode dataclass for the hierarchical swing model.
-Swings form a DAG (Directed Acyclic Graph) structure where each swing
-can have multiple parents (for context/tolerance inheritance) and
-multiple children.
+Defines the SwingNode dataclass for the swing detection model.
 
 See Docs/Working/swing_detection_rewrite_spec.md for design rationale.
 See Docs/Reference/valid_swings.md for the canonical rules.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import List, Literal
+from typing import Literal
 import uuid
 
 
 @dataclass
 class SwingNode:
     """
-    A swing in the hierarchical model.
+    A swing node representing a price range structure.
 
     Represents a price range (high to low) used to predict future price action.
     Using a symmetric reference frame:
@@ -41,8 +38,6 @@ class SwingNode:
             - "invalidated": Defended pivot was violated
             - "completed": Price reached 2.0 extension target
         formed_at_bar: Bar index when this swing was confirmed (status became "active").
-        parents: Parent swings in the hierarchy (can have multiple for DAG).
-        children: Child swings in the hierarchy.
 
     Example:
         >>> from decimal import Decimal
@@ -72,13 +67,6 @@ class SwingNode:
     direction: Literal["bull", "bear"]
     status: Literal["forming", "active", "invalidated", "completed"]
     formed_at_bar: int
-
-    # Hierarchy (multiple parents for DAG)
-    parents: List["SwingNode"] = field(default_factory=list)
-    children: List["SwingNode"] = field(default_factory=list)
-
-    # Cached depth (computed lazily, invalidated when parents change)
-    _cached_depth: int = field(default=-1, repr=False)
 
     @staticmethod
     def generate_id() -> str:
@@ -147,38 +135,6 @@ class SwingNode:
         """Check if this swing has completed (reached 2.0 target)."""
         return self.status == "completed"
 
-    def add_parent(self, parent: "SwingNode") -> None:
-        """
-        Link this swing as a child of parent.
-
-        Creates bidirectional links: this swing is added to parent's children,
-        and parent is added to this swing's parents.
-
-        Args:
-            parent: The parent swing node to link to.
-        """
-        if parent not in self.parents:
-            self.parents.append(parent)
-            self._invalidate_depth_cache()  # Depth may have changed
-        if self not in parent.children:
-            parent.children.append(self)
-
-    def remove_parent(self, parent: "SwingNode") -> None:
-        """
-        Remove parent link from this swing.
-
-        Removes bidirectional links: removes parent from this swing's parents,
-        and removes this swing from parent's children.
-
-        Args:
-            parent: The parent swing node to unlink.
-        """
-        if parent in self.parents:
-            self.parents.remove(parent)
-            self._invalidate_depth_cache()  # Depth may have changed
-        if self in parent.children:
-            parent.children.remove(self)
-
     def invalidate(self) -> None:
         """
         Mark this swing as invalidated.
@@ -196,39 +152,6 @@ class SwingNode:
         Called when price reaches the 2.0 extension target.
         """
         self.status = "completed"
-
-    def _invalidate_depth_cache(self) -> None:
-        """
-        Invalidate cached depth for this node and all descendants.
-
-        Called when parent links change to ensure depth is recomputed.
-        """
-        if self._cached_depth != -1:
-            self._cached_depth = -1
-            # Also invalidate children since their depth depends on ours
-            for child in self.children:
-                child._invalidate_depth_cache()
-
-    def get_depth(self) -> int:
-        """
-        Calculate hierarchy depth from root.
-
-        Returns 0 if this swing has no parents (is a root).
-        Returns 1 + max(parent depths) otherwise.
-        Uses caching to avoid repeated traversals.
-
-        Returns:
-            Integer depth in the hierarchy.
-        """
-        if self._cached_depth >= 0:
-            return self._cached_depth
-
-        if not self.parents:
-            self._cached_depth = 0
-        else:
-            self._cached_depth = 1 + max(p.get_depth() for p in self.parents)
-
-        return self._cached_depth
 
     def __repr__(self) -> str:
         return (

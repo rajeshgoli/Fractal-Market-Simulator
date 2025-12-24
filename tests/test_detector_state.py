@@ -31,9 +31,9 @@ class TestDetectorStateSerialization:
         assert len(restored.active_swings) == 0
 
     def test_state_with_swings_roundtrip(self):
-        """State with active swings serializes and preserves hierarchy."""
-        parent = SwingNode(
-            swing_id="parent01",
+        """State with active swings serializes and deserializes correctly."""
+        swing1 = SwingNode(
+            swing_id="swing01",
             high_bar_index=0,
             high_price=Decimal("110"),
             low_bar_index=10,
@@ -42,8 +42,8 @@ class TestDetectorStateSerialization:
             status="active",
             formed_at_bar=10,
         )
-        child = SwingNode(
-            swing_id="child001",
+        swing2 = SwingNode(
+            swing_id="swing02",
             high_bar_index=20,
             high_price=Decimal("108"),
             low_bar_index=30,
@@ -52,23 +52,25 @@ class TestDetectorStateSerialization:
             status="active",
             formed_at_bar=30,
         )
-        child.add_parent(parent)
 
         state = DetectorState(
-            active_swings=[parent, child],
-            all_swing_ranges=[parent.range, child.range],
+            active_swings=[swing1, swing2],
+            all_swing_ranges=[swing1.range, swing2.range],
         )
         data = state.to_dict()
         restored = DetectorState.from_dict(data)
 
         assert len(restored.active_swings) == 2
 
-        # Find child in restored state
-        restored_child = next(
-            s for s in restored.active_swings if s.swing_id == "child001"
+        # Find swings in restored state
+        restored_swing1 = next(
+            s for s in restored.active_swings if s.swing_id == "swing01"
         )
-        assert len(restored_child.parents) == 1
-        assert restored_child.parents[0].swing_id == "parent01"
+        restored_swing2 = next(
+            s for s in restored.active_swings if s.swing_id == "swing02"
+        )
+        assert restored_swing1.direction == "bull"
+        assert restored_swing2.direction == "bull"
 
 
 class TestHierarchicalDetectorInitialization:

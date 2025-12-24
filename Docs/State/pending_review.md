@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2025-12-23
 
@@ -8,6 +8,8 @@
 
 ## Pending Changes
 
+- #301: Remove unused swing hierarchy and discretization module
+- #300: Convert leg origin_index/pivot_index to csv_index in API responses
 - #299: Deterministic leg/swing IDs to survive BE reset
 - #298: Restore pivot-based grouping in proximity pruning (fixes #294 regression)
 - #297: Replace window_offset with csv_index in feedback snapshots

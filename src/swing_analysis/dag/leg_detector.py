@@ -1000,11 +1000,6 @@ class LegDetector:
         # Record impulse in formed population for percentile ranking (#241, #242)
         bisect.insort(self.state.formed_leg_impulses, leg.impulse)
 
-        # Find parents
-        parents = self._find_parents(swing)
-        for parent in parents:
-            swing.add_parent(parent)
-
         # Add to active swings
         self.state.active_swings.append(swing)
 
@@ -1021,7 +1016,7 @@ class LegDetector:
             low_bar_index=swing.low_bar_index,
             low_price=swing.low_price,
             direction=swing.direction,
-            parent_ids=[p.swing_id for p in parents],
+            parent_ids=[],  # Swing hierarchy removed (#301)
         )
 
     def _check_leg_invalidations(
@@ -1463,41 +1458,6 @@ class LegDetector:
             parent = min(eligible, key=lambda l: (l.origin_price, -l.origin_index))
 
         return parent.leg_id
-
-    def _find_parents(self, new_swing: SwingNode) -> List[SwingNode]:
-        """
-        Find parent swings for a new swing.
-
-        A swing is a parent if the new swing's defended pivot is within
-        the parent's 0-2 range.
-
-        Args:
-            new_swing: The newly formed swing.
-
-        Returns:
-            List of parent SwingNode objects.
-        """
-        parents = []
-        new_pivot = new_swing.defended_pivot
-
-        for swing in self.state.active_swings:
-            if swing.status != "active":
-                continue
-            if swing.swing_id == new_swing.swing_id:
-                continue
-
-            frame = ReferenceFrame(
-                anchor0=swing.defended_pivot,
-                anchor1=swing.origin,
-                direction="BULL" if swing.is_bull else "BEAR",
-            )
-
-            ratio = frame.ratio(new_pivot)
-            # Parent if new swing's pivot is in 0-2 range
-            if Decimal("0") <= ratio <= Decimal("2"):
-                parents.append(swing)
-
-        return parents
 
     def get_active_swings(self) -> List[SwingNode]:
         """

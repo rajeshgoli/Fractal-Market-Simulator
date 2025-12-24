@@ -75,28 +75,15 @@ export interface BarData {
   source_end_index: number;
 }
 
+// Legacy discretization types (stub for usePlayback hook compatibility)
+// Discretization module removed in #301 - these are kept as stubs for the
+// unused event/swing arrays passed to usePlayback
 export interface DiscretizationEvent {
   bar: number;
   timestamp: string;
   swing_id: string;
   event_type: string;
-  data: {
-    scale?: string;
-    direction?: string;
-    explanation?: {
-      high?: { price: number; bar: number; timestamp: string };
-      low?: { price: number; bar: number; timestamp: string };
-      size_pts?: number;
-      size_pct?: number;
-      scale_reason?: string;
-      is_anchor?: boolean;
-      separation?: {
-        distance_fib: number;
-        minimum_fib: number;
-        from_swing_id: string;
-      };
-    };
-  };
+  data: Record<string, unknown>;
 }
 
 export interface DiscretizationSwing {
@@ -109,8 +96,6 @@ export interface DiscretizationSwing {
   anchor1_bar: number;
   formed_at_bar: number;
   status: string;
-  terminated_at_bar?: number;
-  termination_reason?: string;
 }
 
 // Playback state machine
@@ -244,42 +229,6 @@ export const DEPTH_FILTER_OPTIONS: { value: DepthFilterKey; label: string }[] = 
   { value: '3_levels', label: '3 levels' },
   { value: 'all', label: 'All' },
 ];
-
-// ============================================================================
-// Tree Statistics (Issue #166)
-// ============================================================================
-
-export interface TreeStatistics {
-  root_swings: number;
-  root_bull: number;
-  root_bear: number;
-  total_nodes: number;
-  max_depth: number;
-  avg_children: number;
-  defended_by_depth: Record<string, number>;  // {"1": 12, "2": 38, ...}
-  largest_range: number;
-  largest_swing_id: string | null;
-  median_range: number;
-  smallest_range: number;
-  recently_invalidated: number;
-  roots_have_children: boolean;
-  siblings_detected: boolean;
-  no_orphaned_nodes: boolean;
-}
-
-export interface SwingsByDepth {
-  depth_1: CalibrationSwing[];  // Root swings (depth 0)
-  depth_2: CalibrationSwing[];  // Depth 1
-  depth_3: CalibrationSwing[];  // Depth 2
-  deeper: CalibrationSwing[];   // Depth 3+
-}
-
-// Extended CalibrationData with hierarchical info
-export interface CalibrationDataHierarchical extends CalibrationData {
-  tree_stats: TreeStatistics;
-  swings_by_depth: SwingsByDepth;
-  active_swings_by_depth: SwingsByDepth;
-}
 
 // ============================================================================
 // DAG State Types (Issue #171 - DAG State Panel)

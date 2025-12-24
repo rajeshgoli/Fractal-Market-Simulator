@@ -115,32 +115,6 @@ _replay_cache: Dict[str, Any] = {
 # ============================================================================
 
 
-def _depth_to_scale(depth: int, total_depth: int = 4) -> str:
-    """
-    Map hierarchy depth to legacy scale for compatibility.
-
-    Lower depth = larger swings = higher scale.
-    - depth 0 (root) -> XL
-    - depth 1 -> L
-    - depth 2 -> M
-    - depth 3+ -> S
-
-    Args:
-        depth: Hierarchy depth from SwingNode.
-        total_depth: Maximum depth for normalization.
-
-    Returns:
-        Scale string (XL, L, M, or S).
-    """
-    if depth == 0:
-        return "XL"
-    elif depth == 1:
-        return "L"
-    elif depth == 2:
-        return "M"
-    return "S"
-
-
 def _size_to_scale(size: float, scale_thresholds: Dict[str, float]) -> str:
     """
     Map swing size to scale based on thresholds.
@@ -185,12 +159,11 @@ def _swing_node_to_calibration_response(
     low = float(swing.low_price)
     size = high - low
 
-    # Determine scale - use size-based thresholds if available, else depth
+    # Determine scale - use size-based thresholds if available, otherwise "M"
     if scale_thresholds:
         scale = _size_to_scale(size, scale_thresholds)
     else:
-        depth = swing.get_depth()
-        scale = _depth_to_scale(depth)
+        scale = "M"
 
     # Calculate Fib levels based on direction
     if swing.direction == "bull":
@@ -217,8 +190,8 @@ def _swing_node_to_calibration_response(
         size=size,
         rank=rank,
         is_active=is_active,
-        depth=swing.get_depth(),
-        parent_ids=[p.swing_id for p in swing.parents],
+        depth=0,  # Swing hierarchy removed (#301)
+        parent_ids=[],  # Swing hierarchy removed (#301)
         fib_0=fib_0,
         fib_0382=fib_0382,
         fib_1=fib_1,
@@ -243,38 +216,32 @@ def _event_to_response(
         ReplayEventResponse for API response.
     """
     # Determine event type string
+    # Swing hierarchy removed in #301 - depth always 0, parent_ids always empty
     if isinstance(event, SwingFormedEvent):
         event_type = "SWING_FORMED"
         direction = event.direction
-        depth = 0
-        parent_ids = event.parent_ids
     elif isinstance(event, SwingInvalidatedEvent):
         event_type = "SWING_INVALIDATED"
         direction = swing.direction if swing else "bull"
-        depth = swing.get_depth() if swing else 0
-        parent_ids = [p.swing_id for p in swing.parents] if swing else []
     elif isinstance(event, SwingCompletedEvent):
         event_type = "SWING_COMPLETED"
         direction = swing.direction if swing else "bull"
-        depth = swing.get_depth() if swing else 0
-        parent_ids = [p.swing_id for p in swing.parents] if swing else []
     elif isinstance(event, LevelCrossEvent):
         event_type = "LEVEL_CROSS"
         direction = swing.direction if swing else "bull"
-        depth = swing.get_depth() if swing else 0
-        parent_ids = [p.swing_id for p in swing.parents] if swing else []
     else:
         event_type = "UNKNOWN"
         direction = "bull"
-        depth = 0
-        parent_ids = []
 
-    # Determine scale from size or depth
+    depth = 0  # Swing hierarchy removed (#301)
+    parent_ids: List[str] = []  # Swing hierarchy removed (#301)
+
+    # Determine scale from size or default to "M"
     if swing and scale_thresholds:
         size = float(swing.high_price - swing.low_price)
         scale = _size_to_scale(size, scale_thresholds)
     else:
-        scale = _depth_to_scale(depth)
+        scale = "M"
 
     # Build swing response if we have swing data
     swing_response = None
@@ -570,6 +537,10 @@ def _compute_tree_statistics(
     """
     Compute tree structure statistics for hierarchical UI.
 
+    Note: Swing hierarchy was removed in #301. This function now computes
+    simplified statistics without parent/child relationships. The leg hierarchy
+    (parent_leg_id) is separate and still functional.
+
     Args:
         all_swings: All swings from the DAG.
         active_swings: Currently active (defended) swings.
@@ -577,7 +548,7 @@ def _compute_tree_statistics(
         recent_lookback: Number of bars to look back for "recently invalidated".
 
     Returns:
-        TreeStatistics with hierarchy metrics.
+        TreeStatistics with simplified metrics (swing hierarchy removed).
     """
     import statistics
 
@@ -600,30 +571,21 @@ def _compute_tree_statistics(
             no_orphaned_nodes=True,
         )
 
-    # Root swings (no parents)
-    root_swings = [s for s in all_swings if len(s.parents) == 0]
-    root_bull = sum(1 for s in root_swings if s.direction == "bull")
-    root_bear = sum(1 for s in root_swings if s.direction == "bear")
+    # Swing hierarchy removed (#301) - all swings are now roots
+    root_bull = sum(1 for s in all_swings if s.direction == "bull")
+    root_bear = sum(1 for s in all_swings if s.direction == "bear")
 
-    # Max depth
-    max_depth = max((s.get_depth() for s in all_swings), default=0)
+    # All swings at depth 0 since hierarchy removed
+    max_depth = 0
+    avg_children = 0.0
 
-    # Average children per node
-    total_children = sum(len(s.children) for s in all_swings)
-    avg_children = total_children / len(all_swings) if all_swings else 0.0
-
-    # Defended swings by depth
-    defended_by_depth = {"1": 0, "2": 0, "3": 0, "deeper": 0}
-    for swing in active_swings:
-        depth = swing.get_depth()
-        if depth == 0:
-            defended_by_depth["1"] += 1  # depth_1 = root (depth 0)
-        elif depth == 1:
-            defended_by_depth["2"] += 1
-        elif depth == 2:
-            defended_by_depth["3"] += 1
-        else:
-            defended_by_depth["deeper"] += 1
+    # All active swings are at depth 1 (roots)
+    defended_by_depth = {
+        "1": len(active_swings),
+        "2": 0,
+        "3": 0,
+        "deeper": 0
+    }
 
     # Range distribution
     ranges = [float(s.high_price - s.low_price) for s in all_swings]
@@ -649,21 +611,13 @@ def _compute_tree_statistics(
         and s.invalidated_at_bar >= recent_threshold
     )
 
-    # Validation quick-checks
-    # 1. All root swings have at least one child
-    roots_have_children = all(len(s.children) > 0 for s in root_swings) if root_swings else True
-
-    # 2. Siblings detected (swings sharing same defended pivot but different origins)
+    # Validation checks simplified (swing hierarchy removed #301)
+    roots_have_children = True  # No hierarchy to validate
     siblings_detected = _check_siblings_exist(all_swings)
-
-    # 3. No orphaned nodes (all non-root swings have parents)
-    no_orphaned_nodes = all(
-        len(s.parents) > 0 or s.get_depth() == 0
-        for s in all_swings
-    )
+    no_orphaned_nodes = True  # No hierarchy to validate
 
     return TreeStatistics(
-        root_swings=len(root_swings),
+        root_swings=len(all_swings),  # All swings are roots now
         root_bull=root_bull,
         root_bear=root_bear,
         total_nodes=len(all_swings),
@@ -755,15 +709,8 @@ def _group_swings_by_depth(
             scale_thresholds=scale_thresholds,
         )
 
-        depth = swing.get_depth()
-        if depth == 0:
-            result.depth_1.append(response)
-        elif depth == 1:
-            result.depth_2.append(response)
-        elif depth == 2:
-            result.depth_3.append(response)
-        else:
-            result.deeper.append(response)
+        # Swing hierarchy removed (#301) - all swings go to depth_1
+        result.depth_1.append(response)
 
     return result
 
@@ -839,9 +786,9 @@ async def get_windowed_swings(
             low_bar_index=swing.low_bar_index,
             size=size,
             rank=rank,
-            scale=_depth_to_scale(swing.get_depth()),
-            depth=swing.get_depth(),
-            parent_ids=[p.swing_id for p in swing.parents],
+            scale="M",  # Swing hierarchy removed (#301)
+            depth=0,  # Swing hierarchy removed (#301)
+            parent_ids=[],  # Swing hierarchy removed (#301)
             fib_0=fib_0,
             fib_0382=fib_0382,
             fib_1=fib_1,
@@ -1394,15 +1341,8 @@ def _build_swing_state(
             rank=rank,
             scale_thresholds=scale_thresholds,
         )
-        depth = swing.get_depth()
-        if depth == 0:
-            by_depth["depth_1"].append(response)
-        elif depth == 1:
-            by_depth["depth_2"].append(response)
-        elif depth == 2:
-            by_depth["depth_3"].append(response)
-        else:
-            by_depth["deeper"].append(response)
+        # Swing hierarchy removed (#301) - all swings go to depth_1
+        by_depth["depth_1"].append(response)
 
     return ReplaySwingState(
         depth_1=by_depth["depth_1"],
