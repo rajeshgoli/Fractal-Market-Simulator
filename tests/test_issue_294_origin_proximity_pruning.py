@@ -341,11 +341,11 @@ class TestOriginProximityPivotGrouping:
         assert len(state.active_legs) == 2
 
 
-class TestOriginProximityActiveSwingImmunity:
-    """Test that legs with active swings are immune to proximity pruning."""
+class TestOriginProximitySwingTransfer:
+    """Test that swings are transferred when legs with active swings are pruned."""
 
-    def test_immune_leg_not_pruned(self):
-        """Legs with active swings should not be pruned."""
+    def test_swing_transferred_to_older_leg(self):
+        """When a leg with a swing is pruned, its swing should transfer to the older leg."""
         config = SwingConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
@@ -375,10 +375,13 @@ class TestOriginProximityActiveSwingImmunity:
         bar = make_bar(20)
         events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
 
-        # leg2 should not be pruned due to active swing immunity
+        # leg2 should be pruned (no immunity) and swing transferred to leg1
         prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
-        assert len(prox_events) == 0
-        assert len(state.active_legs) == 2
+        assert len(prox_events) == 1
+        assert prox_events[0].swing_id == "swing-123"
+        assert len(state.active_legs) == 1
+        # Swing should have been transferred to the surviving older leg
+        assert leg1.swing_id == "swing-123"
 
 
 class TestOriginProximityMultipleLegs:

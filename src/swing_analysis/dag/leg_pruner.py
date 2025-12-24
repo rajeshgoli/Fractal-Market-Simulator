@@ -11,7 +11,7 @@ import bisect
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Dict, Set, TYPE_CHECKING
+from typing import List, Dict, Set, Optional, Tuple, TYPE_CHECKING
 
 from ..swing_config import SwingConfig
 from ..swing_node import SwingNode
@@ -147,14 +147,10 @@ class LegPruner:
         if len(legs) <= 1:
             return events  # Nothing to prune
 
-        # Build set of active swing IDs for immunity check
-        active_swing_ids = {
-            swing.swing_id for swing in state.active_swings
-            if swing.status == 'active'
-        }
-
         current_bar = bar.index
         pruned_leg_ids: Set[str] = set()
+        # Track swing transfers: pruned_leg_id -> survivor_leg that inherits the swing
+        swing_transfers: Dict[str, Leg] = {}
 
         # Step 1: Group legs by pivot (pivot_price, pivot_index)
         pivot_groups: Dict[Tuple[Decimal, int], List[Leg]] = defaultdict(list)
@@ -176,13 +172,6 @@ class LegPruner:
             survivor_indices: List[int] = []  # origin_index values, kept sorted
 
             for leg in group_legs:
-                # Active swing immunity
-                if leg.swing_id and leg.swing_id in active_swing_ids:
-                    # Legs are processed in origin_index order, so append maintains sort
-                    survivors.append(leg)
-                    survivor_indices.append(leg.origin_index)
-                    continue
-
                 # Calculate lower bound for older legs that could satisfy time proximity
                 # From time_ratio < threshold:
                 #   (newer_idx - older_idx) / (current_bar - older_idx) < threshold
@@ -200,6 +189,7 @@ class LegPruner:
 
                 # Only check survivors in bounded window [start_pos:]
                 should_prune = False
+                prune_by_leg: Optional[Leg] = None
                 prune_explanation = ""
 
                 for i in range(start_pos, len(survivors)):
@@ -228,6 +218,7 @@ class LegPruner:
                     # Prune if BOTH conditions are true
                     if time_ratio < time_threshold and range_ratio < range_threshold:
                         should_prune = True
+                        prune_by_leg = older
                         prune_explanation = (
                             f"Pruned by older leg {older.leg_id} (same pivot): "
                             f"time_ratio={float(time_ratio):.3f} < {float(time_threshold):.3f}, "
@@ -238,10 +229,13 @@ class LegPruner:
                 if should_prune:
                     leg.status = 'pruned'
                     pruned_leg_ids.add(leg.leg_id)
+                    # Track swing transfer if pruned leg has a swing
+                    if leg.swing_id:
+                        swing_transfers[leg.leg_id] = prune_by_leg
                     events.append(LegPrunedEvent(
                         bar_index=bar.index,
                         timestamp=timestamp,
-                        swing_id="",
+                        swing_id=leg.swing_id or "",
                         leg_id=leg.leg_id,
                         reason="origin_proximity_prune",
                         explanation=prune_explanation,
@@ -250,6 +244,14 @@ class LegPruner:
                     # Legs are processed in origin_index order, so append maintains sort
                     survivors.append(leg)
                     survivor_indices.append(leg.origin_index)
+
+        # Transfer swings from pruned legs to their survivor legs
+        for pruned_leg in state.active_legs:
+            if pruned_leg.leg_id in swing_transfers:
+                survivor = swing_transfers[pruned_leg.leg_id]
+                # Transfer swing_id to survivor if survivor doesn't already have one
+                if pruned_leg.swing_id and not survivor.swing_id:
+                    survivor.swing_id = pruned_leg.swing_id
 
         # Reparent children of pruned legs before removal (#281)
         for leg in state.active_legs:
