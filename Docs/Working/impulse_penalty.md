@@ -72,9 +72,16 @@ Parent origin (A) ────→ Deepest point (D) ←──── Child origin
 - Parent's effective impulse is the difference
 
 **On new child at higher origin:**
-- A new child forming at a higher origin means deeper counter-move
-- Update the `impulse_back` score (the reversal went further)
-- Net impulse decreases
+- A new child forming at higher origin means deeper counter-move
+- Check if parent's pivot has extended deeper than stored `segment_deepest`
+  - If yes: recalculate BOTH `impulse_to_deepest` AND `impulse_back` (deepest changed)
+  - If no: only update `impulse_back`
+- Net impulse direction is indeterminate — depends on relative impulsiveness of new moves
+
+**Example:** `1000 → 900 → 950 → 500 → 960`
+- Phase 1: D=900, child at 950. impulse_to=1000→900, impulse_back=900→950
+- Phase 2: D=500 (deeper!), new child at 960. BOTH recalculated: impulse_to=1000→500, impulse_back=500→960
+- Net impulse could INCREASE if 1000→500 was sharper than 1000→900
 
 **Key principle:** The market's own behavior determines the score — no magic thresholds required.
 
@@ -155,16 +162,41 @@ def net_segment_impulse(self) -> Optional[float]:
 
 When a new child forms at a higher origin (deeper counter-move):
 ```python
-def update_segment_impulse_for_new_child(parent: Leg, new_child_origin_price: Decimal, new_child_origin_index: int):
-    """Update impulse_back when new child forms at higher origin."""
+def update_segment_impulse_for_new_child(
+    parent: Leg,
+    new_child_origin_price: Decimal,
+    new_child_origin_index: int
+):
+    """
+    Update segment impulse when new child forms at higher origin.
+
+    Two cases:
+    1. Parent's pivot extended deeper than stored deepest → recalculate BOTH
+    2. Parent's pivot same as stored deepest → only update impulse_back
+    """
     if parent.segment_deepest_price is None:
         return  # No segment established yet
 
-    # Only update if new child origin is "higher" (further counter-move)
-    # Bull parent: higher origin = higher price
-    # Bear parent: higher origin = lower price
+    current_pivot = parent.pivot_price
+    current_pivot_index = parent.pivot_index
 
-    # Recalculate impulse_back with new child origin
+    # Check if pivot extended deeper
+    pivot_extended_deeper = (
+        (parent.direction == 'bear' and current_pivot < parent.segment_deepest_price) or
+        (parent.direction == 'bull' and current_pivot > parent.segment_deepest_price)
+    )
+
+    if pivot_extended_deeper:
+        # Deepest changed! Recalculate BOTH impulse components
+        parent.segment_deepest_price = current_pivot
+        parent.segment_deepest_index = current_pivot_index
+
+        # Recalculate impulse_to_deepest
+        range_to_deepest = abs(parent.origin_price - current_pivot)
+        bars_to_deepest = abs(current_pivot_index - parent.origin_index)
+        parent.impulse_to_deepest = float(range_to_deepest) / bars_to_deepest if bars_to_deepest > 0 else 0.0
+
+    # Always recalculate impulse_back with new child origin
     range_back = abs(parent.segment_deepest_price - new_child_origin_price)
     bars_back = abs(new_child_origin_index - parent.segment_deepest_index)
     parent.impulse_back = float(range_back) / bars_back if bars_back > 0 else 0.0
