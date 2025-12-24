@@ -412,24 +412,80 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     return 0;
   }, [calibrationPhase, forwardPlayback.currentPosition, calibrationData]);
 
+  // Compute a "live" aggregated bar from source bars for incremental display
+  // This prevents look-ahead bias by only using source bars up to currentPosition
+  const computeLiveBar = useCallback((
+    aggBar: BarData,
+    currentPosition: number
+  ): BarData | null => {
+    // Find source bars within this aggregated bar's range, up to current position
+    const relevantSourceBars = sourceBars.filter(
+      sb => sb.index >= aggBar.source_start_index && sb.index <= currentPosition
+    );
+
+    if (relevantSourceBars.length === 0) return null;
+
+    // Compute OHLC from the source bars we have so far
+    const firstBar = relevantSourceBars[0];
+    const lastBar = relevantSourceBars[relevantSourceBars.length - 1];
+
+    return {
+      ...aggBar,
+      open: firstBar.open,
+      high: Math.max(...relevantSourceBars.map(b => b.high)),
+      low: Math.min(...relevantSourceBars.map(b => b.low)),
+      close: lastBar.close,
+      // Update source_end_index to reflect what we've actually processed
+      source_end_index: currentPosition,
+    };
+  }, [sourceBars]);
+
   // Filter chart bars to only show candles up to current playback position
-  // This ensures smooth incremental rendering - candles appear one at a time like movie playback
-  // The full aggregated bars are prefetched for performance, but we only render up to current position
+  // Complete bars use backend data; the "live" bar is computed incrementally from source bars
   const visibleChart1Bars = useMemo(() => {
-    // Only filter during playback - show all bars otherwise (calibration, stopped, etc.)
     if (calibrationPhase !== CalibrationPhase.PLAYING) {
       return chart1Bars;
     }
-    // Filter to only include aggregated bars that END at or before current position
-    return chart1Bars.filter(bar => bar.source_end_index <= currentPlaybackPosition);
-  }, [chart1Bars, currentPlaybackPosition, calibrationPhase]);
+
+    const result: BarData[] = [];
+
+    for (const bar of chart1Bars) {
+      if (bar.source_end_index <= currentPlaybackPosition) {
+        // Complete bar - use backend's final OHLC
+        result.push(bar);
+      } else if (bar.source_start_index <= currentPlaybackPosition) {
+        // Live/incomplete bar - compute OHLC from source bars we have
+        const liveBar = computeLiveBar(bar, currentPlaybackPosition);
+        if (liveBar) {
+          result.push(liveBar);
+        }
+      }
+      // Bars that haven't started yet (source_start_index > currentPlaybackPosition) are skipped
+    }
+
+    return result;
+  }, [chart1Bars, currentPlaybackPosition, calibrationPhase, computeLiveBar]);
 
   const visibleChart2Bars = useMemo(() => {
     if (calibrationPhase !== CalibrationPhase.PLAYING) {
       return chart2Bars;
     }
-    return chart2Bars.filter(bar => bar.source_end_index <= currentPlaybackPosition);
-  }, [chart2Bars, currentPlaybackPosition, calibrationPhase]);
+
+    const result: BarData[] = [];
+
+    for (const bar of chart2Bars) {
+      if (bar.source_end_index <= currentPlaybackPosition) {
+        result.push(bar);
+      } else if (bar.source_start_index <= currentPlaybackPosition) {
+        const liveBar = computeLiveBar(bar, currentPlaybackPosition);
+        if (liveBar) {
+          result.push(liveBar);
+        }
+      }
+    }
+
+    return result;
+  }, [chart2Bars, currentPlaybackPosition, calibrationPhase, computeLiveBar]);
 
   // Handle eye icon click - toggle follow state (#267)
   const handleEyeIconClick = useCallback((legId: string) => {

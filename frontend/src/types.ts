@@ -320,7 +320,6 @@ export const AGGREGATION_OPTIONS = [
   { value: '1H', label: '1H', minutes: 60 },
   { value: '4H', label: '4H', minutes: 240 },
   { value: '1D', label: '1D', minutes: 1440 },
-  { value: '1W', label: '1W', minutes: 10080 },
 ] as const;
 
 export type AggregationScale = typeof AGGREGATION_OPTIONS[number]['value'];

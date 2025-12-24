@@ -134,30 +134,18 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
     lineSeriesRef.current.clear();
   }, [chart]);
 
-  // Find bar timestamp by index
+  // Find bar timestamp by source index
+  // barIndex is a SOURCE bar index - we find the aggregated bar whose source range contains it
   const getTimestampForIndex = useCallback((barIndex: number): number | null => {
-    // Find bar with matching source index range
     for (const bar of bars) {
       if (bar.source_start_index !== undefined && bar.source_end_index !== undefined) {
         if (barIndex >= bar.source_start_index && barIndex <= bar.source_end_index) {
           return bar.timestamp;
         }
       }
-      // Fallback: match by exact index
-      if (bar.index === barIndex) {
-        return bar.timestamp;
-      }
     }
-    // If not found, try to estimate from bar index
-    if (bars.length > 0) {
-      const firstBar = bars[0];
-      const lastBar = bars[bars.length - 1];
-      if (bars.length >= 2) {
-        // Estimate timestamp based on linear interpolation
-        const barDuration = (lastBar.timestamp - firstBar.timestamp) / (bars.length - 1);
-        return firstBar.timestamp + barIndex * barDuration;
-      }
-    }
+    // No matching bar found - the aggregated bar containing this source index isn't visible yet
+    // Return null to prevent rendering legs at incorrect positions
     return null;
   }, [bars]);
 
