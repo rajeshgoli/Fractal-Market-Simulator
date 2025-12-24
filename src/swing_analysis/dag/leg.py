@@ -71,6 +71,7 @@ class Leg:
     _moment_sum_x: float = 0.0  # Sum of contributions
     _moment_sum_x2: float = 0.0  # Sum of squared contributions
     _moment_sum_x3: float = 0.0  # Sum of cubed contributions
+    _cached_range: Optional[Decimal] = None  # Cached range value for performance
 
     def __post_init__(self) -> None:
         """Compute deterministic leg_id if not provided."""
@@ -78,6 +79,8 @@ class Leg:
             self.leg_id = self.make_leg_id(
                 self.direction, self.origin_price, self.origin_index
             )
+        # Initialize cached range
+        self._cached_range = abs(self.origin_price - self.pivot_price)
 
     @staticmethod
     def make_leg_id(
@@ -123,8 +126,16 @@ class Leg:
 
     @property
     def range(self) -> Decimal:
-        """Absolute range of the leg."""
-        return abs(self.origin_price - self.pivot_price)
+        """Absolute range of the leg (cached for performance)."""
+        if self._cached_range is None:
+            self._cached_range = abs(self.origin_price - self.pivot_price)
+        return self._cached_range
+
+    def update_pivot(self, new_pivot_price: Decimal, new_pivot_index: int) -> None:
+        """Update pivot and invalidate range cache."""
+        self.pivot_price = new_pivot_price
+        self.pivot_index = new_pivot_index
+        self._cached_range = abs(self.origin_price - new_pivot_price)
 
     @property
     def origin_breached(self) -> bool:

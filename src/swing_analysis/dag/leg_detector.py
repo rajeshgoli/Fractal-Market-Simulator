@@ -258,8 +258,7 @@ class LegDetector:
         for leg in self.state.active_legs:
             if leg.direction == 'bull' and leg.status == 'active':
                 if bar_high > leg.pivot_price and leg.max_origin_breach is None:
-                    leg.pivot_price = bar_high
-                    leg.pivot_index = bar.index
+                    leg.update_pivot(bar_high, bar.index)
                     leg.last_modified_bar = bar.index
                     # Recalculate impulse when pivot extends (#236)
                     leg.impulse = _calculate_impulse(leg.range, leg.origin_index, leg.pivot_index)
@@ -268,8 +267,7 @@ class LegDetector:
         for leg in self.state.active_legs:
             if leg.direction == 'bear' and leg.status == 'active':
                 if bar_low < leg.pivot_price and leg.max_origin_breach is None:
-                    leg.pivot_price = bar_low
-                    leg.pivot_index = bar.index
+                    leg.update_pivot(bar_low, bar.index)
                     leg.last_modified_bar = bar.index
                     # Recalculate impulse when pivot extends (#236)
                     leg.impulse = _calculate_impulse(leg.range, leg.origin_index, leg.pivot_index)
