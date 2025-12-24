@@ -214,7 +214,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           stats.proximity++;
         } else if (reason.includes('inner')) {
           stats.innerStructure++;
-        } else if (reason.includes('min_counter_trend')) {
+        } else if (reason.includes('min counter trend') || reason.includes('min_counter_trend')) {
           stats.minCtr++;
         }
       }
