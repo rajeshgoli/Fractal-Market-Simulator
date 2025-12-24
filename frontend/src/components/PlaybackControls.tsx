@@ -99,10 +99,11 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const isPlaying = playbackState === PlaybackState.PLAYING;
 
   // Process Till state (#328) - date-based navigation
+  const [processTillBars, setProcessTillBars] = useState('');
   const [processTillDate, setProcessTillDate] = useState('');
   const [processTillError, setProcessTillError] = useState<string | null>(null);
 
-  // Calculate bar count from datetime selection
+  // Calculate bar count from datetime selection (only when we have current timestamp)
   const calculateBarsFromDate = (targetDateStr: string): { bars: number; timestamp: number } | null => {
     if (!targetDateStr || !currentTimestamp) return null;
     try {
@@ -117,8 +118,12 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     }
   };
 
-  // Preview of selected date
-  const processTillPreview = processTillDate ? calculateBarsFromDate(processTillDate) : null;
+  // Preview based on date (if available) or direct bar input
+  const processTillPreview = processTillDate && currentTimestamp
+    ? calculateBarsFromDate(processTillDate)
+    : processTillBars
+      ? { bars: parseInt(processTillBars, 10) || 0, timestamp: 0 }
+      : null;
 
   // Check if we're in forward playback mode (have calibration data)
   const isForwardPlayback = calibrationBarCount !== undefined && calibrationBarCount > 0;
@@ -345,40 +350,67 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         )}
 
         {/* Process Till (#328) - date-based navigation */}
-        {onProcessTill && currentTimestamp && (
+        {onProcessTill && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-app-muted">Jump to:</span>
+            <span className="text-xs text-app-muted">Jump:</span>
 
-            {/* +10K bars preset button */}
-            {get10kBarsDate() && (
-              <button
-                onClick={() => setProcessTillDate(get10kBarsDate()!)}
+            {/* +10K bars preset button - always show */}
+            <button
+              onClick={() => {
+                if (currentTimestamp && get10kBarsDate()) {
+                  setProcessTillDate(get10kBarsDate()!);
+                  setProcessTillBars('');
+                } else {
+                  setProcessTillBars('10000');
+                  setProcessTillDate('');
+                }
+              }}
+              disabled={isProcessingTill || isPlaying}
+              className="px-2 py-1 text-xs bg-app-bg border border-app-border rounded hover:bg-app-card hover:text-white text-app-muted transition-colors disabled:opacity-50"
+              title="Set target to 10,000 bars ahead"
+            >
+              +10K
+            </button>
+
+            {/* Show datetime picker when we have current timestamp, otherwise show bar input */}
+            {currentTimestamp ? (
+              <input
+                type="datetime-local"
+                value={processTillDate}
+                onChange={(e) => {
+                  setProcessTillDate(e.target.value);
+                  setProcessTillBars('');
+                  setProcessTillError(null);
+                }}
+                min={minDatetime}
+                max={maxDatetime}
                 disabled={isProcessingTill || isPlaying}
-                className="px-2 py-1 text-xs bg-app-bg border border-app-border rounded hover:bg-app-card hover:text-white text-app-muted transition-colors disabled:opacity-50"
-                title="Set target to 10,000 bars ahead"
-              >
-                +10K
-              </button>
+                className={`px-2 py-1 text-xs font-mono bg-app-bg border rounded focus:outline-none focus:ring-1 focus:ring-trading-blue ${
+                  processTillError ? 'border-trading-bear' : 'border-app-border'
+                } disabled:opacity-50`}
+              />
+            ) : (
+              <input
+                type="text"
+                value={processTillBars}
+                onChange={(e) => {
+                  setProcessTillBars(e.target.value.replace(/\D/g, ''));
+                  setProcessTillDate('');
+                  setProcessTillError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleProcessTill();
+                }}
+                placeholder="bars"
+                disabled={isProcessingTill || isPlaying}
+                className={`w-20 px-2 py-1 text-xs font-mono bg-app-bg border rounded focus:outline-none focus:ring-1 focus:ring-trading-blue ${
+                  processTillError ? 'border-trading-bear' : 'border-app-border'
+                } disabled:opacity-50`}
+              />
             )}
 
-            {/* Datetime picker */}
-            <input
-              type="datetime-local"
-              value={processTillDate}
-              onChange={(e) => {
-                setProcessTillDate(e.target.value);
-                setProcessTillError(null);
-              }}
-              min={minDatetime}
-              max={maxDatetime}
-              disabled={isProcessingTill || isPlaying}
-              className={`px-2 py-1 text-xs font-mono bg-app-bg border rounded focus:outline-none focus:ring-1 focus:ring-trading-blue ${
-                processTillError ? 'border-trading-bear' : 'border-app-border'
-              } disabled:opacity-50`}
-            />
-
             {/* Bar count preview */}
-            {processTillPreview && (
+            {processTillPreview && processTillPreview.bars > 0 && (
               <span className="text-xs text-trading-blue font-mono">
                 +{formatCount(processTillPreview.bars)} bars
               </span>
@@ -387,9 +419,9 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             {/* Go button */}
             <button
               onClick={handleProcessTill}
-              disabled={isProcessingTill || isPlaying || !processTillPreview}
+              disabled={isProcessingTill || isPlaying || !processTillPreview || processTillPreview.bars <= 0}
               className="p-1.5 rounded border border-app-border bg-app-bg text-app-muted hover:text-white hover:bg-app-card transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title={isPlaying ? "Stop playback first" : processTillPreview ? `Process ${formatCount(processTillPreview.bars)} bars` : "Select a future date"}
+              title={isPlaying ? "Stop playback first" : processTillPreview && processTillPreview.bars > 0 ? `Process ${formatCount(processTillPreview.bars)} bars` : "Enter bar count or select date"}
               aria-label="Process till target"
             >
               {isProcessingTill ? (
