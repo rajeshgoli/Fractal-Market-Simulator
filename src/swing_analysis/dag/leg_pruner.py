@@ -97,6 +97,13 @@ class LegPruner:
         """
         Apply origin-proximity based consolidation within pivot groups (#294, #298).
 
+        **Complexity:** O(N log N) via time-bounded binary search (#306).
+
+        The time_ratio formula bounds which older legs need checking:
+            older_idx > (newer_idx - threshold * current_bar) / (1 - threshold)
+        Binary search finds this bound in O(log N), reducing overall complexity
+        from O(N^2) to O(N log N).
+
         **Step 1: Group by pivot** (pivot_price, pivot_index)
         Legs with different pivots are independent - a newer leg can validly have
         a larger range if it found a better pivot.
@@ -164,19 +171,40 @@ class LegPruner:
             group_legs.sort(key=lambda l: l.origin_index)
 
             # Track survivors within this pivot group
+            # Use parallel arrays for O(log N) binary search (#306)
             survivors: List[Leg] = []
+            survivor_indices: List[int] = []  # origin_index values, kept sorted
 
             for leg in group_legs:
                 # Active swing immunity
                 if leg.swing_id and leg.swing_id in active_swing_ids:
+                    # Legs are processed in origin_index order, so append maintains sort
                     survivors.append(leg)
+                    survivor_indices.append(leg.origin_index)
                     continue
 
-                # Check against all older survivors in this pivot group
+                # Calculate lower bound for older legs that could satisfy time proximity
+                # From time_ratio < threshold:
+                #   (newer_idx - older_idx) / (current_bar - older_idx) < threshold
+                # Rearranging: older_idx > (newer_idx - threshold * current_bar) / (1 - threshold)
+                if time_threshold < Decimal("1"):
+                    min_older_idx = int(
+                        (leg.origin_index - float(time_threshold) * current_bar)
+                        / (1 - float(time_threshold))
+                    )
+                else:
+                    min_older_idx = -1  # No bound, check all (edge case)
+
+                # Binary search for first survivor with origin_index >= min_older_idx
+                start_pos = bisect.bisect_left(survivor_indices, min_older_idx)
+
+                # Only check survivors in bounded window [start_pos:]
                 should_prune = False
                 prune_explanation = ""
 
-                for older in survivors:
+                for i in range(start_pos, len(survivors)):
+                    older = survivors[i]
+
                     # Calculate bars since origin for both legs
                     bars_since_older = current_bar - older.origin_index
                     bars_since_newer = current_bar - leg.origin_index
@@ -219,7 +247,9 @@ class LegPruner:
                         explanation=prune_explanation,
                     ))
                 else:
+                    # Legs are processed in origin_index order, so append maintains sort
                     survivors.append(leg)
+                    survivor_indices.append(leg.origin_index)
 
         # Reparent children of pruned legs before removal (#281)
         for leg in state.active_legs:

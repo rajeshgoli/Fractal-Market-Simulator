@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 8
 
 **Last Review:** 2025-12-23
 
@@ -8,6 +8,8 @@
 
 ## Pending Changes
 
+- #306: Optimize proximity pruning to O(N log N) using time-bounded binary search
+- #302: Cache leg.range property for performance
 - #301: Remove unused swing hierarchy and discretization module
 - #300: Convert leg origin_index/pivot_index to csv_index in API responses
 - #299: Deterministic leg/swing IDs to survive BE reset
