@@ -411,7 +411,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Sidebar Header - collapsible (#310) */}
         <button
           className="w-full p-4 border-b border-app-border hover:bg-app-card/30 transition-colors"
-          onClick={() => setIsLingerEventsCollapsed(!isLingerEventsCollapsed)}
+          onClick={() => {
+            const willOpen = isLingerEventsCollapsed;
+            setIsLingerEventsCollapsed(!isLingerEventsCollapsed);
+            // Close Detection Config when opening this section (mutually exclusive)
+            if (willOpen) setIsDetectionConfigCollapsed(true);
+          }}
         >
           <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
             {isLingerEventsCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
@@ -465,7 +470,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="border-t border-app-border">
           <button
             className="w-full p-4 hover:bg-app-card/30 transition-colors"
-            onClick={() => setIsDetectionConfigCollapsed(!isDetectionConfigCollapsed)}
+            onClick={() => {
+              const willOpen = isDetectionConfigCollapsed;
+              setIsDetectionConfigCollapsed(!isDetectionConfigCollapsed);
+              // Close Structure Events when opening this section (mutually exclusive)
+              if (willOpen) setIsLingerEventsCollapsed(true);
+            }}
           >
             <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
               {isDetectionConfigCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
