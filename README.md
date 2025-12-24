@@ -34,8 +34,8 @@ pip install -r requirements.txt
 cd frontend && npm install && npm run build && cd ..
 
 # Launch Market Structure View
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000 --mode dag
-open http://127.0.0.1:8000/replay
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000
+open http://127.0.0.1:8000
 ```
 
 **Features:**
@@ -46,16 +46,14 @@ open http://127.0.0.1:8000/replay
 - **Detection config panel**: Adjust thresholds at runtime without restart
 - **Hover/click interaction**: Highlight legs on chart, inspect in panel
 
-**Also available:** Calibration mode (`--mode calibration`) pre-analyzes 10K bars before playback.
-
 See [User Guide](Docs/Reference/user_guide.md) for detailed documentation.
 
 ### Quick Start
 
 ```bash
 # Launch Market Structure View
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000 --mode dag
-open http://127.0.0.1:8000/replay
+python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --window 10000
+open http://127.0.0.1:8000
 
 # Run tests
 source venv/bin/activate && python -m pytest tests/ -v
