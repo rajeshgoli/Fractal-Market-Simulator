@@ -131,11 +131,59 @@ async def health():
 # ============================================================================
 
 
+def infer_resolution_from_data(file_path: str) -> int:
+    """
+    Infer resolution by reading the first few rows and calculating time difference.
+
+    This is more reliable than filename parsing since it uses actual data.
+
+    Args:
+        file_path: Path to the OHLC CSV file.
+
+    Returns:
+        Resolution in minutes (e.g., 5, 30, 60). Defaults to 5 if detection fails.
+    """
+    from ..data.ohlc_loader import load_ohlc
+
+    try:
+        df, _ = load_ohlc(file_path)
+        if len(df) < 2:
+            return 5  # Default
+
+        # Calculate time difference between first two rows
+        time_diff = df.index[1] - df.index[0]
+        minutes = int(time_diff.total_seconds() / 60)
+
+        # Validate it's a reasonable resolution
+        valid_resolutions = [1, 5, 15, 30, 60, 240, 1440]  # 1m to 1d
+        if minutes in valid_resolutions:
+            return minutes
+
+        # Find closest valid resolution
+        closest = min(valid_resolutions, key=lambda x: abs(x - minutes))
+        return closest
+
+    except Exception as e:
+        logger.debug(f"Failed to infer resolution from data: {e}")
+        return 5  # Default
+
+
+def minutes_to_resolution_string(minutes: int) -> str:
+    """Convert minutes to resolution string (e.g., 60 -> '1h')."""
+    if minutes >= 1440:
+        return f"{minutes // 1440}d"
+    elif minutes >= 60:
+        return f"{minutes // 60}h"
+    else:
+        return f"{minutes}m"
+
+
 def infer_resolution_from_filename(filename: str) -> str:
     """
     Infer resolution from filename patterns like es-5m.csv, es-1h.csv, es-30m-from-2023.csv.
 
     Returns resolution string (e.g., '5m', '1h', '1d') or 'unknown'.
+    Note: Prefer infer_resolution_from_data() for more reliable detection.
     """
     import re
     # Match patterns like -5m., -1h., -30m., -1d., -1w., -1mo.
@@ -227,7 +275,7 @@ async def get_session():
     return {
         "session_id": "replay-session",
         "data_file": s.data_file or "",
-        "resolution": f"{s.resolution_minutes}m",
+        "resolution": minutes_to_resolution_string(s.resolution_minutes),
         "window_size": len(s.source_bars),
         "window_offset": s.window_offset,
         "total_source_bars": s.total_source_bars,
@@ -282,12 +330,9 @@ async def restart_session(request: SessionRestartRequest):
         raise HTTPException(status_code=400, detail=f"Data file not found: {data_file}")
 
     try:
-        # Infer resolution from filename
-        resolution = infer_resolution_from_filename(Path(data_file).name)
-        resolution_minutes = {
-            '1m': 1, '5m': 5, '15m': 15, '30m': 30,
-            '1h': 60, '4h': 240, '1d': 1440, '1w': 10080, '1mo': 43200
-        }.get(resolution, 5)
+        # Infer resolution from actual data (more reliable than filename)
+        resolution_minutes = infer_resolution_from_data(data_file)
+        logger.info(f"Detected resolution: {resolution_minutes}m from data")
 
         # Get file metrics
         metrics = get_file_metrics(data_file)
@@ -335,7 +380,7 @@ async def restart_session(request: SessionRestartRequest):
             "success": True,
             "session_id": "replay-session",
             "data_file": data_file,
-            "resolution": f"{resolution_minutes}m",
+            "resolution": minutes_to_resolution_string(resolution_minutes),
             "window_size": len(state.source_bars),
             "window_offset": offset,
             "total_source_bars": metrics.total_bars,
