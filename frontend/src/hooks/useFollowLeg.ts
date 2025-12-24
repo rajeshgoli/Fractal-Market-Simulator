@@ -92,8 +92,8 @@ export function useFollowLeg(): UseFollowLegReturn {
   const [followedLegs, setFollowedLegs] = useState<FollowedLeg[]>([]);
   const [eventsByBar, setEventsByBar] = useState<Map<number, LifecycleEventWithLegInfo[]>>(new Map());
 
-  // Track last fetched bar to avoid redundant fetches
-  const [lastFetchedBar, setLastFetchedBar] = useState<number>(-1);
+  // Track which legs have had their events fetched (fixes #315)
+  const [fetchedLegIds, setFetchedLegIds] = useState<Set<string>>(new Set());
 
   // Calculate available colors
   const availableColors = useMemo(() => {
@@ -190,6 +190,13 @@ export function useFollowLeg(): UseFollowLegReturn {
   const unfollowLeg = useCallback((legId: string) => {
     setFollowedLegs(prev => prev.filter(l => l.leg_id !== legId));
 
+    // Remove from fetched set so re-following will fetch again
+    setFetchedLegIds(prev => {
+      const updated = new Set(prev);
+      updated.delete(legId);
+      return updated;
+    });
+
     // Clear events for this leg
     setEventsByBar(prev => {
       const updated = new Map(prev);
@@ -205,25 +212,33 @@ export function useFollowLeg(): UseFollowLegReturn {
     });
   }, []);
 
-  // Fetch events for followed legs
-  const fetchEventsForFollowedLegs = useCallback(async (currentBarIndex: number) => {
+  // Fetch events for followed legs (fixes #315 - fetch once per leg, not per bar)
+  const fetchEventsForFollowedLegs = useCallback(async (_currentBarIndex: number) => {
     if (followedLegs.length === 0) {
       return;
     }
 
-    // Determine since_bar (use the earliest followedAtBar or lastFetchedBar + 1)
-    const sinceBar = lastFetchedBar >= 0
-      ? lastFetchedBar + 1
-      : Math.min(...followedLegs.map(l => l.followedAtBar));
-
-    // Don't fetch if we haven't advanced
-    if (sinceBar > currentBarIndex) {
-      return;
+    // Only fetch for legs that haven't been fetched yet
+    const unfetchedLegs = followedLegs.filter(l => !fetchedLegIds.has(l.leg_id));
+    if (unfetchedLegs.length === 0) {
+      return; // All legs already fetched - no API call needed
     }
 
+    // Fetch all events from the earliest followedAtBar onwards
+    const sinceBar = Math.min(...unfetchedLegs.map(l => l.followedAtBar));
+
     try {
-      const legIds = followedLegs.map(l => l.leg_id);
+      const legIds = unfetchedLegs.map(l => l.leg_id);
       const response = await fetchFollowedLegsEvents(legIds, sinceBar);
+
+      // Mark these legs as fetched
+      setFetchedLegIds(prev => {
+        const updated = new Set(prev);
+        for (const leg of unfetchedLegs) {
+          updated.add(leg.leg_id);
+        }
+        return updated;
+      });
 
       // Process new events
       if (response.events.length > 0) {
@@ -276,12 +291,10 @@ export function useFollowLeg(): UseFollowLegReturn {
           };
         }));
       }
-
-      setLastFetchedBar(currentBarIndex);
     } catch (error) {
       console.error('Failed to fetch lifecycle events:', error);
     }
-  }, [followedLegs, lastFetchedBar]);
+  }, [followedLegs, fetchedLegIds]);
 
   // Clear events for a specific leg
   const clearEventsForLeg = useCallback((legId: string) => {
