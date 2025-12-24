@@ -616,21 +616,14 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     }
   }, [calibrationPhase, forwardPlayback]);
 
-  // Handle Process Till (#328) - advance to a specific CSV index
-  const handleProcessTill = useCallback(async (targetCsvIndex: number) => {
+  // Handle Process Till (#328) - advance by bar count (date-based)
+  const handleProcessTill = useCallback(async (_targetTimestamp: number, barCount: number) => {
     if (calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.playbackState === PlaybackState.PLAYING) {
       throw new Error('Stop playback first');
     }
 
-    const currentCsv = forwardPlayback.csvIndex;
-    if (targetCsvIndex <= currentCsv) {
-      throw new Error('Target must be greater than current position');
-    }
-
-    // Calculate how many bars to advance
-    const advanceBy = targetCsvIndex - currentCsv;
-    if (advanceBy <= 0) {
-      return;
+    if (barCount <= 0) {
+      throw new Error('Must advance at least 1 bar');
     }
 
     setIsProcessingTill(true);
@@ -644,7 +637,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
       const response = await advanceReplay(
         0,  // calibrationBarCount (0 for DAG mode)
         currentPlaybackPosition,
-        advanceBy,
+        barCount,
         [chart1Aggregation, chart2Aggregation],  // Request aggregated bars
         true  // Include DAG state
       );
@@ -685,7 +678,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   }, [
     calibrationPhase,
     forwardPlayback.playbackState,
-    forwardPlayback.csvIndex,
     currentPlaybackPosition,
     chart1Aggregation,
     chart2Aggregation,
@@ -1409,8 +1401,16 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
               onDismissLinger={forwardPlayback.dismissLinger}
               lingerEnabled={lingerEnabled}
               onToggleLinger={() => setLingerEnabled(prev => !prev)}
-              currentCsvIndex={forwardPlayback.csvIndex}
-              maxCsvIndex={sessionInfo ? sessionInfo.windowOffset + sessionInfo.totalSourceBars - 1 : undefined}
+              currentTimestamp={sourceBars[currentPlaybackPosition]?.timestamp}
+              // Calculate approx max timestamp: current + remaining bars * resolution
+              // This is approximate due to market gaps but provides reasonable constraint
+              maxTimestamp={
+                sourceBars[currentPlaybackPosition]?.timestamp && sessionInfo?.totalSourceBars
+                  ? sourceBars[currentPlaybackPosition].timestamp +
+                    ((sessionInfo.totalSourceBars - currentPlaybackPosition - 1) * sourceResolutionMinutes * 60)
+                  : undefined
+              }
+              resolutionMinutes={sourceResolutionMinutes}
               onProcessTill={handleProcessTill}
               isProcessingTill={isProcessingTill}
             />

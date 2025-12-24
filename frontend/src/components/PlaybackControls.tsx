@@ -48,10 +48,11 @@ interface PlaybackControlsProps {
   // Linger toggle
   lingerEnabled?: boolean;
   onToggleLinger?: () => void;
-  // Process Till feature (#328)
-  currentCsvIndex?: number;
-  maxCsvIndex?: number;
-  onProcessTill?: (targetCsvIndex: number) => Promise<void>;
+  // Process Till feature (#328) - date-based navigation
+  currentTimestamp?: number;  // Unix timestamp of current bar
+  maxTimestamp?: number;  // Unix timestamp of last available bar
+  resolutionMinutes?: number;  // Source resolution for bar count calculation
+  onProcessTill?: (targetTimestamp: number, barCount: number) => Promise<void>;
   isProcessingTill?: boolean;
 }
 
@@ -89,16 +90,35 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onDismissLinger,
   lingerEnabled = true,
   onToggleLinger,
-  currentCsvIndex,
-  maxCsvIndex,
+  currentTimestamp,
+  maxTimestamp,
+  resolutionMinutes = 5,
   onProcessTill,
   isProcessingTill = false,
 }) => {
   const isPlaying = playbackState === PlaybackState.PLAYING;
 
-  // Process Till state (#328)
-  const [processTillInput, setProcessTillInput] = useState('');
+  // Process Till state (#328) - date-based navigation
+  const [processTillDate, setProcessTillDate] = useState('');
   const [processTillError, setProcessTillError] = useState<string | null>(null);
+
+  // Calculate bar count from datetime selection
+  const calculateBarsFromDate = (targetDateStr: string): { bars: number; timestamp: number } | null => {
+    if (!targetDateStr || !currentTimestamp) return null;
+    try {
+      const targetDate = new Date(targetDateStr);
+      const targetTs = Math.floor(targetDate.getTime() / 1000);
+      if (targetTs <= currentTimestamp) return null;
+      const diffMinutes = (targetTs - currentTimestamp) / 60;
+      const bars = Math.floor(diffMinutes / resolutionMinutes);
+      return bars > 0 ? { bars, timestamp: targetTs } : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Preview of selected date
+  const processTillPreview = processTillDate ? calculateBarsFromDate(processTillDate) : null;
 
   // Check if we're in forward playback mode (have calibration data)
   const isForwardPlayback = calibrationBarCount !== undefined && calibrationBarCount > 0;
@@ -124,31 +144,42 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   // Progress bar percentage
   const progressPercent = totalBars > 0 ? (currentBar / totalBars) * 100 : 0;
 
-  // Handle Process Till submit (#328)
+  // Handle Process Till submit (#328) - date-based
   const handleProcessTill = async () => {
-    if (!onProcessTill) return;
+    if (!onProcessTill || !processTillPreview) return;
 
-    const targetIndex = parseInt(processTillInput.trim(), 10);
-    if (isNaN(targetIndex)) {
-      setProcessTillError('Enter a valid number');
-      return;
-    }
-    if (currentCsvIndex !== undefined && targetIndex <= currentCsvIndex) {
-      setProcessTillError('Target must be > current');
-      return;
-    }
-    if (maxCsvIndex !== undefined && targetIndex > maxCsvIndex) {
-      setProcessTillError(`Max is ${maxCsvIndex}`);
+    if (maxTimestamp && processTillPreview.timestamp > maxTimestamp) {
+      setProcessTillError('Date exceeds available data');
       return;
     }
 
     setProcessTillError(null);
     try {
-      await onProcessTill(targetIndex);
-      setProcessTillInput(''); // Clear on success
+      await onProcessTill(processTillPreview.timestamp, processTillPreview.bars);
+      setProcessTillDate(''); // Clear on success
     } catch (err) {
       setProcessTillError(err instanceof Error ? err.message : 'Failed');
     }
+  };
+
+  // Format datetime for input (local timezone)
+  const formatDatetimeLocal = (timestamp: number): string => {
+    const date = new Date(timestamp * 1000);
+    return date.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
+  };
+
+  // Get min datetime (current position)
+  const minDatetime = currentTimestamp ? formatDatetimeLocal(currentTimestamp) : undefined;
+
+  // Get max datetime (end of data)
+  const maxDatetime = maxTimestamp ? formatDatetimeLocal(maxTimestamp) : undefined;
+
+  // Calculate "+10K bars" preset datetime
+  const get10kBarsDate = (): string | null => {
+    if (!currentTimestamp) return null;
+    const targetTs = currentTimestamp + (10000 * resolutionMinutes * 60);
+    if (maxTimestamp && targetTs > maxTimestamp) return null;
+    return formatDatetimeLocal(targetTs);
   };
 
   return (
@@ -313,31 +344,52 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           </button>
         )}
 
-        {/* Process Till (#328) */}
-        {onProcessTill && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-app-muted">Till:</span>
+        {/* Process Till (#328) - date-based navigation */}
+        {onProcessTill && currentTimestamp && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-app-muted">Jump to:</span>
+
+            {/* +10K bars preset button */}
+            {get10kBarsDate() && (
+              <button
+                onClick={() => setProcessTillDate(get10kBarsDate()!)}
+                disabled={isProcessingTill || isPlaying}
+                className="px-2 py-1 text-xs bg-app-bg border border-app-border rounded hover:bg-app-card hover:text-white text-app-muted transition-colors disabled:opacity-50"
+                title="Set target to 10,000 bars ahead"
+              >
+                +10K
+              </button>
+            )}
+
+            {/* Datetime picker */}
             <input
-              type="text"
-              value={processTillInput}
+              type="datetime-local"
+              value={processTillDate}
               onChange={(e) => {
-                setProcessTillInput(e.target.value);
+                setProcessTillDate(e.target.value);
                 setProcessTillError(null);
               }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleProcessTill();
-              }}
-              placeholder={currentCsvIndex !== undefined ? `> ${currentCsvIndex}` : 'CSV index'}
+              min={minDatetime}
+              max={maxDatetime}
               disabled={isProcessingTill || isPlaying}
-              className={`w-20 px-2 py-1 text-xs font-mono bg-app-bg border rounded focus:outline-none focus:ring-1 focus:ring-trading-blue ${
+              className={`px-2 py-1 text-xs font-mono bg-app-bg border rounded focus:outline-none focus:ring-1 focus:ring-trading-blue ${
                 processTillError ? 'border-trading-bear' : 'border-app-border'
               } disabled:opacity-50`}
             />
+
+            {/* Bar count preview */}
+            {processTillPreview && (
+              <span className="text-xs text-trading-blue font-mono">
+                +{formatCount(processTillPreview.bars)} bars
+              </span>
+            )}
+
+            {/* Go button */}
             <button
               onClick={handleProcessTill}
-              disabled={isProcessingTill || isPlaying || !processTillInput.trim()}
+              disabled={isProcessingTill || isPlaying || !processTillPreview}
               className="p-1.5 rounded border border-app-border bg-app-bg text-app-muted hover:text-white hover:bg-app-card transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title={isPlaying ? "Stop playback first" : "Process till target index"}
+              title={isPlaying ? "Stop playback first" : processTillPreview ? `Process ${formatCount(processTillPreview.bars)} bars` : "Select a future date"}
               aria-label="Process till target"
             >
               {isProcessingTill ? (
@@ -346,6 +398,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                 <Forward size={14} />
               )}
             </button>
+
+            {/* Error display */}
             {processTillError && (
               <span className="text-xs text-trading-bear">{processTillError}</span>
             )}
