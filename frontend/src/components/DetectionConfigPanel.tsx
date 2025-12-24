@@ -19,6 +19,7 @@ const GLOBAL_SLIDERS: SliderConfig[] = [
   { key: 'stale_extension_threshold', label: 'Stale Extension', min: 1.0, max: 5.0, step: 0.1, description: 'Extension multiple for stale pruning', colorMode: 'restrictive-left' },
   { key: 'origin_range_threshold', label: 'Origin Range %', min: 0.0, max: 0.10, step: 0.01, description: 'Range similarity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
   { key: 'origin_time_threshold', label: 'Origin Time %', min: 0.0, max: 0.10, step: 0.01, description: 'Time proximity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
+  { key: 'min_counter_trend_ratio', label: 'Min CTR %', min: 0.0, max: 0.20, step: 0.01, description: 'Minimum counter-trend ratio (CTR/range) required to keep leg', displayAsPercent: true, colorMode: 'restrictive-right' },
 ];
 
 // Toggle configurations for pruning algorithms
@@ -39,6 +40,7 @@ interface DetectionConfigPanelProps {
   isCalibrated: boolean;
   className?: string;
   hideHeader?: boolean;  // Hide header when parent provides collapsible container (#310)
+  initialLocalConfig?: DetectionConfig;  // Seeds local state from saved preferences (UI only, not applied to BE)
 }
 
 // Expose reset method via ref for external triggering
@@ -52,14 +54,25 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
   isCalibrated,
   className = '',
   hideHeader = false,
+  initialLocalConfig,
 }, ref) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [localConfig, setLocalConfig] = useState<DetectionConfig>(config);
+  // Initialize local state from saved preferences if available, otherwise from server config
+  const [localConfig, setLocalConfig] = useState<DetectionConfig>(
+    initialLocalConfig ?? config
+  );
 
-  // Update local config when prop changes (BE state updated)
+  // Track whether we've already applied once (to know when to sync after Apply)
+  const hasAppliedRef = React.useRef(false);
+
+  // Sync local config when config prop changes ONLY after an Apply operation
+  // On initial mount with saved preferences, we want to show those, not server config
   React.useEffect(() => {
-    setLocalConfig(config);
+    if (hasAppliedRef.current) {
+      setLocalConfig(config);
+      hasAppliedRef.current = false;
+    }
   }, [config]);
 
   // Compute hasChanges by comparing FE state (localConfig) with BE state (config prop)
@@ -72,6 +85,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       localConfig.stale_extension_threshold !== config.stale_extension_threshold ||
       localConfig.origin_range_threshold !== config.origin_range_threshold ||
       localConfig.origin_time_threshold !== config.origin_time_threshold ||
+      localConfig.min_counter_trend_ratio !== config.min_counter_trend_ratio ||
       localConfig.enable_engulfed_prune !== config.enable_engulfed_prune ||
       localConfig.enable_inner_structure_prune !== config.enable_inner_structure_prune
     );
@@ -122,12 +136,14 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         stale_extension_threshold: localConfig.stale_extension_threshold,
         origin_range_threshold: localConfig.origin_range_threshold,
         origin_time_threshold: localConfig.origin_time_threshold,
+        min_counter_trend_ratio: localConfig.min_counter_trend_ratio,
         // Pruning algorithm toggles
         enable_engulfed_prune: localConfig.enable_engulfed_prune,
         enable_inner_structure_prune: localConfig.enable_inner_structure_prune,
       };
 
       const updatedConfig = await updateDetectionConfig(request);
+      hasAppliedRef.current = true;  // Signal that next config change should sync localConfig
       onConfigUpdate(updatedConfig);
       // hasChanges auto-computes to false when config prop updates
     } catch (err) {

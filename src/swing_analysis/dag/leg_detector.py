@@ -623,6 +623,10 @@ class LegDetector:
         proximity_prune_events = self._pruner.apply_origin_proximity_prune(self.state, 'bear', bar, timestamp)
         events.extend(proximity_prune_events)
 
+        # Apply min counter-trend ratio filter for bear legs (decoupled quality filter)
+        min_ctr_events = self._pruner.apply_min_counter_trend_prune(self.state, 'bear', bar, timestamp)
+        events.extend(min_ctr_events)
+
         # Check if we can start a bull leg from the pending bull origin
         # prev_low is the origin (starting point) for a bull swing extending up
         # Only create if there isn't already a bull leg with the same origin
@@ -720,6 +724,10 @@ class LegDetector:
         # Apply origin-proximity pruning for bull legs (#294)
         proximity_prune_events = self._pruner.apply_origin_proximity_prune(self.state, 'bull', bar, timestamp)
         events.extend(proximity_prune_events)
+
+        # Apply min counter-trend ratio filter for bull legs (decoupled quality filter)
+        min_ctr_events = self._pruner.apply_min_counter_trend_prune(self.state, 'bull', bar, timestamp)
+        events.extend(min_ctr_events)
 
         # Start new bear leg for potential bear swing
         # (tracking downward movement for possible bear retracement later)

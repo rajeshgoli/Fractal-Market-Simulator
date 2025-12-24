@@ -828,3 +828,99 @@ class LegPruner:
         for leg in state.active_legs:
             if leg.parent_leg_id == pruned_leg.leg_id:
                 leg.parent_leg_id = pruned_leg.parent_leg_id  # Could be None (root)
+
+    def apply_min_counter_trend_prune(
+        self,
+        state: DetectorState,
+        direction: str,
+        bar: Bar,
+        timestamp: datetime,
+    ) -> List[LegPrunedEvent]:
+        """
+        Prune legs with insufficient counter-trend ratio (decoupled quality filter).
+
+        This filter removes legs whose counter-trend range is too small relative
+        to their total range. It operates independently of proximity clustering.
+
+        Counter-trend ratio = CTR / leg.range
+        - CTR = |origin_price - parent.segment_deepest_price| (if available)
+        - Fallback: CTR = leg.range (root legs always pass)
+
+        Legs with ratio < min_counter_trend_ratio are pruned as insignificant
+        (shallow noise rather than meaningful structural levels).
+
+        Args:
+            state: Current detector state (mutated)
+            direction: 'bull' or 'bear' - which legs to check
+            bar: Current bar (for event metadata)
+            timestamp: Timestamp for events
+
+        Returns:
+            List of LegPrunedEvent for pruned legs with reason="min_counter_trend"
+        """
+        events: List[LegPrunedEvent] = []
+        min_ratio = self.config.min_counter_trend_ratio
+
+        # Skip if disabled
+        if min_ratio <= 0:
+            return events
+
+        # Build parent lookup
+        leg_by_id = {leg.leg_id: leg for leg in state.active_legs}
+
+        # Get formed legs of the specified direction
+        legs_to_check = [
+            leg for leg in state.active_legs
+            if leg.direction == direction and leg.status == 'active' and leg.formed
+        ]
+
+        pruned_leg_ids: Set[str] = set()
+
+        for leg in legs_to_check:
+            if leg.range == 0:
+                continue
+
+            # Calculate counter-trend range
+            if leg.parent_leg_id and leg.parent_leg_id in leg_by_id:
+                parent = leg_by_id[leg.parent_leg_id]
+                if parent.segment_deepest_price is not None:
+                    ctr = abs(float(leg.origin_price) - float(parent.segment_deepest_price))
+                else:
+                    # Parent exists but no segment data - passes (fallback to range)
+                    ctr = float(leg.range)
+            else:
+                # Root leg - always passes (CTR = range)
+                ctr = float(leg.range)
+
+            # Calculate ratio
+            ratio = ctr / float(leg.range)
+
+            # Prune if below threshold
+            if ratio < min_ratio:
+                leg.status = 'pruned'
+                pruned_leg_ids.add(leg.leg_id)
+                events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=leg.swing_id or "",
+                    leg_id=leg.leg_id,
+                    reason="min_counter_trend",
+                    explanation=(
+                        f"CTR ratio {ratio:.3f} < {min_ratio:.3f} threshold "
+                        f"(CTR={ctr:.2f}, range={float(leg.range):.2f})"
+                    ),
+                ))
+
+        # Reparent children of pruned legs before removal
+        for leg in state.active_legs:
+            if leg.leg_id in pruned_leg_ids:
+                self.reparent_children(state, leg)
+
+        # Remove pruned legs
+        if pruned_leg_ids:
+            state.active_legs = [
+                leg for leg in state.active_legs
+                if leg.leg_id not in pruned_leg_ids
+            ]
+
+        return events

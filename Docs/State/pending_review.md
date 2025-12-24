@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-24
 
@@ -8,9 +8,7 @@
 
 ## Pending Changes
 
-- #318 — Compact formation/invalidation controls in Detection Config panel
-- #320 — Include detection_config in playback feedback snapshots
-- #321 — UX improvements: session persistence, resizable panels, Market Structure fix
+- #322 — Min counter-trend ratio filter for leg quality pruning
 
 ---
 
@@ -18,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 24 | #318-#321 — Counter-trend scoring, session persistence, UX (4 changes) | All Accepted; docs updated |
 | Dec 24 | #305, #309-#316 — UX improvements, API serialization, pruning fix (9 changes) | All Accepted; docs debt updated |
 | Dec 23 | #296-#303, #306, #307 — Performance, cleanup, segment impulse (10 changes) | All Accepted; docs debt noted |
 | Dec 23 | #294, #288, #261, #281, #279, #278, #283, #267, aggregation (9 changes) | All Accepted; #282 follow-up noted |

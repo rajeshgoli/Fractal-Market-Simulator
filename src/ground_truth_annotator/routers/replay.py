@@ -1007,7 +1007,65 @@ async def advance_replay(request: ReplayAdvanceRequest):
             detail="Must calibrate before advancing. Call /api/replay/calibrate first."
         )
 
-    # Validate request
+    # Handle from_index resync (#310): if FE is behind BE, replay to sync
+    from_index = request.from_index
+    if from_index is not None and from_index != _replay_cache["last_bar_index"]:
+        from datetime import datetime as dt_cls  # Local import to avoid shadowing issues
+        logger.info(
+            f"Resync needed: BE at {_replay_cache['last_bar_index']}, "
+            f"FE at {from_index}. Replaying to sync."
+        )
+
+        # Get preserved config from current detector
+        old_detector = _replay_cache["detector"]
+        config = old_detector.config
+
+        # Create fresh detector with same config (like reverse_replay)
+        detector = LegDetector(config)
+        ref_layer = ReferenceLayer(config)
+
+        # Clear lifecycle events - we'll rebuild them during replay
+        _replay_cache["lifecycle_events"] = []
+
+        # Replay all bars up to from_index
+        bars_to_process = s.source_bars[:from_index + 1] if from_index >= 0 else []
+        for bar in bars_to_process:
+            timestamp = dt_cls.fromtimestamp(bar.timestamp) if bar.timestamp else dt_cls.now()
+
+            # Process bar
+            events = detector.process_bar(bar)
+
+            # Apply Reference layer invalidation/completion
+            active_swings = detector.get_active_swings()
+
+            invalidated = ref_layer.update_invalidation_on_bar(active_swings, bar)
+            for swing, result in invalidated:
+                swing.invalidate()
+
+            completed = ref_layer.update_completion_on_bar(active_swings, bar)
+            for swing, result in completed:
+                swing.complete()
+
+            # Capture lifecycle events during replay
+            csv_index = s.window_offset + bar.index
+            ts_iso = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
+            for event in events:
+                lifecycle_event = _event_to_lifecycle_event(event, bar.index, csv_index, ts_iso)
+                if lifecycle_event:
+                    _replay_cache["lifecycle_events"].append(lifecycle_event)
+
+        # Update cache with fresh detector
+        _replay_cache["detector"] = detector
+        _replay_cache["last_bar_index"] = from_index
+        _replay_cache["reference_layer"] = ref_layer
+
+        # Update app state
+        s.playback_index = from_index
+        s.hierarchical_detector = detector
+
+        logger.info(f"Resync complete: BE now at {from_index}")
+
+    # Validate request (only warn, don't resync again)
     if request.current_bar_index != _replay_cache["last_bar_index"]:
         logger.warning(
             f"Bar index mismatch: expected {_replay_cache['last_bar_index']}, "
@@ -1861,6 +1919,10 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
             origin_time_prune_threshold=request.origin_time_threshold,
         )
 
+    # Apply min counter-trend ratio threshold (decoupled quality filter)
+    if request.min_counter_trend_ratio is not None:
+        new_config = new_config.with_min_counter_trend(request.min_counter_trend_ratio)
+
     # Apply pruning algorithm toggles
     if any([
         request.enable_engulfed_prune is not None,
@@ -1898,6 +1960,7 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         stale_extension_threshold=new_config.stale_extension_threshold,
         origin_range_threshold=new_config.origin_range_prune_threshold,
         origin_time_threshold=new_config.origin_time_prune_threshold,
+        min_counter_trend_ratio=new_config.min_counter_trend_ratio,
         enable_engulfed_prune=new_config.enable_engulfed_prune,
         enable_inner_structure_prune=new_config.enable_inner_structure_prune,
     )
@@ -1937,6 +2000,7 @@ async def get_detection_config():
         stale_extension_threshold=config.stale_extension_threshold,
         origin_range_threshold=config.origin_range_prune_threshold,
         origin_time_threshold=config.origin_time_prune_threshold,
+        min_counter_trend_ratio=config.min_counter_trend_ratio,
         enable_engulfed_prune=config.enable_engulfed_prune,
         enable_inner_structure_prune=config.enable_inner_structure_prune,
     )

@@ -621,6 +621,42 @@ Scenario:
   L2 bull is pruned, L1 bull survives.
 ```
 
+### 5. Min Counter-Trend Ratio Pruning
+
+**Rule:** Legs with insufficient counter-trend range are pruned as shallow noise.
+
+This is a **quality filter** that operates independently from proximity pruning. It evaluates each leg's structural significance based on how much counter-trend movement was required to form it.
+
+```
+Formula:
+  counter_trend_range = |leg.origin_price - parent.segment_deepest_price|
+  ratio = counter_trend_range / leg.range
+
+  If ratio < min_counter_trend_ratio threshold → leg is pruned
+
+For root legs (no parent):
+  ratio = 1.0 (always passes)
+
+Example:
+  Parent bear leg: segment_deepest_price = 4050 (lowest point before reversal)
+  Child bull leg: origin_price = 4055, pivot_price = 4080
+    leg.range = 4080 - 4055 = 25 points
+    counter_trend_range = |4055 - 4050| = 5 points
+    ratio = 5 / 25 = 0.20 (20%)
+
+  With min_counter_trend_ratio = 0.05 (5%): 0.20 > 0.05 ✓ → leg survives
+  With min_counter_trend_ratio = 0.25 (25%): 0.20 < 0.25 ✗ → leg pruned
+```
+
+**Rationale:**
+- Legs formed after shallow pullbacks are noise (random chop)
+- Legs formed after significant counter-trend moves are structural (meaningful levels)
+- Self-correcting: as a leg extends, shallow origins become smaller % of total range
+- Root legs always pass (they have no parent to measure counter-trend from)
+
+**Use Case:**
+When proximity pruning clusters by time/range but "random" highs/lows survive while structurally significant ones are pruned, min CTR filtering provides a quality gate that's independent of clustering.
+
 ### Real ES Example: Pruning in Action
 
 ```
@@ -885,6 +921,7 @@ All thresholds are configurable. Defaults shown:
 | `origin_range_prune_threshold` | 0.0 | Range similarity % for origin-proximity consolidation (#294) |
 | `origin_time_prune_threshold` | 0.0 | Time proximity % for origin-proximity consolidation (#294) |
 | `proximity_prune_strategy` | 'counter_trend' | Strategy for selecting survivor: 'oldest' or 'counter_trend' (#319) |
+| `min_counter_trend_ratio` | 0.0 | Min CTR as fraction of range to keep leg (quality filter) |
 | `stale_extension_threshold` | 3.0 | Prune invalidated child legs at 3x range (root legs preserved) |
 
 Bull and bear can have different configs for asymmetric markets.
@@ -921,6 +958,7 @@ The Detection Config Panel in the sidebar provides sliders for adjusting thresho
 - Stale Extension threshold (1.0-5.0)
 - Origin Range % threshold (0.0-0.5) — Range similarity for origin-proximity pruning (#294)
 - Origin Time % threshold (0.0-0.5) — Time proximity for origin-proximity pruning (#294)
+- Min CTR % threshold (0.0-0.2) — Minimum counter-trend ratio quality filter
 
 Changes trigger automatic re-calibration via `PUT /api/replay/config`.
 

@@ -130,6 +130,7 @@ interface SidebarProps {
 
   // Detection config panel (Issue #288)
   detectionConfig?: DetectionConfig;
+  initialDetectionConfig?: DetectionConfig;  // Saved preferences for UI (not applied to BE until user clicks Apply)
   onDetectionConfigUpdate?: (config: DetectionConfig) => void;
   isCalibrated?: boolean;
 
@@ -167,6 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDetachItem,
   onClearAttachments,
   detectionConfig,
+  initialDetectionConfig,
   onDetectionConfigUpdate,
   isCalibrated = false,
   legEvents = [],
@@ -194,8 +196,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       staleExtension: 0,
       proximity: 0,
       innerStructure: 0,
+      minCtr: 0,
       formed: 0,
-      unformed: 0,
     };
 
     // Count from events
@@ -212,16 +214,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           stats.proximity++;
         } else if (reason.includes('inner')) {
           stats.innerStructure++;
+        } else if (reason.includes('min_counter_trend')) {
+          stats.minCtr++;
         }
       }
     }
 
-    // Count formed/unformed from active legs
+    // Count formed from active legs
     for (const leg of activeLegs) {
       if (leg.formed) {
         stats.formed++;
-      } else {
-        stats.unformed++;
       }
     }
 
@@ -385,6 +387,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           stale_extension_threshold: detectionConfig.stale_extension_threshold,
           origin_range_threshold: detectionConfig.origin_range_threshold,
           origin_time_threshold: detectionConfig.origin_time_threshold,
+          min_counter_trend_ratio: detectionConfig.min_counter_trend_ratio,
           enable_engulfed_prune: detectionConfig.enable_engulfed_prune,
           enable_inner_structure_prune: detectionConfig.enable_inner_structure_prune,
         };
@@ -572,6 +575,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <DetectionConfigPanel
                 ref={detectionConfigRef}
                 config={detectionConfig}
+                initialLocalConfig={initialDetectionConfig}
                 onConfigUpdate={onDetectionConfigUpdate}
                 isCalibrated={isCalibrated}
                 hideHeader={true}
@@ -743,15 +747,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span className="text-trading-bull font-medium">{legStats.formed}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-app-muted">Unformed</span>
-                    <span className="text-app-text font-medium">{legStats.unformed}</span>
-                  </div>
-                </div>
-                <div className="space-y-0.5">
-                  <div className="flex justify-between">
                     <span className="text-app-muted">Invalidated</span>
                     <span className="text-trading-bear font-medium">{legStats.invalidated}</span>
                   </div>
+                </div>
+                <div className="space-y-0.5">
                   <div className="flex justify-between">
                     <span className="text-app-muted">Engulfed</span>
                     <span className="text-trading-orange font-medium">{legStats.engulfed}</span>
@@ -759,6 +759,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="flex justify-between">
                     <span className="text-app-muted">Proximity</span>
                     <span className="text-app-text font-medium">{legStats.proximity}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Min CTR</span>
+                    <span className="text-app-text font-medium">{legStats.minCtr}</span>
                   </div>
                 </div>
               </div>

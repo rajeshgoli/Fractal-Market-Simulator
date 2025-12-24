@@ -363,6 +363,7 @@ class FeedbackDetectionConfig(BaseModel):
     stale_extension_threshold: float
     origin_range_threshold: float
     origin_time_threshold: float
+    min_counter_trend_ratio: float
     enable_engulfed_prune: bool
     enable_inner_structure_prune: bool
 
@@ -736,6 +737,7 @@ class SwingConfigUpdateRequest(BaseModel):
     stale_extension_threshold: Optional[float] = None  # 3x extension prune (default: 3.0)
     origin_range_threshold: Optional[float] = None  # Origin proximity range threshold (#294)
     origin_time_threshold: Optional[float] = None  # Origin proximity time threshold (#294)
+    min_counter_trend_ratio: Optional[float] = None  # Min CTR as fraction of range (decoupled filter)
     # Pruning algorithm toggles
     enable_engulfed_prune: Optional[bool] = None  # Enable engulfed leg deletion (default: True)
     enable_inner_structure_prune: Optional[bool] = None  # Enable inner structure pruning (default: True)
@@ -754,6 +756,7 @@ class SwingConfigUpdateRequest(BaseModel):
                 "stale_extension_threshold": 3.0,
                 "origin_range_threshold": 0.05,
                 "origin_time_threshold": 0.10,
+                "min_counter_trend_ratio": 0.05,
                 "enable_engulfed_prune": True,
                 "enable_inner_structure_prune": True
             }
@@ -778,6 +781,7 @@ class SwingConfigResponse(BaseModel):
     stale_extension_threshold: float
     origin_range_threshold: float  # Origin proximity range threshold (#294)
     origin_time_threshold: float  # Origin proximity time threshold (#294)
+    min_counter_trend_ratio: float  # Min CTR as fraction of range (decoupled filter)
     # Pruning algorithm toggles
     enable_engulfed_prune: bool
     enable_inner_structure_prune: bool
@@ -798,6 +802,7 @@ class SwingConfigResponse(BaseModel):
                 "stale_extension_threshold": 3.0,
                 "origin_range_threshold": 0.05,
                 "origin_time_threshold": 0.10,
+                "min_counter_trend_ratio": 0.05,
                 "enable_engulfed_prune": True,
                 "enable_inner_structure_prune": True
             }
