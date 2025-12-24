@@ -644,7 +644,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
 
       // Update state with the response
       if (response.new_bars && response.new_bars.length > 0) {
-        const newBars = response.new_bars.map((bar: ReplayBarData) => ({
+        const newBars: BarData[] = response.new_bars.map((bar: ReplayBarData) => ({
           index: bar.index,
           timestamp: bar.timestamp,
           open: bar.open,
@@ -655,7 +655,18 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
           source_start_index: bar.index,
           source_end_index: bar.index,
         }));
+
+        // Update sourceBars
         setSourceBars(prev => [...prev, ...newBars]);
+
+        // Sync forwardPlayback state to match new position
+        // Build complete visible bars list for sync
+        const allVisibleBars = [...forwardPlayback.visibleBars, ...newBars];
+        forwardPlayback.syncToPosition(
+          response.current_bar_index,
+          allVisibleBars,
+          response.csv_index
+        );
       }
 
       // Update aggregated bars
@@ -678,6 +689,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   }, [
     calibrationPhase,
     forwardPlayback.playbackState,
+    forwardPlayback.visibleBars,
+    forwardPlayback.syncToPosition,
     currentPlaybackPosition,
     chart1Aggregation,
     chart2Aggregation,
@@ -841,8 +854,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         const fileName = session.data_file.split('/').pop() || session.data_file;
         setDataFileName(fileName);
 
-        // Save successful session to localStorage
-        sessionSettings.saveSession(session.data_file, null);
+        // Only save session to localStorage if there's no existing saved session
+        // (prevents overwriting the correct start_date when SettingsPanel just saved it)
+        if (!sessionSettings.hasSavedSession) {
+          sessionSettings.saveSession(session.data_file, null);
+        }
 
         // Adjust chart aggregations if they're below source resolution
         const smallestValid = getSmallestValidAggregation(resolutionMinutes);

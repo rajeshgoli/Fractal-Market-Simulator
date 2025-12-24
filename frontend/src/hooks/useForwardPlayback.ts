@@ -59,6 +59,8 @@ interface UseForwardPlaybackReturn {
   // Timer pause (for feedback input)
   pauseLingerTimer: () => void;
   resumeLingerTimer: () => void;
+  // External sync (for Process Till feature)
+  syncToPosition: (newPosition: number, newBars: BarData[], newCsvIndex: number) => void;
 }
 
 export function useForwardPlayback({
@@ -1055,6 +1057,20 @@ export function useForwardPlayback({
     return currentPosition > 0;
   }, [currentPosition]);
 
+  // Sync to external position (used when external code advances bars directly)
+  // This updates internal state to match the new position without re-fetching
+  const syncToPosition = useCallback((newPosition: number, newBars: BarData[], newCsvIndex: number) => {
+    // Clear buffers since external code has already processed
+    barBufferRef.current = [];
+    pendingBatchStatesRef.current = [];
+    lastFetchedPositionRef.current = newPosition;
+
+    // Update state
+    setCurrentPosition(newPosition);
+    setVisibleBars(newBars);
+    setCsvIndex(newCsvIndex);
+  }, []);
+
   return {
     playbackState,
     currentPosition,
@@ -1089,5 +1105,7 @@ export function useForwardPlayback({
     // Timer pause (for feedback input)
     pauseLingerTimer,
     resumeLingerTimer,
+    // External sync (for Process Till feature)
+    syncToPosition,
   };
 }

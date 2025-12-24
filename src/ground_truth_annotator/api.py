@@ -133,13 +133,14 @@ async def health():
 
 def infer_resolution_from_filename(filename: str) -> str:
     """
-    Infer resolution from filename patterns like es-5m.csv, es-1h.csv.
+    Infer resolution from filename patterns like es-5m.csv, es-1h.csv, es-30m-from-2023.csv.
 
     Returns resolution string (e.g., '5m', '1h', '1d') or 'unknown'.
     """
     import re
     # Match patterns like -5m., -1h., -30m., -1d., -1w., -1mo.
-    match = re.search(r'-(\d+[mhdw]|1mo)\.', filename.lower())
+    # Also match when followed by hyphen (e.g., es-30m-from-2023.csv)
+    match = re.search(r'-(\d+[mhdw]|1mo)[-.]', filename.lower())
     if match:
         return match.group(1)
     return 'unknown'
