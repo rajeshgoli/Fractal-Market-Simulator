@@ -1449,6 +1449,10 @@ def _build_dag_state(detector: LegDetector, window_offset: int = 0) -> DagStateR
             # Hierarchy fields for exploration (#250, #251)
             parent_leg_id=leg.parent_leg_id,
             swing_id=leg.swing_id,
+            # Segment impulse tracking (#307)
+            impulse_to_deepest=leg.impulse_to_deepest,
+            impulse_back=leg.impulse_back,
+            net_segment_impulse=leg.net_segment_impulse,
         )
         for leg in state.active_legs
     ]
@@ -1583,6 +1587,10 @@ async def get_dag_state():
             # Hierarchy fields for exploration (#250, #251)
             parent_leg_id=leg.parent_leg_id,
             swing_id=leg.swing_id,
+            # Segment impulse tracking (#307)
+            impulse_to_deepest=leg.impulse_to_deepest,
+            impulse_back=leg.impulse_back,
+            net_segment_impulse=leg.net_segment_impulse,
         )
         for leg in state.active_legs
     ]

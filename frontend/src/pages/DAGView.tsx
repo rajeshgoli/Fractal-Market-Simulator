@@ -44,15 +44,17 @@ import { ViewMode } from '../App';
 
 /**
  * Convert DagLeg from API to ActiveLeg for visualization.
+ * The API returns csv_index values (#300), so we subtract windowOffset
+ * to get local bar indices for chart rendering.
  */
-function dagLegToActiveLeg(leg: DagLeg): ActiveLeg {
+function dagLegToActiveLeg(leg: DagLeg, windowOffset: number = 0): ActiveLeg {
   return {
     leg_id: leg.leg_id,
     direction: leg.direction,
     pivot_price: leg.pivot_price,
-    pivot_index: leg.pivot_index,
+    pivot_index: leg.pivot_index - windowOffset,  // Convert csv_index to local bar index
     origin_price: leg.origin_price,
-    origin_index: leg.origin_index,
+    origin_index: leg.origin_index - windowOffset,  // Convert csv_index to local bar index
     retracement_pct: leg.retracement_pct,
     formed: leg.formed,
     status: leg.status,
@@ -61,6 +63,10 @@ function dagLegToActiveLeg(leg: DagLeg): ActiveLeg {
     spikiness: leg.spikiness,
     parent_leg_id: leg.parent_leg_id,
     swing_id: leg.swing_id,
+    // Segment impulse tracking (#307)
+    impulse_to_deepest: leg.impulse_to_deepest,
+    impulse_back: leg.impulse_back,
+    net_segment_impulse: leg.net_segment_impulse,
   };
 }
 
@@ -317,8 +323,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   // Convert DAG legs to ActiveLeg[] for visualization
   const activeLegs = useMemo((): ActiveLeg[] => {
     if (!dagState) return [];
-    return dagState.active_legs.map(dagLegToActiveLeg);
-  }, [dagState]);
+    const offset = sessionInfo?.windowOffset ?? 0;
+    return dagState.active_legs.map(leg => dagLegToActiveLeg(leg, offset));
+  }, [dagState, sessionInfo?.windowOffset]);
 
   // Hierarchy exploration mode (#250)
   const hierarchyMode = useHierarchyMode(activeLegs);

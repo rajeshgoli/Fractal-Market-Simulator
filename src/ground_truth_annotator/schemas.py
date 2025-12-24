@@ -583,6 +583,15 @@ class DagLegResponse(BaseModel):
     parent_leg_id: Optional[str] = None
     # Swing ID if this leg has formed into a swing
     swing_id: Optional[str] = None
+    # Segment impulse tracking (#307): Two-impulse model for parent segments
+    # When children form under this leg, tracks: origin -> deepest -> child_origin
+    # impulse_to_deepest: Price change per bar from origin to deepest point
+    impulse_to_deepest: Optional[float] = None
+    # impulse_back: Price change per bar from deepest back to child origin
+    impulse_back: Optional[float] = None
+    # net_segment_impulse: impulse_to_deepest - impulse_back (sustained conviction)
+    # Positive = sustained move, negative = gave back progress
+    net_segment_impulse: Optional[float] = None
 
 
 class DagPendingOrigin(BaseModel):

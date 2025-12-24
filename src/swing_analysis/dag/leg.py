@@ -72,6 +72,16 @@ class Leg:
     _moment_sum_x2: float = 0.0  # Sum of squared contributions
     _moment_sum_x3: float = 0.0  # Sum of cubed contributions
     _cached_range: Optional[Decimal] = None  # Cached range value for performance
+    # Segment impulse tracking (#307): Two-impulse model for parent segments
+    # When a child leg is created, we record the parent's segment impulse:
+    # - segment_deepest_price: The deepest price (pivot) when first child formed
+    # - segment_deepest_index: Bar index of the deepest point
+    # - impulse_to_deepest: Impulse from parent origin to deepest point
+    # - impulse_back: Impulse from deepest back to child origin (counter-move)
+    segment_deepest_price: Optional[Decimal] = None
+    segment_deepest_index: Optional[int] = None
+    impulse_to_deepest: Optional[float] = None
+    impulse_back: Optional[float] = None
 
     def __post_init__(self) -> None:
         """Compute deterministic leg_id if not provided."""
@@ -146,6 +156,23 @@ class Leg:
     def pivot_breached(self) -> bool:
         """True if price has ever breached the pivot."""
         return self.max_pivot_breach is not None
+
+    @property
+    def net_segment_impulse(self) -> Optional[float]:
+        """
+        Net segment impulse = impulse_to_deepest - impulse_back (#307).
+
+        This captures the sustained conviction of the parent's segment.
+        - High positive: Sharp primary move, weak counter-move (sustained)
+        - Near zero: Both moves similar (contested)
+        - Negative: Counter-move was more impulsive (gave back progress)
+
+        Returns:
+            Net impulse difference, or None if segment not yet established.
+        """
+        if self.impulse_to_deepest is None or self.impulse_back is None:
+            return None
+        return self.impulse_to_deepest - self.impulse_back
 
 
 @dataclass

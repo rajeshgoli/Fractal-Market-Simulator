@@ -99,6 +99,89 @@ def _calculate_impulsiveness(raw_impulse: float, formed_impulses: List[float]) -
     return (position / len(formed_impulses)) * 100
 
 
+def _calculate_segment_impulse(
+    parent: Leg,
+    child_origin_price: Decimal,
+    child_origin_index: int
+) -> None:
+    """
+    Calculate and store segment impulse on parent when first child forms (#307).
+
+    The segment is: parent.origin -> parent.pivot (deepest) -> child.origin
+
+    Args:
+        parent: The parent leg to update with segment impulse.
+        child_origin_price: Origin price of the child leg.
+        child_origin_index: Bar index of the child's origin.
+    """
+    # The deepest point is the parent's current pivot (before child takes over)
+    deepest_price = parent.pivot_price
+    deepest_index = parent.pivot_index
+
+    # Impulse TO deepest (the primary move)
+    range_to_deepest = abs(parent.origin_price - deepest_price)
+    bars_to_deepest = abs(deepest_index - parent.origin_index)
+    impulse_to_deepest = float(range_to_deepest) / bars_to_deepest if bars_to_deepest > 0 else 0.0
+
+    # Impulse BACK to child origin (the counter-move)
+    range_back = abs(deepest_price - child_origin_price)
+    bars_back = abs(child_origin_index - deepest_index)
+    impulse_back = float(range_back) / bars_back if bars_back > 0 else 0.0
+
+    # Store on parent
+    parent.segment_deepest_price = deepest_price
+    parent.segment_deepest_index = deepest_index
+    parent.impulse_to_deepest = impulse_to_deepest
+    parent.impulse_back = impulse_back
+
+
+def _update_segment_impulse_for_new_child(
+    parent: Leg,
+    new_child_origin_price: Decimal,
+    new_child_origin_index: int
+) -> None:
+    """
+    Update segment impulse when a new child forms at a higher origin (#307).
+
+    Two cases:
+    1. Parent's pivot extended deeper than stored deepest -> recalculate BOTH
+    2. Parent's pivot same as stored deepest -> only update impulse_back
+
+    Args:
+        parent: The parent leg to update.
+        new_child_origin_price: Origin price of the new child.
+        new_child_origin_index: Bar index of the new child's origin.
+    """
+    if parent.segment_deepest_price is None:
+        # No segment established yet - treat as first child
+        _calculate_segment_impulse(parent, new_child_origin_price, new_child_origin_index)
+        return
+
+    current_pivot = parent.pivot_price
+    current_pivot_index = parent.pivot_index
+
+    # Check if pivot extended deeper
+    pivot_extended_deeper = (
+        (parent.direction == 'bear' and current_pivot < parent.segment_deepest_price) or
+        (parent.direction == 'bull' and current_pivot > parent.segment_deepest_price)
+    )
+
+    if pivot_extended_deeper:
+        # Deepest changed! Recalculate BOTH impulse components
+        parent.segment_deepest_price = current_pivot
+        parent.segment_deepest_index = current_pivot_index
+
+        # Recalculate impulse_to_deepest
+        range_to_deepest = abs(parent.origin_price - current_pivot)
+        bars_to_deepest = abs(current_pivot_index - parent.origin_index)
+        parent.impulse_to_deepest = float(range_to_deepest) / bars_to_deepest if bars_to_deepest > 0 else 0.0
+
+    # Always recalculate impulse_back with new child origin
+    range_back = abs(parent.segment_deepest_price - new_child_origin_price)
+    bars_back = abs(new_child_origin_index - parent.segment_deepest_index)
+    parent.impulse_back = float(range_back) / bars_back if bars_back > 0 else 0.0
+
+
 def _calculate_spikiness(n: int, sum_x: float, sum_x2: float, sum_x3: float) -> Optional[float]:
     """
     Calculate spikiness (0-100) from running moments using Fisher's skewness (#241, #244).
@@ -575,6 +658,13 @@ class LegDetector:
                     parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                 )
                 self.state.active_legs.append(new_leg)
+                # Update parent's segment impulse when child forms (#307)
+                if parent_leg_id:
+                    parent = self._find_leg_by_id(parent_leg_id)
+                    if parent:
+                        _update_segment_impulse_for_new_child(
+                            parent, pending.price, pending.bar_index
+                        )
                 # Clear pending origin after leg creation (#197)
                 self.state.pending_origins['bull'] = None
                 # Emit LegCreatedEvent (#168)
@@ -664,6 +754,13 @@ class LegDetector:
                     parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                 )
                 self.state.active_legs.append(new_bear_leg)
+                # Update parent's segment impulse when child forms (#307)
+                if parent_leg_id:
+                    parent = self._find_leg_by_id(parent_leg_id)
+                    if parent:
+                        _update_segment_impulse_for_new_child(
+                            parent, pending.price, pending.bar_index
+                        )
                 # Clear pending origin after leg creation (#197)
                 self.state.pending_origins['bear'] = None
                 # Emit LegCreatedEvent (#168)
@@ -744,6 +841,13 @@ class LegDetector:
                         parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                     )
                     self.state.active_legs.append(new_bear_leg)
+                    # Update parent's segment impulse when child forms (#307)
+                    if parent_leg_id:
+                        parent = self._find_leg_by_id(parent_leg_id)
+                        if parent:
+                            _update_segment_impulse_for_new_child(
+                                parent, pending_bear.price, pending_bear.bar_index
+                            )
                     # Clear pending origins after leg creation (#197)
                     self.state.pending_origins['bear'] = None
                     self.state.pending_origins['bull'] = None
@@ -784,6 +888,13 @@ class LegDetector:
                         parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                     )
                     self.state.active_legs.append(new_bull_leg)
+                    # Update parent's segment impulse when child forms (#307)
+                    if parent_leg_id:
+                        parent = self._find_leg_by_id(parent_leg_id)
+                        if parent:
+                            _update_segment_impulse_for_new_child(
+                                parent, pending_bull.price, pending_bull.bar_index
+                            )
                     # Clear pending origins after leg creation (#197)
                     self.state.pending_origins['bull'] = None
                     self.state.pending_origins['bear'] = None
@@ -1410,6 +1521,21 @@ class LegDetector:
             else:
                 break
         return level
+
+    def _find_leg_by_id(self, leg_id: str) -> Optional[Leg]:
+        """
+        Find a leg by its ID in active_legs.
+
+        Args:
+            leg_id: The leg ID to find.
+
+        Returns:
+            Leg if found, None otherwise.
+        """
+        for leg in self.state.active_legs:
+            if leg.leg_id == leg_id:
+                return leg
+        return None
 
     def _find_parent_for_leg(self, direction: str, origin_price: Decimal, origin_index: int) -> Optional[str]:
         """

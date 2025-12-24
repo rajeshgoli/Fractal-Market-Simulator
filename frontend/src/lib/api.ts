@@ -351,6 +351,13 @@ export interface DagLeg {
   // Hierarchy fields for exploration (#250, #251)
   parent_leg_id: string | null;
   swing_id: string | null;
+  // Segment impulse tracking (#307): Two-impulse model for parent segments
+  // impulse_to_deepest: Price change per bar from origin to deepest point
+  impulse_to_deepest: number | null;
+  // impulse_back: Price change per bar from deepest back to child origin
+  impulse_back: number | null;
+  // net_segment_impulse: impulse_to_deepest - impulse_back (sustained conviction)
+  net_segment_impulse: number | null;
 }
 
 export interface DagPendingOrigin {

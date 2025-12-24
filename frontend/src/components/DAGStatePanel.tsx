@@ -115,15 +115,17 @@ const LegItem: React.FC<LegItemProps> = ({ leg, isHighlighted, isFocused, isAtta
         <span className="font-mono">{leg.bar_count}</span>
       </div>
       <div>
-        <span className="text-[10px] uppercase">Impls:</span>{' '}
-        <span className="font-mono">
-          {leg.impulsiveness !== null ? `${leg.impulsiveness.toFixed(0)}%` : 'N/A'}
+        <span className="text-[10px] uppercase">Net Seg:</span>{' '}
+        <span className={`font-mono ${leg.net_segment_impulse !== null ? (leg.net_segment_impulse > 0 ? 'text-trading-bull' : leg.net_segment_impulse < 0 ? 'text-trading-bear' : '') : ''}`}>
+          {leg.net_segment_impulse !== null ? leg.net_segment_impulse.toFixed(2) : '-'}
         </span>
       </div>
       <div>
-        <span className="text-[10px] uppercase">Spiky:</span>{' '}
+        <span className="text-[10px] uppercase">To/Back:</span>{' '}
         <span className="font-mono">
-          {leg.spikiness !== null ? `${leg.spikiness.toFixed(0)}%` : 'N/A'}
+          {leg.impulse_to_deepest !== null && leg.impulse_back !== null
+            ? `${leg.impulse_to_deepest.toFixed(1)}/${leg.impulse_back.toFixed(1)}`
+            : '-/-'}
         </span>
       </div>
     </div>

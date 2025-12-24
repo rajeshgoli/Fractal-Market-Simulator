@@ -114,6 +114,11 @@ class DetectorState:
                 "_moment_sum_x": leg._moment_sum_x,
                 "_moment_sum_x2": leg._moment_sum_x2,
                 "_moment_sum_x3": leg._moment_sum_x3,
+                # Segment impulse tracking (#307)
+                "segment_deepest_price": str(leg.segment_deepest_price) if leg.segment_deepest_price is not None else None,
+                "segment_deepest_index": leg.segment_deepest_index,
+                "impulse_to_deepest": leg.impulse_to_deepest,
+                "impulse_back": leg.impulse_back,
             })
 
         # Serialize pending origins
@@ -224,6 +229,11 @@ class DetectorState:
                 _moment_sum_x=leg_data.get("_moment_sum_x", 0.0),
                 _moment_sum_x2=leg_data.get("_moment_sum_x2", 0.0),
                 _moment_sum_x3=leg_data.get("_moment_sum_x3", 0.0),
+                # Segment impulse tracking (#307)
+                segment_deepest_price=Decimal(leg_data["segment_deepest_price"]) if leg_data.get("segment_deepest_price") else None,
+                segment_deepest_index=leg_data.get("segment_deepest_index"),
+                impulse_to_deepest=leg_data.get("impulse_to_deepest"),
+                impulse_back=leg_data.get("impulse_back"),
             )
             active_legs.append(leg)
 

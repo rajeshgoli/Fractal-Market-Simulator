@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 8
+**Unreviewed Change Count:** 9
 
 **Last Review:** 2025-12-23
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- #307: Segment impulse tracking (two-impulse model for parent segments)
 - #306: Optimize proximity pruning to O(N log N) using time-bounded binary search
 - #302: Cache leg.range property for performance
 - #301: Remove unused swing hierarchy and discretization module
