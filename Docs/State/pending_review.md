@@ -1,20 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 1
 
-**Last Review:** 2025-12-23
+**Last Review:** 2025-12-24
 
 ---
 
 ## Pending Changes
 
-- #314: Fix glitching leg overlay with aggregated timeframes (live bar computation, index mapping fix, remove 1W)
-- #313: Remove swing immunity from proximity pruning, add swing transfer
-- #305: Remove dead pivot_breach replacement code path
-- #309: Add leg event serialization to API (`LEG_CREATED`, `LEG_PRUNED`, `LEG_INVALIDATED`)
-- #310: Sidebar collapsible sections (auto-collapse Detection Config when Linger enabled, collapsible event filters)
-- #311: Linger mode: Space pauses, ESC/dismiss resumes
-- #312: Recent Events panel click-to-inspect (popup, marker, leg highlight)
+- #318 — Compact formation/invalidation controls in Detection Config panel
 
 ---
 
@@ -22,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 24 | #305, #309-#316 — UX improvements, API serialization, pruning fix (9 changes) | All Accepted; docs debt updated |
 | Dec 23 | #296-#303, #306, #307 — Performance, cleanup, segment impulse (10 changes) | All Accepted; docs debt noted |
 | Dec 23 | #294, #288, #261, #281, #279, #278, #283, #267, aggregation (9 changes) | All Accepted; #282 follow-up noted |
 | Dec 22 | #241, #248-#250, #260-#266, bugfixes — Impulse metrics, hierarchy exploration, inner structure pruning (10 changes) | All Accepted |

@@ -267,10 +267,27 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         </div>
       )}
 
-      {/* Direction Thresholds - Compact 2x2 Grid */}
+      {/* Global Thresholds */}
       <div className="space-y-2">
+        <span className="text-xs font-medium text-app-text">Global</span>
+        <div className="pl-4 space-y-3">
+          {GLOBAL_SLIDERS.map(slider => renderSlider('global', slider))}
+        </div>
+      </div>
+
+      {/* Pruning Algorithms */}
+      <div className="space-y-2">
+        <span className="text-xs font-medium text-app-text">Pruning Algorithms</span>
+        <div className="pl-4 space-y-2">
+          {PRUNE_TOGGLES.map(toggle => renderToggle(toggle))}
+        </div>
+      </div>
+
+      {/* Thresholds - Compact 2x2 Grid for Formation/Invalidation */}
+      <div className="space-y-2">
+        <span className="text-xs font-medium text-app-text">Thresholds</span>
         {/* Header row with direction labels */}
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
           <span></span>
           <span className="flex items-center gap-1 justify-center w-14">
             <span className="w-1.5 h-1.5 rounded-full bg-trading-bull" />
@@ -282,7 +299,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
           </span>
         </div>
         {/* Formation row */}
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
           <span className="text-app-muted" title="Retracement required to form leg">Formation</span>
           <input
             type="text"
@@ -306,7 +323,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
           />
         </div>
         {/* Invalidation row */}
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
           <span className="text-app-muted" title="Breach threshold for invalidation">Invalidation</span>
           <input
             type="text"
@@ -328,22 +345,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
             className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bear focus:outline-none focus:border-trading-bear"
             disabled={isUpdating}
           />
-        </div>
-      </div>
-
-      {/* Global Thresholds */}
-      <div className="space-y-2">
-        <span className="text-xs font-medium text-app-text">Global</span>
-        <div className="pl-4 space-y-3">
-          {GLOBAL_SLIDERS.map(slider => renderSlider('global', slider))}
-        </div>
-      </div>
-
-      {/* Pruning Algorithms */}
-      <div className="space-y-2">
-        <span className="text-xs font-medium text-app-text">Pruning Algorithms</span>
-        <div className="pl-4 space-y-2">
-          {PRUNE_TOGGLES.map(toggle => renderToggle(toggle))}
         </div>
       </div>
 
