@@ -658,11 +658,13 @@ export function useForwardPlayback({
       clearTimers();
     }
     // Clear buffer and pending queue to prevent in-flight fetchBatch from overwriting state
+    // Also reset lastFetchedPosition so advanceBar resyncs backend to current position
     barBufferRef.current = [];
     pendingBatchStatesRef.current = [];
+    lastFetchedPositionRef.current = currentPosition;
     setPlaybackState(PlaybackState.PAUSED);
     await advanceBar();
-  }, [playbackState, clearTimers, exitLinger, advanceBar]);
+  }, [playbackState, currentPosition, clearTimers, exitLinger, advanceBar]);
 
   // Step back by calling backend to replay from 0 to current-1
   const stepBack = useCallback(async () => {
