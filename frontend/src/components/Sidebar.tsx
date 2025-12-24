@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useRef, RefObject } from 'react';
+import React, { useState, useCallback, useRef, RefObject, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { EventType, PlaybackState, DetectionConfig } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X } from 'lucide-react';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X, ChevronDown, ChevronRight, Settings } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent, DagLeg } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
 import { LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
@@ -167,6 +167,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [hasAutopaused, setHasAutopaused] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Collapse state for sidebar sections (#310)
+  const [isLingerEventsCollapsed, setIsLingerEventsCollapsed] = useState(false);
+  const [isDetectionConfigCollapsed, setIsDetectionConfigCollapsed] = useState(false);
+
+  // Auto-collapse Detection Config when linger is enabled (#310)
+  useEffect(() => {
+    if (lingerEnabled) {
+      setIsDetectionConfigCollapsed(true);
+    }
+  }, [lingerEnabled]);
 
   const handleFeedbackSubmit = useCallback(async () => {
     if (!feedbackText.trim() || currentPlaybackBar === undefined || !feedbackContext) return;
@@ -371,49 +382,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Linger Event Toggles - only shown when linger is enabled */}
       {lingerEnabled && (
         <>
-        {/* Sidebar Header */}
-        <div className="p-4 border-b border-app-border">
+        {/* Sidebar Header - collapsible (#310) */}
+        <button
+          className="w-full p-4 border-b border-app-border hover:bg-app-card/30 transition-colors"
+          onClick={() => setIsLingerEventsCollapsed(!isLingerEventsCollapsed)}
+        >
           <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
+            {isLingerEventsCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
             <Filter size={14} />
             {mode === 'dag' ? 'Structure Events' : 'Linger Events'}
           </h2>
-        </div>
+        </button>
 
-        {/* Event toggles */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
-          {lingerEvents.map((event) => (
-            <div
-              key={event.id}
-              className={`
-                group flex items-start gap-3 p-3 rounded-lg transition-all duration-200
-                ${event.isEnabled
-                  ? 'bg-app-card border border-app-border'
-                  : 'hover:bg-app-card/50 border border-transparent opacity-70'
-                }
-              `}
-            >
-              <div className="pt-1">
-                {getIconForType(event.id)}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-sm font-medium ${event.isEnabled ? 'text-app-text' : 'text-app-muted'}`}>
-                    {event.label}
-                  </span>
-                  <Toggle
-                    checked={event.isEnabled}
-                    onChange={() => onToggleLingerEvent(event.id)}
-                    id={`toggle-${event.id}`}
-                  />
+        {/* Event toggles - collapsible (#310) */}
+        {!isLingerEventsCollapsed && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-1">
+            {lingerEvents.map((event) => (
+              <div
+                key={event.id}
+                className={`
+                  group flex items-start gap-3 p-3 rounded-lg transition-all duration-200
+                  ${event.isEnabled
+                    ? 'bg-app-card border border-app-border'
+                    : 'hover:bg-app-card/50 border border-transparent opacity-70'
+                  }
+                `}
+              >
+                <div className="pt-1">
+                  {getIconForType(event.id)}
                 </div>
-                <p className="text-xs text-app-muted truncate group-hover:whitespace-normal group-hover:overflow-visible">
-                  {event.description}
-                </p>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-sm font-medium ${event.isEnabled ? 'text-app-text' : 'text-app-muted'}`}>
+                      {event.label}
+                    </span>
+                    <Toggle
+                      checked={event.isEnabled}
+                      onChange={() => onToggleLingerEvent(event.id)}
+                      id={`toggle-${event.id}`}
+                    />
+                  </div>
+                  <p className="text-xs text-app-muted truncate group-hover:whitespace-normal group-hover:overflow-visible">
+                    {event.description}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
         </>
       )}
 
@@ -474,14 +491,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
-      {/* Detection Config Panel (Issue #288) */}
+      {/* Detection Config Panel (Issue #288) - collapsible (#310) */}
       {detectionConfig && onDetectionConfigUpdate && (
-        <div className="p-4 border-t border-app-border">
-          <DetectionConfigPanel
-            config={detectionConfig}
-            onConfigUpdate={onDetectionConfigUpdate}
-            isCalibrated={isCalibrated}
-          />
+        <div className="border-t border-app-border">
+          <button
+            className="w-full p-4 hover:bg-app-card/30 transition-colors"
+            onClick={() => setIsDetectionConfigCollapsed(!isDetectionConfigCollapsed)}
+          >
+            <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
+              {isDetectionConfigCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              <Settings size={14} />
+              Detection Config
+            </h3>
+          </button>
+          {!isDetectionConfigCollapsed && (
+            <div className="px-4 pb-4">
+              <DetectionConfigPanel
+                config={detectionConfig}
+                onConfigUpdate={onDetectionConfigUpdate}
+                isCalibrated={isCalibrated}
+                hideHeader={true}
+              />
+            </div>
+          )}
         </div>
       )}
 

@@ -274,6 +274,11 @@ Use OFF mode for continuous observation without interruptions. Events are still 
 
 **Event Filters (Sidebar):**
 
+The event filter panel is collapsible (#310):
+- Click the header (Structure Events/Linger Events) to expand/collapse
+- Chevron icons (▶/▼) indicate current state
+- Expanded by default when Linger is enabled
+
 | Event Type | Default | Notes |
 |------------|---------|-------|
 | SWING_FORMED | ON | New swing detected at scale |
@@ -387,6 +392,12 @@ Attachments are stored in the snapshot with full context (leg_id, prices, bar in
 The Detection Config Panel allows real-time adjustment of swing detection thresholds without restarting the session. Changes trigger automatic re-calibration from bar 0.
 
 **Location:** Sidebar, below the Stats toggle (visible after calibration)
+
+**Collapsible Behavior (#310):**
+- Click the header to expand/collapse the panel
+- Chevron icons (▶/▼) indicate current state
+- Auto-collapses when Linger is enabled to reduce sidebar clutter
+- Can be manually expanded while Linger is active
 
 **Available Parameters:**
 

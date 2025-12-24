@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-23
 
@@ -10,6 +10,7 @@
 
 - #305: Remove dead pivot_breach replacement code path
 - #309: Add leg event serialization to API (`LEG_CREATED`, `LEG_PRUNED`, `LEG_INVALIDATED`)
+- #310: Sidebar collapsible sections (auto-collapse Detection Config when Linger enabled, collapsible event filters)
 
 ---
 

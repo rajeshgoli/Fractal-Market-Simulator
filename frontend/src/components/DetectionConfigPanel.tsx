@@ -42,6 +42,7 @@ interface DetectionConfigPanelProps {
   onConfigUpdate: (config: DetectionConfig) => void;
   isCalibrated: boolean;
   className?: string;
+  hideHeader?: boolean;  // Hide header when parent provides collapsible container (#310)
 }
 
 export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
@@ -49,6 +50,7 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
   onConfigUpdate,
   isCalibrated,
   className = '',
+  hideHeader = false,
 }) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -202,21 +204,23 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
 
   return (
     <div className={`space-y-4 ${className}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
-          <Settings size={14} />
-          Detection Config
-        </h3>
-        <button
-          onClick={handleReset}
-          className="text-xs text-app-muted hover:text-white transition-colors"
-          title="Reset to defaults"
-          disabled={isUpdating}
-        >
-          <RotateCcw size={14} />
-        </button>
-      </div>
+      {/* Header - hidden when parent provides collapsible container (#310) */}
+      {!hideHeader && (
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
+            <Settings size={14} />
+            Detection Config
+          </h3>
+          <button
+            onClick={handleReset}
+            className="text-xs text-app-muted hover:text-white transition-colors"
+            title="Reset to defaults"
+            disabled={isUpdating}
+          >
+            <RotateCcw size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Bull Direction */}
       <div className="space-y-2">
