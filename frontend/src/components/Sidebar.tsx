@@ -172,10 +172,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isLingerEventsCollapsed, setIsLingerEventsCollapsed] = useState(false);
   const [isDetectionConfigCollapsed, setIsDetectionConfigCollapsed] = useState(false);
 
-  // Auto-collapse Detection Config when linger is enabled (#310)
+  // Auto-collapse/expand Detection Config based on linger state (#310)
   useEffect(() => {
     if (lingerEnabled) {
+      // Collapse when linger enabled (less real estate)
       setIsDetectionConfigCollapsed(true);
+    } else {
+      // Expand when linger disabled (more real estate available)
+      setIsDetectionConfigCollapsed(false);
     }
   }, [lingerEnabled]);
 
@@ -379,6 +383,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className={`flex flex-col bg-app-secondary border-r border-app-border h-full ${className}`}>
+      {/* DAG Context Display (DAG mode only) - moved to top (#310) */}
+      {mode === 'dag' && dagContext && (
+        <div className="p-4 border-b border-app-border">
+          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
+            <GitBranch size={14} />
+            Market Structure
+          </h2>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between">
+              <span className="text-app-muted">Active Legs</span>
+              <span className="text-app-text font-medium">{dagContext.activeLegs.length}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-app-muted">Pending Origins</span>
+              <span className="text-app-text font-medium">
+                {(dagContext.pendingOrigins.bull ? 1 : 0) + (dagContext.pendingOrigins.bear ? 1 : 0)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Linger Event Toggles - only shown when linger is enabled */}
       {lingerEnabled && (
         <>
@@ -434,25 +460,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </>
       )}
 
-      {/* DAG Context Display (DAG mode only) */}
-      {mode === 'dag' && dagContext && (
-        <div className="p-4 border-t border-app-border">
-          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
-            <GitBranch size={14} />
-            Market Structure
-          </h2>
-          <div className="space-y-1.5 text-xs">
-            <div className="flex justify-between">
-              <span className="text-app-muted">Active Legs</span>
-              <span className="text-app-text font-medium">{dagContext.activeLegs.length}</span>
+      {/* Detection Config Panel (Issue #288) - collapsible (#310), adjacent to linger events */}
+      {detectionConfig && onDetectionConfigUpdate && (
+        <div className="border-t border-app-border">
+          <button
+            className="w-full p-4 hover:bg-app-card/30 transition-colors"
+            onClick={() => setIsDetectionConfigCollapsed(!isDetectionConfigCollapsed)}
+          >
+            <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
+              {isDetectionConfigCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              <Settings size={14} />
+              Detection Config
+            </h3>
+          </button>
+          {!isDetectionConfigCollapsed && (
+            <div className="px-4 pb-4">
+              <DetectionConfigPanel
+                config={detectionConfig}
+                onConfigUpdate={onDetectionConfigUpdate}
+                isCalibrated={isCalibrated}
+                hideHeader={true}
+              />
             </div>
-            <div className="flex justify-between">
-              <span className="text-app-muted">Pending Origins</span>
-              <span className="text-app-text font-medium">
-                {(dagContext.pendingOrigins.bull ? 1 : 0) + (dagContext.pendingOrigins.bear ? 1 : 0)}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -488,32 +518,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </p>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Detection Config Panel (Issue #288) - collapsible (#310) */}
-      {detectionConfig && onDetectionConfigUpdate && (
-        <div className="border-t border-app-border">
-          <button
-            className="w-full p-4 hover:bg-app-card/30 transition-colors"
-            onClick={() => setIsDetectionConfigCollapsed(!isDetectionConfigCollapsed)}
-          >
-            <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
-              {isDetectionConfigCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-              <Settings size={14} />
-              Detection Config
-            </h3>
-          </button>
-          {!isDetectionConfigCollapsed && (
-            <div className="px-4 pb-4">
-              <DetectionConfigPanel
-                config={detectionConfig}
-                onConfigUpdate={onDetectionConfigUpdate}
-                isCalibrated={isCalibrated}
-                hideHeader={true}
-              />
-            </div>
-          )}
         </div>
       )}
 
