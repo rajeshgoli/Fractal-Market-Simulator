@@ -1,12 +1,12 @@
-import React, { useState, useCallback, useRef, RefObject, useEffect } from 'react';
+import React, { useState, useCallback, useRef, RefObject, useEffect, useMemo } from 'react';
 import { toPng } from 'html-to-image';
-import { EventType, PlaybackState, DetectionConfig } from '../types';
+import { EventType, PlaybackState, DetectionConfig, LegEvent } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X, ChevronDown, ChevronRight, Settings, RotateCcw, Clock, Zap } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent, DagLeg } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
 import { LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
-import { DetectionConfigPanel } from './DetectionConfigPanel';
+import { DetectionConfigPanel, DetectionConfigPanelHandle } from './DetectionConfigPanel';
 
 // Linger event configuration for mode-specific toggles
 export interface LingerEventConfig {
@@ -132,6 +132,10 @@ interface SidebarProps {
   detectionConfig?: DetectionConfig;
   onDetectionConfigUpdate?: (config: DetectionConfig) => void;
   isCalibrated?: boolean;
+
+  // Market Structure stats props
+  legEvents?: LegEvent[];
+  activeLegs?: DagLeg[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -161,16 +165,78 @@ export const Sidebar: React.FC<SidebarProps> = ({
   detectionConfig,
   onDetectionConfigUpdate,
   isCalibrated = false,
+  legEvents = [],
+  activeLegs = [],
 }) => {
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [hasAutopaused, setHasAutopaused] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const detectionConfigRef = useRef<DetectionConfigPanelHandle>(null);
 
   // Collapse state for sidebar sections (#310)
   const [isLingerEventsCollapsed, setIsLingerEventsCollapsed] = useState(false);
   const [isDetectionConfigCollapsed, setIsDetectionConfigCollapsed] = useState(false);
+  const [isMarketStructureCollapsed, setIsMarketStructureCollapsed] = useState(false);
+
+  // Compute leg statistics from events
+  const legStats = useMemo(() => {
+    const stats = {
+      invalidated: 0,
+      engulfed: 0,
+      staleExtension: 0,
+      proximity: 0,
+      innerStructure: 0,
+      formed: 0,
+      unformed: 0,
+    };
+
+    // Count from events
+    for (const event of legEvents) {
+      if (event.type === 'LEG_INVALIDATED') {
+        stats.invalidated++;
+      } else if (event.type === 'LEG_PRUNED' && event.reason) {
+        const reason = event.reason.toLowerCase();
+        if (reason.includes('engulfed')) {
+          stats.engulfed++;
+        } else if (reason.includes('stale') || reason.includes('extension')) {
+          stats.staleExtension++;
+        } else if (reason.includes('proximity')) {
+          stats.proximity++;
+        } else if (reason.includes('inner')) {
+          stats.innerStructure++;
+        }
+      }
+    }
+
+    // Count formed/unformed from active legs
+    for (const leg of activeLegs) {
+      if (leg.formed) {
+        stats.formed++;
+      } else {
+        stats.unformed++;
+      }
+    }
+
+    return stats;
+  }, [legEvents, activeLegs]);
+
+  // Top 5 longest lived legs (by bar_count)
+  const longestLivedLegs = useMemo(() => {
+    return [...activeLegs]
+      .filter(leg => leg.bar_count > 0)
+      .sort((a, b) => b.bar_count - a.bar_count)
+      .slice(0, 5);
+  }, [activeLegs]);
+
+  // Top 5 most impulsive legs
+  const mostImpulsiveLegs = useMemo(() => {
+    return [...activeLegs]
+      .filter(leg => leg.impulsiveness !== null && leg.impulsiveness > 0)
+      .sort((a, b) => (b.impulsiveness ?? 0) - (a.impulsiveness ?? 0))
+      .slice(0, 5);
+  }, [activeLegs]);
 
   // Auto-collapse/expand Detection Config based on linger state (#310)
   useEffect(() => {
@@ -383,25 +449,117 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className={`flex flex-col bg-app-secondary border-r border-app-border h-full ${className}`}>
-      {/* DAG Context Display (DAG mode only) - moved to top (#310) */}
+      {/* Market Structure (DAG mode only) - collapsible, independent of other sections */}
       {mode === 'dag' && dagContext && (
-        <div className="p-4 border-b border-app-border">
-          <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2 mb-3">
-            <GitBranch size={14} />
-            Market Structure
-          </h2>
-          <div className="space-y-1.5 text-xs">
-            <div className="flex justify-between">
-              <span className="text-app-muted">Active Legs</span>
-              <span className="text-app-text font-medium">{dagContext.activeLegs.length}</span>
+        <div className="border-b border-app-border">
+          <button
+            className="w-full p-4 hover:bg-app-card/30 transition-colors"
+            onClick={() => setIsMarketStructureCollapsed(!isMarketStructureCollapsed)}
+          >
+            <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
+              {isMarketStructureCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              <GitBranch size={14} />
+              Market Structure
+            </h2>
+          </button>
+
+          {!isMarketStructureCollapsed && (
+            <div className="px-4 pb-4 space-y-4">
+              {/* Current State */}
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-app-muted">Active Legs</span>
+                  <span className="text-app-text font-medium">{dagContext.activeLegs.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-app-muted">Formed</span>
+                  <span className="text-trading-bull font-medium">{legStats.formed}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-app-muted">Unformed</span>
+                  <span className="text-app-text font-medium">{legStats.unformed}</span>
+                </div>
+              </div>
+
+              {/* Pruning Stats */}
+              <div>
+                <h3 className="text-[10px] font-bold text-app-muted uppercase tracking-wider mb-2">Pruning</h3>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Invalidated</span>
+                    <span className="text-trading-bear font-medium">{legStats.invalidated}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Engulfed</span>
+                    <span className="text-trading-orange font-medium">{legStats.engulfed}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Stale Extension</span>
+                    <span className="text-app-text font-medium">{legStats.staleExtension}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Proximity</span>
+                    <span className="text-app-text font-medium">{legStats.proximity}</span>
+                  </div>
+                  {detectionConfig?.enable_inner_structure_prune && (
+                    <div className="flex justify-between">
+                      <span className="text-app-muted">Inner Structure</span>
+                      <span className="text-app-text font-medium">{legStats.innerStructure}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Top Legs - side by side */}
+              {(longestLivedLegs.length > 0 || mostImpulsiveLegs.length > 0) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Longest Lived */}
+                  {longestLivedLegs.length > 0 && (
+                    <div>
+                      <h3 className="text-[10px] font-bold text-app-muted uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Clock size={10} />
+                        Longest
+                      </h3>
+                      <div className="space-y-0.5 text-[10px]">
+                        {longestLivedLegs.map((leg) => (
+                          <div key={leg.leg_id} className="flex items-center justify-between">
+                            <span className={`${leg.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}`}>
+                              {leg.direction.charAt(0).toUpperCase()}
+                            </span>
+                            <span className="text-app-muted font-mono">
+                              {leg.bar_count}b
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Most Impulsive */}
+                  {mostImpulsiveLegs.length > 0 && (
+                    <div>
+                      <h3 className="text-[10px] font-bold text-app-muted uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Zap size={10} />
+                        Impulsive
+                      </h3>
+                      <div className="space-y-0.5 text-[10px]">
+                        {mostImpulsiveLegs.map((leg) => (
+                          <div key={leg.leg_id} className="flex items-center justify-between">
+                            <span className={`${leg.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}`}>
+                              {leg.direction.charAt(0).toUpperCase()}
+                            </span>
+                            <span className="text-app-muted font-mono">
+                              {(leg.impulsiveness ?? 0).toFixed(1)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="flex justify-between">
-              <span className="text-app-muted">Pending Origins</span>
-              <span className="text-app-text font-medium">
-                {(dagContext.pendingOrigins.bull ? 1 : 0) + (dagContext.pendingOrigins.bear ? 1 : 0)}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -468,24 +626,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Detection Config Panel (Issue #288) - collapsible (#310), adjacent to linger events */}
       {detectionConfig && onDetectionConfigUpdate && (
         <div className="border-t border-app-border">
-          <button
-            className="w-full p-4 hover:bg-app-card/30 transition-colors"
-            onClick={() => {
-              const willOpen = isDetectionConfigCollapsed;
-              setIsDetectionConfigCollapsed(!isDetectionConfigCollapsed);
-              // Close Structure Events when opening this section (mutually exclusive)
-              if (willOpen) setIsLingerEventsCollapsed(true);
-            }}
-          >
-            <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
-              {isDetectionConfigCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-              <Settings size={14} />
-              Detection Config
-            </h3>
-          </button>
+          <div className="flex items-center">
+            <button
+              className="flex-1 p-4 hover:bg-app-card/30 transition-colors text-left"
+              onClick={() => {
+                const willOpen = isDetectionConfigCollapsed;
+                setIsDetectionConfigCollapsed(!isDetectionConfigCollapsed);
+                // Close Structure Events when opening this section (mutually exclusive)
+                if (willOpen) setIsLingerEventsCollapsed(true);
+              }}
+            >
+              <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
+                {isDetectionConfigCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                <Settings size={14} />
+                Detection Config
+              </h3>
+            </button>
+            <button
+              onClick={() => detectionConfigRef.current?.reset()}
+              className="p-4 text-app-muted hover:text-white transition-colors"
+              title="Reset to defaults"
+            >
+              <RotateCcw size={14} />
+            </button>
+          </div>
           {!isDetectionConfigCollapsed && (
             <div className="px-4 pb-4">
               <DetectionConfigPanel
+                ref={detectionConfigRef}
                 config={detectionConfig}
                 onConfigUpdate={onDetectionConfigUpdate}
                 isCalibrated={isCalibrated}
