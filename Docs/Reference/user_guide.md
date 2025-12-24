@@ -8,7 +8,7 @@ Markets exhibit fractal structure: large moves are composed of smaller moves fol
 
 **Use cases:**
 - **Debug structural events** with synchronized multi-timeframe replay
-- **Visualize discretization** to see how price action translates to structural events
+- **Visualize swing detection** to see how price action translates to structural swings
 - **Build training data** for GAN-style market simulation models
 
 ---
@@ -468,9 +468,8 @@ Each chart has an independent aggregation selector with standard timeframes:
 | 1H | 1-hour bars |
 | 4H | 4-hour bars |
 | 1D | Daily bars |
-| 1W | Weekly bars |
 
-**Dynamic filtering:** The dropdown only shows timeframes at or above the source data resolution. For example, if you load 30m source data, only 30m, 1H, 4H, 1D, and 1W are available—you cannot aggregate to finer resolution than the source.
+**Dynamic filtering:** The dropdown only shows timeframes at or above the source data resolution. For example, if you load 30m source data, only 30m, 1H, 4H, and 1D are available—you cannot aggregate to finer resolution than the source.
 
 **Default behavior:** Chart 1 defaults to 1H and Chart 2 defaults to the smallest valid aggregation (matches source resolution).
 

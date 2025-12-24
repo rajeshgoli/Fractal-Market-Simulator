@@ -34,7 +34,6 @@ For detailed technical architecture, see `Docs/State/architect_notes.md`.
 | Module | Purpose |
 |--------|---------|
 | `src/swing_analysis/` | Core detection: HierarchicalDetector, SwingNode, ReferenceFrame, BarAggregator |
-| `src/discretization/` | OHLC → structural event log conversion |
 | `src/data/` | OHLC data loading and gap detection |
 
 ### Key Components
@@ -55,7 +54,6 @@ For detailed technical architecture, see `Docs/State/architect_notes.md`.
 ```
 src/
 ├── swing_analysis/            # Core detection algorithms
-├── discretization/            # Event log conversion
 └── data/                      # OHLC loading
 
 Docs/
