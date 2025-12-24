@@ -814,12 +814,12 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   // NOTE: DAG state is now fetched via /advance API response (onDagStateChange callback)
   // This eliminates the extra API call per bar advance.
 
-  // Collect leg events from forward playback
-  useEffect(() => {
-    const legEvents: LegEvent[] = [];
+  // Compute all leg events from forward playback (for stats)
+  const allLegEvents = useMemo(() => {
+    const events: LegEvent[] = [];
     for (const event of forwardPlayback.allEvents) {
       if (event.type === 'LEG_CREATED' || event.type === 'LEG_PRUNED' || event.type === 'LEG_INVALIDATED') {
-        legEvents.push({
+        events.push({
           type: event.type as LegEvent['type'],
           leg_id: event.swing_id,
           bar_index: event.bar_index,
@@ -828,8 +828,13 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         });
       }
     }
-    setRecentLegEvents(legEvents.slice(-20).reverse());
+    return events;
   }, [forwardPlayback.allEvents]);
+
+  // Collect leg events from forward playback (last 20 for display)
+  useEffect(() => {
+    setRecentLegEvents(allLegEvents.slice(-20).reverse());
+  }, [allLegEvents]);
 
   // Handle chart ready callbacks
   const handleChart1Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
@@ -1011,6 +1016,10 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             detectionConfig={detectionConfig}
             onDetectionConfigUpdate={setDetectionConfig}
             isCalibrated={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
+            legEvents={allLegEvents}
+            activeLegs={dagState?.active_legs}
+            onHoverLeg={setHighlightedDagItem}
+            highlightedItem={highlightedDagItem}
           />
         </div>
 

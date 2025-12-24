@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, RefObject, useEffect, useMemo } from 'react';
 import { toPng } from 'html-to-image';
-import { EventType, PlaybackState, DetectionConfig, LegEvent } from '../types';
+import { EventType, PlaybackState, DetectionConfig, LegEvent, HighlightedDagItem } from '../types';
 import { Toggle } from './ui/Toggle';
 import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X, ChevronDown, ChevronRight, Settings, RotateCcw, Clock, Zap } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent, DagLeg } from '../lib/api';
@@ -136,6 +136,10 @@ interface SidebarProps {
   // Market Structure stats props
   legEvents?: LegEvent[];
   activeLegs?: DagLeg[];
+
+  // Leg highlight support (from DAGStatePanel pattern)
+  onHoverLeg?: (item: HighlightedDagItem | null) => void;
+  highlightedItem?: HighlightedDagItem | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -167,6 +171,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCalibrated = false,
   legEvents = [],
   activeLegs = [],
+  onHoverLeg,
+  highlightedItem,
 }) => {
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -449,120 +455,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className={`flex flex-col bg-app-secondary border-r border-app-border h-full ${className}`}>
-      {/* Market Structure (DAG mode only) - collapsible, independent of other sections */}
-      {mode === 'dag' && dagContext && (
-        <div className="border-b border-app-border">
-          <button
-            className="w-full p-4 hover:bg-app-card/30 transition-colors"
-            onClick={() => setIsMarketStructureCollapsed(!isMarketStructureCollapsed)}
-          >
-            <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
-              {isMarketStructureCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-              <GitBranch size={14} />
-              Market Structure
-            </h2>
-          </button>
-
-          {!isMarketStructureCollapsed && (
-            <div className="px-4 pb-4 space-y-4">
-              {/* Current State */}
-              <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-app-muted">Active Legs</span>
-                  <span className="text-app-text font-medium">{dagContext.activeLegs.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-app-muted">Formed</span>
-                  <span className="text-trading-bull font-medium">{legStats.formed}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-app-muted">Unformed</span>
-                  <span className="text-app-text font-medium">{legStats.unformed}</span>
-                </div>
-              </div>
-
-              {/* Pruning Stats */}
-              <div>
-                <h3 className="text-[10px] font-bold text-app-muted uppercase tracking-wider mb-2">Pruning</h3>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-app-muted">Invalidated</span>
-                    <span className="text-trading-bear font-medium">{legStats.invalidated}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-app-muted">Engulfed</span>
-                    <span className="text-trading-orange font-medium">{legStats.engulfed}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-app-muted">Stale Extension</span>
-                    <span className="text-app-text font-medium">{legStats.staleExtension}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-app-muted">Proximity</span>
-                    <span className="text-app-text font-medium">{legStats.proximity}</span>
-                  </div>
-                  {detectionConfig?.enable_inner_structure_prune && (
-                    <div className="flex justify-between">
-                      <span className="text-app-muted">Inner Structure</span>
-                      <span className="text-app-text font-medium">{legStats.innerStructure}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Top Legs - side by side */}
-              {(longestLivedLegs.length > 0 || mostImpulsiveLegs.length > 0) && (
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Longest Lived */}
-                  {longestLivedLegs.length > 0 && (
-                    <div>
-                      <h3 className="text-[10px] font-bold text-app-muted uppercase tracking-wider mb-1 flex items-center gap-1">
-                        <Clock size={10} />
-                        Longest
-                      </h3>
-                      <div className="space-y-0.5 text-[10px]">
-                        {longestLivedLegs.map((leg) => (
-                          <div key={leg.leg_id} className="flex items-center justify-between">
-                            <span className={`${leg.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}`}>
-                              {leg.direction.charAt(0).toUpperCase()}
-                            </span>
-                            <span className="text-app-muted font-mono">
-                              {leg.bar_count}b
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Most Impulsive */}
-                  {mostImpulsiveLegs.length > 0 && (
-                    <div>
-                      <h3 className="text-[10px] font-bold text-app-muted uppercase tracking-wider mb-1 flex items-center gap-1">
-                        <Zap size={10} />
-                        Impulsive
-                      </h3>
-                      <div className="space-y-0.5 text-[10px]">
-                        {mostImpulsiveLegs.map((leg) => (
-                          <div key={leg.leg_id} className="flex items-center justify-between">
-                            <span className={`${leg.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}`}>
-                              {leg.direction.charAt(0).toUpperCase()}
-                            </span>
-                            <span className="text-app-muted font-mono">
-                              {(leg.impulsiveness ?? 0).toFixed(1)}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Linger Event Toggles - only shown when linger is enabled */}
       {lingerEnabled && (
         <>
@@ -795,6 +687,127 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Market Structure (DAG mode only) - pinned to bottom */}
+      {mode === 'dag' && dagContext && (
+        <div className="border-t border-app-border mt-auto">
+          <button
+            className="w-full p-3 hover:bg-app-card/30 transition-colors"
+            onClick={() => setIsMarketStructureCollapsed(!isMarketStructureCollapsed)}
+          >
+            <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
+              {isMarketStructureCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              <GitBranch size={14} />
+              Market Structure
+            </h2>
+          </button>
+
+          {!isMarketStructureCollapsed && (
+            <div className="px-3 pb-3 space-y-3">
+              {/* Current State + Pruning Stats - compact side by side */}
+              <div className="grid grid-cols-2 gap-3 text-[10px]">
+                <div className="space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Active</span>
+                    <span className="text-app-text font-medium">{dagContext.activeLegs.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Formed</span>
+                    <span className="text-trading-bull font-medium">{legStats.formed}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Unformed</span>
+                    <span className="text-app-text font-medium">{legStats.unformed}</span>
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Invalidated</span>
+                    <span className="text-trading-bear font-medium">{legStats.invalidated}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Engulfed</span>
+                    <span className="text-trading-orange font-medium">{legStats.engulfed}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-app-muted">Proximity</span>
+                    <span className="text-app-text font-medium">{legStats.proximity}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Top Legs - side by side */}
+              {(longestLivedLegs.length > 0 || mostImpulsiveLegs.length > 0) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Longest Lived */}
+                  {longestLivedLegs.length > 0 && (
+                    <div>
+                      <h3 className="text-[10px] font-bold text-app-muted uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Clock size={10} />
+                        Longest
+                      </h3>
+                      <div className="space-y-0.5 text-[10px]">
+                        {longestLivedLegs.map((leg) => {
+                          const isHighlighted = highlightedItem?.type === 'leg' && highlightedItem.id === leg.leg_id;
+                          return (
+                            <div
+                              key={leg.leg_id}
+                              className={`flex items-center justify-between px-1 py-0.5 rounded cursor-pointer transition-colors ${
+                                isHighlighted ? 'bg-trading-blue/30 ring-1 ring-trading-blue' : 'hover:bg-app-card/50'
+                              }`}
+                              onMouseEnter={() => onHoverLeg?.({ type: 'leg', id: leg.leg_id, direction: leg.direction })}
+                              onMouseLeave={() => onHoverLeg?.(null)}
+                            >
+                              <span className={`${leg.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}`}>
+                                {leg.direction.charAt(0).toUpperCase()}
+                              </span>
+                              <span className="text-app-muted font-mono">
+                                {leg.bar_count}b
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Most Impulsive */}
+                  {mostImpulsiveLegs.length > 0 && (
+                    <div>
+                      <h3 className="text-[10px] font-bold text-app-muted uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Zap size={10} />
+                        Impulsive
+                      </h3>
+                      <div className="space-y-0.5 text-[10px]">
+                        {mostImpulsiveLegs.map((leg) => {
+                          const isHighlighted = highlightedItem?.type === 'leg' && highlightedItem.id === leg.leg_id;
+                          return (
+                            <div
+                              key={leg.leg_id}
+                              className={`flex items-center justify-between px-1 py-0.5 rounded cursor-pointer transition-colors ${
+                                isHighlighted ? 'bg-trading-blue/30 ring-1 ring-trading-blue' : 'hover:bg-app-card/50'
+                              }`}
+                              onMouseEnter={() => onHoverLeg?.({ type: 'leg', id: leg.leg_id, direction: leg.direction })}
+                              onMouseLeave={() => onHoverLeg?.(null)}
+                            >
+                              <span className={`${leg.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}`}>
+                                {leg.direction.charAt(0).toUpperCase()}
+                              </span>
+                              <span className="text-app-muted font-mono">
+                                {(leg.impulsiveness ?? 0).toFixed(1)}%
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
