@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries } from 'lightweight-charts';
+import React, { useEffect, useRef } from 'react';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LogicalRange } from 'lightweight-charts';
 import { ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { BarData, AggregationScale, getFilteredAggregationOptions } from '../types';
 
@@ -63,14 +63,18 @@ const ChartHeader: React.FC<ChartHeaderProps> = ({
 interface SingleChartProps {
   data: BarData[];
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void;
+  savedZoom?: LogicalRange | null;
+  onZoomChange?: (range: LogicalRange | null) => void;
 }
 
-const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady }) => {
+const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady, savedZoom, onZoomChange }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   // Track whether initial data has been loaded (for zoom preservation)
   const hasInitialDataRef = useRef<boolean>(false);
+  // Track whether we've applied the saved zoom (only once per mount)
+  const hasAppliedSavedZoomRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -133,21 +137,31 @@ const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady }) => {
     });
     resizeObserver.observe(chartContainerRef.current);
 
+    // Subscribe to zoom changes for persistence
+    const zoomHandler = (range: LogicalRange | null) => {
+      if (onZoomChange && hasInitialDataRef.current) {
+        onZoomChange(range);
+      }
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(zoomHandler);
+
     return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(zoomHandler);
       resizeObserver.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
       hasInitialDataRef.current = false;
+      hasAppliedSavedZoomRef.current = false;
     };
-  }, [onChartReady]);
+  }, [onChartReady, onZoomChange]);
 
   // Update data when it changes - preserve zoom level (#125)
   useEffect(() => {
     if (seriesRef.current && data.length > 0) {
       // Save current visible range before updating data
       const chart = chartRef.current;
-      const savedRange = chart?.timeScale().getVisibleLogicalRange();
+      const currentRange = chart?.timeScale().getVisibleLogicalRange();
 
       const formattedData: CandlestickData[] = data.map(d => ({
         time: d.timestamp as Time,
@@ -160,18 +174,27 @@ const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady }) => {
 
       if (chart) {
         if (!hasInitialDataRef.current) {
-          // First time loading data - fit content for small datasets
+          // First time loading data
           hasInitialDataRef.current = true;
-          if (data.length <= 200) {
+
+          // Try to restore saved zoom from localStorage
+          if (savedZoom && !hasAppliedSavedZoomRef.current) {
+            hasAppliedSavedZoomRef.current = true;
+            // Use requestAnimationFrame to ensure chart is ready
+            requestAnimationFrame(() => {
+              chart.timeScale().setVisibleLogicalRange(savedZoom);
+            });
+          } else if (data.length <= 200) {
+            // Fit content for small datasets
             chart.timeScale().fitContent();
           }
-        } else if (savedRange) {
+        } else if (currentRange) {
           // Subsequent updates - restore the saved visible range to preserve zoom
-          chart.timeScale().setVisibleLogicalRange(savedRange);
+          chart.timeScale().setVisibleLogicalRange(currentRange);
         }
       }
     }
-  }, [data]);
+  }, [data, savedZoom]);
 
   return <div ref={chartContainerRef} className="w-full h-full" />;
 };
@@ -186,6 +209,14 @@ interface ChartAreaProps {
   onChart1Ready?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void;
   onChart2Ready?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void;
   sourceResolutionMinutes?: number;
+  // Zoom persistence
+  chart1Zoom?: LogicalRange | null;
+  chart2Zoom?: LogicalRange | null;
+  onChart1ZoomChange?: (range: LogicalRange | null) => void;
+  onChart2ZoomChange?: (range: LogicalRange | null) => void;
+  // Maximized chart state
+  maximizedChart?: 1 | 2 | null;
+  onMaximizedChartChange?: (value: 1 | 2 | null) => void;
 }
 
 export const ChartArea: React.FC<ChartAreaProps> = ({
@@ -198,16 +229,19 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
   onChart1Ready,
   onChart2Ready,
   sourceResolutionMinutes = 1,
+  chart1Zoom,
+  chart2Zoom,
+  onChart1ZoomChange,
+  onChart2ZoomChange,
+  maximizedChart,
+  onMaximizedChartChange,
 }) => {
-  // Track which chart is maximized: null = both visible, 1 = chart 1 maximized, 2 = chart 2 maximized
-  const [maximizedChart, setMaximizedChart] = useState<1 | 2 | null>(null);
-
   const toggleChart1Maximize = () => {
-    setMaximizedChart(prev => prev === 1 ? null : 1);
+    onMaximizedChartChange?.(maximizedChart === 1 ? null : 1);
   };
 
   const toggleChart2Maximize = () => {
-    setMaximizedChart(prev => prev === 2 ? null : 2);
+    onMaximizedChartChange?.(maximizedChart === 2 ? null : 2);
   };
 
   return (
@@ -224,7 +258,12 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
             onToggleMaximize={toggleChart1Maximize}
             sourceResolutionMinutes={sourceResolutionMinutes}
           />
-          <SingleChart data={chart1Data} onChartReady={onChart1Ready} />
+          <SingleChart
+            data={chart1Data}
+            onChartReady={onChart1Ready}
+            savedZoom={chart1Zoom}
+            onZoomChange={onChart1ZoomChange}
+          />
         </div>
       )}
 
@@ -240,7 +279,12 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
             onToggleMaximize={toggleChart2Maximize}
             sourceResolutionMinutes={sourceResolutionMinutes}
           />
-          <SingleChart data={chart2Data} onChartReady={onChart2Ready} />
+          <SingleChart
+            data={chart2Data}
+            onChartReady={onChart2Ready}
+            savedZoom={chart2Zoom}
+            onZoomChange={onChart2ZoomChange}
+          />
         </div>
       )}
     </div>

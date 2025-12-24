@@ -8,7 +8,6 @@ import App from './App.tsx'
 window.addEventListener('error', (event) => {
   if (event.message?.includes('Object is disposed')) {
     event.preventDefault();
-    console.warn('Chart disposal race condition (harmless):', event.message);
   }
 });
 

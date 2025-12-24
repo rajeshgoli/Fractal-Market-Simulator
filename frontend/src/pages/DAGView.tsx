@@ -5,6 +5,7 @@ import { Sidebar, DAG_LINGER_EVENTS, LingerEventConfig, DagContext } from '../co
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
+import { ResizeHandle } from '../components/ResizeHandle';
 import { LegOverlay } from '../components/LegOverlay';
 import { PendingOriginsOverlay } from '../components/PendingOriginsOverlay';
 import { HierarchyModeOverlay } from '../components/HierarchyModeOverlay';
@@ -13,6 +14,7 @@ import { EventInspectionPopup } from '../components/EventInspectionPopup';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { useHierarchyMode } from '../hooks/useHierarchyMode';
 import { useFollowLeg, LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
+import { useChartPreferences } from '../hooks/useChartPreferences';
 import {
   fetchBars,
   fetchSession,
@@ -86,14 +88,33 @@ interface DAGViewProps {
 }
 
 export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) => {
-  // Chart aggregation state
-  const [chart1Aggregation, setChart1Aggregation] = useState<AggregationScale>('1H');
-  const [chart2Aggregation, setChart2Aggregation] = useState<AggregationScale>('5m');
+  // Chart and speed preferences (persisted to localStorage)
+  const {
+    chart1Aggregation,
+    chart2Aggregation,
+    speedMultiplier,
+    speedAggregation,
+    chart1Zoom,
+    chart2Zoom,
+    maximizedChart,
+    explanationPanelHeight,
+    setChart1Aggregation,
+    setChart2Aggregation,
+    setSpeedMultiplier,
+    setSpeedAggregation,
+    setChart1Zoom,
+    setChart2Zoom,
+    setMaximizedChart,
+    setExplanationPanelHeight,
+  } = useChartPreferences();
 
-  // Speed control state
+  // Handle panel resize
+  const handlePanelResize = useCallback((deltaY: number) => {
+    setExplanationPanelHeight(Math.max(100, Math.min(600, explanationPanelHeight + deltaY)));
+  }, [explanationPanelHeight, setExplanationPanelHeight]);
+
+  // Source resolution (derived from data, not persisted)
   const [sourceResolutionMinutes, setSourceResolutionMinutes] = useState<number>(5);
-  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
-  const [speedAggregation, setSpeedAggregation] = useState<AggregationScale>('1H');
 
   // Data state
   const [sourceBars, setSourceBars] = useState<BarData[]>([]);
@@ -1035,6 +1056,12 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             onChart1Ready={handleChart1Ready}
             onChart2Ready={handleChart2Ready}
             sourceResolutionMinutes={sourceResolutionMinutes}
+            chart1Zoom={chart1Zoom}
+            chart2Zoom={chart2Zoom}
+            onChart1ZoomChange={setChart1Zoom}
+            onChart2ZoomChange={setChart2Zoom}
+            maximizedChart={maximizedChart}
+            onMaximizedChartChange={setMaximizedChart}
           />
 
           {/* Leg Overlays - render diagonal leg lines on charts */}
@@ -1196,8 +1223,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             />
           </div>
 
+          {/* Resize Handle */}
+          <ResizeHandle onResize={handlePanelResize} />
+
           {/* DAG State Panel - Always shown in DAG mode */}
-          <div className="h-48 md:h-56 shrink-0">
+          <div className="shrink-0" style={{ height: explanationPanelHeight }}>
             <DAGStatePanel
               dagState={dagState}
               recentLegEvents={recentLegEvents}

@@ -5,6 +5,7 @@ import { Sidebar, REPLAY_LINGER_EVENTS, LingerEventConfig } from '../components/
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
 import { ExplanationPanel } from '../components/ExplanationPanel';
+import { ResizeHandle } from '../components/ResizeHandle';
 import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
 import { SwingOverlay } from '../components/SwingOverlay';
 import { usePlayback } from '../hooks/usePlayback';
@@ -40,6 +41,7 @@ import {
   DEFAULT_DETECTION_CONFIG,
 } from '../types';
 import { useHierarchicalDisplay } from '../hooks/useSwingDisplay';
+import { useChartPreferences } from '../hooks/useChartPreferences';
 import { ViewMode } from '../App';
 
 /**
@@ -167,14 +169,33 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
   // UI state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Chart aggregation state
-  const [chart1Aggregation, setChart1Aggregation] = useState<AggregationScale>('1H');
-  const [chart2Aggregation, setChart2Aggregation] = useState<AggregationScale>('5m');
+  // Chart and speed preferences (persisted to localStorage)
+  const {
+    chart1Aggregation,
+    chart2Aggregation,
+    speedMultiplier,
+    speedAggregation,
+    chart1Zoom,
+    chart2Zoom,
+    maximizedChart,
+    explanationPanelHeight,
+    setChart1Aggregation,
+    setChart2Aggregation,
+    setSpeedMultiplier,
+    setSpeedAggregation,
+    setChart1Zoom,
+    setChart2Zoom,
+    setMaximizedChart,
+    setExplanationPanelHeight,
+  } = useChartPreferences();
 
-  // Speed control state
+  // Handle panel resize
+  const handlePanelResize = useCallback((deltaY: number) => {
+    setExplanationPanelHeight(Math.max(100, Math.min(600, explanationPanelHeight + deltaY)));
+  }, [explanationPanelHeight, setExplanationPanelHeight]);
+
+  // Source resolution (derived from data, not persisted)
   const [sourceResolutionMinutes, setSourceResolutionMinutes] = useState<number>(5); // Default 5m
-  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1);
-  const [speedAggregation, setSpeedAggregation] = useState<AggregationScale>('1H'); // Default to chart1
 
   // Data state
   const [sourceBars, setSourceBars] = useState<BarData[]>([]);
@@ -1231,6 +1252,12 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
             onChart1Ready={handleChart1Ready}
             onChart2Ready={handleChart2Ready}
             sourceResolutionMinutes={sourceResolutionMinutes}
+            chart1Zoom={chart1Zoom}
+            chart2Zoom={chart2Zoom}
+            onChart1ZoomChange={setChart1Zoom}
+            onChart2ZoomChange={setChart2Zoom}
+            maximizedChart={maximizedChart}
+            onMaximizedChartChange={setMaximizedChart}
           />
 
           {/* Swing Overlays - render Fib level price lines on charts */}
@@ -1289,8 +1316,11 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
             />
           </div>
 
+          {/* Resize Handle */}
+          <ResizeHandle onResize={handlePanelResize} />
+
           {/* Explanation Panel / DAG State Panel - with toggle during PLAYING phase */}
-          <div className="h-48 md:h-56 shrink-0 relative">
+          <div className="shrink-0 relative" style={{ height: explanationPanelHeight }}>
             {/* Panel toggle tabs (only in PLAYING phase) */}
             {calibrationPhase === CalibrationPhase.PLAYING && (
               <div className="absolute -top-7 right-4 flex gap-1 z-10">

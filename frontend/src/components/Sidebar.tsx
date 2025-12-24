@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, RefObject, useEffect, useMemo } f
 import { toPng } from 'html-to-image';
 import { EventType, PlaybackState, DetectionConfig, LegEvent, HighlightedDagItem } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X, ChevronDown, ChevronRight, Settings, RotateCcw, Clock, Zap } from 'lucide-react';
+import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X, ChevronDown, ChevronRight, Settings, RotateCcw, Zap, Maximize2 } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent, DagLeg } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
 import { LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
@@ -228,11 +228,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return stats;
   }, [legEvents, activeLegs]);
 
-  // Top 5 longest lived legs (by bar_count)
-  const longestLivedLegs = useMemo(() => {
+  // Top 5 biggest legs (by price range)
+  const biggestLegs = useMemo(() => {
     return [...activeLegs]
-      .filter(leg => leg.bar_count > 0)
-      .sort((a, b) => b.bar_count - a.bar_count)
+      .map(leg => ({
+        ...leg,
+        range: Math.abs(leg.pivot_price - leg.origin_price),
+      }))
+      .filter(leg => leg.range > 0)
+      .sort((a, b) => b.range - a.range)
       .slice(0, 5);
   }, [activeLegs]);
 
@@ -760,17 +764,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {/* Top Legs - side by side */}
-              {(longestLivedLegs.length > 0 || mostImpulsiveLegs.length > 0) && (
+              {(biggestLegs.length > 0 || mostImpulsiveLegs.length > 0) && (
                 <div className="grid grid-cols-2 gap-3">
-                  {/* Longest Lived */}
-                  {longestLivedLegs.length > 0 && (
+                  {/* Biggest (by range) */}
+                  {biggestLegs.length > 0 && (
                     <div>
                       <h3 className="text-[10px] font-bold text-app-muted uppercase tracking-wider mb-1 flex items-center gap-1">
-                        <Clock size={10} />
-                        Longest
+                        <Maximize2 size={10} />
+                        Biggest
                       </h3>
                       <div className="space-y-0.5 text-[10px]">
-                        {longestLivedLegs.map((leg) => {
+                        {biggestLegs.map((leg) => {
                           const isHighlighted = highlightedItem?.type === 'leg' && highlightedItem.id === leg.leg_id;
                           return (
                             <div
@@ -785,7 +789,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 {leg.direction.charAt(0).toUpperCase()}
                               </span>
                               <span className="text-app-muted font-mono">
-                                {leg.bar_count}b
+                                {leg.range.toFixed(2)}
                               </span>
                             </div>
                           );
