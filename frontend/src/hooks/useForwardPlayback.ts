@@ -60,7 +60,7 @@ interface UseForwardPlaybackReturn {
   pauseLingerTimer: () => void;
   resumeLingerTimer: () => void;
   // External sync (for Process Till feature)
-  syncToPosition: (newPosition: number, newBars: BarData[], newCsvIndex: number) => void;
+  syncToPosition: (newPosition: number, newBars: BarData[], newCsvIndex: number, events?: ReplayEvent[]) => void;
 }
 
 export function useForwardPlayback({
@@ -1059,7 +1059,7 @@ export function useForwardPlayback({
 
   // Sync to external position (used when external code advances bars directly)
   // This updates internal state to match the new position without re-fetching
-  const syncToPosition = useCallback((newPosition: number, newBars: BarData[], newCsvIndex: number) => {
+  const syncToPosition = useCallback((newPosition: number, newBars: BarData[], newCsvIndex: number, events?: ReplayEvent[]) => {
     // Clear buffers since external code has already processed
     barBufferRef.current = [];
     pendingBatchStatesRef.current = [];
@@ -1069,6 +1069,11 @@ export function useForwardPlayback({
     setCurrentPosition(newPosition);
     setVisibleBars(newBars);
     setCsvIndex(newCsvIndex);
+
+    // Merge events if provided (for stats tracking)
+    if (events && events.length > 0) {
+      setAllEvents(prev => [...prev, ...events]);
+    }
   }, []);
 
   return {

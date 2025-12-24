@@ -665,7 +665,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         forwardPlayback.syncToPosition(
           response.current_bar_index,
           allVisibleBars,
-          response.csv_index
+          response.csv_index,
+          response.events  // Include events for stats tracking
         );
       }
 
