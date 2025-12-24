@@ -365,6 +365,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         });
       }
 
+      // Add detection config for reproducibility (#320)
+      if (detectionConfig) {
+        snapshot.detection_config = {
+          bull: {
+            formation_fib: detectionConfig.bull.formation_fib,
+            invalidation_threshold: detectionConfig.bull.invalidation_threshold,
+            engulfed_breach_threshold: detectionConfig.bull.engulfed_breach_threshold,
+          },
+          bear: {
+            formation_fib: detectionConfig.bear.formation_fib,
+            invalidation_threshold: detectionConfig.bear.invalidation_threshold,
+            engulfed_breach_threshold: detectionConfig.bear.engulfed_breach_threshold,
+          },
+          stale_extension_threshold: detectionConfig.stale_extension_threshold,
+          origin_range_threshold: detectionConfig.origin_range_threshold,
+          origin_time_threshold: detectionConfig.origin_time_threshold,
+          enable_engulfed_prune: detectionConfig.enable_engulfed_prune,
+          enable_inner_structure_prune: detectionConfig.enable_inner_structure_prune,
+        };
+      }
+
       // Capture screenshot if target ref is available
       let screenshotData: string | undefined;
       if (screenshotTargetRef?.current) {
@@ -395,7 +416,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext, screenshotTargetRef, attachedItems, onClearAttachments]);
+  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext, screenshotTargetRef, attachedItems, onClearAttachments, detectionConfig]);
 
   const handleInputFocus = useCallback(() => {
     // Pause linger timer if lingering

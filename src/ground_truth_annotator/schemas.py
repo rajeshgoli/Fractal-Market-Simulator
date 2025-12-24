@@ -181,6 +181,7 @@ class ReplayAdvanceRequest(BaseModel):
     include_aggregated_bars: Optional[List[str]] = None  # Scales to include (e.g., ["S", "M"])
     include_dag_state: bool = False  # Whether to include DAG state (at final bar only)
     include_per_bar_dag_states: bool = False  # Whether to include per-bar DAG states (#283)
+    from_index: Optional[int] = None  # FE position for resync if BE diverged (#310)
 
 
 class ReplayReverseRequest(BaseModel):
@@ -345,6 +346,27 @@ class FeedbackAttachmentLifecycleEvent(BaseModel):
     explanation: str
 
 
+class FeedbackDirectionConfig(BaseModel):
+    """Per-direction config in feedback snapshot."""
+    formation_fib: float
+    invalidation_threshold: float
+    engulfed_breach_threshold: float
+
+
+class FeedbackDetectionConfig(BaseModel):
+    """Detection config captured in feedback snapshot.
+
+    Records the full detection config at time of observation for reproducibility.
+    """
+    bull: FeedbackDirectionConfig
+    bear: FeedbackDirectionConfig
+    stale_extension_threshold: float
+    origin_range_threshold: float
+    origin_time_threshold: float
+    enable_engulfed_prune: bool
+    enable_inner_structure_prune: bool
+
+
 class PlaybackFeedbackSnapshot(BaseModel):
     """Rich context snapshot for feedback capture."""
     state: str  # calibrating, calibration_complete, playing, paused
@@ -367,6 +389,8 @@ class PlaybackFeedbackSnapshot(BaseModel):
         FeedbackAttachmentPendingOrigin,
         FeedbackAttachmentLifecycleEvent
     ]]] = None
+    # Detection config at time of observation (#320)
+    detection_config: Optional[FeedbackDetectionConfig] = None
 
 
 class PlaybackFeedbackRequest(BaseModel):

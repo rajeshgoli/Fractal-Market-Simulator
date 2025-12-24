@@ -852,15 +852,33 @@ The feedback system captures user observations with rich context snapshots:
 
 **Frontend types** (`frontend/src/lib/api.ts`):
 - `PlaybackFeedbackSnapshot` - Complete state at observation time
+- `FeedbackDetectionConfig` - Detection config captured at observation time (#320)
 - `FeedbackAttachment` - Attached leg/origin/pivot reference (max 5 per observation)
 - `submitPlaybackFeedback()` - Submit observation with optional screenshot
 
-**Attachment types:**
+**Snapshot fields:**
 ```typescript
-type FeedbackAttachment =
-  | { type: 'leg'; leg_id: string; direction: 'bull' | 'bear'; pivot_price: number; origin_price: number; ... }
-  | { type: 'pending_origin'; direction: 'bull' | 'bear'; price: number; bar_index: number; source: string };
+interface PlaybackFeedbackSnapshot {
+  state: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
+  csv_index: number;           // Authoritative CSV row index
+  bars_since_calibration: number;
+  current_bar_index: number;
+  swings_found: { XL, L, M, S };
+  event_context?: {...};       // If during linger event
+  mode?: 'replay' | 'dag';
+  replay_context?: {...};      // Replay-specific
+  dag_context?: {...};         // DAG-specific
+  attachments?: FeedbackAttachment[];
+  detection_config?: FeedbackDetectionConfig;  // Config at observation time (#320)
+}
 ```
+
+**Detection config in feedback (#320):**
+The `detection_config` field captures the full detection configuration at observation time, enabling reproducibility:
+- Bull/bear formation and invalidation thresholds
+- Stale extension threshold
+- Origin range/time proximity thresholds
+- Pruning algorithm toggles (engulfed, inner structure)
 
 **Backend storage** (`src/ground_truth_annotator/storage.py`):
 - `PLAYBACK_FEEDBACK_SCHEMA_VERSION = 2` - Current schema version

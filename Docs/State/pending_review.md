@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-24
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - #318 — Compact formation/invalidation controls in Detection Config panel
+- #320 — Include detection_config in playback feedback snapshots
 
 ---
 

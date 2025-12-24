@@ -151,6 +151,7 @@ export interface ReplayAdvanceRequest {
   include_aggregated_bars?: string[];  // Scales to include (e.g., ["S", "M"])
   include_dag_state?: boolean;  // DAG state at final bar only
   include_per_bar_dag_states?: boolean;  // Per-bar DAG states (#283)
+  from_index?: number;  // FE position for BE resync if diverged (#310)
 }
 
 export async function advanceReplay(
@@ -159,7 +160,8 @@ export async function advanceReplay(
   advanceBy: number = 1,
   includeAggregatedBars?: string[],
   includeDagState?: boolean,
-  includePerBarDagStates?: boolean
+  includePerBarDagStates?: boolean,
+  fromIndex?: number
 ): Promise<ReplayAdvanceResponse> {
   const requestBody: ReplayAdvanceRequest = {
     calibration_bar_count: calibrationBarCount,
@@ -174,6 +176,9 @@ export async function advanceReplay(
   }
   if (includePerBarDagStates) {
     requestBody.include_per_bar_dag_states = includePerBarDagStates;
+  }
+  if (fromIndex !== undefined) {
+    requestBody.from_index = fromIndex;
   }
 
   const response = await fetch(`${API_BASE}/replay/advance`, {
@@ -238,6 +243,24 @@ export interface PlaybackFeedbackEventContext {
   detection_bar_index?: number;
 }
 
+// Per-direction config in feedback snapshot
+export interface FeedbackDirectionConfig {
+  formation_fib: number;
+  invalidation_threshold: number;
+  engulfed_breach_threshold: number;
+}
+
+// Detection config captured in feedback snapshot (#320)
+export interface FeedbackDetectionConfig {
+  bull: FeedbackDirectionConfig;
+  bear: FeedbackDirectionConfig;
+  stale_extension_threshold: number;
+  origin_range_threshold: number;
+  origin_time_threshold: number;
+  enable_engulfed_prune: boolean;
+  enable_inner_structure_prune: boolean;
+}
+
 // Rich context snapshot for always-on feedback
 export interface PlaybackFeedbackSnapshot {
   // Current state
@@ -291,6 +314,8 @@ export interface PlaybackFeedbackSnapshot {
   };
   // Attached items for focused feedback (max 5)
   attachments?: FeedbackAttachment[];
+  // Detection config at time of observation (#320)
+  detection_config?: FeedbackDetectionConfig;
 }
 
 // Attachment types for feedback

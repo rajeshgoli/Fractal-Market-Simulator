@@ -618,6 +618,7 @@ The feedback input is always visible during playback (not just during linger eve
 - Swings completed count
 - Optional event context (if during linger event)
 - Mode-specific context (Replay View or Market Structure View)
+- Detection config at time of observation (thresholds, pruning toggles) for reproducibility (#320)
 
 **Auto-Screenshot:** A screenshot of the chart area is automatically captured with each observation for visual reference.
 
