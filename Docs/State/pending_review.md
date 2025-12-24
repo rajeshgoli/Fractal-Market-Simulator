@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 10
 
 **Last Review:** 2025-12-24
 
@@ -18,6 +18,7 @@
   - #329 — Startup Flow Without CLI Args
   - #330 — CLI Cleanup
   - #331 — Documentation Update
+- #332 — Fix #324 regressions: session persistence, 10K button, resolution detection
 
 ---
 
