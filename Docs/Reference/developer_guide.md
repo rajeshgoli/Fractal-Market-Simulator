@@ -35,24 +35,19 @@ src/
 │   │   ├── leg_pruner.py           # LegPruner (pruning algorithms)
 │   │   └── calibrate.py            # calibrate, calibrate_from_dataframe, dataframe_to_bars
 │   ├── reference_frame.py          # Oriented coordinate system for ratios
-│   ├── bar_aggregator.py           # Multi-timeframe OHLC aggregation
-│   └── constants.py                # Fibonacci level sets
+│   └── bar_aggregator.py           # Multi-timeframe OHLC aggregation
 
-frontend/                           # React + Vite Replay View
+frontend/                           # React + Vite DAG View
 ├── src/
 │   ├── pages/
-│   │   ├── Replay.tsx              # Main replay page (calibration mode)
-│   │   └── DAGView.tsx             # DAG visualization page (dag mode)
+│   │   └── DAGView.tsx             # Main DAG visualization page
 │   ├── components/
 │   │   ├── ChartArea.tsx           # Dual lightweight-charts
-│   │   ├── SwingOverlay.tsx        # Fib level rendering
-│   │   ├── LegOverlay.tsx          # Leg visualization (DAG mode)
+│   │   ├── LegOverlay.tsx          # Leg visualization
 │   │   ├── DAGStatePanel.tsx       # DAG internal state display
-│   │   ├── PlaybackControls.tsx    # Transport controls
-│   │   └── ExplanationPanel.tsx    # Swing detail display
+│   │   └── PlaybackControls.tsx    # Transport controls
 │   └── hooks/
-│       ├── usePlayback.ts          # Legacy playback (calibration scrubbing)
-│       └── useForwardPlayback.ts   # Forward-only playback (after calibration)
+│       └── useForwardPlayback.ts   # Forward-only playback
 └── package.json
 
 tests/                              # 600+ tests
@@ -92,7 +87,6 @@ scripts/                            # Dev utilities
 │   dag/state.py ─────────► BarType, DetectorState                        │   │
 │   reference_frame.py ───► Price ↔ ratio conversion                       │   │
 │   bar_aggregator.py ────► Multi-timeframe OHLC                           │   │
-│   constants.py ─────────► DISCRETIZATION_LEVELS (16 Fib ratios)          │   │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
                                        │
@@ -101,7 +95,7 @@ scripts/                            # Dev utilities
 │                         FRONTEND (React)                                     │
 │                                                                              │
 │   frontend/src/                                                             │
-│   └── Replay.tsx ◄── ChartArea, SwingOverlay, PlaybackControls             │
+│   └── DAGView.tsx ◄── ChartArea, LegOverlay, PlaybackControls              │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -409,6 +403,20 @@ Configuration:
 - `SwingConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
 - `SwingConfig.proximity_prune_strategy` (default: `'counter_trend'`)
 
+**Minimum counter-trend ratio filter (#319):**
+
+A decoupled quality filter that prunes legs with insufficient counter-trend significance:
+
+```
+counter_trend_ratio = CTR / leg.range
+```
+
+Where CTR = `|origin_price - parent.segment_deepest_price|` (falls back to leg.range for root legs).
+
+Legs with ratio < `min_counter_trend_ratio` are pruned as insignificant noise (shallow moves rather than meaningful structural levels).
+
+Configuration: `SwingConfig.min_counter_trend_ratio` (default: 0.0 = disabled)
+
 **Why pivot grouping is required:** Legs with different pivots can validly have newer legs with larger ranges (e.g., a leg that found a better origin AND a later pivot). Cross-pivot comparisons would incorrectly flag this as invalid.
 
 Example with 10% time threshold and 20% range threshold at bar 100:
@@ -480,11 +488,11 @@ Pruning conditions:
 
 Post-processes DAG output to produce trading references. Applies semantic filtering rules from `Docs/Reference/valid_swings.md`.
 
-**Big vs Small (hierarchy-based definition):**
-- **Big swing** = `len(swing.parents) == 0` (root level, no parents)
-- **Small swing** = `len(swing.parents) > 0` (has parent)
+**Big vs Small (range-based definition):**
+- **Big swing** = top 10% by range (historically called XL)
+- **Small swing** = all other swings
 
-This is determined by hierarchy, not range percentile.
+This is determined by range percentile, computed via `ReferenceLayer._compute_big_swing_threshold()`.
 
 ```python
 from src.swing_analysis.reference_layer import (
@@ -517,7 +525,7 @@ for info in reference_swings:
     if result.is_completed:
         print(f"{info.swing.swing_id} completed")
 
-# Get only big swings (root level, no parents)
+# Get only big swings (top 10% by range)
 big_swings = ref_layer.get_big_swings(swings)
 
 # Batch invalidation check
@@ -537,7 +545,7 @@ for swing, result in completed:
 | `get_reference_swings(swings)` | Get all swings with tolerances computed |
 | `check_invalidation(swing, bar)` | Apply Rule 2.2 with touch/close thresholds |
 | `check_completion(swing, bar)` | Check if swing should be marked complete |
-| `get_big_swings(swings)` | Get only big swings (root level, no parents) |
+| `get_big_swings(swings)` | Get only big swings (top 10% by range) |
 | `update_invalidation_on_bar(swings, bar)` | Batch invalidation check |
 | `update_completion_on_bar(swings, bar)` | Batch completion check |
 
@@ -655,19 +663,14 @@ cd frontend && npm run build  # Output: frontend/dist/
 
 | Component | Purpose |
 |-----------|---------|
-| `Replay.tsx` | Main page for calibration mode |
-| `DAGView.tsx` | Page for DAG build visualization mode |
+| `DAGView.tsx` | Main DAG visualization page |
 | `ChartArea.tsx` | Two stacked lightweight-charts |
-| `SwingOverlay.tsx` | Fib level rendering on charts |
-| `LegOverlay.tsx` | Leg visualization for DAG mode (includes tree icon hover) |
+| `LegOverlay.tsx` | Leg visualization (includes tree icon hover) |
 | `HierarchyModeOverlay.tsx` | Hierarchy exploration mode (exit button, connection lines, status) |
 | `PlaybackControls.tsx` | Play/pause/step transport |
-| `ExplanationPanel.tsx` | Calibration report and swing details |
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |
 | `Sidebar.tsx` | Event filters, feedback input, attachment display |
-| `usePlayback.ts` | Legacy playback (calibration scrubbing) |
-| `useForwardPlayback.ts` | Forward-only playback after calibration (step back via backend API) |
-| `useSwingDisplay.ts` | Scale filtering and swing ranking |
+| `useForwardPlayback.ts` | Forward-only playback (step back via backend API) |
 | `useHierarchyMode.ts` | Hierarchy exploration state management (#250) |
 
 **Backward Navigation:**

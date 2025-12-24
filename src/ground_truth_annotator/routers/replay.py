@@ -43,11 +43,7 @@ from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceSwingInfo
 from ...swing_analysis.bar_aggregator import BarAggregator
 from ..schemas import (
     BarResponse,
-    DetectedSwingResponse,
-    SwingsWindowedResponse,
     CalibrationSwingResponse,
-    CalibrationScaleStats,
-    CalibrationResponse,
     ReplayAdvanceRequest,
     ReplayReverseRequest,
     ReplayBarResponse,
@@ -57,7 +53,7 @@ from ..schemas import (
     AggregatedBarsResponse,
     PlaybackFeedbackRequest,
     PlaybackFeedbackResponse,
-    # New hierarchical models (Issue #166)
+    # Hierarchical models (Issue #166)
     TreeStatistics,
     SwingsByDepth,
     CalibrationResponseHierarchical,
@@ -750,88 +746,6 @@ def _group_swings_by_depth(
 # ============================================================================
 # Endpoints
 # ============================================================================
-
-
-@router.get("/api/swings/windowed", response_model=SwingsWindowedResponse)
-async def get_windowed_swings(
-    bar_end: int = Query(..., description="Source bar index to detect swings up to"),
-    top_n: int = Query(2, description="Number of top swings to return"),
-):
-    """
-    Run swing detection on bars[0:bar_end] and return top N swings.
-
-    Uses LegDetector for detection.
-    """
-    from ..api import get_state
-
-    s = get_state()
-
-    if bar_end < 10:
-        return SwingsWindowedResponse(bar_end=bar_end, swing_count=0, swings=[])
-    if bar_end > len(s.source_bars):
-        bar_end = len(s.source_bars)
-
-    # Run calibration up to bar_end
-    bars_to_process = s.source_bars[:bar_end]
-    detector, _events = calibrate(bars_to_process)
-
-    # Get active swings from DAG
-    active_dag_swings = detector.get_active_swings()
-
-    # Apply Reference layer filtering
-    config = SwingConfig.default()
-    ref_layer = ReferenceLayer(config)
-    ref_infos = ref_layer.get_reference_swings(active_dag_swings)
-    active_swings = [info.swing for info in ref_infos if info.is_reference]
-
-    # Sort by size, take top N
-    sorted_swings = sorted(
-        active_swings,
-        key=lambda x: float(x.high_price - x.low_price),
-        reverse=True
-    )[:top_n]
-
-    # Convert to response
-    swing_responses = []
-    for rank, swing in enumerate(sorted_swings, start=1):
-        high = float(swing.high_price)
-        low = float(swing.low_price)
-        size = high - low
-
-        if swing.direction == "bull":
-            fib_0 = low
-            fib_0382 = low + size * 0.382
-            fib_1 = high
-            fib_2 = low + size * 2.0
-        else:
-            fib_0 = high
-            fib_0382 = high - size * 0.382
-            fib_1 = low
-            fib_2 = high - size * 2.0
-
-        swing_responses.append(DetectedSwingResponse(
-            id=swing.swing_id,
-            direction=swing.direction,
-            high_price=high,
-            high_bar_index=swing.high_bar_index,
-            low_price=low,
-            low_bar_index=swing.low_bar_index,
-            size=size,
-            rank=rank,
-            scale="M",  # Swing hierarchy removed (#301)
-            depth=0,  # Swing hierarchy removed (#301)
-            parent_ids=[],  # Swing hierarchy removed (#301)
-            fib_0=fib_0,
-            fib_0382=fib_0382,
-            fib_1=fib_1,
-            fib_2=fib_2,
-        ))
-
-    return SwingsWindowedResponse(
-        bar_end=bar_end,
-        swing_count=len(swing_responses),
-        swings=swing_responses,
-    )
 
 
 @router.get("/api/replay/calibrate", response_model=CalibrationResponseHierarchical)

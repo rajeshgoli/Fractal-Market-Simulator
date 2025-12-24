@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Monitor, Clock, ChevronDown, Play, GitBranch } from 'lucide-react';
+import { Menu, Monitor, Clock, ChevronDown, GitBranch } from 'lucide-react';
 
-type ViewMode = 'calibration' | 'dag';
+// ViewMode kept for backward compatibility (DAGView is now the sole view)
+type ViewMode = 'dag';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -17,7 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentTimestamp,
   sourceBarCount,
   calibrationStatus,
-  currentMode = 'calibration',
+  currentMode = 'dag',
   onModeChange,
 }) => {
   const [isNavOpen, setIsNavOpen] = useState(false);
@@ -56,16 +57,11 @@ export const Header: React.FC<HeaderProps> = ({
 
   const { date, time } = formatTimestamp(currentTimestamp);
 
+  // Single view available - Market Structure View
   const navItems = [
     {
-      id: 'calibration' as ViewMode,
-      label: 'Replay View',
-      icon: <Play size={16} />,
-      description: 'Calibration and temporal playback',
-    },
-    {
       id: 'dag' as ViewMode,
-      label: 'Market structure view',
+      label: 'Market Structure View',
       icon: <GitBranch size={16} />,
       description: 'View market structure as it forms',
     },

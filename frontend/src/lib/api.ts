@@ -1,4 +1,4 @@
-import { BarData, AggregationScale, DetectedSwing, CalibrationData, CalibrationSwing, DetectionConfig } from '../types';
+import { BarData, AggregationScale, CalibrationData, CalibrationSwing, DetectionConfig } from '../types';
 
 const API_BASE = '/api';
 
@@ -42,25 +42,6 @@ export async function fetchBars(scale?: AggregationScale): Promise<BarData[]> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch bars: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export interface WindowedSwingsResponse {
-  bar_end: number;
-  swing_count: number;
-  swings: DetectedSwing[];
-}
-
-export async function fetchDetectedSwings(
-  barEnd: number,
-  topN: number = 2
-): Promise<WindowedSwingsResponse> {
-  const response = await fetch(
-    `${API_BASE}/swings/windowed?bar_end=${barEnd}&top_n=${topN}`
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to fetch detected swings: ${response.statusText}`);
   }
   return response.json();
 }

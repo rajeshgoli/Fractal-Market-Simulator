@@ -5,13 +5,6 @@ export enum EventType {
   LEVEL_CROSS = 'LEVEL_CROSS',
 }
 
-export enum SwingScale {
-  S = 'S',
-  M = 'M',
-  L = 'L',
-  XL = 'XL',
-}
-
 export enum Direction {
   BULL = 'BULL',
   BEAR = 'BEAR',
@@ -75,29 +68,6 @@ export interface BarData {
   source_end_index: number;
 }
 
-// Legacy discretization types (stub for usePlayback hook compatibility)
-// Discretization module removed in #301 - these are kept as stubs for the
-// unused event/swing arrays passed to usePlayback
-export interface DiscretizationEvent {
-  bar: number;
-  timestamp: string;
-  swing_id: string;
-  event_type: string;
-  data: Record<string, unknown>;
-}
-
-export interface DiscretizationSwing {
-  swing_id: string;
-  scale: string;
-  direction: string;
-  anchor0: number;
-  anchor1: number;
-  anchor0_bar: number;
-  anchor1_bar: number;
-  formed_at_bar: number;
-  status: string;
-}
-
 // Playback state machine
 export enum PlaybackState {
   STOPPED = 'STOPPED',
@@ -105,32 +75,6 @@ export enum PlaybackState {
   PAUSED = 'PAUSED',
   LINGERING = 'LINGERING',
 }
-
-// Detected swing for Replay View visualization
-export interface DetectedSwing {
-  id: string;
-  direction: 'bull' | 'bear';
-  high_price: number;
-  high_bar_index: number;
-  low_price: number;
-  low_bar_index: number;
-  size: number;
-  rank: number;
-  // Fib levels for overlay
-  fib_0: number;    // Defended pivot (0)
-  fib_0382: number; // First retracement (0.382)
-  fib_1: number;    // Origin extremum (1.0)
-  fib_2: number;    // Completion target (2.0)
-}
-
-// Swing colors by rank (1-indexed)
-export const SWING_COLORS: Record<number, string> = {
-  1: '#3B82F6', // Blue (biggest)
-  2: '#10B981', // Green
-  3: '#F59E0B', // Orange
-  4: '#8B5CF6', // Purple
-  5: '#EC4899', // Pink
-};
 
 // ============================================================================
 // Calibration Types (Replay View v2)
