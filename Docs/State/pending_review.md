@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-24
 
@@ -10,6 +10,7 @@
 
 - #318 — Compact formation/invalidation controls in Detection Config panel
 - #320 — Include detection_config in playback feedback snapshots
+- #321 — UX improvements: session persistence, resizable panels, Market Structure fix
 
 ---
 
