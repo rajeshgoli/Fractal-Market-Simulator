@@ -417,7 +417,7 @@ export interface DetectionConfig {
   origin_time_threshold: number;  // Origin proximity time threshold (#294)
   // Pruning algorithm toggles
   enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
-  enable_inner_structure_prune: boolean;  // Enable inner structure pruning (default: true)
+  enable_inner_structure_prune: boolean;  // Enable inner structure pruning (default: false)
   enable_pivot_breach_prune: boolean;  // Enable pivot breach replacement (default: true)
 }
 
@@ -441,6 +441,6 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   origin_range_threshold: 0.0,
   origin_time_threshold: 0.0,
   enable_engulfed_prune: true,
-  enable_inner_structure_prune: true,
+  enable_inner_structure_prune: false,
   enable_pivot_breach_prune: true,
 };

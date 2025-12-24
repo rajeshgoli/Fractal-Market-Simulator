@@ -31,7 +31,7 @@ def test_inner_structure_pruned_despite_swing():
 
     When both bears are invalidated, the inner bull should be pruned.
     """
-    config = SwingConfig.default()
+    config = SwingConfig.default().with_prune_toggles(enable_inner_structure_prune=True)
     detector = HierarchicalDetector(config)
 
     bars = [

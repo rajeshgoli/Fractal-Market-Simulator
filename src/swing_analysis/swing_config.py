@@ -78,7 +78,7 @@ class SwingConfig:
         enable_engulfed_prune: Whether to delete legs that are breached on both
             origin and pivot sides. Default True.
         enable_inner_structure_prune: Whether to prune counter-direction legs from
-            inner structure pivots when outer structure invalidates. Default True.
+            inner structure pivots when outer structure invalidates. Default False.
         enable_pivot_breach_prune: Whether to prune and replace formed legs when
             pivot is breached beyond threshold. Default True.
 
@@ -95,7 +95,7 @@ class SwingConfig:
     emit_level_crosses: bool = False
     # Pruning algorithm toggles (#288)
     enable_engulfed_prune: bool = True
-    enable_inner_structure_prune: bool = True
+    enable_inner_structure_prune: bool = False
     enable_pivot_breach_prune: bool = True
 
     @classmethod

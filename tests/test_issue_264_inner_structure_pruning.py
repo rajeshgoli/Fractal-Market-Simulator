@@ -393,7 +393,7 @@ class TestLegPrunerUnit:
         """
         Test prune_inner_structure_legs directly with constructed state.
         """
-        config = SwingConfig.default()
+        config = SwingConfig.default().with_prune_toggles(enable_inner_structure_prune=True)
         pruner = LegPruner(config)
         state = DetectorState()
         timestamp = datetime.now()
@@ -701,7 +701,7 @@ class TestSequentialInvalidation:
 
         Uses direct state manipulation to test the pruner logic.
         """
-        config = SwingConfig.default()
+        config = SwingConfig.default().with_prune_toggles(enable_inner_structure_prune=True)
         pruner = LegPruner(config)
         state = DetectorState()
         timestamp = datetime.now()
