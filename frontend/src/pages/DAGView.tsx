@@ -199,9 +199,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
   // Highlighted event marker (shown when clicking Recent Events panel)
   const [highlightedEvent, setHighlightedEvent] = useState<LifecycleEventWithLegInfo | null>(null);
 
-  // Detection config state (#288) - initialized from saved preferences if available
+  // Detection config state (#288) - server config is authoritative, saved prefs only seed UI
   const [detectionConfig, setDetectionConfigState] = useState<DetectionConfig>(
-    savedDetectionConfig ?? DEFAULT_DETECTION_CONFIG
+    DEFAULT_DETECTION_CONFIG
   );
 
   // Wrap setDetectionConfig to also save to preferences
@@ -736,14 +736,13 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         const initialDagState = await fetchDagState();
         setDagState(initialDagState);
 
-        // Fetch initial detection config (#288) - only apply server config if no saved preferences
-        if (!savedDetectionConfig) {
-          try {
-            const config = await fetchDetectionConfig();
-            setDetectionConfig(config);
-          } catch (err) {
-            console.warn('Failed to fetch detection config, using defaults:', err);
-          }
+        // Fetch detection config (#288) - server config is authoritative
+        // Saved preferences only populate UI (via initialDetectionConfig prop)
+        try {
+          const config = await fetchDetectionConfig();
+          setDetectionConfigState(config);  // Use state setter directly, don't save to prefs
+        } catch (err) {
+          console.warn('Failed to fetch detection config, using defaults:', err);
         }
 
         // Ready to play - user presses play to start incremental build
@@ -1076,6 +1075,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             onDetachItem={handleDetachItem}
             onClearAttachments={handleClearAttachments}
             detectionConfig={detectionConfig}
+            initialDetectionConfig={savedDetectionConfig ?? undefined}
             onDetectionConfigUpdate={setDetectionConfig}
             isCalibrated={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
             legEvents={allLegEvents}

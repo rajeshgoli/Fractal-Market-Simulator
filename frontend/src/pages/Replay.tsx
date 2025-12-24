@@ -276,9 +276,9 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
   // Feedback attachment state (max 5 items)
   const [attachedItems, setAttachedItems] = useState<AttachableItem[]>([]);
 
-  // Detection config state (#288) - initialized from saved preferences if available
+  // Detection config state (#288) - server config is authoritative, saved prefs only seed UI
   const [detectionConfig, setDetectionConfigState] = useState<DetectionConfig>(
-    savedDetectionConfig ?? DEFAULT_DETECTION_CONFIG
+    DEFAULT_DETECTION_CONFIG
   );
 
   // Wrap setDetectionConfig to also save to preferences
@@ -719,14 +719,13 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
         const calBars = newSourceBars.slice(0, calibration.calibration_bar_count);
         setCalibrationBars(calBars);
 
-        // Fetch detection config (#288) - only apply server config if no saved preferences
-        if (!savedDetectionConfig) {
-          try {
-            const config = await fetchDetectionConfig();
-            setDetectionConfig(config);
-          } catch (err) {
-            console.warn('Failed to fetch detection config, using defaults:', err);
-          }
+        // Fetch detection config (#288) - server config is authoritative
+        // Saved preferences only populate UI (via initialDetectionConfig prop)
+        try {
+          const config = await fetchDetectionConfig();
+          setDetectionConfigState(config);  // Use state setter directly, don't save to prefs
+        } catch (err) {
+          console.warn('Failed to fetch detection config, using defaults:', err);
         }
 
         // Reset index and transition to calibrated phase
@@ -1275,6 +1274,7 @@ export const Replay: React.FC<ReplayProps> = ({ currentMode, onModeChange }) => 
             onDetachItem={handleDetachItem}
             onClearAttachments={handleClearAttachments}
             detectionConfig={detectionConfig}
+            initialDetectionConfig={savedDetectionConfig ?? undefined}
             onDetectionConfigUpdate={setDetectionConfig}
             isCalibrated={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
           />
