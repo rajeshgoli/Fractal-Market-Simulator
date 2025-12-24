@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react';
 import { Settings, RotateCcw, Loader } from 'lucide-react';
 import { DetectionConfig, DEFAULT_DETECTION_CONFIG } from '../types';
 import { updateDetectionConfig, DetectionConfigUpdateRequest } from '../lib/api';
@@ -13,12 +13,6 @@ interface SliderConfig {
   displayAsPercent?: boolean;  // Display value as percentage (multiply by 100, add %)
   colorMode?: 'restrictive-right' | 'restrictive-left';  // Which direction is more restrictive
 }
-
-// Slider configurations for direction-specific parameters
-const DIRECTION_SLIDERS: SliderConfig[] = [
-  { key: 'formation_fib', label: 'Formation', min: 0.1, max: 1.0, step: 0.01, description: 'Retracement required to form leg', displayAsPercent: true, colorMode: 'restrictive-right' },
-  { key: 'invalidation_threshold', label: 'Invalidation', min: 0.1, max: 1.0, step: 0.01, description: 'Breach threshold for invalidation', displayAsPercent: true, colorMode: 'restrictive-right' },
-];
 
 // Slider configurations for global parameters
 const GLOBAL_SLIDERS: SliderConfig[] = [
@@ -47,23 +41,41 @@ interface DetectionConfigPanelProps {
   hideHeader?: boolean;  // Hide header when parent provides collapsible container (#310)
 }
 
-export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
+// Expose reset method via ref for external triggering
+export interface DetectionConfigPanelHandle {
+  reset: () => void;
+}
+
+export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, DetectionConfigPanelProps>(({
   config,
   onConfigUpdate,
   isCalibrated,
   className = '',
   hideHeader = false,
-}) => {
+}, ref) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [localConfig, setLocalConfig] = useState<DetectionConfig>(config);
-  const [hasChanges, setHasChanges] = useState(false);
 
-  // Update local config when prop changes
+  // Update local config when prop changes (BE state updated)
   React.useEffect(() => {
     setLocalConfig(config);
-    setHasChanges(false);
   }, [config]);
+
+  // Compute hasChanges by comparing FE state (localConfig) with BE state (config prop)
+  const hasChanges = useMemo(() => {
+    return (
+      localConfig.bull.formation_fib !== config.bull.formation_fib ||
+      localConfig.bull.invalidation_threshold !== config.bull.invalidation_threshold ||
+      localConfig.bear.formation_fib !== config.bear.formation_fib ||
+      localConfig.bear.invalidation_threshold !== config.bear.invalidation_threshold ||
+      localConfig.stale_extension_threshold !== config.stale_extension_threshold ||
+      localConfig.origin_range_threshold !== config.origin_range_threshold ||
+      localConfig.origin_time_threshold !== config.origin_time_threshold ||
+      localConfig.enable_engulfed_prune !== config.enable_engulfed_prune ||
+      localConfig.enable_inner_structure_prune !== config.enable_inner_structure_prune
+    );
+  }, [localConfig, config]);
 
   const handleSliderChange = useCallback((
     direction: 'bull' | 'bear' | 'global',
@@ -79,13 +91,11 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
         [direction]: { ...prev[direction], [key]: value },
       };
     });
-    setHasChanges(true);
     setError(null);
   }, []);
 
   const handleToggleChange = useCallback((key: keyof DetectionConfig, value: boolean) => {
     setLocalConfig(prev => ({ ...prev, [key]: value }));
-    setHasChanges(true);
     setError(null);
   }, []);
 
@@ -119,7 +129,7 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
 
       const updatedConfig = await updateDetectionConfig(request);
       onConfigUpdate(updatedConfig);
-      setHasChanges(false);
+      // hasChanges auto-computes to false when config prop updates
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update config');
     } finally {
@@ -129,9 +139,14 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
 
   const handleReset = useCallback(() => {
     setLocalConfig(DEFAULT_DETECTION_CONFIG);
-    setHasChanges(true);
     setError(null);
+    // hasChanges auto-computes based on localConfig vs config (BE state)
   }, []);
+
+  // Expose reset method via ref for external triggering (e.g., from Sidebar header)
+  useImperativeHandle(ref, () => ({
+    reset: handleReset,
+  }), [handleReset]);
 
   const renderSlider = (
     direction: 'bull' | 'bear' | 'global',
@@ -252,25 +267,67 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
         </div>
       )}
 
-      {/* Bull Direction */}
+      {/* Direction Thresholds - Compact 2x2 Grid */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-trading-bull" />
-          <span className="text-xs font-medium text-app-text">Bull</span>
+        {/* Header row with direction labels */}
+        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs">
+          <span></span>
+          <span className="flex items-center gap-1 justify-center w-14">
+            <span className="w-1.5 h-1.5 rounded-full bg-trading-bull" />
+            <span className="text-app-muted">Bull</span>
+          </span>
+          <span className="flex items-center gap-1 justify-center w-14">
+            <span className="w-1.5 h-1.5 rounded-full bg-trading-bear" />
+            <span className="text-app-muted">Bear</span>
+          </span>
         </div>
-        <div className="pl-4 space-y-3">
-          {DIRECTION_SLIDERS.map(slider => renderSlider('bull', slider))}
+        {/* Formation row */}
+        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs">
+          <span className="text-app-muted" title="Retracement required to form leg">Formation</span>
+          <input
+            type="text"
+            value={`${Math.round(localConfig.bull.formation_fib * 100)}%`}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value.replace('%', '')) / 100;
+              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bull', 'formation_fib', val);
+            }}
+            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bull focus:outline-none focus:border-trading-bull"
+            disabled={isUpdating}
+          />
+          <input
+            type="text"
+            value={`${Math.round(localConfig.bear.formation_fib * 100)}%`}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value.replace('%', '')) / 100;
+              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bear', 'formation_fib', val);
+            }}
+            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bear focus:outline-none focus:border-trading-bear"
+            disabled={isUpdating}
+          />
         </div>
-      </div>
-
-      {/* Bear Direction */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-trading-bear" />
-          <span className="text-xs font-medium text-app-text">Bear</span>
-        </div>
-        <div className="pl-4 space-y-3">
-          {DIRECTION_SLIDERS.map(slider => renderSlider('bear', slider))}
+        {/* Invalidation row */}
+        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs">
+          <span className="text-app-muted" title="Breach threshold for invalidation">Invalidation</span>
+          <input
+            type="text"
+            value={`${Math.round(localConfig.bull.invalidation_threshold * 100)}%`}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value.replace('%', '')) / 100;
+              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bull', 'invalidation_threshold', val);
+            }}
+            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bull focus:outline-none focus:border-trading-bull"
+            disabled={isUpdating}
+          />
+          <input
+            type="text"
+            value={`${Math.round(localConfig.bear.invalidation_threshold * 100)}%`}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value.replace('%', '')) / 100;
+              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bear', 'invalidation_threshold', val);
+            }}
+            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bear focus:outline-none focus:border-trading-bear"
+            disabled={isUpdating}
+          />
         </div>
       </div>
 
@@ -319,4 +376,4 @@ export const DetectionConfigPanel: React.FC<DetectionConfigPanelProps> = ({
       )}
     </div>
   );
-};
+});
