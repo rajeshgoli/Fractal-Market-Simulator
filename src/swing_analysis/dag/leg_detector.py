@@ -506,6 +506,14 @@ class LegDetector:
         # Only pivots (current defended extreme) extend as price moves.
         self._extend_leg_pivots(bar, bar_high, bar_low)
 
+        # Apply CTR check for both directions after pivot extension (#336)
+        # This ensures legs are checked as they extend, not just on direction change.
+        # As a leg's range grows, its CTR decreases and may fall below threshold.
+        ctr_events = self._pruner.apply_min_counter_trend_prune(self.state, 'bull', bar, timestamp)
+        events.extend(ctr_events)
+        ctr_events = self._pruner.apply_min_counter_trend_prune(self.state, 'bear', bar, timestamp)
+        events.extend(ctr_events)
+
         # Update breach tracking for all legs (#208)
         # Returns breach events for first-time origin/pivot breaches
         breach_events = self._update_breach_tracking(bar, bar_high, bar_low, timestamp)
@@ -623,9 +631,7 @@ class LegDetector:
         proximity_prune_events = self._pruner.apply_origin_proximity_prune(self.state, 'bear', bar, timestamp)
         events.extend(proximity_prune_events)
 
-        # Apply min counter-trend ratio filter for bear legs (decoupled quality filter)
-        min_ctr_events = self._pruner.apply_min_counter_trend_prune(self.state, 'bear', bar, timestamp)
-        events.extend(min_ctr_events)
+        # Note: CTR pruning moved to process_bar() after _extend_leg_pivots (#336)
 
         # Check if we can start a bull leg from the pending bull origin
         # prev_low is the origin (starting point) for a bull swing extending up
@@ -725,9 +731,7 @@ class LegDetector:
         proximity_prune_events = self._pruner.apply_origin_proximity_prune(self.state, 'bull', bar, timestamp)
         events.extend(proximity_prune_events)
 
-        # Apply min counter-trend ratio filter for bull legs (decoupled quality filter)
-        min_ctr_events = self._pruner.apply_min_counter_trend_prune(self.state, 'bull', bar, timestamp)
-        events.extend(min_ctr_events)
+        # Note: CTR pruning moved to process_bar() after _extend_leg_pivots (#336)
 
         # Start new bear leg for potential bear swing
         # (tracking downward movement for possible bear retracement later)
