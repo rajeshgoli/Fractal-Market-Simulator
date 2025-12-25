@@ -544,8 +544,8 @@ Two strategies determine which leg survives from each cluster:
 
 | Strategy | Survivor Rule | Use Case |
 |----------|---------------|----------|
-| `oldest` | Oldest leg (by origin_index) wins | Simple, deterministic, O(N log N) |
-| `counter_trend` (default) | Highest counter-trend range wins | Prioritizes structural significance |
+| `oldest` (default) | Oldest leg (by origin_index) wins | Simple, deterministic, O(N log N) |
+| `counter_trend` | Highest counter-trend range wins | Prioritizes structural significance |
 
 **Counter-Trend Scoring:**
 When `counter_trend` strategy is active, each leg is scored by how far price traveled against the trend to reach its origin:
@@ -928,7 +928,7 @@ All thresholds are configurable. Defaults shown:
 | `engulfed_breach_threshold` | 0.0 | Combined breach % for engulfed deletion (#236) |
 | `origin_range_prune_threshold` | 0.0 | Range similarity % for origin-proximity consolidation (#294) |
 | `origin_time_prune_threshold` | 0.0 | Time proximity % for origin-proximity consolidation (#294) |
-| `proximity_prune_strategy` | 'counter_trend' | Strategy for selecting survivor: 'oldest' or 'counter_trend' (#319) |
+| `proximity_prune_strategy` | 'oldest' | Strategy for selecting survivor: 'oldest' or 'counter_trend' (#319) |
 | `min_branch_ratio` | 0.0 | Branch ratio for origin domination - prevents insignificant child legs (#337) |
 | `stale_extension_threshold` | 3.0 | Prune invalidated child legs at 3x range (root legs preserved) |
 

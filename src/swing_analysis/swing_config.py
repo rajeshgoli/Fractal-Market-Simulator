@@ -39,7 +39,7 @@ class DirectionConfig:
             that marks a leg as engulfed and deletes it. Default 0.0 (strict
             deletion while collecting impulse data for threshold tuning) (#236).
     """
-    formation_fib: float = 0.287
+    formation_fib: float = 0.236
     self_separation: float = 0.10
     big_swing_threshold: float = 0.10
     big_swing_price_tolerance: float = 0.15
@@ -90,10 +90,10 @@ class SwingConfig:
     bear: DirectionConfig = field(default_factory=DirectionConfig)
     origin_range_prune_threshold: float = 0.0  # Disabled by default; set > 0 to enable
     origin_time_prune_threshold: float = 0.0  # Disabled by default; set > 0 to enable
-    # Proximity pruning strategy (#319): 'oldest' (legacy) or 'counter_trend' (default)
+    # Proximity pruning strategy (#319): 'oldest' (default) or 'counter_trend'
     # 'oldest': Keep oldest leg in each cluster (purely geometric)
     # 'counter_trend': Keep leg with highest counter-trend range (market-structure aware)
-    proximity_prune_strategy: str = 'counter_trend'
+    proximity_prune_strategy: str = 'oldest'
     # Branch ratio for origin domination (#337): prevents insignificant child legs
     # A new leg's counter-trend must be >= min_branch_ratio * parent's counter-trend.
     # This scales naturally through the hierarchy (children of children can be smaller).

@@ -386,8 +386,8 @@ After turn pruning, legs close together in origin (time, range) space are consol
 
 | Strategy | Description | Complexity |
 |----------|-------------|------------|
-| `'oldest'` | Keep oldest leg in each cluster (legacy, purely geometric) | O(N log N) |
-| `'counter_trend'` | Keep leg with highest counter-trend range (default, market-structure aware) | O(N²) |
+| `'oldest'` | Keep oldest leg in each cluster (default, purely geometric) | O(N log N) |
+| `'counter_trend'` | Keep leg with highest counter-trend range (market-structure aware) | O(N²) |
 
 **Counter-trend scoring (#319):** Uses `parent.segment_deepest_price` to compute how far price traveled against the trend to reach each origin. Higher counter-trend range = more significant structural level (price worked harder to establish it). Fallback to leg's own range when parent data unavailable.
 
@@ -403,7 +403,7 @@ Algorithm (both strategies):
 Configuration:
 - `SwingConfig.origin_range_prune_threshold` (default: 0.0 = disabled)
 - `SwingConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
-- `SwingConfig.proximity_prune_strategy` (default: `'counter_trend'`)
+- `SwingConfig.proximity_prune_strategy` (default: `'oldest'`)
 
 **Branch ratio origin domination (#337):**
 
@@ -627,7 +627,7 @@ frame.get_fib_price(0.618)                        # Returns Decimal("5061.8")
 | Method | Description |
 |--------|-------------|
 | `is_violated(price, tolerance=0)` | Check if defended pivot is violated (ratio < -tolerance) |
-| `is_formed(price, formation_fib=0.287)` | Check if formation threshold breached |
+| `is_formed(price, formation_fib=0.236)` | Check if formation threshold breached |
 | `is_completed(price)` | Check if swing reached 2.0 target |
 | `get_fib_price(level)` | Get absolute price for a Fib level |
 

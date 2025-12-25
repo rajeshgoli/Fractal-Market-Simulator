@@ -78,10 +78,10 @@ def make_bear_leg(
 class TestProximityPruneStrategyConfig:
     """Test configuration for proximity_prune_strategy."""
 
-    def test_default_strategy_is_counter_trend(self):
-        """Default strategy should be 'counter_trend'."""
+    def test_default_strategy_is_oldest(self):
+        """Default strategy should be 'oldest'."""
         config = SwingConfig.default()
-        assert config.proximity_prune_strategy == 'counter_trend'
+        assert config.proximity_prune_strategy == 'oldest'
 
     def test_with_origin_prune_accepts_strategy(self):
         """with_origin_prune should accept proximity_prune_strategy."""
@@ -99,7 +99,7 @@ class TestProximityPruneStrategyConfig:
         config = SwingConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.05,
         )
-        assert config.proximity_prune_strategy == 'counter_trend'
+        assert config.proximity_prune_strategy == 'oldest'
 
     def test_strategy_preserved_across_with_methods(self):
         """Strategy should be preserved across all with_* methods."""
