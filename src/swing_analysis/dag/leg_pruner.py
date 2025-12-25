@@ -869,10 +869,6 @@ class LegPruner:
         events: List[LegPrunedEvent] = []
         min_ratio = self.config.min_counter_trend_ratio
 
-        # Skip if disabled
-        if min_ratio <= 0:
-            return events
-
         # Get formed legs of the specified direction
         legs_to_check = [
             leg for leg in state.active_legs
@@ -908,11 +904,11 @@ class LegPruner:
                 ratio = 1.0
                 longest_range = float(leg.range)
 
-            # Store the ratio on the leg for display/inspection
+            # Always store the ratio on the leg for display/inspection
             leg.counter_trend_ratio = ratio
 
-            # Prune if below threshold
-            if ratio < min_ratio:
+            # Prune if threshold is enabled and ratio is below it
+            if min_ratio > 0 and ratio < min_ratio:
                 leg.status = 'pruned'
                 pruned_leg_ids.add(leg.leg_id)
                 events.append(LegPrunedEvent(

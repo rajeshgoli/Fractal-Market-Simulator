@@ -324,20 +324,20 @@ class TestCounterTrendRatioSerialization:
 
 
 class TestDisabledMinCtrFilter:
-    """Test that min_counter_trend_ratio=0 disables the filter."""
+    """Test that min_counter_trend_ratio=0 disables pruning but still calculates CTR."""
 
-    def test_zero_threshold_skips_pruning(self):
-        """Setting min_counter_trend_ratio=0 should skip all pruning."""
+    def test_zero_threshold_skips_pruning_but_calculates_ctr(self):
+        """Setting min_counter_trend_ratio=0 should skip pruning but still calculate CTR."""
         # Default config has min_counter_trend_ratio=0, which means disabled
         config = SwingConfig.default()
         pruner = LegPruner(config)
 
         state = DetectorState()
 
-        # Very small bull leg
+        # Very small bull leg with pivot at 100
         bull = make_bull_leg(99.0, 0, 100.0, 10)   # range = 1
 
-        # Large bear leg - would normally be pruned with low CTR
+        # Large bear leg with origin at 100 - would be pruned if threshold > 0
         bear = make_bear_leg(100.0, 15, 0.0, 25)   # range = 100
 
         state.active_legs = [bull, bear]
@@ -347,5 +347,6 @@ class TestDisabledMinCtrFilter:
 
         # Filter is disabled, no pruning
         assert len(events) == 0
-        # CTR is not calculated when filter is disabled
-        assert bear.counter_trend_ratio is None
+        # CTR should still be calculated for display purposes
+        # CTR = bull.range / bear.range = 1 / 100 = 0.01
+        assert bear.counter_trend_ratio == pytest.approx(0.01, rel=0.01)
