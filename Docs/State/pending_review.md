@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-24
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - #337 — Branch ratio origin domination (replaces CTR pruning)
+- #338 — Pending origin not updated when leg pivot extends (fixes branch ratio domination)
 
 ---
 

@@ -2,7 +2,7 @@
 
 **A Trader's Guide to the Algorithm**
 
-*Last Updated: December 22, 2025*
+*Last Updated: December 24, 2025*
 
 ---
 
@@ -189,6 +189,7 @@ Type 2-Bull bar tells us:
 
 Once created, the leg is actively tracked:
 - **Pivot extends** on new highs (for bull) or new lows (for bear)
+- **Pending origin updates** when pivot extends (#338): Bull pivot extension → pending bear origin updated to that price; Bear pivot extension → pending bull origin updated. This ensures counter-trend legs form at leg pivots where the branch ratio check (#337) can find matching counter-trend ranges.
 - **Retracement calculated** as price moves toward/away from origin
 - **Breach tracked** if price violates origin
 
@@ -922,7 +923,7 @@ All thresholds are configurable. Defaults shown:
 
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
-| `formation_fib` | 0.287 | Retracement % to confirm swing |
+| `formation_fib` | 0.236 | Retracement % to confirm swing |
 | `invalidation_threshold` | 0.382 | Origin breach % to invalidate |
 | `engulfed_breach_threshold` | 0.0 | Combined breach % for engulfed deletion (#236) |
 | `origin_range_prune_threshold` | 0.0 | Range similarity % for origin-proximity consolidation (#294) |
