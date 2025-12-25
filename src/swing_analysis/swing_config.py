@@ -105,6 +105,13 @@ class SwingConfig:
     # Pruning algorithm toggles (#288)
     enable_engulfed_prune: bool = True
     enable_inner_structure_prune: bool = False
+    # Turn limit pruning (#340): cap counter-direction legs at each turn
+    # When a new leg forms and reaches min_turn_threshold of the largest counter-leg,
+    # keep only the top max_legs_per_turn by score. 0 = disabled.
+    max_legs_per_turn: int = 0
+    # Minimum size of new leg (as fraction of largest counter-leg) to trigger
+    # turn limit pruning. Prevents pruning at small pivots.
+    min_turn_threshold: float = 0.236
 
     @classmethod
     def default(cls) -> "SwingConfig":
@@ -136,6 +143,8 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
+            max_legs_per_turn=self.max_legs_per_turn,
+            min_turn_threshold=self.min_turn_threshold,
         )
 
     def with_bear(self, **kwargs: Any) -> "SwingConfig":
@@ -157,6 +166,8 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
+            max_legs_per_turn=self.max_legs_per_turn,
+            min_turn_threshold=self.min_turn_threshold,
         )
 
     def with_origin_prune(
@@ -204,6 +215,8 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
+            max_legs_per_turn=self.max_legs_per_turn,
+            min_turn_threshold=self.min_turn_threshold,
         )
 
     def with_stale_extension(self, stale_extension_threshold: float) -> "SwingConfig":
@@ -228,6 +241,8 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
+            max_legs_per_turn=self.max_legs_per_turn,
+            min_turn_threshold=self.min_turn_threshold,
         )
 
     def with_level_crosses(self, emit_level_crosses: bool) -> "SwingConfig":
@@ -252,6 +267,8 @@ class SwingConfig:
             emit_level_crosses=emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
+            max_legs_per_turn=self.max_legs_per_turn,
+            min_turn_threshold=self.min_turn_threshold,
         )
 
     def with_prune_toggles(
@@ -280,6 +297,8 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
             enable_inner_structure_prune=enable_inner_structure_prune if enable_inner_structure_prune is not None else self.enable_inner_structure_prune,
+            max_legs_per_turn=self.max_legs_per_turn,
+            min_turn_threshold=self.min_turn_threshold,
         )
 
     def with_min_branch_ratio(self, min_branch_ratio: float) -> "SwingConfig":
@@ -305,4 +324,38 @@ class SwingConfig:
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
             enable_inner_structure_prune=self.enable_inner_structure_prune,
+            max_legs_per_turn=self.max_legs_per_turn,
+            min_turn_threshold=self.min_turn_threshold,
+        )
+
+    def with_turn_limit(
+        self,
+        max_legs_per_turn: int = None,
+        min_turn_threshold: float = None,
+    ) -> "SwingConfig":
+        """
+        Create a new config with modified turn limit pruning settings (#340).
+
+        Since SwingConfig is frozen, this creates a new instance.
+
+        Args:
+            max_legs_per_turn: Maximum counter-direction legs to keep at each turn.
+                0 disables turn limit pruning. Typical values: 3-5.
+            min_turn_threshold: Minimum size of new leg (as fraction of largest
+                counter-leg at its origin) to trigger turn pruning. Prevents
+                pruning at small pivots that may give way. Default 0.236.
+        """
+        return SwingConfig(
+            bull=self.bull,
+            bear=self.bear,
+            origin_range_prune_threshold=self.origin_range_prune_threshold,
+            origin_time_prune_threshold=self.origin_time_prune_threshold,
+            proximity_prune_strategy=self.proximity_prune_strategy,
+            min_branch_ratio=self.min_branch_ratio,
+            stale_extension_threshold=self.stale_extension_threshold,
+            emit_level_crosses=self.emit_level_crosses,
+            enable_engulfed_prune=self.enable_engulfed_prune,
+            enable_inner_structure_prune=self.enable_inner_structure_prune,
+            max_legs_per_turn=max_legs_per_turn if max_legs_per_turn is not None else self.max_legs_per_turn,
+            min_turn_threshold=min_turn_threshold if min_turn_threshold is not None else self.min_turn_threshold,
         )

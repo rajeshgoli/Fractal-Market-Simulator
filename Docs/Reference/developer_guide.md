@@ -359,7 +359,7 @@ The pipeline order per bar:
 | `SwingCompletedEvent` | `SWING_COMPLETED` | Price reaches 2.0 extension target |
 | `LevelCrossEvent` | `LEVEL_CROSS` | Price crosses Fib level boundary |
 | `LegCreatedEvent` | `LEG_CREATED` | New candidate leg is created (pre-formation) |
-| `LegPrunedEvent` | `LEG_PRUNED` | Leg is removed (reasons: `turn_prune`, `origin_proximity_prune`, `breach_prune`, `extension_prune`, `inner_structure`) |
+| `LegPrunedEvent` | `LEG_PRUNED` | Leg is removed (reasons: `turn_prune`, `origin_proximity_prune`, `breach_prune`, `extension_prune`, `inner_structure`, `turn_limit`) |
 | `LegInvalidatedEvent` | `LEG_INVALIDATED` | Leg breaches invalidation threshold (configurable, default 0.382) |
 
 All event types are serialized with their API type string (second column) in API responses. Leg events include their specific metadata: `LegPrunedEvent` includes `reason` and `explanation` fields in the `trigger_explanation`.
@@ -423,6 +423,23 @@ This scales naturally through the hierarchy:
 **Why this works:** At a strong pivot (countering a large rally/drop), child legs need significant counter-trend to be considered valid. At a weak pivot, smaller counter-trends are acceptable. This captures the fractal nature of market structure.
 
 Configuration: `SwingConfig.min_branch_ratio` (default: 0.0 = disabled)
+
+**Turn limit pruning (#340):**
+
+Caps the number of counter-direction legs that can survive at each turn (pivot). When a new leg forms and reaches `min_turn_threshold` of the largest counter-leg at its origin, keep only the top `max_legs_per_turn` legs by score.
+
+**Algorithm:**
+1. Trigger when new leg forms and reaches threshold
+2. Find counter-direction legs whose pivot = new leg's origin
+3. Score each by range of largest counter-leg at that leg's origin (structural significance)
+4. Keep top N by score (ties broken by age - older wins)
+5. Prune the rest with `reason="turn_limit"`
+
+**Scoring rationale:** Legs backed by larger counter-trend moves are more significant (price worked harder to establish that origin). First legs with no counter at origin get infinite score → always survive.
+
+Configuration:
+- `SwingConfig.max_legs_per_turn` (default: 0 = disabled)
+- `SwingConfig.min_turn_threshold` (default: 0.236 = 23.6% retracement)
 
 **Why pivot grouping is required:** Legs with different pivots can validly have newer legs with larger ranges (e.g., a leg that found a better origin AND a later pivot). Cross-pivot comparisons would incorrectly flag this as invalid.
 

@@ -523,6 +523,7 @@ export interface DetectionConfigUpdateRequest {
   origin_range_threshold?: number;  // Origin proximity range threshold (#294)
   origin_time_threshold?: number;  // Origin proximity time threshold (#294)
   min_branch_ratio?: number;  // Min branch ratio for origin domination (#337)
+  max_legs_per_turn?: number;  // Max counter-legs per turn (#340)
   // Pruning algorithm toggles
   enable_engulfed_prune?: boolean;
   enable_inner_structure_prune?: boolean;

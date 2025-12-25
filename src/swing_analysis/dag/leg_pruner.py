@@ -927,3 +927,158 @@ class LegPruner:
             ]
 
         return events
+
+    def prune_turn_limit(
+        self,
+        state: DetectorState,
+        new_leg: Leg,
+        bar: Bar,
+        timestamp: datetime,
+    ) -> List[LegPrunedEvent]:
+        """
+        Prune counter-direction legs at a turn when too many share the same pivot (#340).
+
+        Triggered when new_leg forms and reaches min_turn_threshold of the largest
+        counter-leg at its origin. Keeps top max_legs_per_turn by score, prunes rest.
+
+        **Algorithm:**
+        1. Find counter-direction legs whose pivot = new_leg.origin (converged at this turn)
+        2. Score each: max range of counter-legs at that leg's origin (structural significance)
+        3. Keep top N by score, prune the rest
+
+        **Edge case:** First leg (no counter-leg at origin) gets infinite score → always survives.
+
+        Args:
+            state: Current detector state (mutated)
+            new_leg: The newly formed leg that triggered turn pruning
+            bar: Current bar (for event metadata)
+            timestamp: Timestamp for events
+
+        Returns:
+            List of LegPrunedEvent for pruned legs with reason="turn_limit"
+        """
+        events: List[LegPrunedEvent] = []
+
+        # Check if turn limit pruning is enabled
+        max_legs = self.config.max_legs_per_turn
+        if max_legs <= 0:
+            return events  # Disabled
+
+        min_threshold = Decimal(str(self.config.min_turn_threshold))
+
+        # Find the largest counter-leg at new_leg's origin
+        # This determines if this is a "significant" turn worth pruning
+        opposite_direction = 'bear' if new_leg.direction == 'bull' else 'bull'
+        counter_legs_at_origin = [
+            leg for leg in state.active_legs
+            if leg.direction == opposite_direction
+            and leg.pivot_price == new_leg.origin_price
+            and leg.status == 'active'
+        ]
+
+        if not counter_legs_at_origin:
+            return events  # No counter-legs at this origin, nothing to prune
+
+        largest_counter = max(counter_legs_at_origin, key=lambda l: l.range)
+
+        # Check if new_leg has reached the minimum threshold
+        if largest_counter.range == 0:
+            return events
+
+        threshold_ratio = new_leg.range / largest_counter.range
+        if threshold_ratio < min_threshold:
+            return events  # New leg too small, not a significant turn yet
+
+        # Find all counter-direction legs that share this pivot
+        # (counter to new_leg means same direction as counter_legs_at_origin)
+        candidate_legs = counter_legs_at_origin  # Already filtered
+
+        if len(candidate_legs) <= max_legs:
+            return events  # Not enough legs to require pruning
+
+        # Score each leg by the range of the largest counter-leg at its origin
+        # Higher score = more significant origin (backed by larger counter-trend)
+        scored_legs: List[Tuple[Leg, float]] = []
+        for leg in candidate_legs:
+            score = self._score_leg_for_turn_limit(state, leg)
+            scored_legs.append((leg, score))
+
+        # Sort by score descending (highest = best), then by origin_index ascending (older = better)
+        scored_legs.sort(key=lambda x: (-x[1], x[0].origin_index))
+
+        # Keep top N, prune the rest
+        legs_to_keep = set(leg.leg_id for leg, _ in scored_legs[:max_legs])
+        legs_to_prune = [leg for leg, score in scored_legs[max_legs:]]
+
+        pruned_leg_ids: Set[str] = set()
+
+        for leg in legs_to_prune:
+            leg.status = 'pruned'
+            pruned_leg_ids.add(leg.leg_id)
+
+            # Find the leg's score for explanation
+            leg_score = next((s for l, s in scored_legs if l.leg_id == leg.leg_id), 0.0)
+
+            events.append(LegPrunedEvent(
+                bar_index=bar.index,
+                timestamp=timestamp,
+                swing_id=leg.swing_id or "",
+                leg_id=leg.leg_id,
+                reason="turn_limit",
+                explanation=(
+                    f"Score {leg_score:.2f} below top {max_legs}; "
+                    f"kept {len(legs_to_keep)} of {len(candidate_legs)} legs at pivot={float(leg.pivot_price):.2f}"
+                ),
+            ))
+
+        # Reparent children of pruned legs before removal (#281)
+        for leg in state.active_legs:
+            if leg.leg_id in pruned_leg_ids:
+                self.reparent_children(state, leg)
+
+        # Remove pruned legs
+        if pruned_leg_ids:
+            state.active_legs = [
+                leg for leg in state.active_legs
+                if leg.leg_id not in pruned_leg_ids
+            ]
+
+        return events
+
+    def _score_leg_for_turn_limit(
+        self,
+        state: DetectorState,
+        leg: Leg,
+    ) -> float:
+        """
+        Score a leg by structural significance for turn limit pruning (#340).
+
+        Score = max range of counter-direction legs at this leg's origin.
+        This measures how significant the counter-trend move was that established
+        this leg's origin.
+
+        Edge case: If no counter-legs exist at origin (first leg of data),
+        return infinity so it always survives.
+
+        Args:
+            state: Current detector state
+            leg: Leg to score
+
+        Returns:
+            Score (higher = more significant, should survive)
+        """
+        opposite_direction = 'bear' if leg.direction == 'bull' else 'bull'
+
+        # Find counter-direction legs whose pivot = this leg's origin
+        counter_legs = [
+            l for l in state.active_legs
+            if l.direction == opposite_direction
+            and l.pivot_price == leg.origin_price
+        ]
+
+        if not counter_legs:
+            # First leg or no counter-trend at origin → infinite score
+            return float('inf')
+
+        # Return max range
+        return float(max(l.range for l in counter_legs))

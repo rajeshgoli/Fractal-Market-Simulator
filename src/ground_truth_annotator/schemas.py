@@ -515,7 +515,7 @@ class DirectionConfigRequest(BaseModel):
     These control swing detection thresholds for bull or bear directions.
     All values are floats representing Fibonacci ratios (0.0 - 1.0+).
     """
-    formation_fib: Optional[float] = None  # Formation threshold (default: 0.287)
+    formation_fib: Optional[float] = None  # Formation threshold (default: 0.236)
     invalidation_threshold: Optional[float] = None  # Invalidation threshold (default: 0.382)
     engulfed_breach_threshold: Optional[float] = None  # Engulfed threshold (default: 0.0)
 
@@ -543,6 +543,7 @@ class SwingConfigUpdateRequest(BaseModel):
     origin_range_threshold: Optional[float] = None  # Origin proximity range threshold (#294)
     origin_time_threshold: Optional[float] = None  # Origin proximity time threshold (#294)
     min_branch_ratio: Optional[float] = None  # Min branch ratio for origin domination (#337)
+    max_legs_per_turn: Optional[int] = None  # Max counter-legs per turn (#340, 0 = disabled)
     # Pruning algorithm toggles
     enable_engulfed_prune: Optional[bool] = None  # Enable engulfed leg deletion (default: True)
     enable_inner_structure_prune: Optional[bool] = None  # Enable inner structure pruning (default: True)
@@ -562,6 +563,7 @@ class SwingConfigUpdateRequest(BaseModel):
                 "origin_range_threshold": 0.05,
                 "origin_time_threshold": 0.10,
                 "min_branch_ratio": 0.1,
+                "max_legs_per_turn": 5,
                 "enable_engulfed_prune": True,
                 "enable_inner_structure_prune": True
             }
@@ -587,6 +589,7 @@ class SwingConfigResponse(BaseModel):
     origin_range_threshold: float  # Origin proximity range threshold (#294)
     origin_time_threshold: float  # Origin proximity time threshold (#294)
     min_branch_ratio: float  # Min branch ratio for origin domination (#337)
+    max_legs_per_turn: int  # Max counter-legs per turn (#340, 0 = disabled)
     # Pruning algorithm toggles
     enable_engulfed_prune: bool
     enable_inner_structure_prune: bool
@@ -608,6 +611,7 @@ class SwingConfigResponse(BaseModel):
                 "origin_range_threshold": 0.05,
                 "origin_time_threshold": 0.10,
                 "min_branch_ratio": 0.1,
+                "max_legs_per_turn": 5,
                 "enable_engulfed_prune": True,
                 "enable_inner_structure_prune": True
             }
