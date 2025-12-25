@@ -357,7 +357,7 @@ export interface DetectionConfig {
   stale_extension_threshold: number;  // 3x extension prune (default: 3.0)
   origin_range_threshold: number;  // Origin proximity range threshold (#294)
   origin_time_threshold: number;  // Origin proximity time threshold (#294)
-  min_counter_trend_ratio: number;  // Min CTR as fraction of range (default: 0.0)
+  min_branch_ratio: number;  // Min branch ratio for origin domination (#337, default: 0.0)
   // Pruning algorithm toggles
   enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
   enable_inner_structure_prune: boolean;  // Enable inner structure pruning (default: false)
@@ -380,7 +380,7 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   stale_extension_threshold: 3.0,
   origin_range_threshold: 0.0,
   origin_time_threshold: 0.0,
-  min_counter_trend_ratio: 0.0,
+  min_branch_ratio: 0.0,
   enable_engulfed_prune: true,
   enable_inner_structure_prune: false,
 };

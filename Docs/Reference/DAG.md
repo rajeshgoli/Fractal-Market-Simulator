@@ -623,39 +623,46 @@ Scenario:
 
 ### 5. Min Counter-Trend Ratio Pruning
 
-**Rule:** Legs with insufficient counter-trend range are pruned as shallow noise.
+**Rule:** Child legs require sufficient counter-trend at their origin relative to their parent's counter-trend.
 
-This is a **quality filter** that operates independently from proximity pruning. It evaluates each leg's structural significance based on how much counter-trend movement was required to form it.
+This is an **origin selection filter** that operates at leg creation time (#337). It prevents insignificant child legs from being created by requiring the counter-trend at the child's origin to be at least a minimum ratio of the counter-trend at the parent's origin.
 
 ```
 Formula:
-  counter_trend_range = |leg.origin_price - parent.segment_deepest_price|
-  ratio = counter_trend_range / leg.range
+  R0 = range of largest counter-direction leg at new leg's origin
+  R1 = range of largest counter-direction leg at parent's origin
 
-  If ratio < min_counter_trend_ratio threshold → leg is pruned
+  Create leg if: R0 >= min_branch_ratio * R1
 
 For root legs (no parent):
-  ratio = 1.0 (always passes)
+  Always create (root legs have no parent to compare against)
+
+For legs where parent has no counter-trend (R1 is None):
+  Always create (parent is root-like, no comparison possible)
 
 Example:
-  Parent bear leg: segment_deepest_price = 4050 (lowest point before reversal)
-  Child bull leg: origin_price = 4055, pivot_price = 4080
-    leg.range = 4080 - 4055 = 25 points
-    counter_trend_range = |4055 - 4050| = 5 points
-    ratio = 5 / 25 = 0.20 (20%)
+  Bear B1: 200 → 100 (range 100) - creates counter-trend at 100
+  Bull L1: 100 → 190 (root) - uses B1 as counter-trend at origin
+  Bear B2: 111 → 110 (range 1) - creates counter-trend at 110
+  Bull L2: 110 → 190 (parent = L1)
+    R0 = 1 (B2's range at L2's origin)
+    R1 = 100 (B1's range at L1's origin)
+    Check: 1 >= 0.1 * 100 = 10 → FAILS → L2 blocked
 
-  With min_counter_trend_ratio = 0.05 (5%): 0.20 > 0.05 ✓ → leg survives
-  With min_counter_trend_ratio = 0.25 (25%): 0.20 < 0.25 ✗ → leg pruned
+  With min_branch_ratio = 0.1 (10%): L2 blocked because 1 < 10
 ```
 
-**Rationale:**
-- Legs formed after shallow pullbacks are noise (random chop)
-- Legs formed after significant counter-trend moves are structural (meaningful levels)
-- Self-correcting: as a leg extends, shallow origins become smaller % of total range
-- Root legs always pass (they have no parent to measure counter-trend from)
+**Recursive scaling:**
+The threshold scales naturally through the hierarchy:
+- Root level: Large counter-trend (e.g., 100 pts)
+- Child needs: >= 10% of 100 = 10 pts
+- Grandchild needs: >= 10% of 10 = 1 pt
 
-**Use Case:**
-When proximity pruning clusters by time/range but "random" highs/lows survive while structurally significant ones are pruned, min CTR filtering provides a quality gate that's independent of clustering.
+**Why this works:**
+- At strong pivots (large counter-trend), child origins need significant counter-trend
+- At weak pivots (small counter-trend), smaller counter-trends are acceptable
+- This captures the fractal nature of market structure
+- Operates at creation time, not as post-hoc pruning
 
 ### Real ES Example: Pruning in Action
 
@@ -921,7 +928,7 @@ All thresholds are configurable. Defaults shown:
 | `origin_range_prune_threshold` | 0.0 | Range similarity % for origin-proximity consolidation (#294) |
 | `origin_time_prune_threshold` | 0.0 | Time proximity % for origin-proximity consolidation (#294) |
 | `proximity_prune_strategy` | 'counter_trend' | Strategy for selecting survivor: 'oldest' or 'counter_trend' (#319) |
-| `min_counter_trend_ratio` | 0.0 | Min CTR as fraction of range to keep leg (quality filter) |
+| `min_branch_ratio` | 0.0 | Branch ratio for origin domination - prevents insignificant child legs (#337) |
 | `stale_extension_threshold` | 3.0 | Prune invalidated child legs at 3x range (root legs preserved) |
 
 Bull and bear can have different configs for asymmetric markets.
@@ -958,7 +965,7 @@ The Detection Config Panel in the sidebar provides sliders for adjusting thresho
 - Stale Extension threshold (1.0-5.0)
 - Origin Range % threshold (0.0-0.5) — Range similarity for origin-proximity pruning (#294)
 - Origin Time % threshold (0.0-0.5) — Time proximity for origin-proximity pruning (#294)
-- Min CTR % threshold (0.0-0.2) — Minimum counter-trend ratio quality filter
+- Min Branch Ratio % threshold (0.0-0.2) — Branch ratio for origin domination (#337)
 
 Changes trigger automatic re-calibration via `PUT /api/replay/config`.
 

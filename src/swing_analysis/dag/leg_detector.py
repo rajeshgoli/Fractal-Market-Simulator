@@ -543,13 +543,8 @@ class LegDetector:
         # Only pivots (current defended extreme) extend as price moves.
         self._extend_leg_pivots(bar, bar_high, bar_low)
 
-        # Apply CTR check for both directions after pivot extension (#336)
-        # This ensures legs are checked as they extend, not just on direction change.
-        # As a leg's range grows, its CTR decreases and may fall below threshold.
-        ctr_events = self._pruner.apply_min_counter_trend_prune(self.state, 'bull', bar, timestamp)
-        events.extend(ctr_events)
-        ctr_events = self._pruner.apply_min_counter_trend_prune(self.state, 'bear', bar, timestamp)
-        events.extend(ctr_events)
+        # Note: CTR pruning removed in #337 - replaced by branch ratio origin domination
+        # which prevents insignificant legs at creation time rather than pruning after.
 
         # Update breach tracking for all legs (#208)
         # Returns breach events for first-time origin/pivot breaches
@@ -686,9 +681,14 @@ class LegDetector:
                 existing_bull_leg = True
             # Pivot extension handled by _extend_leg_pivots (#188)
             if not existing_bull_leg:
+                # Find parent BEFORE creating leg (leg not yet in active_legs)
+                parent_leg_id = self._find_parent_for_leg('bull', pending.price, pending.bar_index)
+                # Check branch ratio domination (#337)
+                if self._is_origin_dominated_by_branch_ratio('bull', pending.price, parent_leg_id):
+                    existing_bull_leg = True  # Skip creation
+            if not existing_bull_leg:
                 # Create new bull leg: origin at LOW -> pivot at HIGH
                 leg_range = abs(bar_high - pending.price)
-                # Find parent BEFORE creating leg (leg not yet in active_legs)
                 parent_leg_id = self._find_parent_for_leg('bull', pending.price, pending.bar_index)
                 # Capture counter-trend range at origin (#336)
                 origin_ctr = self._find_origin_counter_trend_range('bull', pending.price)
@@ -788,8 +788,13 @@ class LegDetector:
                 existing_bear_leg = True
             # Pivot extension handled by _extend_leg_pivots (#188)
             if not existing_bear_leg:
-                leg_range = abs(pending.price - bar_low)
                 # Find parent BEFORE creating leg (leg not yet in active_legs)
+                parent_leg_id = self._find_parent_for_leg('bear', pending.price, pending.bar_index)
+                # Check branch ratio domination (#337)
+                if self._is_origin_dominated_by_branch_ratio('bear', pending.price, parent_leg_id):
+                    existing_bear_leg = True  # Skip creation
+            if not existing_bear_leg:
+                leg_range = abs(pending.price - bar_low)
                 parent_leg_id = self._find_parent_for_leg('bear', pending.price, pending.bar_index)
                 # Capture counter-trend range at origin (#336)
                 origin_ctr = self._find_origin_counter_trend_range('bear', pending.price)
@@ -876,10 +881,17 @@ class LegDetector:
                 # pending_bear = HIGH, pending_bull = LOW
                 # If HIGH came before LOW, this is a BEAR structure
                 # Skip if dominated by existing leg with better origin (#194)
-                if (pending_bear.bar_index < pending_bull.bar_index
-                    and not self._pruner.would_leg_be_dominated(self.state, 'bear', pending_bear.price)):
+                should_create_bear = (
+                    pending_bear.bar_index < pending_bull.bar_index
+                    and not self._pruner.would_leg_be_dominated(self.state, 'bear', pending_bear.price)
+                )
+                if should_create_bear:
+                    # Find parent and check branch ratio domination (#337)
+                    parent_leg_id = self._find_parent_for_leg('bear', pending_bear.price, pending_bear.bar_index)
+                    if self._is_origin_dominated_by_branch_ratio('bear', pending_bear.price, parent_leg_id):
+                        should_create_bear = False
+                if should_create_bear:
                     leg_range = abs(pending_bear.price - pending_bull.price)
-                    # Find parent BEFORE creating leg (leg not yet in active_legs)
                     parent_leg_id = self._find_parent_for_leg('bear', pending_bear.price, pending_bear.bar_index)
                     # Capture counter-trend range at origin (#336)
                     origin_ctr = self._find_origin_counter_trend_range('bear', pending_bear.price)
@@ -926,10 +938,17 @@ class LegDetector:
                 # pending_bull = LOW, pending_bear = HIGH
                 # If LOW came before HIGH, this is a BULL structure
                 # Skip if dominated by existing leg with better origin (#194)
-                if (pending_bull.bar_index < pending_bear.bar_index
-                    and not self._pruner.would_leg_be_dominated(self.state, 'bull', pending_bull.price)):
+                should_create_bull = (
+                    pending_bull.bar_index < pending_bear.bar_index
+                    and not self._pruner.would_leg_be_dominated(self.state, 'bull', pending_bull.price)
+                )
+                if should_create_bull:
+                    # Find parent and check branch ratio domination (#337)
+                    parent_leg_id = self._find_parent_for_leg('bull', pending_bull.price, pending_bull.bar_index)
+                    if self._is_origin_dominated_by_branch_ratio('bull', pending_bull.price, parent_leg_id):
+                        should_create_bull = False
+                if should_create_bull:
                     leg_range = abs(pending_bear.price - pending_bull.price)
-                    # Find parent BEFORE creating leg (leg not yet in active_legs)
                     parent_leg_id = self._find_parent_for_leg('bull', pending_bull.price, pending_bull.bar_index)
                     # Capture counter-trend range at origin (#336)
                     origin_ctr = self._find_origin_counter_trend_range('bull', pending_bull.price)
@@ -1640,6 +1659,98 @@ class LegDetector:
             parent = min(eligible, key=lambda l: (l.origin_price, -l.origin_index))
 
         return parent.leg_id
+
+    def _is_origin_dominated_by_branch_ratio(
+        self,
+        direction: str,
+        origin_price: Decimal,
+        parent_leg_id: Optional[str],
+    ) -> bool:
+        """
+        Check if a new leg's origin is dominated by branch ratio (#337).
+
+        A new leg's counter-trend at its origin must be at least min_branch_ratio
+        times the counter-trend at its parent's origin. This prevents insignificant
+        child legs from being created within larger structures.
+
+        The check scales naturally through the hierarchy:
+        - Root legs (no parent) are always allowed
+        - Child legs need counter-trend >= 10% of parent's counter-trend
+        - Grandchild legs need counter-trend >= 10% of child's counter-trend
+        - And so on...
+
+        Args:
+            direction: 'bull' or 'bear'
+            origin_price: Origin price of the new leg
+            parent_leg_id: ID of the parent leg, or None if root
+
+        Returns:
+            True if origin is dominated (should NOT create leg)
+            False if origin is valid (should create leg)
+        """
+        # Root legs are always allowed
+        if parent_leg_id is None:
+            return False
+
+        # Check if branch ratio domination is enabled
+        min_ratio = self.config.min_branch_ratio
+        if min_ratio <= 0:
+            return False  # Disabled
+
+        # Find the parent leg
+        parent = self._find_leg_by_id(parent_leg_id)
+        if parent is None:
+            return False  # Parent not found, allow
+
+        # Find R0 = counter-trend at new leg's origin
+        # (largest opposite-direction leg whose pivot == new origin)
+        r0_range = self._find_counter_trend_range_at_price(direction, origin_price)
+
+        # Find R1 = counter-trend at parent's origin
+        r1_range = self._find_counter_trend_range_at_price(direction, parent.origin_price)
+
+        # If parent has no counter-trend, allow child (parent is root-like)
+        if r1_range is None:
+            return False
+
+        # If new origin has no counter-trend, it's dominated
+        if r0_range is None:
+            return True
+
+        # Check: R0 >= min_ratio * R1
+        # If not, origin is dominated
+        return r0_range < min_ratio * r1_range
+
+    def _find_counter_trend_range_at_price(
+        self,
+        direction: str,
+        price: Decimal,
+    ) -> Optional[float]:
+        """
+        Find the range of the largest counter-direction leg at a price level.
+
+        For a bull leg at price P, find the largest bear leg whose pivot == P.
+        For a bear leg at price P, find the largest bull leg whose pivot == P.
+
+        Args:
+            direction: Direction of the leg we're checking ('bull' or 'bear')
+            price: Price level to check
+
+        Returns:
+            Range of largest counter-direction leg at this price, or None if none
+        """
+        opposite_direction = 'bear' if direction == 'bull' else 'bull'
+
+        matching_legs = [
+            leg for leg in self.state.active_legs
+            if leg.direction == opposite_direction
+            and leg.pivot_price == price
+        ]
+
+        if matching_legs:
+            longest = max(matching_legs, key=lambda l: l.range)
+            return float(longest.range)
+        return None
 
     def get_active_swings(self) -> List[SwingNode]:
         """

@@ -295,7 +295,7 @@ export interface FeedbackDetectionConfig {
   stale_extension_threshold: number;
   origin_range_threshold: number;
   origin_time_threshold: number;
-  min_counter_trend_ratio: number;
+  min_branch_ratio: number;  // Min branch ratio for origin domination (#337)
   enable_engulfed_prune: boolean;
   enable_inner_structure_prune: boolean;
 }
@@ -522,7 +522,7 @@ export interface DetectionConfigUpdateRequest {
   stale_extension_threshold?: number;
   origin_range_threshold?: number;  // Origin proximity range threshold (#294)
   origin_time_threshold?: number;  // Origin proximity time threshold (#294)
-  min_counter_trend_ratio?: number;  // Min CTR filter (decoupled from proximity)
+  min_branch_ratio?: number;  // Min branch ratio for origin domination (#337)
   // Pruning algorithm toggles
   enable_engulfed_prune?: boolean;
   enable_inner_structure_prune?: boolean;

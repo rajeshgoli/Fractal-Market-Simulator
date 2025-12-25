@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 11
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-24
 
@@ -8,18 +8,7 @@
 
 ## Pending Changes
 
-- #322 — Min counter-trend ratio filter for leg quality pruning
-- #323 — Delete Replay.tsx and ~4,000 lines of dead code
-- #324 — In-App Settings Epic (sub-issues #325-#331):
-  - #325 — File Discovery API
-  - #326 — Session Persistence (localStorage)
-  - #327 — Settings Panel UI
-  - #328 — Process Till Feature
-  - #329 — Startup Flow Without CLI Args
-  - #330 — CLI Cleanup
-  - #331 — Documentation Update
-- #332 — Fix #324 regressions: session persistence, 10K button, resolution detection
-- #335 — Process Till (10K>>) doesn't update stats panel
+- #337 — Branch ratio origin domination (replaces CTR pruning)
 
 ---
 
@@ -27,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 24 | #322-#335 — Min CTR filter, dead code cleanup, in-app settings, regressions (11 changes) | All Accepted; docs current |
 | Dec 24 | #318-#321 — Counter-trend scoring, session persistence, UX (4 changes) | All Accepted; docs updated |
 | Dec 24 | #305, #309-#316 — UX improvements, API serialization, pruning fix (9 changes) | All Accepted; docs debt updated |
 | Dec 23 | #296-#303, #306, #307 — Performance, cleanup, segment impulse (10 changes) | All Accepted; docs debt noted |

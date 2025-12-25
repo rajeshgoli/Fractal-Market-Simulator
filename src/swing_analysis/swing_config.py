@@ -94,11 +94,12 @@ class SwingConfig:
     # 'oldest': Keep oldest leg in each cluster (purely geometric)
     # 'counter_trend': Keep leg with highest counter-trend range (market-structure aware)
     proximity_prune_strategy: str = 'counter_trend'
-    # Minimum counter-trend ratio threshold (decoupled from proximity pruning)
-    # Legs with CTR < min_counter_trend_ratio * leg.range are pruned as insignificant.
-    # E.g., 0.05 means counter-trend must be at least 5% of leg range to survive.
-    # Default 0.0 (disabled). Set > 0 to enable quality-based filtering.
-    min_counter_trend_ratio: float = 0.0
+    # Branch ratio for origin domination (#337): prevents insignificant child legs
+    # A new leg's counter-trend must be >= min_branch_ratio * parent's counter-trend.
+    # This scales naturally through the hierarchy (children of children can be smaller).
+    # E.g., 0.1 means child's counter-trend must be at least 10% of parent's.
+    # Default 0.0 (disabled). Set > 0 to enable branch ratio domination.
+    min_branch_ratio: float = 0.0
     stale_extension_threshold: float = 3.0
     emit_level_crosses: bool = False
     # Pruning algorithm toggles (#288)
@@ -130,7 +131,7 @@ class SwingConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_counter_trend_ratio=self.min_counter_trend_ratio,
+            min_branch_ratio=self.min_branch_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -151,7 +152,7 @@ class SwingConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_counter_trend_ratio=self.min_counter_trend_ratio,
+            min_branch_ratio=self.min_branch_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -198,7 +199,7 @@ class SwingConfig:
                 if proximity_prune_strategy is not None
                 else self.proximity_prune_strategy
             ),
-            min_counter_trend_ratio=self.min_counter_trend_ratio,
+            min_branch_ratio=self.min_branch_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -222,7 +223,7 @@ class SwingConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_counter_trend_ratio=self.min_counter_trend_ratio,
+            min_branch_ratio=self.min_branch_ratio,
             stale_extension_threshold=stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -246,7 +247,7 @@ class SwingConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_counter_trend_ratio=self.min_counter_trend_ratio,
+            min_branch_ratio=self.min_branch_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -274,24 +275,24 @@ class SwingConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_counter_trend_ratio=self.min_counter_trend_ratio,
+            min_branch_ratio=self.min_branch_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
             enable_inner_structure_prune=enable_inner_structure_prune if enable_inner_structure_prune is not None else self.enable_inner_structure_prune,
         )
 
-    def with_min_counter_trend(self, min_counter_trend_ratio: float) -> "SwingConfig":
+    def with_min_branch_ratio(self, min_branch_ratio: float) -> "SwingConfig":
         """
-        Create a new config with modified min counter-trend ratio threshold.
+        Create a new config with modified min branch ratio threshold (#337).
 
         Since SwingConfig is frozen, this creates a new instance.
 
         Args:
-            min_counter_trend_ratio: Minimum CTR as fraction of leg range.
-                Legs with CTR < min_counter_trend_ratio * range are pruned.
-                0.05 means counter-trend must be at least 5% of leg range.
-                0.0 disables this filter.
+            min_branch_ratio: Minimum ratio of child's counter-trend to parent's.
+                A new leg's counter-trend must be >= min_branch_ratio * parent's.
+                0.1 means child's counter-trend must be at least 10% of parent's.
+                0.0 disables branch ratio domination.
         """
         return SwingConfig(
             bull=self.bull,
@@ -299,7 +300,7 @@ class SwingConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_counter_trend_ratio=min_counter_trend_ratio,
+            min_branch_ratio=min_branch_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,

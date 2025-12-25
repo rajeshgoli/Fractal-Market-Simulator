@@ -19,7 +19,7 @@ const GLOBAL_SLIDERS: SliderConfig[] = [
   { key: 'stale_extension_threshold', label: 'Stale Extension', min: 1.0, max: 5.0, step: 0.1, description: 'Extension multiple for stale pruning', colorMode: 'restrictive-left' },
   { key: 'origin_range_threshold', label: 'Origin Range %', min: 0.0, max: 0.10, step: 0.01, description: 'Range similarity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
   { key: 'origin_time_threshold', label: 'Origin Time %', min: 0.0, max: 0.10, step: 0.01, description: 'Time proximity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
-  { key: 'min_counter_trend_ratio', label: 'Counter Trend Ratio', min: 0.0, max: 0.20, step: 0.01, description: 'Min ratio of longest opposite leg range to leg range at same pivot', displayAsPercent: true, colorMode: 'restrictive-right' },
+  { key: 'min_branch_ratio', label: 'Branch Ratio', min: 0.0, max: 0.20, step: 0.01, description: 'Min ratio of child counter-trend to parent counter-trend for origin domination', displayAsPercent: true, colorMode: 'restrictive-right' },
 ];
 
 // Toggle configurations for pruning algorithms
@@ -85,7 +85,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       localConfig.stale_extension_threshold !== config.stale_extension_threshold ||
       localConfig.origin_range_threshold !== config.origin_range_threshold ||
       localConfig.origin_time_threshold !== config.origin_time_threshold ||
-      localConfig.min_counter_trend_ratio !== config.min_counter_trend_ratio ||
+      localConfig.min_branch_ratio !== config.min_branch_ratio ||
       localConfig.enable_engulfed_prune !== config.enable_engulfed_prune ||
       localConfig.enable_inner_structure_prune !== config.enable_inner_structure_prune
     );
@@ -136,7 +136,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         stale_extension_threshold: localConfig.stale_extension_threshold,
         origin_range_threshold: localConfig.origin_range_threshold,
         origin_time_threshold: localConfig.origin_time_threshold,
-        min_counter_trend_ratio: localConfig.min_counter_trend_ratio,
+        min_branch_ratio: localConfig.min_branch_ratio,
         // Pruning algorithm toggles
         enable_engulfed_prune: localConfig.enable_engulfed_prune,
         enable_inner_structure_prune: localConfig.enable_inner_structure_prune,

@@ -214,8 +214,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           stats.proximity++;
         } else if (reason.includes('inner')) {
           stats.innerStructure++;
-        } else if (reason.includes('min counter trend') || reason.includes('min_counter_trend')) {
-          stats.minCtr++;
+        } else if (reason.includes('branch_ratio') || reason.includes('dominated')) {
+          stats.minCtr++;  // Repurposed for branch ratio domination
         }
       }
     }
@@ -387,7 +387,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           stale_extension_threshold: detectionConfig.stale_extension_threshold,
           origin_range_threshold: detectionConfig.origin_range_threshold,
           origin_time_threshold: detectionConfig.origin_time_threshold,
-          min_counter_trend_ratio: detectionConfig.min_counter_trend_ratio,
+          min_branch_ratio: detectionConfig.min_branch_ratio,
           enable_engulfed_prune: detectionConfig.enable_engulfed_prune,
           enable_inner_structure_prune: detectionConfig.enable_inner_structure_prune,
         };
