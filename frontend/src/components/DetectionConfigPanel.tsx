@@ -182,20 +182,22 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
     direction: 'bull' | 'bear' | 'global',
     slider: SliderConfig
   ) => {
-    const value = direction === 'global'
-      ? (localConfig[slider.key as keyof DetectionConfig] as number)
-      : localConfig[direction][slider.key as keyof typeof localConfig.bull];
-
     const defaultValue = direction === 'global'
       ? (DEFAULT_DETECTION_CONFIG[slider.key as keyof DetectionConfig] as number)
       : DEFAULT_DETECTION_CONFIG[direction][slider.key as keyof typeof DEFAULT_DETECTION_CONFIG.bull];
 
+    // Get value with fallback to default if undefined (handles missing fields from older backends)
+    const rawValue = direction === 'global'
+      ? (localConfig[slider.key as keyof DetectionConfig] as number)
+      : localConfig[direction][slider.key as keyof typeof localConfig.bull];
+    const value = rawValue ?? defaultValue;
+
     const isDefault = Math.abs(value - defaultValue) < 0.001;
 
-    // Format display value (as percentage if configured)
+    // Format display value (as percentage if configured, or integer for step >= 1)
     const displayValue = slider.displayAsPercent
       ? `${Math.round(value * 100)}%`
-      : value.toFixed(slider.step >= 0.1 ? 1 : 2);
+      : slider.step >= 1 ? String(Math.round(value)) : value.toFixed(slider.step >= 0.1 ? 1 : 2);
 
     // Calculate position ratio for color gradient (0 = min, 1 = max)
     const positionRatio = (value - slider.min) / (slider.max - slider.min);
