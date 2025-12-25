@@ -38,11 +38,11 @@ const PRUNE_TOGGLES: ToggleConfig[] = [
 // Fibonacci level options for Formation and Invalidation thresholds
 const FIB_LEVEL_OPTIONS = [
   { value: 0.10, label: '10%' },
-  { value: 0.236, label: '24%' },
-  { value: 0.382, label: '38%' },
+  { value: 0.236, label: '23.6%' },
+  { value: 0.382, label: '38.2%' },
   { value: 0.50, label: '50%' },
-  { value: 0.618, label: '62%' },
-  { value: 0.764, label: '76%' },
+  { value: 0.618, label: '61.8%' },
+  { value: 0.764, label: '76.4%' },
   { value: 0.90, label: '90%' },
   { value: 1.00, label: '100%' },
 ];
@@ -292,7 +292,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       <select
         value={value}
         onChange={(e) => handleSliderChange(direction, key, parseFloat(e.target.value))}
-        className={`w-14 px-1 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded ${colorClass} ${borderClass} focus:outline-none cursor-pointer`}
+        className={`w-16 px-1 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded ${colorClass} ${borderClass} focus:outline-none cursor-pointer`}
         disabled={isUpdating}
       >
         {FIB_LEVEL_OPTIONS.map(opt => (
@@ -344,11 +344,11 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         {/* Header row with direction labels */}
         <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
           <span></span>
-          <span className="flex items-center gap-1 justify-center w-14">
+          <span className="flex items-center gap-1 justify-center w-16">
             <span className="w-1.5 h-1.5 rounded-full bg-trading-bull" />
             <span className="text-app-muted">Bull</span>
           </span>
-          <span className="flex items-center gap-1 justify-center w-14">
+          <span className="flex items-center gap-1 justify-center w-16">
             <span className="w-1.5 h-1.5 rounded-full bg-trading-bear" />
             <span className="text-app-muted">Bear</span>
           </span>
