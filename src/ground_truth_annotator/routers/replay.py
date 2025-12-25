@@ -1837,10 +1837,6 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     if request.min_branch_ratio is not None:
         new_config = new_config.with_min_branch_ratio(request.min_branch_ratio)
 
-    # Apply turn limit pruning settings (#340)
-    if request.max_legs_per_turn is not None:
-        new_config = new_config.with_turn_limit(max_legs_per_turn=request.max_legs_per_turn)
-
     # Apply pruning algorithm toggles
     if any([
         request.enable_engulfed_prune is not None,
@@ -1879,7 +1875,6 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         origin_range_threshold=new_config.origin_range_prune_threshold,
         origin_time_threshold=new_config.origin_time_prune_threshold,
         min_branch_ratio=new_config.min_branch_ratio,
-        max_legs_per_turn=new_config.max_legs_per_turn,
         enable_engulfed_prune=new_config.enable_engulfed_prune,
         enable_inner_structure_prune=new_config.enable_inner_structure_prune,
     )
@@ -1920,7 +1915,6 @@ async def get_detection_config():
         origin_range_threshold=config.origin_range_prune_threshold,
         origin_time_threshold=config.origin_time_prune_threshold,
         min_branch_ratio=config.min_branch_ratio,
-        max_legs_per_turn=config.max_legs_per_turn,
         enable_engulfed_prune=config.enable_engulfed_prune,
         enable_inner_structure_prune=config.enable_inner_structure_prune,
     )

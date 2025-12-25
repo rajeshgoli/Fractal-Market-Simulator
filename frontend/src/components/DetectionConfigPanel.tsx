@@ -20,7 +20,6 @@ const GLOBAL_SLIDERS: SliderConfig[] = [
   { key: 'origin_range_threshold', label: 'Origin Range %', min: 0.0, max: 0.10, step: 0.01, description: 'Range similarity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
   { key: 'origin_time_threshold', label: 'Origin Time %', min: 0.0, max: 0.10, step: 0.01, description: 'Time proximity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
   { key: 'min_branch_ratio', label: 'Branch Ratio', min: 0.0, max: 0.20, step: 0.01, description: 'Min ratio of child counter-trend to parent counter-trend for origin domination', displayAsPercent: true, colorMode: 'restrictive-right' },
-  { key: 'max_legs_per_turn', label: 'Max Legs/Turn', min: 0, max: 10, step: 1, description: 'Max counter-direction legs per turn (0 = disabled)', colorMode: 'restrictive-right' },
 ];
 
 // Toggle configurations for pruning algorithms
@@ -33,17 +32,6 @@ interface ToggleConfig {
 const PRUNE_TOGGLES: ToggleConfig[] = [
   { key: 'enable_engulfed_prune', label: 'Engulfed', description: 'Delete legs breached on both origin and pivot sides' },
   { key: 'enable_inner_structure_prune', label: 'Inner Structure', description: 'Prune legs with same pivot as parent' },
-];
-
-// Predefined Fibonacci threshold levels for Formation and Invalidation
-const THRESHOLD_LEVELS = [
-  { value: 0.10, label: '10%' },
-  { value: 0.236, label: '23.6%' },
-  { value: 0.382, label: '38.2%' },
-  { value: 0.50, label: '50%' },
-  { value: 0.618, label: '61.8%' },
-  { value: 0.786, label: '78.6%' },
-  { value: 0.90, label: '90%' },
 ];
 
 interface DetectionConfigPanelProps {
@@ -98,7 +86,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       localConfig.origin_range_threshold !== config.origin_range_threshold ||
       localConfig.origin_time_threshold !== config.origin_time_threshold ||
       localConfig.min_branch_ratio !== config.min_branch_ratio ||
-      localConfig.max_legs_per_turn !== config.max_legs_per_turn ||
       localConfig.enable_engulfed_prune !== config.enable_engulfed_prune ||
       localConfig.enable_inner_structure_prune !== config.enable_inner_structure_prune
     );
@@ -150,7 +137,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         origin_range_threshold: localConfig.origin_range_threshold,
         origin_time_threshold: localConfig.origin_time_threshold,
         min_branch_ratio: localConfig.min_branch_ratio,
-        max_legs_per_turn: localConfig.max_legs_per_turn,
         // Pruning algorithm toggles
         enable_engulfed_prune: localConfig.enable_engulfed_prune,
         enable_inner_structure_prune: localConfig.enable_inner_structure_prune,
@@ -333,50 +319,50 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         {/* Formation row */}
         <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
           <span className="text-app-muted" title="Retracement required to form leg">Formation</span>
-          <select
-            value={localConfig.bull.formation_fib}
-            onChange={(e) => handleSliderChange('bull', 'formation_fib', parseFloat(e.target.value))}
-            className="w-16 px-1 py-0.5 text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bull focus:outline-none focus:border-trading-bull cursor-pointer"
+          <input
+            type="text"
+            value={`${Math.round(localConfig.bull.formation_fib * 100)}%`}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value.replace('%', '')) / 100;
+              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bull', 'formation_fib', val);
+            }}
+            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bull focus:outline-none focus:border-trading-bull"
             disabled={isUpdating}
-          >
-            {THRESHOLD_LEVELS.map(level => (
-              <option key={level.value} value={level.value}>{level.label}</option>
-            ))}
-          </select>
-          <select
-            value={localConfig.bear.formation_fib}
-            onChange={(e) => handleSliderChange('bear', 'formation_fib', parseFloat(e.target.value))}
-            className="w-16 px-1 py-0.5 text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bear focus:outline-none focus:border-trading-bear cursor-pointer"
+          />
+          <input
+            type="text"
+            value={`${Math.round(localConfig.bear.formation_fib * 100)}%`}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value.replace('%', '')) / 100;
+              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bear', 'formation_fib', val);
+            }}
+            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bear focus:outline-none focus:border-trading-bear"
             disabled={isUpdating}
-          >
-            {THRESHOLD_LEVELS.map(level => (
-              <option key={level.value} value={level.value}>{level.label}</option>
-            ))}
-          </select>
+          />
         </div>
         {/* Invalidation row */}
         <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
           <span className="text-app-muted" title="Breach threshold for invalidation">Invalidation</span>
-          <select
-            value={localConfig.bull.invalidation_threshold}
-            onChange={(e) => handleSliderChange('bull', 'invalidation_threshold', parseFloat(e.target.value))}
-            className="w-16 px-1 py-0.5 text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bull focus:outline-none focus:border-trading-bull cursor-pointer"
+          <input
+            type="text"
+            value={`${Math.round(localConfig.bull.invalidation_threshold * 100)}%`}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value.replace('%', '')) / 100;
+              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bull', 'invalidation_threshold', val);
+            }}
+            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bull focus:outline-none focus:border-trading-bull"
             disabled={isUpdating}
-          >
-            {THRESHOLD_LEVELS.map(level => (
-              <option key={level.value} value={level.value}>{level.label}</option>
-            ))}
-          </select>
-          <select
-            value={localConfig.bear.invalidation_threshold}
-            onChange={(e) => handleSliderChange('bear', 'invalidation_threshold', parseFloat(e.target.value))}
-            className="w-16 px-1 py-0.5 text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bear focus:outline-none focus:border-trading-bear cursor-pointer"
+          />
+          <input
+            type="text"
+            value={`${Math.round(localConfig.bear.invalidation_threshold * 100)}%`}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value.replace('%', '')) / 100;
+              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bear', 'invalidation_threshold', val);
+            }}
+            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bear focus:outline-none focus:border-trading-bear"
             disabled={isUpdating}
-          >
-            {THRESHOLD_LEVELS.map(level => (
-              <option key={level.value} value={level.value}>{level.label}</option>
-            ))}
-          </select>
+          />
         </div>
       </div>
 

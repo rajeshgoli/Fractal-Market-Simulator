@@ -1115,11 +1115,6 @@ class LegDetector:
                 event = self._form_swing_from_leg(leg, bar, timestamp)
                 if event:
                     events.append(event)
-                # Check turn limit pruning (#340): prune counter-legs at this turn
-                turn_limit_events = self._pruner.prune_turn_limit(
-                    self.state, leg, bar, timestamp
-                )
-                events.extend(turn_limit_events)
 
         return events
 
@@ -1155,11 +1150,6 @@ class LegDetector:
                 event = self._form_swing_from_leg(leg, bar, timestamp)
                 if event:
                     events.append(event)
-                # Check turn limit pruning (#340): prune counter-legs at this turn
-                turn_limit_events = self._pruner.prune_turn_limit(
-                    self.state, leg, bar, timestamp
-                )
-                events.extend(turn_limit_events)
 
         return events
 

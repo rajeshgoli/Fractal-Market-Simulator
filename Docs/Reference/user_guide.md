@@ -62,31 +62,6 @@ Click the **gear icon** in the header to access the Settings panel at any time. 
 
 Changes take effect immediately after restart. Session settings persist across browser sessions.
 
-### Detection Config Panel
-
-The Detection Config panel (in the sidebar, under Settings) lets you tune the swing detection algorithm parameters in real-time. Changes take effect immediately after clicking "Apply".
-
-**Global Thresholds:**
-
-| Parameter | Range | Description |
-|-----------|-------|-------------|
-| Stale Extension | 1.0-5.0 | Extension multiple at which invalidated legs are pruned |
-| Origin Range % | 0-10% | Range similarity threshold for origin-proximity pruning |
-| Origin Time % | 0-10% | Time proximity threshold for origin-proximity pruning |
-| Branch Ratio | 0-20% | Minimum counter-trend ratio for child legs to survive domination |
-| Max Legs/Turn | 0-10 | Maximum counter-legs per turn (0 = disabled) |
-
-**Max Legs/Turn:** When enabled (1-10), this caps how many counter-direction legs can survive at each pivot. When a new leg forms and retraces sufficiently, legs at that turn are scored by the range of counter-legs at their origin. Top N survive; the rest are pruned with reason="turn_limit". This prevents leg explosion in trending markets.
-
-**Pruning Toggles:**
-
-| Toggle | Default | Description |
-|--------|---------|-------------|
-| Engulfed | ON | Delete legs breached on both origin and pivot sides |
-| Inner Structure | OFF | Prune contained legs when outer-origin leg exists |
-
-**Per-Direction Thresholds (Formation / Invalidation):** Use the dropdowns to set Fibonacci thresholds for bull and bear directions independently.
-
 ### Process Till
 
 Use the "Till" input in the playback controls to quickly advance to a specific CSV index:
@@ -182,7 +157,7 @@ You can interact with legs directly on the chart (not just in the panel):
 | Event | Description |
 |-------|-------------|
 | LEG_CREATED | New candidate leg created from pivot + origin pair |
-| LEG_PRUNED | Leg removed (reasons: turn_prune, origin_proximity_prune, inner_structure, turn_limit, etc.) |
+| LEG_PRUNED | Leg removed (inner structure pruning, origin-proximity consolidation, or staleness) |
 | LEG_INVALIDATED | Leg fell below 0.382 threshold (decisive invalidation) |
 
 ### Playback Controls

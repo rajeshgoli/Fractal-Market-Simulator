@@ -343,7 +343,7 @@ export function getAggregationMinutes(scale: AggregationScale): number {
  * Per-direction detection configuration.
  */
 export interface DirectionConfig {
-  formation_fib: number;       // Formation threshold (default: 0.236)
+  formation_fib: number;       // Formation threshold (default: 0.287)
   invalidation_threshold: number;  // Invalidation threshold (default: 0.382)
   engulfed_breach_threshold: number;  // Engulfed threshold (default: 0.0)
 }
@@ -358,7 +358,6 @@ export interface DetectionConfig {
   origin_range_threshold: number;  // Origin proximity range threshold (#294)
   origin_time_threshold: number;  // Origin proximity time threshold (#294)
   min_branch_ratio: number;  // Min branch ratio for origin domination (#337, default: 0.0)
-  max_legs_per_turn: number;  // Max counter-legs per turn (#340, 0 = disabled)
   // Pruning algorithm toggles
   enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
   enable_inner_structure_prune: boolean;  // Enable inner structure pruning (default: false)
@@ -369,12 +368,12 @@ export interface DetectionConfig {
  */
 export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   bull: {
-    formation_fib: 0.236,
+    formation_fib: 0.287,
     invalidation_threshold: 0.382,
     engulfed_breach_threshold: 0.0,
   },
   bear: {
-    formation_fib: 0.236,
+    formation_fib: 0.287,
     invalidation_threshold: 0.382,
     engulfed_breach_threshold: 0.0,
   },
@@ -382,7 +381,6 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   origin_range_threshold: 0.0,
   origin_time_threshold: 0.0,
   min_branch_ratio: 0.0,
-  max_legs_per_turn: 0,  // Disabled by default
   enable_engulfed_prune: true,
   enable_inner_structure_prune: false,
 };
