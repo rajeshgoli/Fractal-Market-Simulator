@@ -761,7 +761,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span className="text-app-text font-medium">{legStats.proximity}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-app-muted">Min CTR</span>
+                    <span className="text-app-muted">CTR</span>
                     <span className="text-app-text font-medium">{legStats.minCtr}</span>
                   </div>
                 </div>

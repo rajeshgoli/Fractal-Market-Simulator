@@ -254,6 +254,7 @@ When a child leg forms within a parent leg, segment impulse fields capture the t
 | `impulse_to_deepest` | `float | None` | Impulse from parent origin to deepest point |
 | `impulse_back` | `float | None` | Impulse from deepest back to child origin (counter-move) |
 | `net_segment_impulse` | `float | None` | Property: `impulse_to_deepest - impulse_back` |
+| `counter_trend_ratio` | `float | None` | Ratio: longest_opposite_range / leg.range (#336) |
 
 - **Impulse to deepest** measures the primary move intensity (parent origin → segment extreme)
 - **Impulse back** measures the counter-move intensity (segment extreme → child origin)
@@ -403,17 +404,19 @@ Configuration:
 - `SwingConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
 - `SwingConfig.proximity_prune_strategy` (default: `'counter_trend'`)
 
-**Minimum counter-trend ratio filter (#319):**
+**Counter-trend ratio filter (#336):**
 
-A decoupled quality filter that prunes legs with insufficient counter-trend significance:
+A decoupled quality filter that prunes legs with insufficient counter-trend pressure at their origin:
 
 ```
-counter_trend_ratio = CTR / leg.range
+counter_trend_ratio = longest_opposite_range / leg.range
 ```
 
-Where CTR = `|origin_price - parent.segment_deepest_price|` (falls back to leg.range for root legs).
+Where `longest_opposite_range` is the range of the longest opposite-direction leg whose pivot equals this leg's origin. This measures how much counter-trend pressure accumulated at the pivot before this leg started.
 
-Legs with ratio < `min_counter_trend_ratio` are pruned as insignificant noise (shallow moves rather than meaningful structural levels).
+Example: At pivot 100, bull legs exist with ranges 50, 40, 30. A new bear leg forms from 100→20 (range=80). The CTR = 50/80 = 0.625 (62.5%) - significant counter-trend pressure justifies this level.
+
+Legs with ratio < `min_counter_trend_ratio` are pruned as insignificant noise. Legs with no opposite legs at their origin pass by default (ratio = 1.0).
 
 Configuration: `SwingConfig.min_counter_trend_ratio` (default: 0.0 = disabled)
 

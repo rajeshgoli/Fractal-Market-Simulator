@@ -837,17 +837,25 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Prune legs with insufficient counter-trend ratio (decoupled quality filter).
+        Prune legs with insufficient counter-trend ratio (#336).
 
-        This filter removes legs whose counter-trend range is too small relative
+        This filter removes legs whose counter-trend pressure is too small relative
         to their total range. It operates independently of proximity clustering.
 
-        Counter-trend ratio = CTR / leg.range
-        - CTR = |origin_price - parent.segment_deepest_price| (if available)
-        - Fallback: CTR = leg.range (root legs always pass)
+        Counter-trend ratio = longest_opposite_range / leg.range
+
+        Where longest_opposite_range is the range of the longest opposite-direction
+        leg whose pivot equals this leg's origin. This measures how much counter-trend
+        pressure accumulated at the pivot before this leg started.
+
+        Example:
+            At pivot 100, bull legs exist: 50→100, 60→100, 70→100
+            New bear leg: 100→20 (range=80)
+            longest_opposite_range = 50 (from the 50→100 bull leg)
+            ratio = 50/80 = 0.625 (62.5%)
 
         Legs with ratio < min_counter_trend_ratio are pruned as insignificant
-        (shallow noise rather than meaningful structural levels).
+        (insufficient counter-trend pressure to justify this structural level).
 
         Args:
             state: Current detector state (mutated)
@@ -865,14 +873,14 @@ class LegPruner:
         if min_ratio <= 0:
             return events
 
-        # Build parent lookup
-        leg_by_id = {leg.leg_id: leg for leg in state.active_legs}
-
         # Get formed legs of the specified direction
         legs_to_check = [
             leg for leg in state.active_legs
             if leg.direction == direction and leg.status == 'active' and leg.formed
         ]
+
+        # Determine opposite direction
+        opposite_direction = 'bear' if direction == 'bull' else 'bull'
 
         pruned_leg_ids: Set[str] = set()
 
@@ -880,20 +888,28 @@ class LegPruner:
             if leg.range == 0:
                 continue
 
-            # Calculate counter-trend range
-            if leg.parent_leg_id and leg.parent_leg_id in leg_by_id:
-                parent = leg_by_id[leg.parent_leg_id]
-                if parent.segment_deepest_price is not None:
-                    ctr = abs(float(leg.origin_price) - float(parent.segment_deepest_price))
-                else:
-                    # Parent exists but no segment data - passes (fallback to range)
-                    ctr = float(leg.range)
-            else:
-                # Root leg - always passes (CTR = range)
-                ctr = float(leg.range)
+            # Calculate counter-trend ratio (#336):
+            # Find all opposite-direction legs whose pivot == this leg's origin
+            # Use the longest one's range as the counter-trend pressure
+            opposite_legs_at_origin = [
+                opp for opp in state.active_legs
+                if opp.direction == opposite_direction
+                and opp.pivot_price == leg.origin_price
+                and opp.status == 'active'
+            ]
 
-            # Calculate ratio
-            ratio = ctr / float(leg.range)
+            if opposite_legs_at_origin:
+                # Find the longest opposite leg (max range)
+                longest_opposite = max(opposite_legs_at_origin, key=lambda l: l.range)
+                longest_range = float(longest_opposite.range)
+                ratio = longest_range / float(leg.range)
+            else:
+                # No opposite legs at this origin - passes by default
+                ratio = 1.0
+                longest_range = float(leg.range)
+
+            # Store the ratio on the leg for display/inspection
+            leg.counter_trend_ratio = ratio
 
             # Prune if below threshold
             if ratio < min_ratio:
@@ -907,7 +923,7 @@ class LegPruner:
                     reason="min_counter_trend",
                     explanation=(
                         f"CTR ratio {ratio:.3f} < {min_ratio:.3f} threshold "
-                        f"(CTR={ctr:.2f}, range={float(leg.range):.2f})"
+                        f"(opposite_range={longest_range:.2f}, leg_range={float(leg.range):.2f})"
                     ),
                 ))
 

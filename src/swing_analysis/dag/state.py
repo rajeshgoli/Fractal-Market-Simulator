@@ -119,6 +119,8 @@ class DetectorState:
                 "segment_deepest_index": leg.segment_deepest_index,
                 "impulse_to_deepest": leg.impulse_to_deepest,
                 "impulse_back": leg.impulse_back,
+                # Counter-trend ratio (#336)
+                "counter_trend_ratio": leg.counter_trend_ratio,
             })
 
         # Serialize pending origins
@@ -234,6 +236,8 @@ class DetectorState:
                 segment_deepest_index=leg_data.get("segment_deepest_index"),
                 impulse_to_deepest=leg_data.get("impulse_to_deepest"),
                 impulse_back=leg_data.get("impulse_back"),
+                # Counter-trend ratio (#336)
+                counter_trend_ratio=leg_data.get("counter_trend_ratio"),
             )
             active_legs.append(leg)
 

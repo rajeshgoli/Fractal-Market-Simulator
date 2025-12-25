@@ -19,7 +19,7 @@ const GLOBAL_SLIDERS: SliderConfig[] = [
   { key: 'stale_extension_threshold', label: 'Stale Extension', min: 1.0, max: 5.0, step: 0.1, description: 'Extension multiple for stale pruning', colorMode: 'restrictive-left' },
   { key: 'origin_range_threshold', label: 'Origin Range %', min: 0.0, max: 0.10, step: 0.01, description: 'Range similarity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
   { key: 'origin_time_threshold', label: 'Origin Time %', min: 0.0, max: 0.10, step: 0.01, description: 'Time proximity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
-  { key: 'min_counter_trend_ratio', label: 'Min CTR %', min: 0.0, max: 0.20, step: 0.01, description: 'Minimum counter-trend ratio (CTR/range) required to keep leg', displayAsPercent: true, colorMode: 'restrictive-right' },
+  { key: 'min_counter_trend_ratio', label: 'Counter Trend Ratio', min: 0.0, max: 0.20, step: 0.01, description: 'Min ratio of longest opposite leg range to leg range at same pivot', displayAsPercent: true, colorMode: 'restrictive-right' },
 ];
 
 // Toggle configurations for pruning algorithms
