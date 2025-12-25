@@ -20,6 +20,7 @@ const GLOBAL_SLIDERS: SliderConfig[] = [
   { key: 'origin_range_threshold', label: 'Origin Range %', min: 0.0, max: 0.10, step: 0.01, description: 'Range similarity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
   { key: 'origin_time_threshold', label: 'Origin Time %', min: 0.0, max: 0.10, step: 0.01, description: 'Time proximity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
   { key: 'min_branch_ratio', label: 'Branch Ratio', min: 0.0, max: 0.20, step: 0.01, description: 'Min ratio of child counter-trend to parent counter-trend for origin domination', displayAsPercent: true, colorMode: 'restrictive-right' },
+  { key: 'min_turn_ratio', label: 'Turn Ratio', min: 0.0, max: 0.50, step: 0.01, description: 'Min turn ratio for sibling pruning (counter-leg range / leg range)', displayAsPercent: true, colorMode: 'restrictive-right' },
 ];
 
 // Toggle configurations for pruning algorithms
@@ -32,6 +33,18 @@ interface ToggleConfig {
 const PRUNE_TOGGLES: ToggleConfig[] = [
   { key: 'enable_engulfed_prune', label: 'Engulfed', description: 'Delete legs breached on both origin and pivot sides' },
   { key: 'enable_inner_structure_prune', label: 'Inner Structure', description: 'Prune legs with same pivot as parent' },
+];
+
+// Fibonacci level options for Formation and Invalidation thresholds
+const FIB_LEVEL_OPTIONS = [
+  { value: 0.10, label: '10%' },
+  { value: 0.236, label: '24%' },
+  { value: 0.382, label: '38%' },
+  { value: 0.50, label: '50%' },
+  { value: 0.618, label: '62%' },
+  { value: 0.764, label: '76%' },
+  { value: 0.90, label: '90%' },
+  { value: 1.00, label: '100%' },
 ];
 
 interface DetectionConfigPanelProps {
@@ -86,6 +99,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       localConfig.origin_range_threshold !== config.origin_range_threshold ||
       localConfig.origin_time_threshold !== config.origin_time_threshold ||
       localConfig.min_branch_ratio !== config.min_branch_ratio ||
+      localConfig.min_turn_ratio !== config.min_turn_ratio ||
       localConfig.enable_engulfed_prune !== config.enable_engulfed_prune ||
       localConfig.enable_inner_structure_prune !== config.enable_inner_structure_prune
     );
@@ -137,6 +151,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         origin_range_threshold: localConfig.origin_range_threshold,
         origin_time_threshold: localConfig.origin_time_threshold,
         min_branch_ratio: localConfig.min_branch_ratio,
+        min_turn_ratio: localConfig.min_turn_ratio,
         // Pruning algorithm toggles
         enable_engulfed_prune: localConfig.enable_engulfed_prune,
         enable_inner_structure_prune: localConfig.enable_inner_structure_prune,
@@ -265,6 +280,28 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
     );
   };
 
+  const renderFibSelect = (
+    direction: 'bull' | 'bear',
+    key: 'formation_fib' | 'invalidation_threshold'
+  ) => {
+    const value = localConfig[direction][key];
+    const colorClass = direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
+    const borderClass = direction === 'bull' ? 'focus:border-trading-bull' : 'focus:border-trading-bear';
+
+    return (
+      <select
+        value={value}
+        onChange={(e) => handleSliderChange(direction, key, parseFloat(e.target.value))}
+        className={`w-14 px-1 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded ${colorClass} ${borderClass} focus:outline-none cursor-pointer`}
+        disabled={isUpdating}
+      >
+        {FIB_LEVEL_OPTIONS.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    );
+  };
+
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Header - hidden when parent provides collapsible container (#310) */}
@@ -319,50 +356,14 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         {/* Formation row */}
         <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
           <span className="text-app-muted" title="Retracement required to form leg">Formation</span>
-          <input
-            type="text"
-            value={`${Math.round(localConfig.bull.formation_fib * 100)}%`}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value.replace('%', '')) / 100;
-              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bull', 'formation_fib', val);
-            }}
-            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bull focus:outline-none focus:border-trading-bull"
-            disabled={isUpdating}
-          />
-          <input
-            type="text"
-            value={`${Math.round(localConfig.bear.formation_fib * 100)}%`}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value.replace('%', '')) / 100;
-              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bear', 'formation_fib', val);
-            }}
-            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bear focus:outline-none focus:border-trading-bear"
-            disabled={isUpdating}
-          />
+          {renderFibSelect('bull', 'formation_fib')}
+          {renderFibSelect('bear', 'formation_fib')}
         </div>
         {/* Invalidation row */}
         <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
           <span className="text-app-muted" title="Breach threshold for invalidation">Invalidation</span>
-          <input
-            type="text"
-            value={`${Math.round(localConfig.bull.invalidation_threshold * 100)}%`}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value.replace('%', '')) / 100;
-              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bull', 'invalidation_threshold', val);
-            }}
-            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bull focus:outline-none focus:border-trading-bull"
-            disabled={isUpdating}
-          />
-          <input
-            type="text"
-            value={`${Math.round(localConfig.bear.invalidation_threshold * 100)}%`}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value.replace('%', '')) / 100;
-              if (!isNaN(val) && val >= 0.1 && val <= 1.0) handleSliderChange('bear', 'invalidation_threshold', val);
-            }}
-            className="w-14 px-1.5 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded text-trading-bear focus:outline-none focus:border-trading-bear"
-            disabled={isUpdating}
-          />
+          {renderFibSelect('bull', 'invalidation_threshold')}
+          {renderFibSelect('bear', 'invalidation_threshold')}
         </div>
       </div>
 

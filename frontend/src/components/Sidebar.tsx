@@ -388,6 +388,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           origin_range_threshold: detectionConfig.origin_range_threshold,
           origin_time_threshold: detectionConfig.origin_time_threshold,
           min_branch_ratio: detectionConfig.min_branch_ratio,
+          min_turn_ratio: detectionConfig.min_turn_ratio,
           enable_engulfed_prune: detectionConfig.enable_engulfed_prune,
           enable_inner_structure_prune: detectionConfig.enable_inner_structure_prune,
         };
