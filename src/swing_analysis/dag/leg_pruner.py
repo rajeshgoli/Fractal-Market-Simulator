@@ -885,24 +885,14 @@ class LegPruner:
                 continue
 
             # Calculate counter-trend ratio (#336):
-            # Find all opposite-direction legs whose pivot == this leg's origin
-            # Use the longest one's range as the counter-trend pressure
-            opposite_legs_at_origin = [
-                opp for opp in state.active_legs
-                if opp.direction == opposite_direction
-                and opp.pivot_price == leg.origin_price
-                and opp.status == 'active'
-            ]
-
-            if opposite_legs_at_origin:
-                # Find the longest opposite leg (max range)
-                longest_opposite = max(opposite_legs_at_origin, key=lambda l: l.range)
-                longest_range = float(longest_opposite.range)
-                ratio = longest_range / float(leg.range)
+            # Use the stored origin_counter_trend_range (captured at leg creation)
+            # This is the range of the longest opposite leg at this origin when leg formed
+            # The opposite leg may have been pruned since, but we use the captured value
+            if leg.origin_counter_trend_range is not None:
+                ratio = leg.origin_counter_trend_range / float(leg.range)
             else:
-                # No opposite legs at this origin - passes by default
+                # No opposite legs at this origin when leg was created - passes by default
                 ratio = 1.0
-                longest_range = float(leg.range)
 
             # Always store the ratio on the leg for display/inspection
             leg.counter_trend_ratio = ratio
@@ -911,6 +901,7 @@ class LegPruner:
             if min_ratio > 0 and ratio < min_ratio:
                 leg.status = 'pruned'
                 pruned_leg_ids.add(leg.leg_id)
+                opposite_range = leg.origin_counter_trend_range or 0.0
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
@@ -919,7 +910,7 @@ class LegPruner:
                     reason="min_counter_trend",
                     explanation=(
                         f"CTR ratio {ratio:.3f} < {min_ratio:.3f} threshold "
-                        f"(opposite_range={longest_range:.2f}, leg_range={float(leg.range):.2f})"
+                        f"(opposite_range={opposite_range:.2f}, leg_range={float(leg.range):.2f})"
                     ),
                 ))
 

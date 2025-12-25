@@ -85,7 +85,7 @@ class TestCounterTrendRatioCalculation:
         At pivot 100, bull legs exist: 50→100 (range=50), 60→100 (range=40)
         New bear leg: 100→20 (range=80)
 
-        CTR = longest_opposite_range / this_leg_range = 50 / 80 = 0.625
+        CTR = origin_counter_trend_range / this_leg_range = 50 / 80 = 0.625
         """
         config = SwingConfig.default().with_min_counter_trend(0.01)  # Low threshold to not prune
         pruner = LegPruner(config)
@@ -97,18 +97,17 @@ class TestCounterTrendRatioCalculation:
         bull2 = make_bull_leg(60.0, 5, 100.0, 15)   # range = 40
         bull3 = make_bull_leg(70.0, 8, 100.0, 18)   # range = 30
 
-        # Bear leg with origin at 100
+        # Bear leg with origin at 100, origin_counter_trend_range = 50 (captured at creation)
         bear = make_bear_leg(100.0, 20, 20.0, 30)   # range = 80
+        bear.origin_counter_trend_range = 50.0  # Longest bull leg at pivot 100
 
         state.active_legs = [bull1, bull2, bull3, bear]
 
         bar = make_bar(35)
-        # Run pruning to calculate CTR (with min_ratio=0, nothing gets pruned)
+        # Run pruning to calculate CTR
         events = pruner.apply_min_counter_trend_prune(state, 'bear', bar, datetime.now())
 
-        # CTR should be calculated on the bear leg
-        # longest_opposite = bull1 (range=50), bear.range = 80
-        # ratio = 50 / 80 = 0.625
+        # CTR = origin_counter_trend_range / range = 50 / 80 = 0.625
         assert bear.counter_trend_ratio == pytest.approx(0.625, rel=0.01)
 
     def test_prunes_low_ctr_legs(self):
@@ -131,6 +130,7 @@ class TestCounterTrendRatioCalculation:
 
         # Large bear leg with origin at 100
         bear = make_bear_leg(100.0, 15, 0.0, 25)   # range = 100
+        bear.origin_counter_trend_range = 10.0  # Captured from bull leg
 
         state.active_legs = [bull, bear]
 
@@ -165,6 +165,7 @@ class TestCounterTrendRatioCalculation:
 
         # Bear leg with origin at 100
         bear = make_bear_leg(100.0, 15, 20.0, 25)  # range = 80
+        bear.origin_counter_trend_range = 50.0  # Captured from bull leg
 
         state.active_legs = [bull, bear]
 
@@ -204,10 +205,12 @@ class TestCounterTrendRatioCalculation:
 
     def test_uses_longest_opposite_leg(self):
         """
-        Test that the longest opposite-direction leg is used.
+        Test that the longest opposite-direction leg range is used.
 
-        Multiple bull legs at pivot 100 with different ranges.
-        Bear leg should use the longest one for CTR calculation.
+        origin_counter_trend_range is captured at creation = 60 (longest bull at pivot 100)
+        Bear leg range = 50
+
+        CTR = 60 / 50 = 1.2
         """
         config = SwingConfig.default().with_min_counter_trend(0.01)  # Low threshold to not prune
         pruner = LegPruner(config)
@@ -219,23 +222,23 @@ class TestCounterTrendRatioCalculation:
         bull2 = make_bull_leg(40.0, 3, 100.0, 12)   # range = 60 (longest!)
         bull3 = make_bull_leg(70.0, 5, 100.0, 14)   # range = 30
 
-        # Bear leg with origin at 100
+        # Bear leg with origin at 100 - captured longest = 60
         bear = make_bear_leg(100.0, 20, 50.0, 30)   # range = 50
+        bear.origin_counter_trend_range = 60.0  # Captured from longest bull
 
         state.active_legs = [bull1, bull2, bull3, bear]
 
         bar = make_bar(35)
         events = pruner.apply_min_counter_trend_prune(state, 'bear', bar, datetime.now())
 
-        # longest_opposite = bull2 (range=60), bear.range = 50
-        # ratio = 60 / 50 = 1.2
+        # CTR = 60 / 50 = 1.2
         assert bear.counter_trend_ratio == pytest.approx(1.2, rel=0.01)
 
-    def test_only_considers_active_opposite_legs(self):
+    def test_origin_counter_trend_range_captured_at_creation(self):
         """
-        Test that only active opposite-direction legs are considered.
+        Test that origin_counter_trend_range is captured at creation and doesn't change.
 
-        Inactive (stale, invalidated, pruned) legs should be ignored.
+        Even if opposite legs are later pruned/stale, the captured value is used.
         """
         config = SwingConfig.default().with_min_counter_trend(0.01)  # Low threshold to not prune
         pruner = LegPruner(config)
@@ -245,27 +248,29 @@ class TestCounterTrendRatioCalculation:
         # Active bull leg with pivot at 100
         active_bull = make_bull_leg(90.0, 0, 100.0, 10)   # range = 10
 
-        # Inactive bull leg with larger range at same pivot
+        # Inactive bull leg with larger range at same pivot (was active when bear formed)
         inactive_bull = make_bull_leg(40.0, 2, 100.0, 12)   # range = 60
         inactive_bull.status = 'stale'
 
-        # Bear leg with origin at 100
+        # Bear leg with origin at 100 - captured the 60 range when it was created
+        # (before the bull became stale)
         bear = make_bear_leg(100.0, 20, 50.0, 30)   # range = 50
+        bear.origin_counter_trend_range = 60.0  # Captured before bull became stale
 
         state.active_legs = [active_bull, inactive_bull, bear]
 
         bar = make_bar(35)
         events = pruner.apply_min_counter_trend_prune(state, 'bear', bar, datetime.now())
 
-        # Only active_bull should be considered (range=10)
-        # ratio = 10 / 50 = 0.2
-        assert bear.counter_trend_ratio == pytest.approx(0.2, rel=0.01)
+        # Uses captured value (60), not current active (10)
+        # ratio = 60 / 50 = 1.2
+        assert bear.counter_trend_ratio == pytest.approx(1.2, rel=0.01)
 
     def test_bull_and_bear_legs_separate(self):
         """
         Test that bull and bear legs are processed separately.
 
-        Bull legs should find bear opposite legs, and vice versa.
+        Bull legs should have captured bear opposite leg range at creation.
         """
         config = SwingConfig.default().with_min_counter_trend(0.01)  # Low threshold to not prune
         pruner = LegPruner(config)
@@ -275,16 +280,16 @@ class TestCounterTrendRatioCalculation:
         # Bear leg with pivot at 50
         bear = make_bear_leg(100.0, 0, 50.0, 10)   # range = 50
 
-        # Bull leg with origin at 50 (should find bear with pivot at 50)
+        # Bull leg with origin at 50 - captured bear leg range at creation
         bull = make_bull_leg(50.0, 15, 80.0, 25)   # range = 30
+        bull.origin_counter_trend_range = 50.0  # Bear leg at pivot 50 had range 50
 
         state.active_legs = [bear, bull]
 
         bar = make_bar(30)
         events = pruner.apply_min_counter_trend_prune(state, 'bull', bar, datetime.now())
 
-        # bull looks for bear legs with pivot == 50 → finds bear (range=50)
-        # ratio = 50 / 30 = 1.67
+        # CTR = 50 / 30 = 1.67
         assert bull.counter_trend_ratio == pytest.approx(1.67, rel=0.01)
 
 
@@ -339,6 +344,7 @@ class TestDisabledMinCtrFilter:
 
         # Large bear leg with origin at 100 - would be pruned if threshold > 0
         bear = make_bear_leg(100.0, 15, 0.0, 25)   # range = 100
+        bear.origin_counter_trend_range = 1.0  # Captured from bull leg at pivot 100
 
         state.active_legs = [bull, bear]
 
@@ -348,5 +354,5 @@ class TestDisabledMinCtrFilter:
         # Filter is disabled, no pruning
         assert len(events) == 0
         # CTR should still be calculated for display purposes
-        # CTR = bull.range / bear.range = 1 / 100 = 0.01
+        # CTR = origin_counter_trend_range / bear.range = 1 / 100 = 0.01
         assert bear.counter_trend_ratio == pytest.approx(0.01, rel=0.01)

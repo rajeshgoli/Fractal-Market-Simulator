@@ -83,11 +83,14 @@ class Leg:
     impulse_to_deepest: Optional[float] = None
     impulse_back: Optional[float] = None
     # Counter-trend ratio (#336): Measures counter-trend pressure at this leg's origin
-    # = longest_opposite_leg_range / this_leg_range
-    # where longest_opposite_leg is the longest leg of opposite direction sharing this origin as pivot
+    # = origin_counter_trend_range / this_leg_range
+    # where origin_counter_trend_range is captured at leg creation (largest opposite leg at that pivot)
     # High ratio = significant counter-trend pressure justified this origin
     # Low ratio = shallow noise, candidate for pruning
     counter_trend_ratio: Optional[float] = None
+    # The range of the longest opposite-direction leg at this origin when leg was created
+    # This is captured once at creation and never changes (the opposite leg may be pruned later)
+    origin_counter_trend_range: Optional[float] = None
 
     def __post_init__(self) -> None:
         """Compute deterministic leg_id if not provided."""

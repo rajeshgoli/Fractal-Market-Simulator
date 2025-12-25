@@ -121,6 +121,7 @@ class DetectorState:
                 "impulse_back": leg.impulse_back,
                 # Counter-trend ratio (#336)
                 "counter_trend_ratio": leg.counter_trend_ratio,
+                "origin_counter_trend_range": leg.origin_counter_trend_range,
             })
 
         # Serialize pending origins
@@ -238,6 +239,7 @@ class DetectorState:
                 impulse_back=leg_data.get("impulse_back"),
                 # Counter-trend ratio (#336)
                 counter_trend_ratio=leg_data.get("counter_trend_ratio"),
+                origin_counter_trend_range=leg_data.get("origin_counter_trend_range"),
             )
             active_legs.append(leg)
 

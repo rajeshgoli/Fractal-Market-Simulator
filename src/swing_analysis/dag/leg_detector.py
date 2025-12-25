@@ -355,6 +355,43 @@ class LegDetector:
                     # Recalculate impulse when pivot extends (#236)
                     leg.impulse = _calculate_impulse(leg.range, leg.origin_index, leg.pivot_index)
 
+    def _find_origin_counter_trend_range(self, direction: str, origin_price: Decimal) -> Optional[float]:
+        """
+        Find the range of the longest opposite-direction leg at this origin (#336).
+
+        For a new bull leg with origin at price P, find the longest bear leg
+        whose pivot is at P. This represents the counter-trend pressure that
+        accumulated at this price level before the new leg starts.
+
+        The value is captured once at leg creation and never changes, even if
+        the opposite leg is later pruned.
+
+        NOTE: We do NOT filter by status because the opposite leg may have been
+        invalidated by the time this leg is created. We want the range of the
+        biggest leg that EVER existed at this pivot, regardless of current status.
+
+        Args:
+            direction: Direction of the new leg ('bull' or 'bear')
+            origin_price: Origin price of the new leg
+
+        Returns:
+            Range of longest opposite leg at this origin, or None if no matches
+        """
+        opposite_direction = 'bear' if direction == 'bull' else 'bull'
+
+        # Don't filter by status - we want ANY leg that ever existed at this pivot
+        # The leg may be invalidated but still in active_legs
+        matching_legs = [
+            leg for leg in self.state.active_legs
+            if leg.direction == opposite_direction
+            and leg.pivot_price == origin_price
+        ]
+
+        if matching_legs:
+            longest = max(matching_legs, key=lambda l: l.range)
+            return float(longest.range)
+        return None
+
     def _update_breach_tracking(
         self,
         bar: Bar,
@@ -653,6 +690,8 @@ class LegDetector:
                 leg_range = abs(bar_high - pending.price)
                 # Find parent BEFORE creating leg (leg not yet in active_legs)
                 parent_leg_id = self._find_parent_for_leg('bull', pending.price, pending.bar_index)
+                # Capture counter-trend range at origin (#336)
+                origin_ctr = self._find_origin_counter_trend_range('bull', pending.price)
                 new_leg = Leg(
                     direction='bull',
                     origin_price=pending.price,  # LOW - where upward move started
@@ -663,6 +702,7 @@ class LegDetector:
                     last_modified_bar=bar.index,
                     impulse=_calculate_impulse(leg_range, pending.bar_index, bar.index),
                     parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
+                    origin_counter_trend_range=origin_ctr,  # (#336)
                 )
                 self.state.active_legs.append(new_leg)
                 # Update parent's segment impulse when child forms (#307)
@@ -751,6 +791,8 @@ class LegDetector:
                 leg_range = abs(pending.price - bar_low)
                 # Find parent BEFORE creating leg (leg not yet in active_legs)
                 parent_leg_id = self._find_parent_for_leg('bear', pending.price, pending.bar_index)
+                # Capture counter-trend range at origin (#336)
+                origin_ctr = self._find_origin_counter_trend_range('bear', pending.price)
                 new_bear_leg = Leg(
                     direction='bear',
                     origin_price=pending.price,  # HIGH - where downward move started
@@ -761,6 +803,7 @@ class LegDetector:
                     last_modified_bar=bar.index,
                     impulse=_calculate_impulse(leg_range, pending.bar_index, bar.index),
                     parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
+                    origin_counter_trend_range=origin_ctr,  # (#336)
                 )
                 self.state.active_legs.append(new_bear_leg)
                 # Update parent's segment impulse when child forms (#307)
@@ -838,6 +881,8 @@ class LegDetector:
                     leg_range = abs(pending_bear.price - pending_bull.price)
                     # Find parent BEFORE creating leg (leg not yet in active_legs)
                     parent_leg_id = self._find_parent_for_leg('bear', pending_bear.price, pending_bear.bar_index)
+                    # Capture counter-trend range at origin (#336)
+                    origin_ctr = self._find_origin_counter_trend_range('bear', pending_bear.price)
                     new_bear_leg = Leg(
                         direction='bear',
                         origin_price=pending_bear.price,  # HIGH - where downward move started
@@ -848,6 +893,7 @@ class LegDetector:
                         last_modified_bar=bar.index,
                         impulse=_calculate_impulse(leg_range, pending_bear.bar_index, pending_bull.bar_index),
                         parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
+                        origin_counter_trend_range=origin_ctr,  # (#336)
                     )
                     self.state.active_legs.append(new_bear_leg)
                     # Update parent's segment impulse when child forms (#307)
@@ -885,6 +931,8 @@ class LegDetector:
                     leg_range = abs(pending_bear.price - pending_bull.price)
                     # Find parent BEFORE creating leg (leg not yet in active_legs)
                     parent_leg_id = self._find_parent_for_leg('bull', pending_bull.price, pending_bull.bar_index)
+                    # Capture counter-trend range at origin (#336)
+                    origin_ctr = self._find_origin_counter_trend_range('bull', pending_bull.price)
                     new_bull_leg = Leg(
                         direction='bull',
                         origin_price=pending_bull.price,  # LOW - where upward move started
@@ -895,6 +943,7 @@ class LegDetector:
                         last_modified_bar=bar.index,
                         impulse=_calculate_impulse(leg_range, pending_bull.bar_index, pending_bear.bar_index),
                         parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
+                        origin_counter_trend_range=origin_ctr,  # (#336)
                     )
                     self.state.active_legs.append(new_bull_leg)
                     # Update parent's segment impulse when child forms (#307)
