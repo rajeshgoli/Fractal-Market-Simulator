@@ -543,6 +543,7 @@ class SwingConfigUpdateRequest(BaseModel):
     origin_range_threshold: Optional[float] = None  # Origin proximity range threshold (#294)
     origin_time_threshold: Optional[float] = None  # Origin proximity time threshold (#294)
     min_branch_ratio: Optional[float] = None  # Min branch ratio for origin domination (#337)
+    min_turn_ratio: Optional[float] = None  # Min turn ratio for sibling pruning (#341)
     # Pruning algorithm toggles
     enable_engulfed_prune: Optional[bool] = None  # Enable engulfed leg deletion (default: True)
     enable_inner_structure_prune: Optional[bool] = None  # Enable inner structure pruning (default: True)
@@ -562,6 +563,7 @@ class SwingConfigUpdateRequest(BaseModel):
                 "origin_range_threshold": 0.05,
                 "origin_time_threshold": 0.10,
                 "min_branch_ratio": 0.1,
+                "min_turn_ratio": 0.5,
                 "enable_engulfed_prune": True,
                 "enable_inner_structure_prune": True
             }
@@ -587,6 +589,7 @@ class SwingConfigResponse(BaseModel):
     origin_range_threshold: float  # Origin proximity range threshold (#294)
     origin_time_threshold: float  # Origin proximity time threshold (#294)
     min_branch_ratio: float  # Min branch ratio for origin domination (#337)
+    min_turn_ratio: float  # Min turn ratio for sibling pruning (#341)
     # Pruning algorithm toggles
     enable_engulfed_prune: bool
     enable_inner_structure_prune: bool
@@ -608,6 +611,7 @@ class SwingConfigResponse(BaseModel):
                 "origin_range_threshold": 0.05,
                 "origin_time_threshold": 0.10,
                 "min_branch_ratio": 0.1,
+                "min_turn_ratio": 0.5,
                 "enable_engulfed_prune": True,
                 "enable_inner_structure_prune": True
             }

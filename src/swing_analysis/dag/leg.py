@@ -91,6 +91,11 @@ class Leg:
     # The range of the longest opposite-direction leg at this origin when leg was created
     # This is captured once at creation and never changes (the opposite leg may be pruned later)
     origin_counter_trend_range: Optional[float] = None
+    # Turn ratio tracking (#341): Measures trend-to-counter-trend ratio for sibling pruning
+    # _max_counter_leg_range: Set once at leg creation; max range of counter-legs at this leg's origin
+    # (i.e., opposite-direction legs whose pivot == this leg's origin)
+    # This captures "how strong was the trend that created my origin"
+    _max_counter_leg_range: Optional[float] = None
 
     def __post_init__(self) -> None:
         """Compute deterministic leg_id if not provided."""
@@ -182,6 +187,28 @@ class Leg:
         if self.impulse_to_deepest is None or self.impulse_back is None:
             return None
         return self.impulse_to_deepest - self.impulse_back
+
+    @property
+    def turn_ratio(self) -> Optional[float]:
+        """
+        Turn ratio = _max_counter_leg_range / range (#341).
+
+        Measures how significant this leg is relative to the trend that created it.
+        - High ratio: Leg is small relative to the counter-trend that established its origin
+          (structurally significant, price worked hard to create the origin)
+        - Low ratio: Leg has extended far beyond its "weight class" (riding coattails)
+
+        Used for turn ratio pruning: when a new leg forms at origin O, counter-legs
+        whose pivot = O and whose turn_ratio < min_turn_ratio are pruned.
+
+        Returns:
+            Ratio value (0+), or None if _max_counter_leg_range not set.
+        """
+        if self._max_counter_leg_range is None:
+            return None
+        if self.range == 0:
+            return None
+        return self._max_counter_leg_range / float(self.range)
 
 
 @dataclass

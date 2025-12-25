@@ -718,8 +718,14 @@ class LegDetector:
                     impulse=_calculate_impulse(leg_range, pending.bar_index, bar.index),
                     parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                     origin_counter_trend_range=origin_ctr,  # (#336)
+                    _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
                 )
                 self.state.active_legs.append(new_leg)
+                # Prune counter-legs at origin with low turn ratio (#341)
+                turn_ratio_events = self._pruner.prune_by_turn_ratio(
+                    self.state, new_leg, bar, timestamp
+                )
+                events.extend(turn_ratio_events)
                 # Update parent's segment impulse when child forms (#307)
                 if parent_leg_id:
                     parent = self._find_leg_by_id(parent_leg_id)
@@ -824,8 +830,14 @@ class LegDetector:
                     impulse=_calculate_impulse(leg_range, pending.bar_index, bar.index),
                     parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                     origin_counter_trend_range=origin_ctr,  # (#336)
+                    _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
                 )
                 self.state.active_legs.append(new_bear_leg)
+                # Prune counter-legs at origin with low turn ratio (#341)
+                turn_ratio_events = self._pruner.prune_by_turn_ratio(
+                    self.state, new_bear_leg, bar, timestamp
+                )
+                events.extend(turn_ratio_events)
                 # Update parent's segment impulse when child forms (#307)
                 if parent_leg_id:
                     parent = self._find_leg_by_id(parent_leg_id)
@@ -921,8 +933,14 @@ class LegDetector:
                         impulse=_calculate_impulse(leg_range, pending_bear.bar_index, pending_bull.bar_index),
                         parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                         origin_counter_trend_range=origin_ctr,  # (#336)
+                        _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
                     )
                     self.state.active_legs.append(new_bear_leg)
+                    # Prune counter-legs at origin with low turn ratio (#341)
+                    turn_ratio_events = self._pruner.prune_by_turn_ratio(
+                        self.state, new_bear_leg, bar, timestamp
+                    )
+                    events.extend(turn_ratio_events)
                     # Update parent's segment impulse when child forms (#307)
                     if parent_leg_id:
                         parent = self._find_leg_by_id(parent_leg_id)
@@ -978,8 +996,14 @@ class LegDetector:
                         impulse=_calculate_impulse(leg_range, pending_bull.bar_index, pending_bear.bar_index),
                         parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                         origin_counter_trend_range=origin_ctr,  # (#336)
+                        _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
                     )
                     self.state.active_legs.append(new_bull_leg)
+                    # Prune counter-legs at origin with low turn ratio (#341)
+                    turn_ratio_events = self._pruner.prune_by_turn_ratio(
+                        self.state, new_bull_leg, bar, timestamp
+                    )
+                    events.extend(turn_ratio_events)
                     # Update parent's segment impulse when child forms (#307)
                     if parent_leg_id:
                         parent = self._find_leg_by_id(parent_leg_id)

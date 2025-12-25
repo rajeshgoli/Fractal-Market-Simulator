@@ -927,3 +927,95 @@ class LegPruner:
             ]
 
         return events
+
+    def prune_by_turn_ratio(
+        self,
+        state: DetectorState,
+        new_leg: Leg,
+        bar: Bar,
+        timestamp: datetime,
+    ) -> List[LegPrunedEvent]:
+        """
+        Prune counter-legs at the new leg's origin that have low turn ratio (#341).
+
+        When a new leg forms at origin O, for each counter-leg whose pivot == O:
+        1. Compute turn_ratio = counter_leg._max_counter_leg_range / counter_leg.range
+        2. If turn_ratio < min_turn_ratio, prune the counter-leg
+
+        This filters horizontally (siblings at shared pivots) rather than vertically
+        (parent-child via branch ratio). It removes legs that have extended far
+        beyond what their structural context justified.
+
+        Args:
+            state: Current detector state (mutated)
+            new_leg: The newly created leg (trigger for pruning)
+            bar: Current bar (for event metadata)
+            timestamp: Timestamp for events
+
+        Returns:
+            List of LegPrunedEvent for pruned counter-legs with reason="turn_ratio"
+        """
+        events: List[LegPrunedEvent] = []
+        min_turn_ratio = self.config.min_turn_ratio
+
+        # Skip if turn ratio pruning is disabled
+        if min_turn_ratio <= 0:
+            return events
+
+        # Find counter-legs: opposite direction, pivot == new_leg.origin
+        opposite_direction = 'bear' if new_leg.direction == 'bull' else 'bull'
+        counter_legs = [
+            leg for leg in state.active_legs
+            if leg.direction == opposite_direction
+            and leg.pivot_price == new_leg.origin_price
+            and leg.status == 'active'
+            and leg.leg_id != new_leg.leg_id  # Exclude self (shouldn't match anyway)
+        ]
+
+        if not counter_legs:
+            return events
+
+        pruned_leg_ids: Set[str] = set()
+
+        for counter_leg in counter_legs:
+            if counter_leg.range == 0:
+                continue
+
+            # Compute turn_ratio = _max_counter_leg_range / counter_leg.range
+            # If _max_counter_leg_range is None, the leg was created before this
+            # feature - skip it (don't prune legacy legs)
+            if counter_leg._max_counter_leg_range is None:
+                continue
+
+            turn_ratio = counter_leg._max_counter_leg_range / float(counter_leg.range)
+
+            # Prune if turn_ratio < min_turn_ratio
+            if turn_ratio < min_turn_ratio:
+                counter_leg.status = 'pruned'
+                pruned_leg_ids.add(counter_leg.leg_id)
+                events.append(LegPrunedEvent(
+                    bar_index=bar.index,
+                    timestamp=timestamp,
+                    swing_id=counter_leg.swing_id or "",
+                    leg_id=counter_leg.leg_id,
+                    reason="turn_ratio",
+                    explanation=(
+                        f"Turn ratio {turn_ratio:.3f} < {min_turn_ratio:.3f} threshold "
+                        f"(max_counter={counter_leg._max_counter_leg_range:.2f}, "
+                        f"leg_range={float(counter_leg.range):.2f})"
+                    ),
+                ))
+
+        # Reparent children of pruned legs before removal
+        for leg in state.active_legs:
+            if leg.leg_id in pruned_leg_ids:
+                self.reparent_children(state, leg)
+
+        # Remove pruned legs
+        if pruned_leg_ids:
+            state.active_legs = [
+                leg for leg in state.active_legs
+                if leg.leg_id not in pruned_leg_ids
+            ]
+
+        return events

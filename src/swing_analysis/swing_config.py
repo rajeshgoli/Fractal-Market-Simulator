@@ -100,6 +100,13 @@ class SwingConfig:
     # E.g., 0.1 means child's counter-trend must be at least 10% of parent's.
     # Default 0.0 (disabled). Set > 0 to enable branch ratio domination.
     min_branch_ratio: float = 0.0
+    # Turn ratio for sibling pruning at shared pivots (#341): filters horizontally
+    # When a new leg forms at origin O, counter-legs with pivot=O are scored by:
+    #   turn_ratio = _max_counter_leg_range / leg.range
+    # Legs with turn_ratio < min_turn_ratio are pruned (too small for their context).
+    # E.g., 0.5 means leg cannot extend more than 2x its counter-trend.
+    # Default 0.0 (disabled). Set > 0 to enable turn ratio pruning.
+    min_turn_ratio: float = 0.0
     stale_extension_threshold: float = 3.0
     emit_level_crosses: bool = False
     # Pruning algorithm toggles (#288)
@@ -132,6 +139,7 @@ class SwingConfig:
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
             min_branch_ratio=self.min_branch_ratio,
+            min_turn_ratio=self.min_turn_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -153,6 +161,7 @@ class SwingConfig:
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
             min_branch_ratio=self.min_branch_ratio,
+            min_turn_ratio=self.min_turn_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -200,6 +209,7 @@ class SwingConfig:
                 else self.proximity_prune_strategy
             ),
             min_branch_ratio=self.min_branch_ratio,
+            min_turn_ratio=self.min_turn_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -224,6 +234,7 @@ class SwingConfig:
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
             min_branch_ratio=self.min_branch_ratio,
+            min_turn_ratio=self.min_turn_ratio,
             stale_extension_threshold=stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -248,6 +259,7 @@ class SwingConfig:
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
             min_branch_ratio=self.min_branch_ratio,
+            min_turn_ratio=self.min_turn_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -276,6 +288,7 @@ class SwingConfig:
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
             min_branch_ratio=self.min_branch_ratio,
+            min_turn_ratio=self.min_turn_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
@@ -301,6 +314,34 @@ class SwingConfig:
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
             min_branch_ratio=min_branch_ratio,
+            min_turn_ratio=self.min_turn_ratio,
+            stale_extension_threshold=self.stale_extension_threshold,
+            emit_level_crosses=self.emit_level_crosses,
+            enable_engulfed_prune=self.enable_engulfed_prune,
+            enable_inner_structure_prune=self.enable_inner_structure_prune,
+        )
+
+    def with_min_turn_ratio(self, min_turn_ratio: float) -> "SwingConfig":
+        """
+        Create a new config with modified min turn ratio threshold (#341).
+
+        Since SwingConfig is frozen, this creates a new instance.
+
+        Args:
+            min_turn_ratio: Minimum turn ratio for sibling pruning at shared pivots.
+                When a new leg forms at origin O, counter-legs with pivot=O and
+                turn_ratio < min_turn_ratio are pruned.
+                0.5 means legs cannot extend more than 2x their counter-trend.
+                0.0 disables turn ratio pruning.
+        """
+        return SwingConfig(
+            bull=self.bull,
+            bear=self.bear,
+            origin_range_prune_threshold=self.origin_range_prune_threshold,
+            origin_time_prune_threshold=self.origin_time_prune_threshold,
+            proximity_prune_strategy=self.proximity_prune_strategy,
+            min_branch_ratio=self.min_branch_ratio,
+            min_turn_ratio=min_turn_ratio,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,

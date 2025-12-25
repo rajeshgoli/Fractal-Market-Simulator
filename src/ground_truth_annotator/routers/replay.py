@@ -1837,6 +1837,10 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     if request.min_branch_ratio is not None:
         new_config = new_config.with_min_branch_ratio(request.min_branch_ratio)
 
+    # Apply min turn ratio for sibling pruning (#341)
+    if request.min_turn_ratio is not None:
+        new_config = new_config.with_min_turn_ratio(request.min_turn_ratio)
+
     # Apply pruning algorithm toggles
     if any([
         request.enable_engulfed_prune is not None,
@@ -1915,6 +1919,7 @@ async def get_detection_config():
         origin_range_threshold=config.origin_range_prune_threshold,
         origin_time_threshold=config.origin_time_prune_threshold,
         min_branch_ratio=config.min_branch_ratio,
+        min_turn_ratio=config.min_turn_ratio,
         enable_engulfed_prune=config.enable_engulfed_prune,
         enable_inner_structure_prune=config.enable_inner_structure_prune,
     )

@@ -358,6 +358,7 @@ export interface DetectionConfig {
   origin_range_threshold: number;  // Origin proximity range threshold (#294)
   origin_time_threshold: number;  // Origin proximity time threshold (#294)
   min_branch_ratio: number;  // Min branch ratio for origin domination (#337, default: 0.0)
+  min_turn_ratio: number;  // Min turn ratio for sibling pruning (#341, default: 0.0)
   // Pruning algorithm toggles
   enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
   enable_inner_structure_prune: boolean;  // Enable inner structure pruning (default: false)
@@ -381,6 +382,7 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   origin_range_threshold: 0.0,
   origin_time_threshold: 0.0,
   min_branch_ratio: 0.0,
+  min_turn_ratio: 0.0,
   enable_engulfed_prune: true,
   enable_inner_structure_prune: false,
 };

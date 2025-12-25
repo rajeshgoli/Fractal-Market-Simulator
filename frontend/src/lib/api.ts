@@ -296,6 +296,7 @@ export interface FeedbackDetectionConfig {
   origin_range_threshold: number;
   origin_time_threshold: number;
   min_branch_ratio: number;  // Min branch ratio for origin domination (#337)
+  min_turn_ratio: number;  // Min turn ratio for sibling pruning (#341)
   enable_engulfed_prune: boolean;
   enable_inner_structure_prune: boolean;
 }
@@ -523,6 +524,7 @@ export interface DetectionConfigUpdateRequest {
   origin_range_threshold?: number;  // Origin proximity range threshold (#294)
   origin_time_threshold?: number;  // Origin proximity time threshold (#294)
   min_branch_ratio?: number;  // Min branch ratio for origin domination (#337)
+  min_turn_ratio?: number;  // Min turn ratio for sibling pruning (#341)
   // Pruning algorithm toggles
   enable_engulfed_prune?: boolean;
   enable_inner_structure_prune?: boolean;
