@@ -468,25 +468,27 @@ Example with 10% time threshold and 20% range threshold at bar 100:
 **Active swing immunity:**
 Legs that have formed into active swings are never pruned. If an origin has any active swings, the entire origin is immune from pruning.
 
-**Extended visibility for invalidated legs (#203):**
+**Extended visibility for breached legs (#203, #345):**
 
-Invalidated legs remain visible in the DAG until pruned by one of two conditions:
-- `active` → legs not yet invalidated, shown with solid lines
-- `invalidated` → legs past invalidation threshold, shown with dotted lines
-- **Engulfed prune:** If both origin AND pivot are breached, invalidated legs are deleted immediately (no replacement)
-- **Extension prune:** At N× extension beyond origin, invalidated legs are pruned via `_check_extension_prune()` (disabled by default)
+Breached legs (where origin has been touched) remain visible in the DAG until pruned:
+- `active` → legs with origin not yet breached, shown with solid lines
+- `stale` → legs inactive for extended periods, shown with dashed lines
+- Breached legs (`max_origin_breach is not None`) shown with dotted lines
+- **Engulfed prune:** If both origin AND pivot are breached, legs are deleted immediately (no replacement)
+- **Extension prune:** At N× extension beyond origin, breached child legs are pruned via `_check_extension_prune()`
 
 Configuration:
-- `DirectionConfig.invalidation_threshold`: Configurable per direction (default: 0.382)
 - `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
 - `SwingConfig.emit_level_crosses`: Enable/disable LevelCrossEvent emission (default: False for performance)
 - `SwingConfig.enable_*_prune`: Toggle individual pruning algorithms (engulfed, inner_structure)
 
+**Note (#345):** The `invalidation_threshold` config has been removed. Origin breach is now detected at 0% (any touch). Use `max_origin_breach is not None` to check if a leg's origin has been breached.
+
 **Inner structure pruning (#264, #266, #279):**
 
-When legs of the same direction are invalidated, prune counter-direction legs from inner structure pivots. Inner structure legs are redundant when an outer-origin leg exists with the same current pivot.
+When legs of the same direction have their origins breached, prune counter-direction legs from inner structure pivots. Inner structure legs are redundant when an outer-origin leg exists with the same current pivot.
 
-**Sequential invalidation (#279):** Contained legs are invalidated sequentially (inner first, outer later) because inner.origin < outer.origin. The algorithm checks newly invalidated legs against ALL previously invalidated legs, not just same-bar invalidations.
+**Sequential breach detection (#279, #345):** Contained legs are breached sequentially (inner first, outer later) because inner.origin < outer.origin. The algorithm checks newly breached legs against ALL previously breached legs, not just same-bar breaches.
 
 **Important:** Swing immunity does NOT apply for inner structure pruning. If a leg is structurally inner (contained in a larger structure) and there's an outer-origin leg with the same pivot, the inner leg is redundant regardless of whether it formed a swing (#266).
 
@@ -496,8 +498,8 @@ H1=6100 → L1=5900 → H2=6050 → L2=5950 → H4=6150
          (outer)              (inner)
 
 At H4 (breaks above H1):
-- Bear leg H1→L1 invalidated (outer structure)
-- Bear leg H2→L2 invalidated (inner structure, contained in H1→L1)
+- Bear leg H1→L1 origin breached (outer structure)
+- Bear leg H2→L2 origin breached (inner structure, contained in H1→L1)
 - Bull leg L1→H4 survives (outer-origin)
 - Bull leg L2→H4 PRUNED (inner-origin, reason="inner_structure")
 ```
@@ -848,7 +850,7 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 
 # Detection Config: GET /api/replay/config
 # Returns current detection configuration:
-# - bull/bear: Per-direction thresholds (formation_fib, invalidation_threshold, etc.)
+# - bull/bear: Per-direction thresholds (formation_fib, engulfed_breach_threshold)
 # - stale_extension_threshold: Extension multiplier for stale pruning
 # - origin_range_threshold: Range similarity threshold for origin-proximity pruning (#294)
 # - origin_time_threshold: Time proximity threshold for origin-proximity pruning (#294)
@@ -857,13 +859,14 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 # Updates detection config and re-calibrates from bar 0:
 # Request body (all fields optional):
 # {
-#   "bull": {"formation_fib": 0.382, "invalidation_threshold": 0.382},
-#   "bear": {"formation_fib": 0.382, "invalidation_threshold": 0.382},
+#   "bull": {"formation_fib": 0.382, "engulfed_breach_threshold": 0.0},
+#   "bear": {"formation_fib": 0.382, "engulfed_breach_threshold": 0.0},
 #   "stale_extension_threshold": 3.0,
 #   "origin_range_threshold": 0.05,
 #   "origin_time_threshold": 0.10
 # }
 # Returns updated configuration after re-calibration
+# Note (#345): invalidation_threshold removed; origin breach detected at 0%
 ```
 
 **Reference Layer Integration:**

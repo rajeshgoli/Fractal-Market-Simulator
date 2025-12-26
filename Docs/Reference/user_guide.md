@@ -242,8 +242,8 @@ The Follow Leg feature lets you track specific legs through their complete lifec
   - **F** (formed): Leg transitioned from forming to formed
   - **P** (pruned): Leg removed from active set
   - **E** (engulfed): Both origin and pivot breached
-  - **X** (invalidated): Leg breaches invalidation threshold
-  - **O!** / **P!**: Origin or pivot breached
+  - **O!** (origin breached): Price touched or crossed the leg's origin (#345)
+  - **P!** (pivot breached): Price moved beyond the leg's pivot
 
 **Following constraints:**
 - Maximum 5 legs can be followed simultaneously

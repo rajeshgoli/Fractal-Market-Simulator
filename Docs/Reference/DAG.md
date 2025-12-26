@@ -135,22 +135,28 @@ This can happen immediately on the same bar the leg is created,
 if price has already moved far enough.
 ```
 
-### The 38.2% Invalidation Threshold
+### Origin Breach Detection (#345)
 
-If price breaches the origin by 38.2% of the range, the structure is invalidated.
+When price touches or crosses the origin, the leg's structure is compromised. This is tracked via `max_origin_breach`:
 
 ```
 Example: Bull leg from 3900 (origin) to 3950 (pivot)
-Range = 50 points
 
-Invalidation price = Origin - (38.2% × Range)
-                   = 3900 - (0.382 × 50)
-                   = 3900 - 19.1
-                   = 3880.9
+If price drops to 3899 (below origin of 3900):
+  - max_origin_breach = 1 point
+  - Leg is now "breached" (origin_breached = True)
+  - Pivot stops extending
+  - Swing is invalidated
 
-If price drops to 3880.9, the leg is INVALIDATED.
-The 3950 high is no longer a valid swing reference.
+The 3950 high remains as a historical reference but is no longer
+actively defended.
 ```
+
+**Key behavior after origin breach:**
+- Pivot freezes (no longer extends to new extremes)
+- Leg remains in active_legs for context
+- Can be pruned by engulfed or stale extension mechanisms
+- Cannot form new swings or be a parent for child legs
 
 ---
 
@@ -467,36 +473,35 @@ BEAR LEG INVALIDATION:
                ▼
             Pivot ────►  4518.25
 
-When bar.high ≥ 4525.51, the leg is INVALIDATED.
+When bar.high ≥ 4525.51, the leg's origin is BREACHED.
 The pivot is no longer a valid swing reference.
 ```
 
-### What Happens After Invalidation?
+### What Happens After Origin Breach? (#345)
 
-**Invalidated legs are NOT immediately deleted.** They remain as counter-trend references:
+**Breached legs are NOT immediately deleted.** They remain as counter-trend references:
 
 1. Pivot is frozen (stops extending)
-2. Status changes to 'invalidated'
+2. `max_origin_breach` is set (tracks breach amount)
 3. Leg remains visible for context
-4. Eventually cleaned up by pruning mechanisms
+4. Eventually cleaned up by pruning mechanisms (engulfed, stale extension)
 
-### Real ES Example: Invalidation
+### Real ES Example: Origin Breach
 
 ```
 ES 5-minute: January 3, 2023, 07:00-08:00
 
 Strong selloff during early session:
 
-Bull Leg before invalidation:
+Bull Leg before breach:
   Origin: 3985.50 (LOW at 06:30)
   Pivot: 3989.75 (HIGH at 03:00)
   Range: 4.25 points
 
-Invalidation threshold = 3985.50 - (0.382 × 4.25) = 3983.88
+Bar at 07:20: Low = 3976.50 ← Below origin of 3985.50!
 
-Bar at 07:20: Low = 3976.50 ← Well below 3983.88!
-
-The leg is INVALIDATED.
+Origin breach amount = 3985.50 - 3976.50 = 9 points
+The leg's origin is BREACHED (max_origin_breach = 9).
 The 3989.75 swing high is no longer valid structure.
 Price has broken the pattern — the low was not defended.
 
@@ -924,7 +929,6 @@ All thresholds are configurable. Defaults shown:
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
 | `formation_fib` | 0.236 | Retracement % to confirm swing |
-| `invalidation_threshold` | 0.382 | Origin breach % to invalidate |
 | `engulfed_breach_threshold` | 0.0 | Combined breach % for engulfed deletion (#236) |
 | `origin_range_prune_threshold` | 0.0 | Range similarity % for origin-proximity consolidation (#294) |
 | `origin_time_prune_threshold` | 0.0 | Time proximity % for origin-proximity consolidation (#294) |
@@ -932,7 +936,9 @@ All thresholds are configurable. Defaults shown:
 | `min_branch_ratio` | 0.0 | Branch ratio for origin domination - prevents insignificant child legs (#337) |
 | `min_turn_ratio` | 0.0 | Turn ratio threshold for sibling pruning (threshold mode) (#341, #344) |
 | `max_turns_per_pivot` | 0 | Top-k turn ratio pruning - keep only k highest-ratio legs per pivot (#342, #344) |
-| `stale_extension_threshold` | 3.0 | Prune invalidated child legs at 3x range (root legs preserved) |
+| `stale_extension_threshold` | 3.0 | Prune breached child legs at 3x range (root legs preserved) |
+
+**Note (#345):** Origin breach is detected at 0% (any touch of origin). The old `invalidation_threshold` parameter has been removed. Leg status is now only `'active'` or `'stale'`, with `max_origin_breach` tracking structural invalidation.
 
 Bull and bear can have different configs for asymmetric markets.
 
