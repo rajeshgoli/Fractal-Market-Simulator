@@ -1,22 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 1
 
-**Last Review:** 2025-12-24
+**Last Review:** 2025-12-25
 
 ---
 
 ## Pending Changes
 
-- #334 — Frontend refactor: DAGView and Sidebar decomposition
-- #337 — Branch ratio origin domination (replaces CTR pruning)
-- #338 — Pending origin not updated when leg pivot extends (fixes branch ratio domination)
-- #341 — Turn ratio pruning for sibling legs at shared pivots
-- #342 — Top-k turn ratio pruning mode (alternative to threshold-based)
-- #343 — Replace threshold text inputs with Fib level dropdowns
-- #344 — Exempt largest leg from turn-ratio pruning (fixes #341/#342 edge case)
-- #345 — Remove invalidation_threshold and 'invalidated' status from DAG (use origin breach directly)
-- #333 — Extract shared frontend utilities (barData, legStats, eventType)
+- **#347** — Turn ratio pruning frontend UX: settings persistence fix, max turns to 20, dual-slider controls
 
 ---
 
@@ -24,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 25 | #333-#346 — Frontend refactor, branch ratio, turn ratio, origin breach simplification (10 changes) | All Accepted; docs current |
 | Dec 24 | #322-#335 — Min CTR filter, dead code cleanup, in-app settings, regressions (11 changes) | All Accepted; docs current |
 | Dec 24 | #318-#321 — Counter-trend scoring, session persistence, UX (4 changes) | All Accepted; docs updated |
 | Dec 24 | #305, #309-#316 — UX improvements, API serialization, pruning fix (9 changes) | All Accepted; docs debt updated |
