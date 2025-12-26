@@ -779,7 +779,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
       <div className="flex items-center justify-center h-screen bg-app-bg text-app-text">
         <div className="text-center">
           <div className="animate-spin w-8 h-8 border-2 border-trading-blue border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p>Loading DAG visualization...</p>
+          <p>Loading...</p>
         </div>
       </div>
     );
