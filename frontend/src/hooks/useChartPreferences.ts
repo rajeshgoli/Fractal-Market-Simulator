@@ -7,7 +7,7 @@ const ZOOM_DEBOUNCE_MS = 500; // Debounce zoom saves to avoid performance issues
 
 /**
  * Deep merge saved detection config with defaults to ensure all fields exist.
- * This handles schema evolution when new fields are added (#347).
+ * This handles schema evolution when new fields are added (#347, #355).
  */
 function mergeDetectionConfig(saved: Partial<DetectionConfig> | null): DetectionConfig | null {
   if (!saved) return null;
@@ -20,6 +20,7 @@ function mergeDetectionConfig(saved: Partial<DetectionConfig> | null): Detection
     min_branch_ratio: saved.min_branch_ratio ?? DEFAULT_DETECTION_CONFIG.min_branch_ratio,
     min_turn_ratio: saved.min_turn_ratio ?? DEFAULT_DETECTION_CONFIG.min_turn_ratio,
     max_turns_per_pivot: saved.max_turns_per_pivot ?? DEFAULT_DETECTION_CONFIG.max_turns_per_pivot,
+    max_turns_per_pivot_raw: saved.max_turns_per_pivot_raw ?? DEFAULT_DETECTION_CONFIG.max_turns_per_pivot_raw,
     enable_engulfed_prune: saved.enable_engulfed_prune ?? DEFAULT_DETECTION_CONFIG.enable_engulfed_prune,
   };
 }

@@ -360,6 +360,7 @@ export interface DetectionConfig {
   min_branch_ratio: number;  // Min branch ratio for origin domination (#337, default: 0.0)
   min_turn_ratio: number;  // Min turn ratio for sibling pruning (#341, default: 0.0)
   max_turns_per_pivot: number;  // Top-k turn ratio pruning (#342, default: 0)
+  max_turns_per_pivot_raw: number;  // Top-k raw counter-heft pruning (#355, default: 0)
   // Pruning algorithm toggles
   enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
 }
@@ -382,5 +383,6 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   min_branch_ratio: 0.0,
   min_turn_ratio: 0.0,
   max_turns_per_pivot: 0,
+  max_turns_per_pivot_raw: 0,
   enable_engulfed_prune: true,
 };

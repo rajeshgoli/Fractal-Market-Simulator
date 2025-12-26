@@ -509,14 +509,10 @@ export async function fetchFollowedLegsEvents(
 export interface DetectionConfigUpdateRequest {
   bull?: {
     formation_fib?: number;
-    invalidation_threshold?: number;
-    pivot_breach_threshold?: number;
     engulfed_breach_threshold?: number;
   };
   bear?: {
     formation_fib?: number;
-    invalidation_threshold?: number;
-    pivot_breach_threshold?: number;
     engulfed_breach_threshold?: number;
   };
   stale_extension_threshold?: number;
@@ -525,11 +521,9 @@ export interface DetectionConfigUpdateRequest {
   min_branch_ratio?: number;  // Min branch ratio for origin domination (#337)
   min_turn_ratio?: number;  // Min turn ratio for sibling pruning (#341)
   max_turns_per_pivot?: number;  // Top-k turn ratio pruning (#342)
+  max_turns_per_pivot_raw?: number;  // Top-k raw counter-heft pruning (#355)
   // Pruning algorithm toggles
   enable_engulfed_prune?: boolean;
-  enable_turn_prune?: boolean;
-  enable_pivot_breach_prune?: boolean;
-  enable_domination_prune?: boolean;
 }
 
 /**

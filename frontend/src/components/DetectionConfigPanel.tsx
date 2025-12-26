@@ -104,20 +104,24 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       localConfig.min_branch_ratio !== config.min_branch_ratio ||
       localConfig.min_turn_ratio !== config.min_turn_ratio ||
       localConfig.max_turns_per_pivot !== config.max_turns_per_pivot ||
+      localConfig.max_turns_per_pivot_raw !== config.max_turns_per_pivot_raw ||
       localConfig.enable_engulfed_prune !== config.enable_engulfed_prune
     );
   }, [localConfig, config]);
 
-  // Handle turn ratio slider changes with mutual exclusion (#347)
-  // Setting one slider > 0 automatically zeros the other
-  const handleTurnRatioChange = useCallback((key: 'min_turn_ratio' | 'max_turns_per_pivot', value: number) => {
+  // Handle turn ratio slider changes with mutual exclusion (#347, #355)
+  // Setting one slider > 0 automatically zeros the others
+  const handleTurnRatioChange = useCallback((key: 'min_turn_ratio' | 'max_turns_per_pivot' | 'max_turns_per_pivot_raw', value: number) => {
     setLocalConfig(prev => {
       if (key === 'min_turn_ratio' && value > 0) {
-        // Setting threshold > 0 clears top-k
-        return { ...prev, min_turn_ratio: value, max_turns_per_pivot: 0 };
+        // Setting threshold > 0 clears both top-k modes
+        return { ...prev, min_turn_ratio: value, max_turns_per_pivot: 0, max_turns_per_pivot_raw: 0 };
       } else if (key === 'max_turns_per_pivot' && value > 0) {
-        // Setting top-k > 0 clears threshold
-        return { ...prev, min_turn_ratio: 0, max_turns_per_pivot: value };
+        // Setting top-k ratio > 0 clears threshold and raw mode
+        return { ...prev, min_turn_ratio: 0, max_turns_per_pivot: value, max_turns_per_pivot_raw: 0 };
+      } else if (key === 'max_turns_per_pivot_raw' && value > 0) {
+        // Setting top-k raw > 0 clears threshold and ratio mode
+        return { ...prev, min_turn_ratio: 0, max_turns_per_pivot: 0, max_turns_per_pivot_raw: value };
       } else {
         // Setting to 0 just sets that field
         return { ...prev, [key]: value };
@@ -174,6 +178,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         min_branch_ratio: localConfig.min_branch_ratio,
         min_turn_ratio: localConfig.min_turn_ratio,
         max_turns_per_pivot: localConfig.max_turns_per_pivot,
+        max_turns_per_pivot_raw: localConfig.max_turns_per_pivot_raw,
         // Pruning algorithm toggles
         enable_engulfed_prune: localConfig.enable_engulfed_prune,
       };
@@ -351,14 +356,14 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         </div>
       </div>
 
-      {/* Turn Ratio Pruning (#347) - dual sliders with mutual exclusion */}
+      {/* Turn Ratio Pruning (#347, #355) - three sliders with mutual exclusion */}
       <div className="space-y-2">
         <span className="text-xs font-medium text-app-text">Turn Ratio Pruning</span>
         <div className="pl-4 space-y-3">
           {/* Min turn ratio slider (threshold mode) */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-app-muted" title="Min turn ratio threshold (counter-leg range / leg range). Setting > 0 disables Max Turns.">
+              <span className="text-xs text-app-muted" title="Min turn ratio threshold (counter-leg range / leg range). Setting > 0 disables other modes.">
                 Min Ratio %
               </span>
               <span className={`text-xs font-mono ${(localConfig.min_turn_ratio ?? 0) > 0 ? 'text-trading-blue' : 'text-app-muted'}`}>
@@ -378,10 +383,10 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
             />
           </div>
 
-          {/* Max turns slider (top-k mode) */}
+          {/* Max turns slider (top-k by ratio mode) */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-app-muted" title="Keep only top k legs per pivot by turn ratio. Setting > 0 disables Min Ratio.">
+              <span className="text-xs text-app-muted" title="Keep only top k legs per pivot by turn ratio. Setting > 0 disables other modes.">
                 Max Turns
               </span>
               <span className={`text-xs font-mono ${(localConfig.max_turns_per_pivot ?? 0) > 0 ? 'text-trading-blue' : 'text-app-muted'}`}>
@@ -397,6 +402,29 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
               onChange={(e) => handleTurnRatioChange('max_turns_per_pivot', parseInt(e.target.value))}
               className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
               style={{ accentColor: (localConfig.max_turns_per_pivot ?? 0) > 0 ? 'rgb(59, 130, 246)' : 'rgb(107, 114, 128)' }}
+              disabled={isUpdating}
+            />
+          </div>
+
+          {/* Max heft slider (top-k by raw counter-heft mode, #355) */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-app-muted" title="Keep only top k legs per pivot by raw counter-leg range (ignores ratio). Setting > 0 disables other modes.">
+                Max Heft
+              </span>
+              <span className={`text-xs font-mono ${(localConfig.max_turns_per_pivot_raw ?? 0) > 0 ? 'text-trading-blue' : 'text-app-muted'}`}>
+                {(localConfig.max_turns_per_pivot_raw ?? 0) === 0 ? 'off' : localConfig.max_turns_per_pivot_raw}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={20}
+              step={1}
+              value={localConfig.max_turns_per_pivot_raw ?? 0}
+              onChange={(e) => handleTurnRatioChange('max_turns_per_pivot_raw', parseInt(e.target.value))}
+              className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
+              style={{ accentColor: (localConfig.max_turns_per_pivot_raw ?? 0) > 0 ? 'rgb(59, 130, 246)' : 'rgb(107, 114, 128)' }}
               disabled={isUpdating}
             />
           </div>

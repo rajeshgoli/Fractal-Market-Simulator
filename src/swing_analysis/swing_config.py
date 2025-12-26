@@ -104,12 +104,19 @@ class SwingConfig:
     min_turn_ratio: float = 0.0
     # Top-k turn ratio pruning (#342): alternative to threshold-based pruning
     # When > 0, keeps only the k highest turn-ratio legs at each pivot.
-    # Mutually exclusive with min_turn_ratio:
-    #   - If min_turn_ratio > 0, uses threshold mode (ignores max_turns_per_pivot)
-    #   - If min_turn_ratio == 0 and max_turns_per_pivot > 0, uses top-k mode
-    #   - If both are 0, turn ratio pruning is disabled
+    # Mutually exclusive with min_turn_ratio and max_turns_per_pivot_raw:
+    #   - If min_turn_ratio > 0, uses threshold mode (ignores others)
+    #   - If min_turn_ratio == 0 and max_turns_per_pivot > 0, uses top-k by ratio mode
+    #   - If both are 0 and max_turns_per_pivot_raw > 0, uses top-k by raw counter-heft
+    #   - If all are 0, turn ratio pruning is disabled
     # Default 0 (disabled). Set > 0 to enable top-k mode.
     max_turns_per_pivot: int = 0
+    # Top-k raw counter-heft pruning (#355): alternative to ratio-based pruning
+    # When > 0, keeps only the k highest _max_counter_leg_range legs at each pivot.
+    # Uses raw counter-leg range instead of ratio for sorting.
+    # Mutually exclusive with min_turn_ratio and max_turns_per_pivot.
+    # Default 0 (disabled). Set > 0 to enable raw counter-heft mode.
+    max_turns_per_pivot_raw: int = 0
     stale_extension_threshold: float = 3.0
     emit_level_crosses: bool = False
     # Pruning algorithm toggles (#288)
@@ -143,6 +150,7 @@ class SwingConfig:
             min_branch_ratio=self.min_branch_ratio,
             min_turn_ratio=self.min_turn_ratio,
             max_turns_per_pivot=self.max_turns_per_pivot,
+            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -165,6 +173,7 @@ class SwingConfig:
             min_branch_ratio=self.min_branch_ratio,
             min_turn_ratio=self.min_turn_ratio,
             max_turns_per_pivot=self.max_turns_per_pivot,
+            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -213,6 +222,7 @@ class SwingConfig:
             min_branch_ratio=self.min_branch_ratio,
             min_turn_ratio=self.min_turn_ratio,
             max_turns_per_pivot=self.max_turns_per_pivot,
+            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -238,6 +248,7 @@ class SwingConfig:
             min_branch_ratio=self.min_branch_ratio,
             min_turn_ratio=self.min_turn_ratio,
             max_turns_per_pivot=self.max_turns_per_pivot,
+            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -263,6 +274,7 @@ class SwingConfig:
             min_branch_ratio=self.min_branch_ratio,
             min_turn_ratio=self.min_turn_ratio,
             max_turns_per_pivot=self.max_turns_per_pivot,
+            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -290,6 +302,7 @@ class SwingConfig:
             min_branch_ratio=self.min_branch_ratio,
             min_turn_ratio=self.min_turn_ratio,
             max_turns_per_pivot=self.max_turns_per_pivot,
+            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
@@ -316,6 +329,7 @@ class SwingConfig:
             min_branch_ratio=min_branch_ratio,
             min_turn_ratio=self.min_turn_ratio,
             max_turns_per_pivot=self.max_turns_per_pivot,
+            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -343,6 +357,7 @@ class SwingConfig:
             min_branch_ratio=self.min_branch_ratio,
             min_turn_ratio=min_turn_ratio,
             max_turns_per_pivot=self.max_turns_per_pivot,
+            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
@@ -368,6 +383,35 @@ class SwingConfig:
             min_branch_ratio=self.min_branch_ratio,
             min_turn_ratio=self.min_turn_ratio,
             max_turns_per_pivot=max_turns_per_pivot,
+            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
+            stale_extension_threshold=self.stale_extension_threshold,
+            emit_level_crosses=self.emit_level_crosses,
+            enable_engulfed_prune=self.enable_engulfed_prune,
+        )
+
+    def with_max_turns_per_pivot_raw(self, max_turns_per_pivot_raw: int) -> "SwingConfig":
+        """
+        Create a new config with modified max turns per pivot (raw mode) (#355).
+
+        Since SwingConfig is frozen, this creates a new instance.
+
+        Args:
+            max_turns_per_pivot_raw: Maximum number of legs to keep at each pivot
+                in raw counter-heft mode. Only active when min_turn_ratio == 0
+                and max_turns_per_pivot == 0.
+                Sorts by raw _max_counter_leg_range instead of ratio.
+                0 disables raw counter-heft mode.
+        """
+        return SwingConfig(
+            bull=self.bull,
+            bear=self.bear,
+            origin_range_prune_threshold=self.origin_range_prune_threshold,
+            origin_time_prune_threshold=self.origin_time_prune_threshold,
+            proximity_prune_strategy=self.proximity_prune_strategy,
+            min_branch_ratio=self.min_branch_ratio,
+            min_turn_ratio=self.min_turn_ratio,
+            max_turns_per_pivot=self.max_turns_per_pivot,
+            max_turns_per_pivot_raw=max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
             emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,

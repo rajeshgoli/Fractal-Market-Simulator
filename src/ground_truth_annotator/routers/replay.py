@@ -1842,6 +1842,10 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     if request.max_turns_per_pivot is not None:
         new_config = new_config.with_max_turns_per_pivot(request.max_turns_per_pivot)
 
+    # Apply max turns per pivot raw for raw counter-heft mode (#355)
+    if request.max_turns_per_pivot_raw is not None:
+        new_config = new_config.with_max_turns_per_pivot_raw(request.max_turns_per_pivot_raw)
+
     # Apply pruning algorithm toggles
     if request.enable_engulfed_prune is not None:
         new_config = new_config.with_prune_toggles(
@@ -1876,6 +1880,7 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         min_branch_ratio=new_config.min_branch_ratio,
         min_turn_ratio=new_config.min_turn_ratio,
         max_turns_per_pivot=new_config.max_turns_per_pivot,
+        max_turns_per_pivot_raw=new_config.max_turns_per_pivot_raw,
         enable_engulfed_prune=new_config.enable_engulfed_prune,
     )
 
@@ -1916,5 +1921,6 @@ async def get_detection_config():
         min_branch_ratio=config.min_branch_ratio,
         min_turn_ratio=config.min_turn_ratio,
         max_turns_per_pivot=config.max_turns_per_pivot,
+        max_turns_per_pivot_raw=config.max_turns_per_pivot_raw,
         enable_engulfed_prune=config.enable_engulfed_prune,
     )

@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-25
 
@@ -8,9 +8,7 @@
 
 ## Pending Changes
 
-- **#349** — Frontend cleanup: remove dead code (ViewMode, CalibrationDataHierarchical), fix misleading names, refactor jumpToNextEvent
-- **#348** — Remove inner structure pruning: deleted feature code, tests, and docs
-- **#347** — Turn ratio pruning frontend UX: settings persistence fix, max turns to 20, dual-slider controls
+- #355: Raw counter-heft mode for turn ratio pruning
 
 ---
 
@@ -18,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 25 | #347-#349 — Turn ratio UX, inner structure removal, frontend cleanup (3 changes) | All Accepted; dead feature deleted, docs current |
 | Dec 25 | #333-#346 — Frontend refactor, branch ratio, turn ratio, origin breach simplification (10 changes) | All Accepted; docs current |
 | Dec 24 | #322-#335 — Min CTR filter, dead code cleanup, in-app settings, regressions (11 changes) | All Accepted; docs current |
 | Dec 24 | #318-#321 — Counter-trend scoring, session persistence, UX (4 changes) | All Accepted; docs updated |
