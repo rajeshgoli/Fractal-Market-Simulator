@@ -97,8 +97,8 @@ export const MarketStructurePanel: React.FC<MarketStructurePanelProps> = ({
                 <span className="text-trading-bull font-medium">{legStats.formed}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-app-muted">Invalidated</span>
-                <span className="text-trading-bear font-medium">{legStats.invalidated}</span>
+                <span className="text-app-muted">Turn</span>
+                <span className="text-app-text font-medium">{legStats.turnRatio}</span>
               </div>
             </div>
             <div className="space-y-0.5">

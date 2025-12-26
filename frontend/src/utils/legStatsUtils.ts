@@ -10,11 +10,11 @@ import { DagLeg } from '../lib/api';
  * Statistics breakdown for legs.
  */
 export interface LegStats {
-  invalidated: number;    // Origin breach count
   engulfed: number;       // Engulfed prune count
   staleExtension: number; // Stale/extension prune count
   proximity: number;      // Proximity prune count
-  minCtr: number;         // Branch ratio domination count
+  minCtr: number;         // Min counter-trend ratio prune count
+  turnRatio: number;      // Turn ratio prune count
   formed: number;         // Currently formed legs
 }
 
@@ -29,19 +29,17 @@ export function calculateLegStats(
   activeLegs: (ActiveLeg | DagLeg)[]
 ): LegStats {
   const stats: LegStats = {
-    invalidated: 0,
     engulfed: 0,
     staleExtension: 0,
     proximity: 0,
     minCtr: 0,
+    turnRatio: 0,
     formed: 0,
   };
 
   // Count from events
   for (const event of legEvents) {
-    if (event.type === 'ORIGIN_BREACHED') {
-      stats.invalidated++;  // Count origin breaches as "invalidated" for stats
-    } else if (event.type === 'LEG_PRUNED' && event.reason) {
+    if (event.type === 'LEG_PRUNED' && event.reason) {
       const reason = event.reason.toLowerCase();
       if (reason.includes('engulfed')) {
         stats.engulfed++;
@@ -49,8 +47,10 @@ export function calculateLegStats(
         stats.staleExtension++;
       } else if (reason.includes('proximity')) {
         stats.proximity++;
-      } else if (reason.includes('branch_ratio') || reason.includes('dominated')) {
-        stats.minCtr++;  // Repurposed for branch ratio domination
+      } else if (reason.includes('counter_trend') || reason.includes('counter-trend')) {
+        stats.minCtr++;  // Min counter-trend ratio prune
+      } else if (reason.includes('turn_ratio')) {
+        stats.turnRatio++;  // Turn ratio prune (threshold, top-k, or raw modes)
       }
     }
   }
