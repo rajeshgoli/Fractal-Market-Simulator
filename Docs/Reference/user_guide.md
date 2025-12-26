@@ -62,6 +62,43 @@ Click the **gear icon** in the header to access the Settings panel at any time. 
 
 Changes take effect immediately after restart. Session settings persist across browser sessions.
 
+### Detection Config Panel
+
+The Detection Config panel in the sidebar controls the leg detection algorithm parameters. All settings persist across browser sessions.
+
+#### Turn Ratio Pruning (#347)
+
+Turn ratio pruning limits the number of sibling legs sharing the same pivot. Two mutually exclusive modes are available via dual sliders:
+
+| Slider | Range | Effect |
+|--------|-------|--------|
+| **Min Ratio %** | 0-50% | Prune legs with turn ratio (counter-trend / leg range) below threshold |
+| **Max Turns** | 0-20 | Keep only top-k legs per pivot by turn ratio |
+
+**Mutual exclusion:** Setting one slider > 0 automatically zeros the other. Both at 0 = disabled.
+
+**When to use which:**
+- **Min Ratio %**: Filter out weak retracements regardless of quantity
+- **Max Turns**: Limit maximum concurrent legs per pivot, keeping strongest
+
+#### Other Parameters
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| Stale Extension | 1.0-5.0x | Extension multiple for stale pruning |
+| Origin Range % | 0-10% | Range similarity threshold for origin-proximity pruning |
+| Origin Time % | 0-10% | Time proximity threshold for origin-proximity pruning |
+| Branch Ratio | 0-20% | Min ratio of child counter-trend to parent counter-trend |
+
+#### Pruning Algorithm Toggles
+
+| Toggle | Description |
+|--------|-------------|
+| Engulfed | Delete legs breached on both origin and pivot sides |
+| Inner Structure | Prune legs with same pivot as parent |
+
+Click **Apply** to send changes to the backend. Changes take effect immediately on the current session.
+
 ### Process Till
 
 Use the "Till" input in the playback controls to quickly advance to a specific CSV index:

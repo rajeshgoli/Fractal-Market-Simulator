@@ -452,9 +452,15 @@ When a new leg forms at origin O, counter-legs with pivot == O are checked.
 
 Configuration:
 - `SwingConfig.min_turn_ratio` (default: 0.0 = disabled)
-- `SwingConfig.max_turns_per_pivot` (default: 0 = disabled)
+- `SwingConfig.max_turns_per_pivot` (default: 0 = disabled, max: 20)
 
 If both are 0, turn ratio pruning is disabled. If `min_turn_ratio > 0`, threshold mode is used (ignoring `max_turns_per_pivot`).
+
+**Frontend controls (#347):** Two mutually exclusive sliders in the Detection Config panel:
+- **Min Ratio %** (0-50%): Setting > 0 auto-zeros Max Turns
+- **Max Turns** (0-20): Setting > 0 auto-zeros Min Ratio
+
+Both at 0 = disabled. No explicit Off button needed.
 
 **Why pivot grouping is required:** Legs with different pivots can validly have newer legs with larger ranges (e.g., a leg that found a better origin AND a later pivot). Cross-pivot comparisons would incorrectly flag this as invalid.
 
@@ -713,6 +719,18 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `Sidebar.tsx` | Event filters, feedback input, attachment display |
 | `useForwardPlayback.ts` | Forward-only playback (step back via backend API) |
 | `useHierarchyMode.ts` | Hierarchy exploration state management (#250) |
+| `useChartPreferences.ts` | Settings persistence to localStorage |
+| `useDAGViewState.ts` | DAG view consolidated state management |
+
+**Settings Persistence (#347):**
+
+`useChartPreferences` persists user settings to localStorage, including:
+- Chart aggregation scales, zoom levels, maximized state
+- Speed multiplier and aggregation
+- Linger enabled/event states
+- Detection config (full `DetectionConfig` object)
+
+Schema evolution is handled via `mergeDetectionConfig()`, which deep-merges saved config with `DEFAULT_DETECTION_CONFIG` to ensure new fields (like `min_turn_ratio`, `max_turns_per_pivot`) have defaults when loading older saved configs.
 
 **Backward Navigation:**
 

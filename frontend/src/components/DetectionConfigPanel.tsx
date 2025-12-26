@@ -22,8 +22,10 @@ const GLOBAL_SLIDERS: SliderConfig[] = [
   { key: 'min_branch_ratio', label: 'Branch Ratio', min: 0.0, max: 0.20, step: 0.01, description: 'Min ratio of child counter-trend to parent counter-trend for origin domination', displayAsPercent: true, colorMode: 'restrictive-right' },
 ];
 
-// Turn ratio mode options (#342)
-type TurnRatioMode = 'disabled' | 'threshold' | 'topk';
+// Turn ratio mode is now implicit based on slider values (#347):
+// - min_turn_ratio > 0: threshold mode
+// - max_turns_per_pivot > 0: top-k mode
+// - both 0: disabled
 
 // Toggle configurations for pruning algorithms
 interface ToggleConfig {
@@ -108,24 +110,19 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
     );
   }, [localConfig, config]);
 
-  // Determine current turn ratio mode based on config values (#342)
-  const turnRatioMode: TurnRatioMode = useMemo(() => {
-    if (localConfig.min_turn_ratio > 0) return 'threshold';
-    if (localConfig.max_turns_per_pivot > 0) return 'topk';
-    return 'disabled';
-  }, [localConfig.min_turn_ratio, localConfig.max_turns_per_pivot]);
-
-  // Handle turn ratio mode change (#342)
-  const handleTurnRatioModeChange = useCallback((mode: TurnRatioMode) => {
+  // Handle turn ratio slider changes with mutual exclusion (#347)
+  // Setting one slider > 0 automatically zeros the other
+  const handleTurnRatioChange = useCallback((key: 'min_turn_ratio' | 'max_turns_per_pivot', value: number) => {
     setLocalConfig(prev => {
-      if (mode === 'disabled') {
-        return { ...prev, min_turn_ratio: 0, max_turns_per_pivot: 0 };
-      } else if (mode === 'threshold') {
-        // Switch to threshold mode: set default threshold, clear top-k
-        return { ...prev, min_turn_ratio: 0.10, max_turns_per_pivot: 0 };
+      if (key === 'min_turn_ratio' && value > 0) {
+        // Setting threshold > 0 clears top-k
+        return { ...prev, min_turn_ratio: value, max_turns_per_pivot: 0 };
+      } else if (key === 'max_turns_per_pivot' && value > 0) {
+        // Setting top-k > 0 clears threshold
+        return { ...prev, min_turn_ratio: 0, max_turns_per_pivot: value };
       } else {
-        // Switch to top-k mode: set default k, clear threshold
-        return { ...prev, min_turn_ratio: 0, max_turns_per_pivot: 3 };
+        // Setting to 0 just sets that field
+        return { ...prev, [key]: value };
       }
     });
     setError(null);
@@ -357,77 +354,55 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         </div>
       </div>
 
-      {/* Turn Ratio Mode (#342) */}
+      {/* Turn Ratio Pruning (#347) - dual sliders with mutual exclusion */}
       <div className="space-y-2">
         <span className="text-xs font-medium text-app-text">Turn Ratio Pruning</span>
-        <div className="pl-4 space-y-2">
-          {/* Mode selector */}
-          <div className="flex gap-1">
-            {(['disabled', 'threshold', 'topk'] as TurnRatioMode[]).map(mode => (
-              <button
-                key={mode}
-                onClick={() => handleTurnRatioModeChange(mode)}
-                disabled={isUpdating}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
-                  turnRatioMode === mode
-                    ? 'bg-trading-blue text-white'
-                    : 'bg-app-border text-app-muted hover:text-white'
-                }`}
-              >
-                {mode === 'disabled' ? 'Off' : mode === 'threshold' ? '%' : 'Top-k'}
-              </button>
-            ))}
+        <div className="pl-4 space-y-3">
+          {/* Min turn ratio slider (threshold mode) */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-app-muted" title="Min turn ratio threshold (counter-leg range / leg range). Setting > 0 disables Max Turns.">
+                Min Ratio %
+              </span>
+              <span className={`text-xs font-mono ${(localConfig.min_turn_ratio ?? 0) > 0 ? 'text-trading-blue' : 'text-app-muted'}`}>
+                {(localConfig.min_turn_ratio ?? 0) === 0 ? 'off' : `${Math.round((localConfig.min_turn_ratio ?? 0) * 100)}%`}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={0.50}
+              step={0.01}
+              value={localConfig.min_turn_ratio ?? 0}
+              onChange={(e) => handleTurnRatioChange('min_turn_ratio', parseFloat(e.target.value))}
+              className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
+              style={{ accentColor: (localConfig.min_turn_ratio ?? 0) > 0 ? 'rgb(59, 130, 246)' : 'rgb(107, 114, 128)' }}
+              disabled={isUpdating}
+            />
           </div>
 
-          {/* Threshold slider (visible when threshold mode) */}
-          {turnRatioMode === 'threshold' && (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-app-muted" title="Min turn ratio for sibling pruning (counter-leg range / leg range)">
-                  Turn Ratio %
-                </span>
-                <span className="text-xs font-mono text-trading-blue">
-                  {Math.round((localConfig.min_turn_ratio ?? 0) * 100)}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0.01}
-                max={0.50}
-                step={0.01}
-                value={localConfig.min_turn_ratio ?? 0.10}
-                onChange={(e) => handleSliderChange('global', 'min_turn_ratio', parseFloat(e.target.value))}
-                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
-                style={{ accentColor: 'rgb(59, 130, 246)' }}
-                disabled={isUpdating}
-              />
+          {/* Max turns slider (top-k mode) */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-app-muted" title="Keep only top k legs per pivot by turn ratio. Setting > 0 disables Min Ratio.">
+                Max Turns
+              </span>
+              <span className={`text-xs font-mono ${(localConfig.max_turns_per_pivot ?? 0) > 0 ? 'text-trading-blue' : 'text-app-muted'}`}>
+                {(localConfig.max_turns_per_pivot ?? 0) === 0 ? 'off' : localConfig.max_turns_per_pivot}
+              </span>
             </div>
-          )}
-
-          {/* Top-k slider (visible when top-k mode) */}
-          {turnRatioMode === 'topk' && (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-app-muted" title="Keep only top k legs per pivot by turn ratio">
-                  Max Turns
-                </span>
-                <span className="text-xs font-mono text-trading-blue">
-                  {localConfig.max_turns_per_pivot ?? 3}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={10}
-                step={1}
-                value={localConfig.max_turns_per_pivot ?? 3}
-                onChange={(e) => handleSliderChange('global', 'max_turns_per_pivot', parseInt(e.target.value))}
-                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
-                style={{ accentColor: 'rgb(59, 130, 246)' }}
-                disabled={isUpdating}
-              />
-            </div>
-          )}
+            <input
+              type="range"
+              min={0}
+              max={20}
+              step={1}
+              value={localConfig.max_turns_per_pivot ?? 0}
+              onChange={(e) => handleTurnRatioChange('max_turns_per_pivot', parseInt(e.target.value))}
+              className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
+              style={{ accentColor: (localConfig.max_turns_per_pivot ?? 0) > 0 ? 'rgb(59, 130, 246)' : 'rgb(107, 114, 128)' }}
+              disabled={isUpdating}
+            />
+          </div>
         </div>
       </div>
 

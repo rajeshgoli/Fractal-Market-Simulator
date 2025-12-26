@@ -1,9 +1,29 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { AggregationScale, DetectionConfig } from '../types';
+import { AggregationScale, DetectionConfig, DEFAULT_DETECTION_CONFIG } from '../types';
 import { LogicalRange } from 'lightweight-charts';
 
 const STORAGE_KEY = 'chart-preferences';
 const ZOOM_DEBOUNCE_MS = 500; // Debounce zoom saves to avoid performance issues
+
+/**
+ * Deep merge saved detection config with defaults to ensure all fields exist.
+ * This handles schema evolution when new fields are added (#347).
+ */
+function mergeDetectionConfig(saved: Partial<DetectionConfig> | null): DetectionConfig | null {
+  if (!saved) return null;
+  return {
+    bull: { ...DEFAULT_DETECTION_CONFIG.bull, ...saved.bull },
+    bear: { ...DEFAULT_DETECTION_CONFIG.bear, ...saved.bear },
+    stale_extension_threshold: saved.stale_extension_threshold ?? DEFAULT_DETECTION_CONFIG.stale_extension_threshold,
+    origin_range_threshold: saved.origin_range_threshold ?? DEFAULT_DETECTION_CONFIG.origin_range_threshold,
+    origin_time_threshold: saved.origin_time_threshold ?? DEFAULT_DETECTION_CONFIG.origin_time_threshold,
+    min_branch_ratio: saved.min_branch_ratio ?? DEFAULT_DETECTION_CONFIG.min_branch_ratio,
+    min_turn_ratio: saved.min_turn_ratio ?? DEFAULT_DETECTION_CONFIG.min_turn_ratio,
+    max_turns_per_pivot: saved.max_turns_per_pivot ?? DEFAULT_DETECTION_CONFIG.max_turns_per_pivot,
+    enable_engulfed_prune: saved.enable_engulfed_prune ?? DEFAULT_DETECTION_CONFIG.enable_engulfed_prune,
+    enable_inner_structure_prune: saved.enable_inner_structure_prune ?? DEFAULT_DETECTION_CONFIG.enable_inner_structure_prune,
+  };
+}
 
 // Store linger event enabled states as a simple record
 type LingerEventStates = Record<string, boolean>;
@@ -47,6 +67,8 @@ function loadPreferences(): ChartPreferences {
       return {
         ...DEFAULT_PREFERENCES,
         ...parsed,
+        // Deep merge detection config to handle schema evolution (#347)
+        detectionConfig: mergeDetectionConfig(parsed.detectionConfig),
       };
     }
   } catch (e) {
