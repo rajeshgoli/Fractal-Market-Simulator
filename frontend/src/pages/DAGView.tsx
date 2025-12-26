@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { IChartApi, ISeriesApi, createSeriesMarkers, Time, ISeriesMarkersPluginApi } from 'lightweight-charts';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { Header } from '../components/Header';
-import { Sidebar, DAG_LINGER_EVENTS, LingerEventConfig, DagContext } from '../components/Sidebar';
+import { Sidebar, DAG_LINGER_EVENTS } from '../components/Sidebar';
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
-import { DAGStatePanel, AttachableItem } from '../components/DAGStatePanel';
+import { DAGStatePanel } from '../components/DAGStatePanel';
 import { ResizeHandle } from '../components/ResizeHandle';
 import { LegOverlay } from '../components/LegOverlay';
 import { PendingOriginsOverlay } from '../components/PendingOriginsOverlay';
@@ -17,6 +16,7 @@ import { useHierarchyMode } from '../hooks/useHierarchyMode';
 import { useFollowLeg, LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
 import { useChartPreferences } from '../hooks/useChartPreferences';
 import { useSessionSettings } from '../hooks/useSessionSettings';
+import { useDAGViewState } from '../hooks/useDAGViewState';
 import {
   fetchBars,
   fetchSession,
@@ -25,15 +25,12 @@ import {
   fetchDetectionConfig,
   restartSession,
   advanceReplay,
-  DagStateResponse,
-  DagLeg,
 } from '../lib/api';
 import { formatReplayBarsData } from '../utils/barDataUtils';
 import { LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
   AggregationScale,
-  CalibrationData,
   CalibrationPhase,
   PlaybackState,
   parseResolutionToMinutes,
@@ -41,53 +38,10 @@ import {
   getAggregationMinutes,
   getSmallestValidAggregation,
   clampAggregationToSource,
-  ActiveLeg,
   LegEvent,
-  HighlightedDagItem,
-  DetectionConfig,
-  DEFAULT_DETECTION_CONFIG,
 } from '../types';
 import { ViewMode } from '../App';
 
-/**
- * Convert DagLeg from API to ActiveLeg for visualization.
- * The API returns csv_index values (#300), so we subtract windowOffset
- * to get local bar indices for chart rendering.
- */
-function dagLegToActiveLeg(leg: DagLeg, windowOffset: number = 0): ActiveLeg {
-  return {
-    leg_id: leg.leg_id,
-    direction: leg.direction,
-    pivot_price: leg.pivot_price,
-    pivot_index: leg.pivot_index - windowOffset,  // Convert csv_index to local bar index
-    origin_price: leg.origin_price,
-    origin_index: leg.origin_index - windowOffset,  // Convert csv_index to local bar index
-    retracement_pct: leg.retracement_pct,
-    formed: leg.formed,
-    status: leg.status as 'active' | 'stale',  // #345: Only active/stale now
-    origin_breached: leg.origin_breached,
-    bar_count: leg.bar_count,
-    impulsiveness: leg.impulsiveness,
-    spikiness: leg.spikiness,
-    parent_leg_id: leg.parent_leg_id,
-    swing_id: leg.swing_id,
-    // Segment impulse tracking (#307)
-    impulse_to_deepest: leg.impulse_to_deepest,
-    impulse_back: leg.impulse_back,
-    net_segment_impulse: leg.net_segment_impulse,
-  };
-}
-
-/**
- * DAGView - Visualization mode for watching the DAG build in real-time.
- *
- * This view focuses on leg visualization (pre-formation candidates) rather than
- * formed swings. It shows:
- * - Active legs drawn as lines from pivot to origin
- * - Bull legs colored blue, bear legs colored red
- * - Stale legs shown dashed/yellow
- * - DAG internal state panel (legs, orphaned origins, pending origins)
- */
 interface DAGViewProps {
   currentMode: ViewMode;
   onModeChange: (mode: ViewMode) => void;
@@ -95,218 +49,230 @@ interface DAGViewProps {
 
 export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) => {
   // Chart and speed preferences (persisted to localStorage)
-  const {
-    chart1Aggregation,
-    chart2Aggregation,
-    speedMultiplier,
-    speedAggregation,
-    chart1Zoom,
-    chart2Zoom,
-    maximizedChart,
-    explanationPanelHeight,
-    detectionConfig: savedDetectionConfig,
-    lingerEnabled: savedLingerEnabled,
-    dagLingerEvents: savedLingerEvents,
-    setChart1Aggregation,
-    setChart2Aggregation,
-    setSpeedMultiplier,
-    setSpeedAggregation,
-    setChart1Zoom,
-    setChart2Zoom,
-    setMaximizedChart,
-    setExplanationPanelHeight,
-    setDetectionConfig: saveDetectionConfig,
-    setLingerEnabled: saveLingerEnabled,
-    setDagLingerEvents: saveLingerEvents,
-  } = useChartPreferences();
+  const chartPrefs = useChartPreferences();
 
-  // Session settings (persisted to localStorage) - #326
+  // Session settings (persisted to localStorage)
   const sessionSettings = useSessionSettings();
 
-  // Settings panel state (#327)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [dataFileName, setDataFileName] = useState<string>('');
+  // DAG View state (consolidated state management)
+  const state = useDAGViewState({
+    savedLingerEnabled: chartPrefs.lingerEnabled,
+    savedLingerEvents: chartPrefs.dagLingerEvents,
+    saveLingerEnabled: chartPrefs.setLingerEnabled,
+    saveLingerEvents: chartPrefs.setDagLingerEvents,
+    savedDetectionConfig: chartPrefs.detectionConfig,
+    saveDetectionConfig: chartPrefs.setDetectionConfig,
+  });
 
   // Handle panel resize
   const handlePanelResize = useCallback((deltaY: number) => {
-    setExplanationPanelHeight(Math.max(100, Math.min(600, explanationPanelHeight + deltaY)));
-  }, [explanationPanelHeight, setExplanationPanelHeight]);
+    chartPrefs.setExplanationPanelHeight(
+      Math.max(100, Math.min(600, chartPrefs.explanationPanelHeight + deltaY))
+    );
+  }, [chartPrefs.explanationPanelHeight, chartPrefs.setExplanationPanelHeight]);
 
-  // Source resolution (derived from data, not persisted)
-  const [sourceResolutionMinutes, setSourceResolutionMinutes] = useState<number>(5);
+  // Compute available speed aggregation options
+  const availableSpeedAggregations = useMemo(() => {
+    const options: { value: AggregationScale; label: string }[] = [];
+    const seen = new Set<AggregationScale>();
 
-  // Data state
-  const [sourceBars, setSourceBars] = useState<BarData[]>([]);
-  const [calibrationBars, setCalibrationBars] = useState<BarData[]>([]);
-  const [chart1Bars, setChart1Bars] = useState<BarData[]>([]);
-  const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+    if (!seen.has(chartPrefs.chart1Aggregation)) {
+      options.push({ value: chartPrefs.chart1Aggregation, label: getAggregationLabel(chartPrefs.chart1Aggregation) });
+      seen.add(chartPrefs.chart1Aggregation);
+    }
 
-  // Session metadata
-  const [sessionInfo, setSessionInfo] = useState<{
-    windowOffset: number;
-    totalSourceBars: number;
-  } | null>(null);
+    if (!seen.has(chartPrefs.chart2Aggregation)) {
+      options.push({ value: chartPrefs.chart2Aggregation, label: getAggregationLabel(chartPrefs.chart2Aggregation) });
+      seen.add(chartPrefs.chart2Aggregation);
+    }
 
-  // Calibration state
-  const [calibrationPhase, setCalibrationPhase] = useState<CalibrationPhase>(CalibrationPhase.NOT_STARTED);
-  const [calibrationData, setCalibrationData] = useState<CalibrationData | null>(null);
+    return options;
+  }, [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation]);
 
-  // DAG state
-  const [dagState, setDagState] = useState<DagStateResponse | null>(null);
-  const [recentLegEvents, setRecentLegEvents] = useState<LegEvent[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [isDagLoading, _setIsDagLoading] = useState(false);
+  // Calculate bars per advance (aggregation factor)
+  const aggregationBarsPerAdvance = useMemo(() => {
+    const aggMinutes = getAggregationMinutes(chartPrefs.speedAggregation);
+    return Math.max(1, Math.round(aggMinutes / state.sourceResolutionMinutes));
+  }, [chartPrefs.speedAggregation, state.sourceResolutionMinutes]);
 
-  // Hover highlighting state for DAG items
-  const [highlightedDagItem, setHighlightedDagItem] = useState<HighlightedDagItem | null>(null);
+  // Calculate playback interval and speed compensation
+  const MIN_INTERVAL_MS = 50;
+  const { effectivePlaybackIntervalMs, barsPerAdvance } = useMemo(() => {
+    const rawIntervalMs = 1000 / chartPrefs.speedMultiplier;
+    const speedCompensationMultiplier = rawIntervalMs < MIN_INTERVAL_MS
+      ? Math.ceil(MIN_INTERVAL_MS / rawIntervalMs)
+      : 1;
+    return {
+      effectivePlaybackIntervalMs: Math.max(MIN_INTERVAL_MS, Math.round(rawIntervalMs)),
+      barsPerAdvance: aggregationBarsPerAdvance * speedCompensationMultiplier,
+    };
+  }, [chartPrefs.speedMultiplier, aggregationBarsPerAdvance]);
 
-  // Focus state for chart-clicked leg (scrolls panel to leg)
-  const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
+  // Handler for aggregated bars from API response
+  const handleAggregatedBarsChange = useCallback((aggBars: import('../lib/api').AggregatedBarsResponse) => {
+    const chart1Bars = aggBars[chartPrefs.chart1Aggregation as keyof typeof aggBars];
+    const chart2Bars = aggBars[chartPrefs.chart2Aggregation as keyof typeof aggBars];
+    if (chart1Bars) state.setChart1Bars(chart1Bars);
+    if (chart2Bars) state.setChart2Bars(chart2Bars);
+  }, [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation, state.setChart1Bars, state.setChart2Bars]);
 
-  // Linger toggle state - initialized from saved preferences (DAG mode defaults to OFF if no saved pref)
-  const [lingerEnabled, setLingerEnabledState] = useState(savedLingerEnabled);
+  // Handler for DAG state from API response
+  const handleDagStateChange = useCallback((dagState: import('../lib/api').DagStateResponse) => {
+    state.setDagState(dagState);
+  }, [state.setDagState]);
 
-  // Wrap setLingerEnabled to also save to preferences
-  const setLingerEnabled = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
-    setLingerEnabledState(prev => {
-      const newValue = typeof value === 'function' ? value(prev) : value;
-      saveLingerEnabled(newValue);
-      return newValue;
-    });
-  }, [saveLingerEnabled]);
-
-  // Sidebar state
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  // Linger event toggles (DAG-specific events) - merge with saved preferences
-  const [lingerEvents, setLingerEventsState] = useState<LingerEventConfig[]>(() =>
-    DAG_LINGER_EVENTS.map(event => ({
-      ...event,
-      isEnabled: savedLingerEvents[event.id] ?? event.isEnabled,
-    }))
-  );
-
-  // Wrap setLingerEvents to also save to preferences
-  const setLingerEvents = useCallback((value: LingerEventConfig[] | ((prev: LingerEventConfig[]) => LingerEventConfig[])) => {
-    setLingerEventsState(prev => {
-      const newEvents = typeof value === 'function' ? value(prev) : value;
-      const eventStates: Record<string, boolean> = {};
-      newEvents.forEach(e => { eventStates[e.id] = e.isEnabled; });
-      saveLingerEvents(eventStates);
-      return newEvents;
-    });
-  }, [saveLingerEvents]);
-
-  // Feedback attachment state (max 5 items)
-  const [attachedItems, setAttachedItems] = useState<AttachableItem[]>([]);
-
-  // Event inspection popup state (#267)
-  const [eventPopup, setEventPopup] = useState<{
-    events: LifecycleEventWithLegInfo[];
-    barIndex: number;
-    position: { x: number; y: number };
-  } | null>(null);
-
-  // Highlighted event marker (shown when clicking Recent Events panel)
-  const [highlightedEvent, setHighlightedEvent] = useState<LifecycleEventWithLegInfo | null>(null);
-
-  // Detection config state (#288) - server config is authoritative, saved prefs only seed UI
-  const [detectionConfig, setDetectionConfigState] = useState<DetectionConfig>(
-    DEFAULT_DETECTION_CONFIG
-  );
-
-  // Wrap setDetectionConfig to also save to preferences
-  const setDetectionConfig = useCallback((value: DetectionConfig) => {
-    setDetectionConfigState(value);
-    saveDetectionConfig(value);
-  }, [saveDetectionConfig]);
-
-  const handleAttachItem = useCallback((item: AttachableItem) => {
-    setAttachedItems(prev => {
-      if (prev.length >= 5) return prev; // Max 5 attachments
-      // Check if already attached
-      const isDuplicate = prev.some(existing => {
-        if (existing.type !== item.type) return false;
-        if (item.type === 'leg') {
-          return (existing.data as { leg_id: string }).leg_id === (item.data as { leg_id: string }).leg_id;
-        } else if (item.type === 'pending_origin') {
-          return (existing.data as { direction: string }).direction === (item.data as { direction: string }).direction;
-        } else if (item.type === 'lifecycle_event') {
-          // Lifecycle events are unique by leg_id + event_type + bar_index
-          const existingEvent = existing.data as { leg_id: string; event_type: string; bar_index: number };
-          const newEvent = item.data as { leg_id: string; event_type: string; bar_index: number };
-          return existingEvent.leg_id === newEvent.leg_id &&
-                 existingEvent.event_type === newEvent.event_type &&
-                 existingEvent.bar_index === newEvent.bar_index;
-        }
-        return false;
-      });
-      if (isDuplicate) return prev;
-      return [...prev, item];
-    });
-  }, []);
-
-  const handleDetachItem = useCallback((item: AttachableItem) => {
-    setAttachedItems(prev => prev.filter(existing => {
-      if (existing.type !== item.type) return true;
-      if (item.type === 'leg') {
-        return (existing.data as { leg_id: string }).leg_id !== (item.data as { leg_id: string }).leg_id;
-      } else if (item.type === 'pending_origin') {
-        return (existing.data as { direction: string }).direction !== (item.data as { direction: string }).direction;
-      } else if (item.type === 'lifecycle_event') {
-        const existingEvent = existing.data as { leg_id: string; event_type: string; bar_index: number };
-        const itemEvent = item.data as { leg_id: string; event_type: string; bar_index: number };
-        return !(existingEvent.leg_id === itemEvent.leg_id &&
-                 existingEvent.event_type === itemEvent.event_type &&
-                 existingEvent.bar_index === itemEvent.bar_index);
+  // Forward playback hook
+  const forwardPlayback = useForwardPlayback({
+    calibrationBarCount: state.calibrationData?.calibration_bar_count ?? 0,
+    calibrationBars: state.calibrationBars,
+    playbackIntervalMs: effectivePlaybackIntervalMs,
+    barsPerAdvance,
+    filters: state.lingerEvents,
+    lingerEnabled: state.lingerEnabled,
+    chartAggregationScales: [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation],
+    includeDagState: true,
+    onNewBars: useCallback((newBars: BarData[]) => {
+      state.setSourceBars(prev => [...prev, ...newBars]);
+      if (newBars.length > 0) {
+        const lastBar = newBars[newBars.length - 1];
+        state.syncChartsToPositionRef.current(lastBar.index);
       }
-      return true;
-    }));
-  }, []);
+    }, [state.setSourceBars]),
+    onAggregatedBarsChange: handleAggregatedBarsChange,
+    onDagStateChange: handleDagStateChange,
+  });
 
-  const handleClearAttachments = useCallback(() => {
-    setAttachedItems([]);
-  }, []);
+  // Hierarchy exploration mode
+  const hierarchyMode = useHierarchyMode(state.activeLegs);
 
-  // Handle leg hover from chart - update highlight state
+  // Follow Leg feature
+  const followLeg = useFollowLeg();
+
+  // Create followedLegColors Map for LegOverlay
+  const followedLegColors = useMemo(() => {
+    const colors = new Map<string, string>();
+    for (const leg of followLeg.followedLegs) {
+      colors.set(leg.leg_id, leg.color);
+    }
+    return colors;
+  }, [followLeg.followedLegs]);
+
+  // Get current playback position
+  const currentPlaybackPosition = useMemo(() => {
+    if (state.calibrationPhase === CalibrationPhase.PLAYING) {
+      return forwardPlayback.currentPosition;
+    } else if (state.calibrationPhase === CalibrationPhase.CALIBRATED && state.calibrationData) {
+      return state.calibrationData.calibration_bar_count - 1;
+    }
+    return 0;
+  }, [state.calibrationPhase, forwardPlayback.currentPosition, state.calibrationData]);
+
+  // Compute a "live" aggregated bar from source bars for incremental display
+  const computeLiveBar = useCallback((
+    aggBar: BarData,
+    currentPosition: number
+  ): BarData | null => {
+    const relevantSourceBars = state.sourceBars.filter(
+      sb => sb.index >= aggBar.source_start_index && sb.index <= currentPosition
+    );
+    if (relevantSourceBars.length === 0) return null;
+
+    const firstBar = relevantSourceBars[0];
+    const lastBar = relevantSourceBars[relevantSourceBars.length - 1];
+
+    return {
+      ...aggBar,
+      open: firstBar.open,
+      high: Math.max(...relevantSourceBars.map(b => b.high)),
+      low: Math.min(...relevantSourceBars.map(b => b.low)),
+      close: lastBar.close,
+      source_end_index: currentPosition,
+    };
+  }, [state.sourceBars]);
+
+  // Filter chart bars to only show candles up to current playback position
+  const visibleChart1Bars = useMemo(() => {
+    if (state.calibrationPhase !== CalibrationPhase.PLAYING) {
+      return state.chart1Bars;
+    }
+    const result: BarData[] = [];
+    for (const bar of state.chart1Bars) {
+      if (bar.source_end_index <= currentPlaybackPosition) {
+        result.push(bar);
+      } else if (bar.source_start_index <= currentPlaybackPosition) {
+        const liveBar = computeLiveBar(bar, currentPlaybackPosition);
+        if (liveBar) result.push(liveBar);
+      }
+    }
+    return result;
+  }, [state.chart1Bars, currentPlaybackPosition, state.calibrationPhase, computeLiveBar]);
+
+  const visibleChart2Bars = useMemo(() => {
+    if (state.calibrationPhase !== CalibrationPhase.PLAYING) {
+      return state.chart2Bars;
+    }
+    const result: BarData[] = [];
+    for (const bar of state.chart2Bars) {
+      if (bar.source_end_index <= currentPlaybackPosition) {
+        result.push(bar);
+      } else if (bar.source_start_index <= currentPlaybackPosition) {
+        const liveBar = computeLiveBar(bar, currentPlaybackPosition);
+        if (liveBar) result.push(liveBar);
+      }
+    }
+    return result;
+  }, [state.chart2Bars, currentPlaybackPosition, state.calibrationPhase, computeLiveBar]);
+
+  // Event handlers
+  const handleTreeIconClick = useCallback((legId: string) => {
+    hierarchyMode.enterHierarchyMode(legId);
+  }, [hierarchyMode]);
+
+  const handleHierarchyRecenter = useCallback((legId: string) => {
+    if (hierarchyMode.state.isActive && hierarchyMode.isInHierarchy(legId)) {
+      hierarchyMode.recenterOnLeg(legId);
+    }
+  }, [hierarchyMode]);
+
   const handleChartLegHover = useCallback((legId: string | null) => {
     if (legId) {
-      const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+      const leg = state.dagState?.active_legs.find(l => l.leg_id === legId);
       if (leg) {
-        setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
+        state.setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
       }
     } else {
-      setHighlightedDagItem(null);
+      state.setHighlightedDagItem(null);
     }
-  }, [dagState]);
+  }, [state.dagState, state.setHighlightedDagItem]);
 
-  // Handle leg click from chart - focus in panel
   const handleChartLegClick = useCallback((legId: string) => {
-    const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+    const leg = state.dagState?.active_legs.find(l => l.leg_id === legId);
     if (leg) {
-      // Set focus to scroll panel to this leg
-      setFocusedLegId(legId);
-      // Also highlight it
-      setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
+      state.setFocusedLegId(legId);
+      state.setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
     }
-  }, [dagState]);
+  }, [state.dagState, state.setFocusedLegId, state.setHighlightedDagItem]);
 
-  // Handle leg double-click from chart - attach
   const handleChartLegDoubleClick = useCallback((legId: string) => {
-    const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+    const leg = state.dagState?.active_legs.find(l => l.leg_id === legId);
     if (leg) {
-      handleAttachItem({ type: 'leg', data: leg });
+      state.handleAttachItem({ type: 'leg', data: leg });
     }
-  }, [dagState, handleAttachItem]);
+  }, [state.dagState, state.handleAttachItem]);
 
-  // Handle recent event click - show popup and highlight leg (no chart scrolling)
+  const handleEyeIconClick = useCallback((legId: string) => {
+    if (followLeg.isFollowed(legId)) {
+      followLeg.unfollowLeg(legId);
+    } else {
+      const leg = state.dagState?.active_legs.find(l => l.leg_id === legId);
+      if (leg) {
+        followLeg.followLeg(leg, currentPlaybackPosition);
+      }
+    }
+  }, [followLeg, state.dagState, currentPlaybackPosition]);
+
   const handleRecentEventClick = useCallback((event: LegEvent, clickEvent: React.MouseEvent) => {
-    // Capture position before any async operations
     const popupPosition = { x: clickEvent.clientX, y: clickEvent.clientY - 100 };
-
-    // Convert LegEvent to LifecycleEventWithLegInfo for the popup
     const eventTypeMap: Record<LegEvent['type'], LifecycleEventWithLegInfo['event_type']> = {
       'LEG_CREATED': 'formed',
       'LEG_PRUNED': 'pruned',
@@ -317,635 +283,173 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
       leg_id: event.leg_id,
       event_type: eventTypeMap[event.type],
       bar_index: event.bar_index,
-      csv_index: (sessionInfo?.windowOffset ?? 0) + event.bar_index,
+      csv_index: (state.sessionInfo?.windowOffset ?? 0) + event.bar_index,
       timestamp: new Date().toISOString(),
       explanation: event.reason || `${event.type} at bar ${event.bar_index}`,
       legColor: event.direction === 'bull' ? '#22c55e' : '#ef4444',
       legDirection: event.direction,
     };
 
-    // Defer all state updates to next frame to avoid chart disposal race
     requestAnimationFrame(() => {
-      // If the leg still exists, highlight and focus it
-      const leg = dagState?.active_legs.find(l => l.leg_id === event.leg_id);
+      const leg = state.dagState?.active_legs.find(l => l.leg_id === event.leg_id);
       if (leg) {
-        setFocusedLegId(event.leg_id);
-        setHighlightedDagItem({ type: 'leg', id: event.leg_id, direction: leg.direction });
+        state.setFocusedLegId(event.leg_id);
+        state.setHighlightedDagItem({ type: 'leg', id: event.leg_id, direction: leg.direction });
       } else {
-        setFocusedLegId(null);
-        setHighlightedDagItem(null);
+        state.setFocusedLegId(null);
+        state.setHighlightedDagItem(null);
       }
-
-      // Show popup and marker
-      setHighlightedEvent(lifecycleEvent);
-      setEventPopup({
+      state.setHighlightedEvent(lifecycleEvent);
+      state.setEventPopup({
         events: [lifecycleEvent],
         barIndex: event.bar_index,
         position: popupPosition,
       });
     });
-  }, [dagState, sessionInfo?.windowOffset]);
+  }, [state.dagState, state.sessionInfo?.windowOffset, state.setFocusedLegId, state.setHighlightedDagItem, state.setHighlightedEvent, state.setEventPopup]);
 
-  // Chart refs
-  const chart1Ref = useRef<IChartApi | null>(null);
-  const chart2Ref = useRef<IChartApi | null>(null);
-  const series1Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const series2Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const markers1Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
-  const markers2Ref = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
-
-  // Main content ref for screenshot capture
-  const mainContentRef = useRef<HTMLElement | null>(null);
-
-  // Sync ref
-  const syncChartsToPositionRef = useRef<(sourceIndex: number) => void>(() => {});
-
-  // Compute available speed aggregation options
-  const availableSpeedAggregations = useMemo(() => {
-    const options: { value: AggregationScale; label: string }[] = [];
-    const seen = new Set<AggregationScale>();
-
-    if (!seen.has(chart1Aggregation)) {
-      options.push({ value: chart1Aggregation, label: getAggregationLabel(chart1Aggregation) });
-      seen.add(chart1Aggregation);
-    }
-
-    if (!seen.has(chart2Aggregation)) {
-      options.push({ value: chart2Aggregation, label: getAggregationLabel(chart2Aggregation) });
-      seen.add(chart2Aggregation);
-    }
-
-    return options;
-  }, [chart1Aggregation, chart2Aggregation]);
-
-  // Calculate bars per advance (aggregation factor)
-  const aggregationBarsPerAdvance = useMemo(() => {
-    const aggMinutes = getAggregationMinutes(speedAggregation);
-    return Math.max(1, Math.round(aggMinutes / sourceResolutionMinutes));
-  }, [speedAggregation, sourceResolutionMinutes]);
-
-  // Calculate playback interval and speed compensation
-  // When speed exceeds 20x, the 50ms floor kicks in - compensate by advancing more bars per tick
-  const MIN_INTERVAL_MS = 50;
-  const { effectivePlaybackIntervalMs, barsPerAdvance } = useMemo(() => {
-    const rawIntervalMs = 1000 / speedMultiplier;
-    // If raw interval is below minimum, calculate how many bars to advance per tick to compensate
-    const speedCompensationMultiplier = rawIntervalMs < MIN_INTERVAL_MS
-      ? Math.ceil(MIN_INTERVAL_MS / rawIntervalMs)
-      : 1;
-    return {
-      effectivePlaybackIntervalMs: Math.max(MIN_INTERVAL_MS, Math.round(rawIntervalMs)),
-      barsPerAdvance: aggregationBarsPerAdvance * speedCompensationMultiplier,
-    };
-  }, [speedMultiplier, aggregationBarsPerAdvance]);
-
-  // Handler for aggregated bars from API response (replaces separate fetchBars calls)
-  const handleAggregatedBarsChange = useCallback((aggBars: import('../lib/api').AggregatedBarsResponse) => {
-    // Aggregation keys match the AggregationScale values directly
-    const chart1Bars = aggBars[chart1Aggregation as keyof typeof aggBars];
-    const chart2Bars = aggBars[chart2Aggregation as keyof typeof aggBars];
-
-    if (chart1Bars) {
-      setChart1Bars(chart1Bars);
-    }
-    if (chart2Bars) {
-      setChart2Bars(chart2Bars);
-    }
-  }, [chart1Aggregation, chart2Aggregation]);
-
-  // Handler for DAG state from API response (replaces separate fetchDagState call)
-  const handleDagStateChange = useCallback((state: import('../lib/api').DagStateResponse) => {
-    setDagState(state);
-  }, []);
-
-  // Forward playback hook
-  // For DAG mode with bar_count=0 calibration, we start from position -1 (before first bar)
-  const forwardPlayback = useForwardPlayback({
-    calibrationBarCount: calibrationData?.calibration_bar_count ?? 0,
-    calibrationBars,
-    playbackIntervalMs: effectivePlaybackIntervalMs,
-    barsPerAdvance,
-    filters: lingerEvents,
-    lingerEnabled, // Use lingerEnabled state for toggle
-    // Request aggregated bars for both chart scales + DAG state
-    chartAggregationScales: [chart1Aggregation, chart2Aggregation],
-    includeDagState: true,
-    onNewBars: useCallback((newBars: BarData[]) => {
-      setSourceBars(prev => [...prev, ...newBars]);
-      if (newBars.length > 0) {
-        const lastBar = newBars[newBars.length - 1];
-        syncChartsToPositionRef.current(lastBar.index);
-      }
-    }, []),
-    onAggregatedBarsChange: handleAggregatedBarsChange,
-    onDagStateChange: handleDagStateChange,
-  });
-
-  // Convert DAG legs to ActiveLeg[] for visualization
-  const activeLegs = useMemo((): ActiveLeg[] => {
-    if (!dagState) return [];
-    const offset = sessionInfo?.windowOffset ?? 0;
-    return dagState.active_legs.map(leg => dagLegToActiveLeg(leg, offset));
-  }, [dagState, sessionInfo?.windowOffset]);
-
-  // Hierarchy exploration mode (#250)
-  const hierarchyMode = useHierarchyMode(activeLegs);
-
-  // Follow Leg feature (#267)
-  const followLeg = useFollowLeg();
-
-  // Create followedLegColors Map for LegOverlay (#267)
-  const followedLegColors = useMemo(() => {
-    const colors = new Map<string, string>();
-    for (const leg of followLeg.followedLegs) {
-      colors.set(leg.leg_id, leg.color);
-    }
-    return colors;
-  }, [followLeg.followedLegs]);
-
-  // Handle tree icon click - enter hierarchy mode
-  const handleTreeIconClick = useCallback((legId: string) => {
-    hierarchyMode.enterHierarchyMode(legId);
-  }, [hierarchyMode]);
-
-  // Handle recenter in hierarchy mode (click on another leg in hierarchy)
-  const handleHierarchyRecenter = useCallback((legId: string) => {
-    if (hierarchyMode.state.isActive && hierarchyMode.isInHierarchy(legId)) {
-      hierarchyMode.recenterOnLeg(legId);
-    }
-  }, [hierarchyMode]);
-
-  // Get current playback position
-  const currentPlaybackPosition = useMemo(() => {
-    if (calibrationPhase === CalibrationPhase.PLAYING) {
-      return forwardPlayback.currentPosition;
-    } else if (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) {
-      return calibrationData.calibration_bar_count - 1;
-    }
-    return 0;
-  }, [calibrationPhase, forwardPlayback.currentPosition, calibrationData]);
-
-  // Compute a "live" aggregated bar from source bars for incremental display
-  // This prevents look-ahead bias by only using source bars up to currentPosition
-  const computeLiveBar = useCallback((
-    aggBar: BarData,
-    currentPosition: number
-  ): BarData | null => {
-    // Find source bars within this aggregated bar's range, up to current position
-    const relevantSourceBars = sourceBars.filter(
-      sb => sb.index >= aggBar.source_start_index && sb.index <= currentPosition
-    );
-
-    if (relevantSourceBars.length === 0) return null;
-
-    // Compute OHLC from the source bars we have so far
-    const firstBar = relevantSourceBars[0];
-    const lastBar = relevantSourceBars[relevantSourceBars.length - 1];
-
-    return {
-      ...aggBar,
-      open: firstBar.open,
-      high: Math.max(...relevantSourceBars.map(b => b.high)),
-      low: Math.min(...relevantSourceBars.map(b => b.low)),
-      close: lastBar.close,
-      // Update source_end_index to reflect what we've actually processed
-      source_end_index: currentPosition,
-    };
-  }, [sourceBars]);
-
-  // Filter chart bars to only show candles up to current playback position
-  // Complete bars use backend data; the "live" bar is computed incrementally from source bars
-  const visibleChart1Bars = useMemo(() => {
-    if (calibrationPhase !== CalibrationPhase.PLAYING) {
-      return chart1Bars;
-    }
-
-    const result: BarData[] = [];
-
-    for (const bar of chart1Bars) {
-      if (bar.source_end_index <= currentPlaybackPosition) {
-        // Complete bar - use backend's final OHLC
-        result.push(bar);
-      } else if (bar.source_start_index <= currentPlaybackPosition) {
-        // Live/incomplete bar - compute OHLC from source bars we have
-        const liveBar = computeLiveBar(bar, currentPlaybackPosition);
-        if (liveBar) {
-          result.push(liveBar);
-        }
-      }
-      // Bars that haven't started yet (source_start_index > currentPlaybackPosition) are skipped
-    }
-
-    return result;
-  }, [chart1Bars, currentPlaybackPosition, calibrationPhase, computeLiveBar]);
-
-  const visibleChart2Bars = useMemo(() => {
-    if (calibrationPhase !== CalibrationPhase.PLAYING) {
-      return chart2Bars;
-    }
-
-    const result: BarData[] = [];
-
-    for (const bar of chart2Bars) {
-      if (bar.source_end_index <= currentPlaybackPosition) {
-        result.push(bar);
-      } else if (bar.source_start_index <= currentPlaybackPosition) {
-        const liveBar = computeLiveBar(bar, currentPlaybackPosition);
-        if (liveBar) {
-          result.push(liveBar);
-        }
-      }
-    }
-
-    return result;
-  }, [chart2Bars, currentPlaybackPosition, calibrationPhase, computeLiveBar]);
-
-  // Handle eye icon click - toggle follow state (#267)
-  const handleEyeIconClick = useCallback((legId: string) => {
-    if (followLeg.isFollowed(legId)) {
-      followLeg.unfollowLeg(legId);
-    } else {
-      const leg = dagState?.active_legs.find(l => l.leg_id === legId);
-      if (leg) {
-        followLeg.followLeg(leg, currentPlaybackPosition);
-      }
-    }
-  }, [followLeg, dagState, currentPlaybackPosition]);
-
-  // Fetch lifecycle events for followed legs when playback advances (#267)
-  useEffect(() => {
-    if (calibrationPhase === CalibrationPhase.PLAYING && followLeg.followedLegs.length > 0) {
-      followLeg.fetchEventsForFollowedLegs(currentPlaybackPosition);
-    }
-  }, [calibrationPhase, currentPlaybackPosition, followLeg]);
-
-  // Handle marker click - show event inspection popup (#267)
   const handleMarkerClick = useCallback((
     barIndex: number,
     events: LifecycleEventWithLegInfo[],
     position: { x: number; y: number }
   ) => {
-    setEventPopup({
-      events,
-      barIndex,
-      position,
-    });
-  }, []);
+    state.setEventPopup({ events, barIndex, position });
+  }, [state.setEventPopup]);
 
-  // Handle attaching an event to feedback (#267)
   const handleAttachEvent = useCallback((event: LifecycleEventWithLegInfo) => {
-    handleAttachItem({ type: 'lifecycle_event', data: event });
-    setEventPopup(null);
-  }, [handleAttachItem]);
+    state.handleAttachItem({ type: 'lifecycle_event', data: event });
+    state.setEventPopup(null);
+  }, [state.handleAttachItem, state.setEventPopup]);
 
-  // Handle marker double-click - attach all events from marker (#267)
   const handleMarkerDoubleClick = useCallback((events: LifecycleEventWithLegInfo[]) => {
-    // Attach the primary (most significant) event
     if (events.length > 0) {
-      handleAttachItem({ type: 'lifecycle_event', data: events[0] });
+      state.handleAttachItem({ type: 'lifecycle_event', data: events[0] });
     }
-  }, [handleAttachItem]);
+  }, [state.handleAttachItem]);
 
-  // Process Till state (#328)
-  const [isProcessingTill, setIsProcessingTill] = useState(false);
-
-  // Handler to start playback
   const handleStartPlayback = useCallback(() => {
-    if (calibrationPhase === CalibrationPhase.CALIBRATED) {
-      setCalibrationPhase(CalibrationPhase.PLAYING);
+    if (state.calibrationPhase === CalibrationPhase.CALIBRATED) {
+      state.setCalibrationPhase(CalibrationPhase.PLAYING);
       forwardPlayback.play();
     }
-  }, [calibrationPhase, forwardPlayback]);
+  }, [state.calibrationPhase, state.setCalibrationPhase, forwardPlayback]);
 
-  // Handle Process Till (#328) - advance by bar count (date-based)
+  const handleStepForward = useCallback(() => {
+    if (state.calibrationPhase === CalibrationPhase.CALIBRATED) {
+      state.setCalibrationPhase(CalibrationPhase.PLAYING);
+    }
+    forwardPlayback.stepForward();
+  }, [state.calibrationPhase, state.setCalibrationPhase, forwardPlayback]);
+
+  const handleToggleLingerEvent = useCallback((eventId: string) => {
+    state.setLingerEvents(prev =>
+      prev.map(e => e.id === eventId ? { ...e, isEnabled: !e.isEnabled } : e)
+    );
+  }, [state.setLingerEvents]);
+
+  const handleResetDefaults = useCallback(() => {
+    state.setLingerEvents(DAG_LINGER_EVENTS);
+  }, [state.setLingerEvents]);
+
   const handleProcessTill = useCallback(async (_targetTimestamp: number, barCount: number) => {
-    if (calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.playbackState === PlaybackState.PLAYING) {
+    if (state.calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.playbackState === PlaybackState.PLAYING) {
       throw new Error('Stop playback first');
     }
-
     if (barCount <= 0) {
       throw new Error('Must advance at least 1 bar');
     }
 
-    setIsProcessingTill(true);
+    state.setIsProcessingTill(true);
     try {
-      // Start playing if not already
-      if (calibrationPhase === CalibrationPhase.CALIBRATED) {
-        setCalibrationPhase(CalibrationPhase.PLAYING);
+      if (state.calibrationPhase === CalibrationPhase.CALIBRATED) {
+        state.setCalibrationPhase(CalibrationPhase.PLAYING);
       }
 
-      // Use the advanceReplay API to process multiple bars at once
       const response = await advanceReplay(
-        0,  // calibrationBarCount (0 for DAG mode)
+        0,
         currentPlaybackPosition,
         barCount,
-        [chart1Aggregation, chart2Aggregation],  // Request aggregated bars
-        true  // Include DAG state
+        [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation],
+        true
       );
 
-      // Update state with the response
       if (response.new_bars && response.new_bars.length > 0) {
         const newBars = formatReplayBarsData(response.new_bars);
-
-        // Update sourceBars
-        setSourceBars(prev => [...prev, ...newBars]);
-
-        // Sync forwardPlayback state to match new position
-        // Build complete visible bars list for sync
+        state.setSourceBars(prev => [...prev, ...newBars]);
         const allVisibleBars = [...forwardPlayback.visibleBars, ...newBars];
         forwardPlayback.syncToPosition(
           response.current_bar_index,
           allVisibleBars,
           response.csv_index,
-          response.events  // Include events for stats tracking
+          response.events
         );
       }
 
-      // Update aggregated bars
       if (response.aggregated_bars) {
         handleAggregatedBarsChange(response.aggregated_bars);
       }
 
-      // Update DAG state
       if (response.dag_state) {
         handleDagStateChange(response.dag_state);
       }
 
-      // Sync charts to new position
       if (response.current_bar_index >= 0) {
-        syncChartsToPositionRef.current(response.current_bar_index);
+        state.syncChartsToPositionRef.current(response.current_bar_index);
       }
     } finally {
-      setIsProcessingTill(false);
+      state.setIsProcessingTill(false);
     }
   }, [
-    calibrationPhase,
+    state.calibrationPhase,
     forwardPlayback.playbackState,
     forwardPlayback.visibleBars,
     forwardPlayback.syncToPosition,
     currentPlaybackPosition,
-    chart1Aggregation,
-    chart2Aggregation,
+    chartPrefs.chart1Aggregation,
+    chartPrefs.chart2Aggregation,
     handleAggregatedBarsChange,
     handleDagStateChange,
+    state.setSourceBars,
+    state.setCalibrationPhase,
+    state.setIsProcessingTill,
   ]);
-
-  // Handler to step forward one bar (without starting continuous playback)
-  const handleStepForward = useCallback(() => {
-    if (calibrationPhase === CalibrationPhase.CALIBRATED) {
-      setCalibrationPhase(CalibrationPhase.PLAYING);
-    }
-    forwardPlayback.stepForward();
-  }, [calibrationPhase, forwardPlayback]);
-
-  // Handler for toggling linger event types
-  const handleToggleLingerEvent = useCallback((eventId: string) => {
-    setLingerEvents(prev =>
-      prev.map(e => e.id === eventId ? { ...e, isEnabled: !e.isEnabled } : e)
-    );
-  }, []);
-
-  // Handler for resetting defaults
-  const handleResetDefaults = useCallback(() => {
-    setLingerEvents(DAG_LINGER_EVENTS);
-  }, []);
-
-  // Compute feedback context for DAG mode
-  const feedbackContext = useMemo(() => {
-    if (calibrationPhase !== CalibrationPhase.CALIBRATED && calibrationPhase !== CalibrationPhase.PLAYING) {
-      return null;
-    }
-
-    let stateString: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
-    if (calibrationPhase === CalibrationPhase.CALIBRATED) {
-      stateString = 'calibration_complete';
-    } else if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
-      stateString = 'playing';
-    } else {
-      stateString = 'paused';
-    }
-
-    // Count events by type
-    let swingsInvalidated = 0;
-    let swingsCompleted = 0;
-    for (const event of forwardPlayback.allEvents) {
-      if (event.type === 'SWING_INVALIDATED' || event.type === 'LEG_INVALIDATED') swingsInvalidated++;
-      if (event.type === 'SWING_COMPLETED') swingsCompleted++;
-    }
-
-    return {
-      playbackState: forwardPlayback.playbackState,
-      calibrationPhase: stateString,
-      csvIndex: forwardPlayback.csvIndex,  // Authoritative CSV index from backend (#297)
-      calibrationBarCount: calibrationData?.calibration_bar_count || 0,
-      currentBarIndex: currentPlaybackPosition,
-      swingsFoundByScale: { XL: 0, L: 0, M: 0, S: 0 }, // Not used in DAG mode
-      totalEvents: forwardPlayback.allEvents.length,
-      swingsInvalidated,
-      swingsCompleted,
-    };
-  }, [
-    calibrationPhase,
-    forwardPlayback.playbackState,
-    forwardPlayback.allEvents,
-    forwardPlayback.csvIndex,
-    calibrationData?.calibration_bar_count,
-    currentPlaybackPosition,
-  ]);
-
-  // Compute DAG context for feedback - now includes full data for debugging (#187)
-  const dagContext = useMemo((): DagContext | undefined => {
-    if (!dagState) return undefined;
-    return {
-      activeLegs: dagState.active_legs.map(leg => ({
-        leg_id: leg.leg_id,
-        direction: leg.direction,
-        pivot_price: leg.pivot_price,
-        pivot_index: leg.pivot_index,
-        origin_price: leg.origin_price,
-        origin_index: leg.origin_index,
-        range: Math.abs(leg.origin_price - leg.pivot_price),
-      })),
-      pendingOrigins: {
-        bull: dagState.pending_origins.bull
-          ? { price: dagState.pending_origins.bull.price, bar_index: dagState.pending_origins.bull.bar_index }
-          : null,
-        bear: dagState.pending_origins.bear
-          ? { price: dagState.pending_origins.bear.price, bar_index: dagState.pending_origins.bear.bar_index }
-          : null,
-      },
-    };
-  }, [dagState]);
-
-  // Load initial data with startup flow (#329)
-  // 1. Check if backend has an active session
-  // 2. If not, restore from localStorage or show file picker
-  // 3. DAG mode: Initialize with bar_count=0 for incremental build from bar 0 (#179)
-  useEffect(() => {
-    const loadData = async () => {
-      // Wait for session settings to load from localStorage
-      if (!sessionSettings.isLoaded) return;
-
-      setIsLoading(true);
-      setError(null);
-      try {
-        // Check backend session status
-        const session = await fetchSession();
-
-        // If backend not initialized, we need to start a session
-        if (!session.initialized) {
-          // Try to restore from saved session settings
-          if (sessionSettings.hasSavedSession && sessionSettings.dataFile) {
-            try {
-              await restartSession({
-                data_file: sessionSettings.dataFile,
-                start_date: sessionSettings.startDate || undefined,
-              });
-              // Reload session info after restart
-              const newSession = await fetchSession();
-              if (!newSession.initialized) {
-                throw new Error('Failed to initialize session after restart');
-              }
-              // Continue with the new session
-              return loadSessionData(newSession);
-            } catch (restartErr) {
-              console.warn('Failed to restore saved session:', restartErr);
-              // Clear invalid saved session and show file picker
-              sessionSettings.clearSession();
-              setIsSettingsOpen(true);
-              setIsLoading(false);
-              return;
-            }
-          } else {
-            // No saved session - show file picker for first-time setup
-            setIsSettingsOpen(true);
-            setIsLoading(false);
-            return;
-          }
-        }
-
-        // Backend is initialized, load the session data
-        await loadSessionData(session);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
-        setIsLoading(false);
-      }
-    };
-
-    // Helper to load session data once we have an initialized session
-    const loadSessionData = async (session: Awaited<ReturnType<typeof fetchSession>>) => {
-      try {
-        const resolutionMinutes = parseResolutionToMinutes(session.resolution);
-        setSourceResolutionMinutes(resolutionMinutes);
-        setSessionInfo({
-          windowOffset: session.window_offset,
-          totalSourceBars: session.total_source_bars,
-        });
-
-        // Extract file name from path
-        const fileName = session.data_file.split('/').pop() || session.data_file;
-        setDataFileName(fileName);
-
-        // Only save session to localStorage if there's no existing saved session
-        // (prevents overwriting the correct start_date when SettingsPanel just saved it)
-        if (!sessionSettings.hasSavedSession) {
-          sessionSettings.saveSession(session.data_file, null);
-        }
-
-        // Adjust chart aggregations if they're below source resolution
-        const smallestValid = getSmallestValidAggregation(resolutionMinutes);
-        const validChart1 = clampAggregationToSource(chart1Aggregation, resolutionMinutes);
-        const validChart2 = clampAggregationToSource(chart2Aggregation, resolutionMinutes);
-        if (validChart1 !== chart1Aggregation) setChart1Aggregation(validChart1);
-        if (validChart2 !== chart2Aggregation) setChart2Aggregation(validChart2);
-
-        // Load source bars (need these for total count display, but won't show initially)
-        const source = await fetchBars(smallestValid);
-
-        // DAG mode: Initialize with bar_count=0 for incremental build
-        // This creates an empty detector ready to process bars one by one
-        setCalibrationPhase(CalibrationPhase.CALIBRATING);
-        const calibration = await fetchCalibration(0);
-        setCalibrationData(calibration);
-
-        // Initially no bars visible - they will be added as playback advances
-        setSourceBars([]);
-        setCalibrationBars([]);
-
-        // Load empty chart bars (backend returns empty when no bars processed)
-        const [bars1, bars2] = await Promise.all([
-          fetchBars(validChart1),
-          fetchBars(validChart2),
-        ]);
-        setChart1Bars(bars1);
-        setChart2Bars(bars2);
-
-        // Fetch initial DAG state (should be empty)
-        const initialDagState = await fetchDagState();
-        setDagState(initialDagState);
-
-        // Fetch detection config (#288) - server config is authoritative
-        // Saved preferences only populate UI (via initialDetectionConfig prop)
-        try {
-          const config = await fetchDetectionConfig();
-          setDetectionConfigState(config);  // Use state setter directly, don't save to prefs
-        } catch (err) {
-          console.warn('Failed to fetch detection config, using defaults:', err);
-        }
-
-        // Ready to play - user presses play to start incremental build
-        setCalibrationPhase(CalibrationPhase.CALIBRATED);
-
-        // Store total bar count for display
-        setSessionInfo(prev => prev ? {
-          ...prev,
-          totalSourceBars: source.length,
-        } : { windowOffset: session.window_offset, totalSourceBars: source.length });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, [sessionSettings.isLoaded]);
 
   // Load chart bars when aggregation changes
   const loadChart1Bars = useCallback(async (scale: AggregationScale) => {
     try {
       const bars = await fetchBars(scale);
-      setChart1Bars(bars);
+      state.setChart1Bars(bars);
     } catch (err) {
       console.error('Failed to load chart 1 bars:', err);
     }
-  }, []);
+  }, [state.setChart1Bars]);
 
   const loadChart2Bars = useCallback(async (scale: AggregationScale) => {
     try {
       const bars = await fetchBars(scale);
-      setChart2Bars(bars);
+      state.setChart2Bars(bars);
     } catch (err) {
       console.error('Failed to load chart 2 bars:', err);
     }
-  }, []);
+  }, [state.setChart2Bars]);
 
-  // Handle aggregation changes
   const handleChart1AggregationChange = useCallback((scale: AggregationScale) => {
-    setChart1Aggregation(scale);
+    chartPrefs.setChart1Aggregation(scale);
     loadChart1Bars(scale);
-  }, [loadChart1Bars]);
+  }, [chartPrefs.setChart1Aggregation, loadChart1Bars]);
 
   const handleChart2AggregationChange = useCallback((scale: AggregationScale) => {
-    setChart2Aggregation(scale);
+    chartPrefs.setChart2Aggregation(scale);
     loadChart2Bars(scale);
-  }, [loadChart2Bars]);
+  }, [chartPrefs.setChart2Aggregation, loadChart2Bars]);
 
   // Keep speedAggregation valid
   useEffect(() => {
-    const validAggregations = [chart1Aggregation, chart2Aggregation];
-    if (!validAggregations.includes(speedAggregation)) {
-      setSpeedAggregation(chart1Aggregation);
+    const validAggregations = [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation];
+    if (!validAggregations.includes(chartPrefs.speedAggregation)) {
+      chartPrefs.setSpeedAggregation(chartPrefs.chart1Aggregation);
     }
-  }, [chart1Aggregation, chart2Aggregation, speedAggregation]);
+  }, [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation, chartPrefs.speedAggregation, chartPrefs.setSpeedAggregation]);
 
   // Find aggregated bar index for source index
   const findAggBarForSourceIndex = useCallback((bars: BarData[], sourceIndex: number): number => {
@@ -957,9 +461,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     return bars.length - 1;
   }, []);
 
-  // Sync charts to position (used during playback - avoids scrolling if already visible)
+  // Sync charts to position
   const syncChartsToPosition = useCallback((sourceIndex: number) => {
-    const syncChart = (chart: IChartApi | null, bars: BarData[]) => {
+    const syncChart = (chart: import('lightweight-charts').IChartApi | null, bars: BarData[]) => {
       if (!chart || bars.length === 0) return;
 
       const aggIndex = findAggBarForSourceIndex(bars, sourceIndex);
@@ -997,31 +501,27 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
       chart.timeScale().setVisibleLogicalRange({ from, to });
     };
 
-    syncChart(chart1Ref.current, chart1Bars);
-    syncChart(chart2Ref.current, chart2Bars);
-  }, [chart1Bars, chart2Bars, findAggBarForSourceIndex]);
+    syncChart(state.chart1Ref.current, state.chart1Bars);
+    syncChart(state.chart2Ref.current, state.chart2Bars);
+  }, [state.chart1Bars, state.chart2Bars, findAggBarForSourceIndex, state.chart1Ref, state.chart2Ref]);
 
   // Keep sync refs updated
   useEffect(() => {
-    syncChartsToPositionRef.current = syncChartsToPosition;
-  }, [syncChartsToPosition]);
-
+    state.syncChartsToPositionRef.current = syncChartsToPosition;
+  }, [syncChartsToPosition, state.syncChartsToPositionRef]);
 
   // Scroll charts when entering CALIBRATED phase
   useEffect(() => {
-    if (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) {
+    if (state.calibrationPhase === CalibrationPhase.CALIBRATED && state.calibrationData) {
       const timeout = setTimeout(() => {
-        const calibrationEndIndex = calibrationData.calibration_bar_count - 1;
-        syncChartsToPositionRef.current(calibrationEndIndex);
+        const calibrationEndIndex = state.calibrationData!.calibration_bar_count - 1;
+        state.syncChartsToPositionRef.current(calibrationEndIndex);
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [calibrationPhase, calibrationData]);
+  }, [state.calibrationPhase, state.calibrationData, state.syncChartsToPositionRef]);
 
-  // NOTE: DAG state is now fetched via /advance API response (onDagStateChange callback)
-  // This eliminates the extra API call per bar advance.
-
-  // Compute all leg events from forward playback (for stats)
+  // Compute all leg events from forward playback
   const allLegEvents = useMemo(() => {
     const events: LegEvent[] = [];
     for (const event of forwardPlayback.allEvents) {
@@ -1040,33 +540,25 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
 
   // Collect leg events from forward playback (last 20 for display)
   useEffect(() => {
-    setRecentLegEvents(allLegEvents.slice(-20).reverse());
-  }, [allLegEvents]);
+    state.setRecentLegEvents(allLegEvents.slice(-20).reverse());
+  }, [allLegEvents, state.setRecentLegEvents]);
 
-  // Handle chart ready callbacks
-  const handleChart1Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
-    chart1Ref.current = chart;
-    series1Ref.current = series;
-    markers1Ref.current = createSeriesMarkers(series, []);
-  }, []);
+  // Fetch lifecycle events for followed legs when playback advances
+  useEffect(() => {
+    if (state.calibrationPhase === CalibrationPhase.PLAYING && followLeg.followedLegs.length > 0) {
+      followLeg.fetchEventsForFollowedLegs(currentPlaybackPosition);
+    }
+  }, [state.calibrationPhase, currentPlaybackPosition, followLeg]);
 
-  const handleChart2Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
-    chart2Ref.current = chart;
-    series2Ref.current = series;
-    markers2Ref.current = createSeriesMarkers(series, []);
-  }, []);
-
-  // Keyboard shortcuts for DAG mode
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore keyboard shortcuts when typing in input/textarea elements
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return;
       }
 
-      // Calibrated phase: Space/Enter to start playback
-      if (calibrationPhase === CalibrationPhase.CALIBRATED) {
+      if (state.calibrationPhase === CalibrationPhase.CALIBRATED) {
         if (e.key === ' ' || e.key === 'Enter') {
           e.preventDefault();
           handleStartPlayback();
@@ -1074,23 +566,19 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
         return;
       }
 
-      // Playing phase
-      if (calibrationPhase === CalibrationPhase.PLAYING) {
-        // Escape key dismisses linger
+      if (state.calibrationPhase === CalibrationPhase.PLAYING) {
         if (e.key === 'Escape' && forwardPlayback.isLingering) {
           e.preventDefault();
           forwardPlayback.dismissLinger();
           return;
         }
 
-        // Space toggles play/pause
         if (e.key === ' ') {
           e.preventDefault();
           forwardPlayback.togglePlayPause();
           return;
         }
 
-        // Linger queue navigation (when multiple events at same bar)
         if (forwardPlayback.isLingering && forwardPlayback.lingerQueuePosition && forwardPlayback.lingerQueuePosition.total > 1) {
           if (e.key === 'ArrowLeft' && !e.shiftKey) {
             e.preventDefault();
@@ -1103,22 +591,12 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
           }
         }
 
-        // Step controls: [ / ] or Arrow keys
-        // Shift modifier for fine control (bar-by-bar)
         if (e.key === '[') {
           e.preventDefault();
-          if (e.shiftKey) {
-            forwardPlayback.stepBack();
-          } else {
-            forwardPlayback.stepBack();
-          }
+          forwardPlayback.stepBack();
         } else if (e.key === ']') {
           e.preventDefault();
-          if (e.shiftKey) {
-            forwardPlayback.stepForward();
-          } else {
-            forwardPlayback.stepForward();
-          }
+          forwardPlayback.stepForward();
         } else if (e.key === 'ArrowLeft' && !forwardPlayback.isLingering) {
           e.preventDefault();
           forwardPlayback.stepBack();
@@ -1132,7 +610,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    calibrationPhase,
+    state.calibrationPhase,
     handleStartPlayback,
     forwardPlayback.isLingering,
     forwardPlayback.lingerQueuePosition,
@@ -1144,12 +622,159 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     forwardPlayback.navigateNextEvent,
   ]);
 
+  // Load initial data with startup flow
+  useEffect(() => {
+    const loadData = async () => {
+      if (!sessionSettings.isLoaded) return;
+
+      state.setIsLoading(true);
+      state.setError(null);
+      try {
+        const session = await fetchSession();
+
+        if (!session.initialized) {
+          if (sessionSettings.hasSavedSession && sessionSettings.dataFile) {
+            try {
+              await restartSession({
+                data_file: sessionSettings.dataFile,
+                start_date: sessionSettings.startDate || undefined,
+              });
+              const newSession = await fetchSession();
+              if (!newSession.initialized) {
+                throw new Error('Failed to initialize session after restart');
+              }
+              return loadSessionData(newSession);
+            } catch (restartErr) {
+              console.warn('Failed to restore saved session:', restartErr);
+              sessionSettings.clearSession();
+              state.setIsSettingsOpen(true);
+              state.setIsLoading(false);
+              return;
+            }
+          } else {
+            state.setIsSettingsOpen(true);
+            state.setIsLoading(false);
+            return;
+          }
+        }
+
+        await loadSessionData(session);
+      } catch (err) {
+        state.setError(err instanceof Error ? err.message : 'Failed to load data');
+        state.setIsLoading(false);
+      }
+    };
+
+    const loadSessionData = async (session: Awaited<ReturnType<typeof fetchSession>>) => {
+      try {
+        const resolutionMinutes = parseResolutionToMinutes(session.resolution);
+        state.setSourceResolutionMinutes(resolutionMinutes);
+        state.setSessionInfo({
+          windowOffset: session.window_offset,
+          totalSourceBars: session.total_source_bars,
+        });
+
+        const fileName = session.data_file.split('/').pop() || session.data_file;
+        state.setDataFileName(fileName);
+
+        if (!sessionSettings.hasSavedSession) {
+          sessionSettings.saveSession(session.data_file, null);
+        }
+
+        const smallestValid = getSmallestValidAggregation(resolutionMinutes);
+        const validChart1 = clampAggregationToSource(chartPrefs.chart1Aggregation, resolutionMinutes);
+        const validChart2 = clampAggregationToSource(chartPrefs.chart2Aggregation, resolutionMinutes);
+        if (validChart1 !== chartPrefs.chart1Aggregation) chartPrefs.setChart1Aggregation(validChart1);
+        if (validChart2 !== chartPrefs.chart2Aggregation) chartPrefs.setChart2Aggregation(validChart2);
+
+        const source = await fetchBars(smallestValid);
+
+        state.setCalibrationPhase(CalibrationPhase.CALIBRATING);
+        const calibration = await fetchCalibration(0);
+        state.setCalibrationData(calibration);
+
+        state.setSourceBars([]);
+        state.setCalibrationBars([]);
+
+        const [bars1, bars2] = await Promise.all([
+          fetchBars(validChart1),
+          fetchBars(validChart2),
+        ]);
+        state.setChart1Bars(bars1);
+        state.setChart2Bars(bars2);
+
+        const initialDagState = await fetchDagState();
+        state.setDagState(initialDagState);
+
+        try {
+          const config = await fetchDetectionConfig();
+          state.setDetectionConfig(config);
+        } catch (err) {
+          console.warn('Failed to fetch detection config, using defaults:', err);
+        }
+
+        state.setCalibrationPhase(CalibrationPhase.CALIBRATED);
+
+        state.setSessionInfo(prev => prev ? {
+          ...prev,
+          totalSourceBars: source.length,
+        } : { windowOffset: session.window_offset, totalSourceBars: source.length });
+      } finally {
+        state.setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [sessionSettings.isLoaded]);
+
+  // Compute feedback context for DAG mode
+  const feedbackContext = useMemo(() => {
+    if (state.calibrationPhase !== CalibrationPhase.CALIBRATED && state.calibrationPhase !== CalibrationPhase.PLAYING) {
+      return null;
+    }
+
+    let stateString: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
+    if (state.calibrationPhase === CalibrationPhase.CALIBRATED) {
+      stateString = 'calibration_complete';
+    } else if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
+      stateString = 'playing';
+    } else {
+      stateString = 'paused';
+    }
+
+    let swingsInvalidated = 0;
+    let swingsCompleted = 0;
+    for (const event of forwardPlayback.allEvents) {
+      if (event.type === 'SWING_INVALIDATED' || event.type === 'LEG_INVALIDATED') swingsInvalidated++;
+      if (event.type === 'SWING_COMPLETED') swingsCompleted++;
+    }
+
+    return {
+      playbackState: forwardPlayback.playbackState,
+      calibrationPhase: stateString,
+      csvIndex: forwardPlayback.csvIndex,
+      calibrationBarCount: state.calibrationData?.calibration_bar_count || 0,
+      currentBarIndex: currentPlaybackPosition,
+      swingsFoundByScale: { XL: 0, L: 0, M: 0, S: 0 },
+      totalEvents: forwardPlayback.allEvents.length,
+      swingsInvalidated,
+      swingsCompleted,
+    };
+  }, [
+    state.calibrationPhase,
+    forwardPlayback.playbackState,
+    forwardPlayback.allEvents,
+    forwardPlayback.csvIndex,
+    state.calibrationData?.calibration_bar_count,
+    currentPlaybackPosition,
+  ]);
+
   // Get current timestamp for header
-  const currentTimestamp = sourceBars[currentPlaybackPosition]?.timestamp
-    ? new Date(sourceBars[currentPlaybackPosition].timestamp * 1000).toISOString()
+  const currentTimestamp = state.sourceBars[currentPlaybackPosition]?.timestamp
+    ? new Date(state.sourceBars[currentPlaybackPosition].timestamp * 1000).toISOString()
     : undefined;
 
-  if (isLoading) {
+  if (state.isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-app-bg text-app-text">
         <div className="text-center">
@@ -1160,11 +785,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     );
   }
 
-  if (error) {
+  if (state.error) {
     return (
       <div className="flex items-center justify-center h-screen bg-app-bg text-app-text">
         <div className="text-center">
-          <p className="text-trading-bear mb-4">Error: {error}</p>
+          <p className="text-trading-bear mb-4">Error: {state.error}</p>
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-trading-blue text-white rounded hover:bg-blue-600"
@@ -1178,37 +803,34 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
 
   return (
     <div className="flex flex-col h-screen w-full bg-app-bg text-app-text font-sans overflow-hidden">
-      {/* Header */}
       <Header
-        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        onToggleSidebar={() => state.setIsSidebarOpen(!state.isSidebarOpen)}
         currentTimestamp={currentTimestamp}
-        sourceBarCount={sourceBars.length}
+        sourceBarCount={state.sourceBars.length}
         calibrationStatus={
-          calibrationPhase === CalibrationPhase.CALIBRATING
+          state.calibrationPhase === CalibrationPhase.CALIBRATING
             ? 'calibrating'
-            : calibrationPhase === CalibrationPhase.CALIBRATED
+            : state.calibrationPhase === CalibrationPhase.CALIBRATED
             ? 'calibrated'
-            : calibrationPhase === CalibrationPhase.PLAYING
+            : state.calibrationPhase === CalibrationPhase.PLAYING
             ? 'playing'
             : undefined
         }
         currentMode={currentMode}
         onModeChange={onModeChange}
-        dataFileName={dataFileName}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        dataFileName={state.dataFileName}
+        onOpenSettings={() => state.setIsSettingsOpen(true)}
       />
 
-      {/* Main Layout */}
       <div className="flex-1 flex min-h-0">
-        {/* Sidebar */}
-        <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden`}>
+        <div className={`${state.isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden`}>
           <Sidebar
             mode="dag"
-            lingerEvents={lingerEvents}
+            lingerEvents={state.lingerEvents}
             onToggleLingerEvent={handleToggleLingerEvent}
             onResetDefaults={handleResetDefaults}
             className="w-64"
-            showFeedback={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
+            showFeedback={state.calibrationPhase === CalibrationPhase.CALIBRATED || state.calibrationPhase === CalibrationPhase.PLAYING}
             isLingering={forwardPlayback.isLingering}
             lingerEvent={forwardPlayback.lingerEvent}
             currentPlaybackBar={currentPlaybackPosition}
@@ -1216,51 +838,49 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             onFeedbackFocus={forwardPlayback.pauseLingerTimer}
             onFeedbackBlur={forwardPlayback.resumeLingerTimer}
             onPausePlayback={forwardPlayback.pause}
-            dagContext={dagContext}
-            screenshotTargetRef={mainContentRef}
-            lingerEnabled={lingerEnabled}
-            attachedItems={attachedItems}
-            onDetachItem={handleDetachItem}
-            onClearAttachments={handleClearAttachments}
-            detectionConfig={detectionConfig}
-            initialDetectionConfig={savedDetectionConfig ?? undefined}
-            onDetectionConfigUpdate={setDetectionConfig}
-            isCalibrated={calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING}
+            dagContext={state.dagContext}
+            screenshotTargetRef={state.mainContentRef}
+            lingerEnabled={state.lingerEnabled}
+            attachedItems={state.attachedItems}
+            onDetachItem={state.handleDetachItem}
+            onClearAttachments={state.handleClearAttachments}
+            detectionConfig={state.detectionConfig}
+            initialDetectionConfig={chartPrefs.detectionConfig ?? undefined}
+            onDetectionConfigUpdate={state.setDetectionConfig}
+            isCalibrated={state.calibrationPhase === CalibrationPhase.CALIBRATED || state.calibrationPhase === CalibrationPhase.PLAYING}
             legEvents={allLegEvents}
-            activeLegs={dagState?.active_legs}
-            onHoverLeg={setHighlightedDagItem}
-            highlightedItem={highlightedDagItem}
+            activeLegs={state.dagState?.active_legs}
+            onHoverLeg={state.setHighlightedDagItem}
+            highlightedItem={state.highlightedDagItem}
           />
         </div>
 
-        <main ref={mainContentRef} className="flex-1 flex flex-col min-w-0">
-          {/* Charts Area */}
+        <main ref={state.mainContentRef} className="flex-1 flex flex-col min-w-0">
           <ChartArea
             chart1Data={visibleChart1Bars}
             chart2Data={visibleChart2Bars}
-            chart1Aggregation={chart1Aggregation}
-            chart2Aggregation={chart2Aggregation}
+            chart1Aggregation={chartPrefs.chart1Aggregation}
+            chart2Aggregation={chartPrefs.chart2Aggregation}
             onChart1AggregationChange={handleChart1AggregationChange}
             onChart2AggregationChange={handleChart2AggregationChange}
-            onChart1Ready={handleChart1Ready}
-            onChart2Ready={handleChart2Ready}
-            sourceResolutionMinutes={sourceResolutionMinutes}
-            chart1Zoom={chart1Zoom}
-            chart2Zoom={chart2Zoom}
-            onChart1ZoomChange={setChart1Zoom}
-            onChart2ZoomChange={setChart2Zoom}
-            maximizedChart={maximizedChart}
-            onMaximizedChartChange={setMaximizedChart}
+            onChart1Ready={state.handleChart1Ready}
+            onChart2Ready={state.handleChart2Ready}
+            sourceResolutionMinutes={state.sourceResolutionMinutes}
+            chart1Zoom={chartPrefs.chart1Zoom}
+            chart2Zoom={chartPrefs.chart2Zoom}
+            onChart1ZoomChange={chartPrefs.setChart1Zoom}
+            onChart2ZoomChange={chartPrefs.setChart2Zoom}
+            maximizedChart={chartPrefs.maximizedChart}
+            onMaximizedChartChange={chartPrefs.setMaximizedChart}
           />
 
-          {/* Leg Overlays - render diagonal leg lines on charts */}
           <LegOverlay
-            chart={chart1Ref.current}
-            series={series1Ref.current}
-            legs={activeLegs}
+            chart={state.chart1Ref.current}
+            series={state.series1Ref.current}
+            legs={state.activeLegs}
             bars={visibleChart1Bars}
             currentPosition={currentPlaybackPosition}
-            highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
+            highlightedLegId={state.highlightedDagItem?.type === 'leg' ? state.highlightedDagItem.id : undefined}
             onLegHover={handleChartLegHover}
             onLegClick={hierarchyMode.state.isActive ? handleHierarchyRecenter : handleChartLegClick}
             onLegDoubleClick={handleChartLegDoubleClick}
@@ -1274,12 +894,12 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             followedLegColors={followedLegColors}
           />
           <LegOverlay
-            chart={chart2Ref.current}
-            series={series2Ref.current}
-            legs={activeLegs}
+            chart={state.chart2Ref.current}
+            series={state.series2Ref.current}
+            legs={state.activeLegs}
             bars={visibleChart2Bars}
             currentPosition={currentPlaybackPosition}
-            highlightedLegId={highlightedDagItem?.type === 'leg' ? highlightedDagItem.id : undefined}
+            highlightedLegId={state.highlightedDagItem?.type === 'leg' ? state.highlightedDagItem.id : undefined}
             onLegHover={handleChartLegHover}
             onLegClick={hierarchyMode.state.isActive ? handleHierarchyRecenter : handleChartLegClick}
             onLegDoubleClick={handleChartLegDoubleClick}
@@ -1293,35 +913,33 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             followedLegColors={followedLegColors}
           />
 
-          {/* Pending Origins Overlays - render price lines for highlighted pending origins */}
           <PendingOriginsOverlay
-            chart={chart1Ref.current}
-            series={series1Ref.current}
-            bullOrigin={dagState?.pending_origins.bull ?? null}
-            bearOrigin={dagState?.pending_origins.bear ?? null}
+            chart={state.chart1Ref.current}
+            series={state.series1Ref.current}
+            bullOrigin={state.dagState?.pending_origins.bull ?? null}
+            bearOrigin={state.dagState?.pending_origins.bear ?? null}
             highlightedOrigin={
-              highlightedDagItem?.type === 'pending_origin'
-                ? highlightedDagItem.direction
+              state.highlightedDagItem?.type === 'pending_origin'
+                ? state.highlightedDagItem.direction
                 : null
             }
           />
           <PendingOriginsOverlay
-            chart={chart2Ref.current}
-            series={series2Ref.current}
-            bullOrigin={dagState?.pending_origins.bull ?? null}
-            bearOrigin={dagState?.pending_origins.bear ?? null}
+            chart={state.chart2Ref.current}
+            series={state.series2Ref.current}
+            bullOrigin={state.dagState?.pending_origins.bull ?? null}
+            bearOrigin={state.dagState?.pending_origins.bear ?? null}
             highlightedOrigin={
-              highlightedDagItem?.type === 'pending_origin'
-                ? highlightedDagItem.direction
+              state.highlightedDagItem?.type === 'pending_origin'
+                ? state.highlightedDagItem.direction
                 : null
             }
           />
 
-          {/* Hierarchy Mode Overlays - exit button, connection lines (#250) */}
           <HierarchyModeOverlay
-            chart={chart1Ref.current}
-            series={series1Ref.current}
-            legs={activeLegs}
+            chart={state.chart1Ref.current}
+            series={state.series1Ref.current}
+            legs={state.activeLegs}
             bars={visibleChart1Bars}
             lineage={hierarchyMode.state.lineage}
             focusedLegId={hierarchyMode.state.focusedLegId}
@@ -1330,9 +948,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             onRecenter={handleHierarchyRecenter}
           />
           <HierarchyModeOverlay
-            chart={chart2Ref.current}
-            series={series2Ref.current}
-            legs={activeLegs}
+            chart={state.chart2Ref.current}
+            series={state.series2Ref.current}
+            legs={state.activeLegs}
             bars={visibleChart2Bars}
             lineage={hierarchyMode.state.lineage}
             focusedLegId={hierarchyMode.state.focusedLegId}
@@ -1341,40 +959,36 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             onRecenter={handleHierarchyRecenter}
           />
 
-          {/* Event Markers Overlays - lifecycle event markers on candles (#267) */}
           <EventMarkersOverlay
-            chart={chart1Ref.current}
-            series={series1Ref.current}
-            markersPlugin={markers1Ref.current}
+            chart={state.chart1Ref.current}
+            series={state.series1Ref.current}
+            markersPlugin={state.markers1Ref.current}
             bars={visibleChart1Bars}
             eventsByBar={followLeg.eventsByBar}
             onMarkerClick={handleMarkerClick}
             onMarkerDoubleClick={handleMarkerDoubleClick}
-            highlightedEvent={highlightedEvent}
+            highlightedEvent={state.highlightedEvent}
           />
           <EventMarkersOverlay
-            chart={chart2Ref.current}
-            series={series2Ref.current}
-            markersPlugin={markers2Ref.current}
+            chart={state.chart2Ref.current}
+            series={state.series2Ref.current}
+            markersPlugin={state.markers2Ref.current}
             bars={visibleChart2Bars}
             eventsByBar={followLeg.eventsByBar}
             onMarkerClick={handleMarkerClick}
             onMarkerDoubleClick={handleMarkerDoubleClick}
-            highlightedEvent={highlightedEvent}
+            highlightedEvent={state.highlightedEvent}
           />
 
-          {/* Playback Controls */}
           <div className="shrink-0 z-10">
             <PlaybackControls
               playbackState={
-                calibrationPhase === CalibrationPhase.PLAYING
+                state.calibrationPhase === CalibrationPhase.PLAYING
                   ? forwardPlayback.playbackState
-                  : calibrationPhase === CalibrationPhase.CALIBRATED
-                  ? PlaybackState.STOPPED
                   : PlaybackState.STOPPED
               }
               onPlayPause={
-                calibrationPhase === CalibrationPhase.CALIBRATED
+                state.calibrationPhase === CalibrationPhase.CALIBRATED
                   ? handleStartPlayback
                   : forwardPlayback.togglePlayPause
               }
@@ -1390,14 +1004,14 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
               currentEventIndex={forwardPlayback.currentEventIndex}
               totalEvents={forwardPlayback.allEvents.length}
               currentBar={Math.max(0, currentPlaybackPosition + 1)}
-              totalBars={sessionInfo?.totalSourceBars || 0}
+              totalBars={state.sessionInfo?.totalSourceBars || 0}
               calibrationBarCount={0}
-              windowOffset={sessionInfo?.windowOffset}
-              totalSourceBars={sessionInfo?.totalSourceBars}
-              speedMultiplier={speedMultiplier}
-              onSpeedMultiplierChange={setSpeedMultiplier}
-              speedAggregation={speedAggregation}
-              onSpeedAggregationChange={setSpeedAggregation}
+              windowOffset={state.sessionInfo?.windowOffset}
+              totalSourceBars={state.sessionInfo?.totalSourceBars}
+              speedMultiplier={chartPrefs.speedMultiplier}
+              onSpeedMultiplierChange={chartPrefs.setSpeedMultiplier}
+              speedAggregation={chartPrefs.speedAggregation}
+              onSpeedAggregationChange={chartPrefs.setSpeedAggregation}
               availableSpeedAggregations={availableSpeedAggregations}
               isLingering={forwardPlayback.isLingering}
               lingerTimeLeft={forwardPlayback.lingerTimeLeft}
@@ -1407,45 +1021,41 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
               onNavigatePrev={forwardPlayback.navigatePrevEvent}
               onNavigateNext={forwardPlayback.navigateNextEvent}
               onDismissLinger={forwardPlayback.dismissLinger}
-              lingerEnabled={lingerEnabled}
-              onToggleLinger={() => setLingerEnabled(prev => !prev)}
-              currentTimestamp={sourceBars[currentPlaybackPosition]?.timestamp}
-              // Calculate approx max timestamp: current + remaining bars * resolution
-              // This is approximate due to market gaps but provides reasonable constraint
+              lingerEnabled={state.lingerEnabled}
+              onToggleLinger={() => state.setLingerEnabled(prev => !prev)}
+              currentTimestamp={state.sourceBars[currentPlaybackPosition]?.timestamp}
               maxTimestamp={
-                sourceBars[currentPlaybackPosition]?.timestamp && sessionInfo?.totalSourceBars
-                  ? sourceBars[currentPlaybackPosition].timestamp +
-                    ((sessionInfo.totalSourceBars - currentPlaybackPosition - 1) * sourceResolutionMinutes * 60)
+                state.sourceBars[currentPlaybackPosition]?.timestamp && state.sessionInfo?.totalSourceBars
+                  ? state.sourceBars[currentPlaybackPosition].timestamp +
+                    ((state.sessionInfo.totalSourceBars - currentPlaybackPosition - 1) * state.sourceResolutionMinutes * 60)
                   : undefined
               }
-              resolutionMinutes={sourceResolutionMinutes}
+              resolutionMinutes={state.sourceResolutionMinutes}
               onProcessTill={handleProcessTill}
-              isProcessingTill={isProcessingTill}
+              isProcessingTill={state.isProcessingTill}
             />
           </div>
 
-          {/* Resize Handle */}
           <ResizeHandle onResize={handlePanelResize} />
 
-          {/* DAG State Panel - Always shown in DAG mode */}
-          <div className="shrink-0" style={{ height: explanationPanelHeight }}>
+          <div className="shrink-0" style={{ height: chartPrefs.explanationPanelHeight }}>
             <DAGStatePanel
-              dagState={dagState}
-              recentLegEvents={recentLegEvents}
-              isLoading={isDagLoading}
-              onHoverItem={setHighlightedDagItem}
-              highlightedItem={highlightedDagItem}
-              attachedItems={attachedItems}
-              onAttachItem={handleAttachItem}
-              onDetachItem={handleDetachItem}
-              focusedLegId={focusedLegId}
+              dagState={state.dagState}
+              recentLegEvents={state.recentLegEvents}
+              isLoading={state.isDagLoading}
+              onHoverItem={state.setHighlightedDagItem}
+              highlightedItem={state.highlightedDagItem}
+              attachedItems={state.attachedItems}
+              onAttachItem={state.handleAttachItem}
+              onDetachItem={state.handleDetachItem}
+              focusedLegId={state.focusedLegId}
               followedLegs={followLeg.followedLegs}
               onUnfollowLeg={followLeg.unfollowLeg}
               onFollowedLegClick={(legId) => {
-                setFocusedLegId(legId);
-                const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+                state.setFocusedLegId(legId);
+                const leg = state.dagState?.active_legs.find(l => l.leg_id === legId);
                 if (leg) {
-                  setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
+                  state.setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
                 }
               }}
               onEventClick={handleRecentEventClick}
@@ -1453,30 +1063,28 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
           </div>
         </main>
 
-        {/* Event Inspection Popup (#267) */}
-        {eventPopup && (
+        {state.eventPopup && (
           <EventInspectionPopup
-            events={eventPopup.events}
-            barIndex={eventPopup.barIndex}
-            csvIndex={sessionInfo ? sessionInfo.windowOffset + eventPopup.barIndex : undefined}
-            position={eventPopup.position}
-            onClose={() => { setEventPopup(null); setHighlightedEvent(null); }}
+            events={state.eventPopup.events}
+            barIndex={state.eventPopup.barIndex}
+            csvIndex={state.sessionInfo ? state.sessionInfo.windowOffset + state.eventPopup.barIndex : undefined}
+            position={state.eventPopup.position}
+            onClose={() => { state.setEventPopup(null); state.setHighlightedEvent(null); }}
             onAttachEvent={handleAttachEvent}
             onFocusLeg={(legId) => {
-              setFocusedLegId(legId);
-              const leg = dagState?.active_legs.find(l => l.leg_id === legId);
+              state.setFocusedLegId(legId);
+              const leg = state.dagState?.active_legs.find(l => l.leg_id === legId);
               if (leg) {
-                setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
+                state.setHighlightedDagItem({ type: 'leg', id: legId, direction: leg.direction });
               }
-              setEventPopup(null);
+              state.setEventPopup(null);
             }}
           />
         )}
 
-        {/* Settings Panel (#327) */}
         <SettingsPanel
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
+          isOpen={state.isSettingsOpen}
+          onClose={() => state.setIsSettingsOpen(false)}
           currentDataFile={sessionSettings.dataFile || ''}
           onSessionRestart={() => window.location.reload()}
           onSaveSession={sessionSettings.saveSession}
