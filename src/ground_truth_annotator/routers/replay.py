@@ -1843,13 +1843,9 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         new_config = new_config.with_max_turns_per_pivot(request.max_turns_per_pivot)
 
     # Apply pruning algorithm toggles
-    if any([
-        request.enable_engulfed_prune is not None,
-        request.enable_inner_structure_prune is not None,
-    ]):
+    if request.enable_engulfed_prune is not None:
         new_config = new_config.with_prune_toggles(
             enable_engulfed_prune=request.enable_engulfed_prune,
-            enable_inner_structure_prune=request.enable_inner_structure_prune,
         )
 
     # Update detector config (keeps current state, applies to future bars)
@@ -1881,7 +1877,6 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         min_turn_ratio=new_config.min_turn_ratio,
         max_turns_per_pivot=new_config.max_turns_per_pivot,
         enable_engulfed_prune=new_config.enable_engulfed_prune,
-        enable_inner_structure_prune=new_config.enable_inner_structure_prune,
     )
 
 
@@ -1922,5 +1917,4 @@ async def get_detection_config():
         min_turn_ratio=config.min_turn_ratio,
         max_turns_per_pivot=config.max_turns_per_pivot,
         enable_engulfed_prune=config.enable_engulfed_prune,
-        enable_inner_structure_prune=config.enable_inner_structure_prune,
     )

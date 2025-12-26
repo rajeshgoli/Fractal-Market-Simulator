@@ -604,30 +604,7 @@ Both endpoints violated = structure is meaningless.
 Leg is deleted immediately. No replacement.
 ```
 
-### 4. Inner Structure Pruning
-
-**Rule:** When outer structure invalidates, redundant inner counter-legs are pruned.
-
-**Key insight:** Contained legs are invalidated **sequentially**, not simultaneously. Since inner.origin < outer.origin (for bears), price breaches the inner leg's origin first. The algorithm checks newly invalidated legs against *all* previously invalidated legs to detect containment pairs across bars (#279).
-
-```
-Scenario:
-  Outer bear: H1=4100 → L1=4000 (large structure)
-  Inner bear: H2=4050 → L2=4020 (nested inside)
-
-  Bar 200: Price hits 4050 → Inner bear (H2) invalidated
-  Bar 202: Price hits 4100 → Outer bear (H1) invalidated
-
-  At Bar 202, containment pair detected (inner already invalidated).
-  Now look at bull legs from both pivots:
-    Bull from L2=4020 → current high
-    Bull from L1=4000 → current high (same destination)
-
-  The L2 bull is REDUNDANT — L1 bull has better origin.
-  L2 bull is pruned, L1 bull survives.
-```
-
-### 5. Min Counter-Trend Ratio Pruning
+### 4. Min Counter-Trend Ratio Pruning
 
 **Rule:** Child legs require sufficient counter-trend at their origin relative to their parent's counter-trend.
 
@@ -1293,11 +1270,11 @@ These could be unified as **one "structure threshold"** with different direction
 
 ### 3. Pruning Rules Consolidation
 
-Four pruning rules could reduce to two:
+Three pruning rules could reduce to two:
 1. **Dominance:** Keep the best origin for each direction
 2. **Breach:** Remove when endpoints are violated
 
-The proximity and inner structure pruning are variations of dominance.
+The proximity pruning is a variation of dominance.
 
 **Opportunity:** Document as "dominance-based cleanup" rather than separate rules.
 

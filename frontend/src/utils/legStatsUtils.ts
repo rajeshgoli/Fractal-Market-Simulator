@@ -14,7 +14,6 @@ export interface LegStats {
   engulfed: number;       // Engulfed prune count
   staleExtension: number; // Stale/extension prune count
   proximity: number;      // Proximity prune count
-  innerStructure: number; // Inner structure prune count
   minCtr: number;         // Branch ratio domination count
   formed: number;         // Currently formed legs
 }
@@ -34,7 +33,6 @@ export function calculateLegStats(
     engulfed: 0,
     staleExtension: 0,
     proximity: 0,
-    innerStructure: 0,
     minCtr: 0,
     formed: 0,
   };
@@ -51,8 +49,6 @@ export function calculateLegStats(
         stats.staleExtension++;
       } else if (reason.includes('proximity')) {
         stats.proximity++;
-      } else if (reason.includes('inner')) {
-        stats.innerStructure++;
       } else if (reason.includes('branch_ratio') || reason.includes('dominated')) {
         stats.minCtr++;  // Repurposed for branch ratio domination
       }

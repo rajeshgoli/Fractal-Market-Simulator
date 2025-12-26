@@ -585,22 +585,9 @@ class LegDetector:
         # which prevents insignificant legs at creation time rather than pruning after.
 
         # Update breach tracking for all legs (#208, #345)
-        # Returns breach events and list of newly breached legs for inner structure pruning
-        breach_events, newly_breached_legs = self._update_breach_tracking(bar, bar_high, bar_low, timestamp)
+        # Returns breach events
+        breach_events, _ = self._update_breach_tracking(bar, bar_high, bar_low, timestamp)
         events.extend(breach_events)
-
-        # Prune inner structure legs when legs get origin-breached (#264, #279, #345)
-        if newly_breached_legs:
-            # Gather ALL origin-breached legs (current bar + previously breached)
-            all_breached = [
-                leg for leg in self.state.active_legs
-                if leg.max_origin_breach is not None
-            ]
-            if len(all_breached) >= 2:
-                inner_prune_events = self._pruner.prune_inner_structure_legs(
-                    self.state, all_breached, bar, timestamp
-                )
-                events.extend(inner_prune_events)
 
         # First bar initialization
         if self.state.prev_bar is None:

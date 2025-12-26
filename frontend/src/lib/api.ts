@@ -297,7 +297,6 @@ export interface FeedbackDetectionConfig {
   min_branch_ratio: number;  // Min branch ratio for origin domination (#337)
   min_turn_ratio: number;  // Min turn ratio for sibling pruning (#341)
   enable_engulfed_prune: boolean;
-  enable_inner_structure_prune: boolean;
 }
 
 // Rich context snapshot for always-on feedback
@@ -528,7 +527,6 @@ export interface DetectionConfigUpdateRequest {
   max_turns_per_pivot?: number;  // Top-k turn ratio pruning (#342)
   // Pruning algorithm toggles
   enable_engulfed_prune?: boolean;
-  enable_inner_structure_prune?: boolean;
   enable_turn_prune?: boolean;
   enable_pivot_breach_prune?: boolean;
   enable_domination_prune?: boolean;

@@ -365,7 +365,6 @@ export interface DetectionConfig {
   max_turns_per_pivot: number;  // Top-k turn ratio pruning (#342, default: 0)
   // Pruning algorithm toggles
   enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
-  enable_inner_structure_prune: boolean;  // Enable inner structure pruning (default: false)
 }
 
 /**
@@ -387,5 +386,4 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   min_turn_ratio: 0.0,
   max_turns_per_pivot: 0,
   enable_engulfed_prune: true,
-  enable_inner_structure_prune: false,
 };

@@ -36,7 +36,6 @@ interface ToggleConfig {
 
 const PRUNE_TOGGLES: ToggleConfig[] = [
   { key: 'enable_engulfed_prune', label: 'Engulfed', description: 'Delete legs breached on both origin and pivot sides' },
-  { key: 'enable_inner_structure_prune', label: 'Inner Structure', description: 'Prune legs with same pivot as parent' },
 ];
 
 // Fibonacci level options for Formation and Invalidation thresholds
@@ -105,8 +104,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       localConfig.min_branch_ratio !== config.min_branch_ratio ||
       localConfig.min_turn_ratio !== config.min_turn_ratio ||
       localConfig.max_turns_per_pivot !== config.max_turns_per_pivot ||
-      localConfig.enable_engulfed_prune !== config.enable_engulfed_prune ||
-      localConfig.enable_inner_structure_prune !== config.enable_inner_structure_prune
+      localConfig.enable_engulfed_prune !== config.enable_engulfed_prune
     );
   }, [localConfig, config]);
 
@@ -178,7 +176,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         max_turns_per_pivot: localConfig.max_turns_per_pivot,
         // Pruning algorithm toggles
         enable_engulfed_prune: localConfig.enable_engulfed_prune,
-        enable_inner_structure_prune: localConfig.enable_inner_structure_prune,
       };
 
       const updatedConfig = await updateDetectionConfig(request);

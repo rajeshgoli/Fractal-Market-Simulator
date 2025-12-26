@@ -359,7 +359,7 @@ The pipeline order per bar:
 | `SwingCompletedEvent` | `SWING_COMPLETED` | Price reaches 2.0 extension target |
 | `LevelCrossEvent` | `LEVEL_CROSS` | Price crosses Fib level boundary |
 | `LegCreatedEvent` | `LEG_CREATED` | New candidate leg is created (pre-formation) |
-| `LegPrunedEvent` | `LEG_PRUNED` | Leg is removed (reasons: `turn_prune`, `origin_proximity_prune`, `breach_prune`, `extension_prune`, `inner_structure`) |
+| `LegPrunedEvent` | `LEG_PRUNED` | Leg is removed (reasons: `turn_prune`, `origin_proximity_prune`, `breach_prune`, `extension_prune`) |
 | `LegInvalidatedEvent` | `LEG_INVALIDATED` | Leg breaches invalidation threshold (configurable, default 0.382) |
 
 All event types are serialized with their API type string (second column) in API responses. Leg events include their specific metadata: `LegPrunedEvent` includes `reason` and `explanation` fields in the `trigger_explanation`.
@@ -486,40 +486,9 @@ Breached legs (where origin has been touched) remain visible in the DAG until pr
 Configuration:
 - `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
 - `SwingConfig.emit_level_crosses`: Enable/disable LevelCrossEvent emission (default: False for performance)
-- `SwingConfig.enable_*_prune`: Toggle individual pruning algorithms (engulfed, inner_structure)
+- `SwingConfig.enable_engulfed_prune`: Toggle engulfed pruning algorithm
 
 **Note (#345):** The `invalidation_threshold` config has been removed. Origin breach is now detected at 0% (any touch). Use `max_origin_breach is not None` to check if a leg's origin has been breached.
-
-**Inner structure pruning (#264, #266, #279):**
-
-When legs of the same direction have their origins breached, prune counter-direction legs from inner structure pivots. Inner structure legs are redundant when an outer-origin leg exists with the same current pivot.
-
-**Sequential breach detection (#279, #345):** Contained legs are breached sequentially (inner first, outer later) because inner.origin < outer.origin. The algorithm checks newly breached legs against ALL previously breached legs, not just same-bar breaches.
-
-**Important:** Swing immunity does NOT apply for inner structure pruning. If a leg is structurally inner (contained in a larger structure) and there's an outer-origin leg with the same pivot, the inner leg is redundant regardless of whether it formed a swing (#266).
-
-Example (bear direction):
-```
-H1=6100 → L1=5900 → H2=6050 → L2=5950 → H4=6150
-         (outer)              (inner)
-
-At H4 (breaks above H1):
-- Bear leg H1→L1 origin breached (outer structure)
-- Bear leg H2→L2 origin breached (inner structure, contained in H1→L1)
-- Bull leg L1→H4 survives (outer-origin)
-- Bull leg L2→H4 PRUNED (inner-origin, reason="inner_structure")
-```
-
-Containment definition:
-- Bear: B_inner contained in B_outer iff `inner.origin < outer.origin AND inner.pivot > outer.pivot`
-- Bull: B_inner contained in B_outer iff `inner.origin > outer.origin AND inner.pivot < outer.pivot`
-
-Pruning conditions:
-1. Multiple legs of same direction invalidated (can be same bar or sequential)
-2. One leg strictly contained in another
-3. Counter-direction legs exist from both pivots
-4. Both counter-direction legs share the same current pivot
-5. **No swing immunity** — inner structure legs are pruned even if they formed swings
 
 **Benefits:**
 - Multi-origin preservation: Keeps the best leg from each structural level
@@ -950,7 +919,7 @@ The `detection_config` field captures the full detection configuration at observ
 - Bull/bear formation and invalidation thresholds
 - Stale extension threshold
 - Origin range/time proximity thresholds
-- Pruning algorithm toggles (engulfed, inner structure)
+- Pruning algorithm toggles (engulfed)
 
 **Backend storage** (`src/ground_truth_annotator/storage.py`):
 - `PLAYBACK_FEEDBACK_SCHEMA_VERSION = 2` - Current schema version

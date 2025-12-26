@@ -95,7 +95,6 @@ Turn ratio pruning limits the number of sibling legs sharing the same pivot. Two
 | Toggle | Description |
 |--------|-------------|
 | Engulfed | Delete legs breached on both origin and pivot sides |
-| Inner Structure | Prune legs with same pivot as parent |
 
 Click **Apply** to send changes to the backend. Changes take effect immediately on the current session.
 
@@ -194,7 +193,7 @@ You can interact with legs directly on the chart (not just in the panel):
 | Event | Description |
 |-------|-------------|
 | LEG_CREATED | New candidate leg created from pivot + origin pair |
-| LEG_PRUNED | Leg removed (inner structure pruning, origin-proximity consolidation, or staleness) |
+| LEG_PRUNED | Leg removed (origin-proximity consolidation, engulfed, or staleness) |
 | LEG_INVALIDATED | Leg fell below 0.382 threshold (decisive invalidation) |
 
 ### Playback Controls

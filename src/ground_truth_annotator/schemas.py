@@ -281,7 +281,6 @@ class FeedbackDetectionConfig(BaseModel):
     origin_time_threshold: float
     min_branch_ratio: float  # Min branch ratio for origin domination (#337)
     enable_engulfed_prune: bool
-    enable_inner_structure_prune: bool
 
 
 class PlaybackFeedbackSnapshot(BaseModel):
@@ -546,7 +545,6 @@ class SwingConfigUpdateRequest(BaseModel):
     max_turns_per_pivot: Optional[int] = None  # Top-k turn ratio pruning (#342)
     # Pruning algorithm toggles
     enable_engulfed_prune: Optional[bool] = None  # Enable engulfed leg deletion (default: True)
-    enable_inner_structure_prune: Optional[bool] = None  # Enable inner structure pruning (default: True)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -565,8 +563,7 @@ class SwingConfigUpdateRequest(BaseModel):
                 "min_branch_ratio": 0.1,
                 "min_turn_ratio": 0.5,
                 "max_turns_per_pivot": 0,
-                "enable_engulfed_prune": True,
-                "enable_inner_structure_prune": True
+                "enable_engulfed_prune": True
             }
         }
     )
@@ -593,7 +590,6 @@ class SwingConfigResponse(BaseModel):
     max_turns_per_pivot: int  # Top-k turn ratio pruning (#342)
     # Pruning algorithm toggles
     enable_engulfed_prune: bool
-    enable_inner_structure_prune: bool
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -612,8 +608,7 @@ class SwingConfigResponse(BaseModel):
                 "min_branch_ratio": 0.1,
                 "min_turn_ratio": 0.5,
                 "max_turns_per_pivot": 0,
-                "enable_engulfed_prune": True,
-                "enable_inner_structure_prune": True
+                "enable_engulfed_prune": True
             }
         }
     )

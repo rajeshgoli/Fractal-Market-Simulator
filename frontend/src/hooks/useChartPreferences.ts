@@ -21,7 +21,6 @@ function mergeDetectionConfig(saved: Partial<DetectionConfig> | null): Detection
     min_turn_ratio: saved.min_turn_ratio ?? DEFAULT_DETECTION_CONFIG.min_turn_ratio,
     max_turns_per_pivot: saved.max_turns_per_pivot ?? DEFAULT_DETECTION_CONFIG.max_turns_per_pivot,
     enable_engulfed_prune: saved.enable_engulfed_prune ?? DEFAULT_DETECTION_CONFIG.enable_engulfed_prune,
-    enable_inner_structure_prune: saved.enable_inner_structure_prune ?? DEFAULT_DETECTION_CONFIG.enable_inner_structure_prune,
   };
 }
 
