@@ -424,7 +424,7 @@ This scales naturally through the hierarchy:
 
 Configuration: `SwingConfig.min_branch_ratio` (default: 0.0 = disabled)
 
-**Turn ratio pruning (#341, #342):**
+**Turn ratio pruning (#341, #342, #344):**
 
 Filters sibling legs horizontally at shared pivots based on turn ratio:
 ```
@@ -445,6 +445,8 @@ Top-k mode:
   Sort all counter-legs at pivot by turn_ratio (descending)
   Keep top k, prune the rest
 ```
+
+**Largest leg exemption (#344):** The largest leg (by range) at each shared pivot is always exempt from turn-ratio pruning. Since the biggest leg has the lowest ratio (range is in the denominator), it would otherwise be pruned first — but it represents primary structure and should be preserved.
 
 When a new leg forms at origin O, counter-legs with pivot == O are checked.
 

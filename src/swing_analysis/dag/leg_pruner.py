@@ -936,12 +936,17 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Prune counter-legs at the new leg's origin based on turn ratio (#341, #342).
+        Prune counter-legs at the new leg's origin based on turn ratio (#341, #342, #344).
 
         Two mutually exclusive modes:
         1. **Threshold mode** (min_turn_ratio > 0): Prune if turn_ratio < threshold
         2. **Top-k mode** (min_turn_ratio == 0, max_turns_per_pivot > 0): Keep only
            the k highest-ratio legs at each pivot
+
+        **#344 Exemption**: The largest leg (by range) at the shared pivot is always
+        exempt from turn-ratio pruning. This is because the largest leg represents
+        primary structure — it has the lowest turn ratio (range is in denominator)
+        but is the most significant level at this pivot.
 
         When a new leg forms at origin O, for each counter-leg whose pivot == O:
         - turn_ratio = counter_leg._max_counter_leg_range / counter_leg.range
@@ -986,11 +991,21 @@ class LegPruner:
         if not counter_legs:
             return events
 
+        # #344: Exempt the largest leg from pruning - it's primary structure
+        # The biggest leg has the lowest turn ratio (since range is in denominator)
+        # but represents the most significant structure at this pivot
+        largest_leg = max(counter_legs, key=lambda l: l.range)
+        pruneable_legs = [leg for leg in counter_legs if leg.leg_id != largest_leg.leg_id]
+
+        # If only one leg, nothing to prune (the largest is exempt)
+        if not pruneable_legs:
+            return events
+
         pruned_leg_ids: Set[str] = set()
 
         if use_threshold_mode:
             # Threshold mode: prune legs with turn_ratio < min_turn_ratio
-            for counter_leg in counter_legs:
+            for counter_leg in pruneable_legs:
                 if counter_leg.range == 0:
                     continue
 
@@ -1019,8 +1034,9 @@ class LegPruner:
         else:
             # Top-k mode: keep only max_turns_per_pivot highest-ratio legs
             # Score each leg by turn_ratio (skip legacy legs without _max_counter_leg_range)
+            # Note: largest leg is already exempt, only score pruneable_legs
             scored_legs: List[Tuple[Leg, float]] = []
-            for counter_leg in counter_legs:
+            for counter_leg in pruneable_legs:
                 if counter_leg.range == 0:
                     continue
                 if counter_leg._max_counter_leg_range is None:

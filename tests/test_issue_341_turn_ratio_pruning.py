@@ -234,44 +234,59 @@ class TestPruneByTurnRatio:
         assert counter_leg in state.active_legs
 
     def test_counter_leg_pruned_when_below_threshold(self):
-        """Counter-leg is pruned when turn_ratio < min_turn_ratio."""
+        """Counter-leg is pruned when turn_ratio < min_turn_ratio (but not if it's largest)."""
         config = SwingConfig.default().with_min_turn_ratio(0.5)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
-        # Counter-leg with low turn ratio (0.1 < 0.5 threshold)
-        # _max_counter = 10, range = 100, ratio = 0.1
-        counter_leg = Leg(
+        # Need 2 legs: one largest (exempt) and one below threshold (pruned)
+        # Largest leg: range=100, ratio=0.5 (at threshold - kept as exempt)
+        largest_leg = Leg(
             direction='bear',
             origin_price=Decimal("200"),
             origin_index=0,
-            pivot_price=Decimal("100"),  # Pivot matches new leg's origin
+            pivot_price=Decimal("100"),
             pivot_index=1,
             price_at_creation=Decimal("110"),
             last_modified_bar=1,
-            _max_counter_leg_range=10.0,  # Counter-trend was 10
+            _max_counter_leg_range=50.0,  # 50/100 = 0.5 ratio
         )
-        state.active_legs.append(counter_leg)
+        state.active_legs.append(largest_leg)
+
+        # Smaller leg with low turn ratio (0.1 < 0.5 threshold) - will be pruned
+        # _max_counter = 5, range = 50, ratio = 0.1
+        small_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("150"),
+            origin_index=2,
+            pivot_price=Decimal("100"),  # Pivot matches new leg's origin
+            pivot_index=3,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=3,
+            _max_counter_leg_range=5.0,  # Counter-trend was 5
+        )
+        state.active_legs.append(small_leg)
 
         # New leg at origin 100
         new_leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
-            origin_index=2,
+            origin_index=4,
             pivot_price=Decimal("105"),
-            pivot_index=3,
+            pivot_index=5,
             price_at_creation=Decimal("104"),
-            last_modified_bar=3,
+            last_modified_bar=5,
         )
 
-        bar = make_bar(3, 100.0, 106.0, 99.0, 105.0)
+        bar = make_bar(5, 100.0, 106.0, 99.0, 105.0)
         events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
 
-        # Counter-leg should be pruned
+        # Small leg should be pruned (largest is exempt)
         assert len(events) == 1
         assert events[0].reason == "turn_ratio"
-        assert counter_leg.leg_id in events[0].leg_id
-        assert counter_leg not in state.active_legs
+        assert small_leg.leg_id in events[0].leg_id
+        assert small_leg not in state.active_legs
+        assert largest_leg in state.active_legs  # Exempt
 
     def test_counter_leg_preserved_when_above_threshold(self):
         """Counter-leg is preserved when turn_ratio >= min_turn_ratio."""
@@ -330,16 +345,29 @@ class TestPruneByTurnRatio:
         )
         state.active_legs.append(unrelated_leg)
 
-        # Counter-leg at matching pivot (should be checked and pruned)
-        matching_leg = Leg(
+        # Largest leg at matching pivot (exempt)
+        largest_leg = Leg(
             direction='bear',
-            origin_price=Decimal("200"),
+            origin_price=Decimal("220"),
             origin_index=2,
             pivot_price=Decimal("100"),  # Matches new leg's origin
             pivot_index=3,
             price_at_creation=Decimal("110"),
             last_modified_bar=3,
-            _max_counter_leg_range=5.0,  # Will fail ratio check
+            _max_counter_leg_range=50.0,
+        )
+        state.active_legs.append(largest_leg)
+
+        # Smaller counter-leg at matching pivot (should be checked and pruned)
+        matching_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("150"),
+            origin_index=4,
+            pivot_price=Decimal("100"),  # Matches new leg's origin
+            pivot_index=5,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=5,
+            _max_counter_leg_range=5.0,  # Will fail ratio check (5/50 = 0.1 < 0.5)
         )
         state.active_legs.append(matching_leg)
 
@@ -347,21 +375,22 @@ class TestPruneByTurnRatio:
         new_leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
-            origin_index=4,
+            origin_index=6,
             pivot_price=Decimal("105"),
-            pivot_index=5,
+            pivot_index=7,
             price_at_creation=Decimal("104"),
-            last_modified_bar=5,
+            last_modified_bar=7,
         )
 
-        bar = make_bar(5, 100.0, 106.0, 99.0, 105.0)
+        bar = make_bar(7, 100.0, 106.0, 99.0, 105.0)
         events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
 
-        # Only matching leg pruned
+        # Only matching leg pruned (largest at pivot is exempt)
         assert len(events) == 1
         assert matching_leg.leg_id in events[0].leg_id
         assert matching_leg not in state.active_legs
         assert unrelated_leg in state.active_legs
+        assert largest_leg in state.active_legs
 
     def test_same_direction_legs_not_checked(self):
         """Same-direction legs are not considered counter-legs."""
@@ -619,13 +648,13 @@ class TestTurnRatioEdgeCases:
         assert boundary_leg in state.active_legs
 
     def test_multiple_counter_legs_selective_pruning(self):
-        """Multiple counter-legs at same pivot: only low-ratio ones pruned."""
+        """Multiple counter-legs at same pivot: largest exempt, then low-ratio ones pruned."""
         config = SwingConfig.default().with_min_turn_ratio(0.4)
         pruner = LegPruner(config)
         state = DetectorState()
 
-        # Counter-leg 1: low ratio (0.2 < 0.4) - should be pruned
-        low_ratio_leg = Leg(
+        # Largest leg (range=100, exempt)
+        largest_leg = Leg(
             direction='bear',
             origin_price=Decimal("200"),
             origin_index=0,
@@ -633,20 +662,33 @@ class TestTurnRatioEdgeCases:
             pivot_index=1,
             price_at_creation=Decimal("110"),
             last_modified_bar=1,
-            _max_counter_leg_range=20.0,  # 20 / 100 = 0.2
+            _max_counter_leg_range=20.0,  # 20 / 100 = 0.2 (low but exempt)
         )
-        state.active_legs.append(low_ratio_leg)
+        state.active_legs.append(largest_leg)
 
-        # Counter-leg 2: high ratio (0.8 >= 0.4) - should be preserved
-        high_ratio_leg = Leg(
+        # Counter-leg: low ratio (0.2 < 0.4) - should be pruned
+        low_ratio_leg = Leg(
             direction='bear',
-            origin_price=Decimal("180"),
+            origin_price=Decimal("150"),
             origin_index=2,
             pivot_price=Decimal("100"),
             pivot_index=3,
-            price_at_creation=Decimal("120"),
+            price_at_creation=Decimal("110"),
             last_modified_bar=3,
-            _max_counter_leg_range=64.0,  # 64 / 80 = 0.8
+            _max_counter_leg_range=10.0,  # 10 / 50 = 0.2
+        )
+        state.active_legs.append(low_ratio_leg)
+
+        # Counter-leg: high ratio (0.8 >= 0.4) - should be preserved
+        high_ratio_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("140"),
+            origin_index=4,
+            pivot_price=Decimal("100"),
+            pivot_index=5,
+            price_at_creation=Decimal("120"),
+            last_modified_bar=5,
+            _max_counter_leg_range=32.0,  # 32 / 40 = 0.8
         )
         state.active_legs.append(high_ratio_leg)
 
@@ -654,21 +696,22 @@ class TestTurnRatioEdgeCases:
         new_leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
-            origin_index=4,
+            origin_index=6,
             pivot_price=Decimal("105"),
-            pivot_index=5,
+            pivot_index=7,
             price_at_creation=Decimal("104"),
-            last_modified_bar=5,
+            last_modified_bar=7,
         )
 
-        bar = make_bar(5, 100.0, 106.0, 99.0, 105.0)
+        bar = make_bar(7, 100.0, 106.0, 99.0, 105.0)
         events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
 
-        # Only low-ratio leg pruned
+        # Only low-ratio leg pruned (largest exempt, high ratio passes)
         assert len(events) == 1
         assert low_ratio_leg.leg_id in events[0].leg_id
         assert low_ratio_leg not in state.active_legs
         assert high_ratio_leg in state.active_legs
+        assert largest_leg in state.active_legs
 
 
 class TestTopKModePruning:
@@ -716,76 +759,91 @@ class TestTopKModePruning:
         assert len(state.active_legs) == 5
 
     def test_topk_mode_keeps_only_k_legs(self):
-        """Top-k mode keeps only the k highest-ratio legs."""
+        """Top-k mode keeps only the k highest-ratio legs (excluding exempt largest)."""
         config = SwingConfig.default().with_max_turns_per_pivot(2)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
-        # Create 4 counter-legs with different ratios
-        # ratio = _max_counter_leg_range / range
-        leg1 = Leg(  # ratio = 10/100 = 0.1 (lowest - prune)
+        # Create 5 counter-legs: 1 largest (exempt) + 4 pruneable
+        # With k=2, we keep top 2 of the 4 pruneable legs
+
+        # Largest leg (exempt) - range=150
+        largest = Leg(
             direction='bear',
-            origin_price=Decimal("200"),
+            origin_price=Decimal("250"),
             origin_index=0,
             pivot_price=Decimal("100"),
             pivot_index=1,
             price_at_creation=Decimal("110"),
             last_modified_bar=1,
-            _max_counter_leg_range=10.0,
+            _max_counter_leg_range=10.0,  # ratio=0.067 (low but exempt)
         )
-        leg2 = Leg(  # ratio = 40/80 = 0.5 (2nd highest - keep)
+        # Pruneable legs - keep 2 highest ratios
+        leg1 = Leg(  # ratio = 10/100 = 0.1 (lowest - prune)
             direction='bear',
-            origin_price=Decimal("180"),
+            origin_price=Decimal("200"),
             origin_index=2,
             pivot_price=Decimal("100"),
             pivot_index=3,
             price_at_creation=Decimal("110"),
             last_modified_bar=3,
-            _max_counter_leg_range=40.0,
+            _max_counter_leg_range=10.0,
         )
-        leg3 = Leg(  # ratio = 60/60 = 1.0 (highest - keep)
+        leg2 = Leg(  # ratio = 40/80 = 0.5 (2nd highest - keep)
             direction='bear',
-            origin_price=Decimal("160"),
+            origin_price=Decimal("180"),
             origin_index=4,
             pivot_price=Decimal("100"),
             pivot_index=5,
             price_at_creation=Decimal("110"),
             last_modified_bar=5,
-            _max_counter_leg_range=60.0,
+            _max_counter_leg_range=40.0,
         )
-        leg4 = Leg(  # ratio = 20/120 = 0.167 (3rd - prune)
+        leg3 = Leg(  # ratio = 60/60 = 1.0 (highest - keep)
             direction='bear',
-            origin_price=Decimal("220"),
+            origin_price=Decimal("160"),
             origin_index=6,
             pivot_price=Decimal("100"),
             pivot_index=7,
             price_at_creation=Decimal("110"),
             last_modified_bar=7,
-            _max_counter_leg_range=20.0,
+            _max_counter_leg_range=60.0,
+        )
+        leg4 = Leg(  # ratio = 16/80 = 0.2 (3rd - prune)
+            direction='bear',
+            origin_price=Decimal("180"),
+            origin_index=8,
+            pivot_price=Decimal("100"),
+            pivot_index=9,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=9,
+            _max_counter_leg_range=16.0,
         )
 
-        state.active_legs.extend([leg1, leg2, leg3, leg4])
+        state.active_legs.extend([largest, leg1, leg2, leg3, leg4])
 
         new_leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
-            origin_index=8,
+            origin_index=10,
             pivot_price=Decimal("105"),
-            pivot_index=9,
+            pivot_index=11,
             price_at_creation=Decimal("104"),
-            last_modified_bar=9,
+            last_modified_bar=11,
         )
 
-        bar = make_bar(9, 100.0, 106.0, 99.0, 105.0)
+        bar = make_bar(11, 100.0, 106.0, 99.0, 105.0)
         events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
 
         # Should prune 2 lowest-ratio legs (leg1 and leg4)
+        # largest is exempt, leg2 and leg3 are top 2 by ratio
         assert len(events) == 2
         pruned_ids = {e.leg_id for e in events}
         assert leg1.leg_id in pruned_ids
         assert leg4.leg_id in pruned_ids
 
-        # leg2 and leg3 should remain
+        # largest, leg2 and leg3 should remain
+        assert largest in state.active_legs
         assert leg2 in state.active_legs
         assert leg3 in state.active_legs
         assert leg1 not in state.active_legs
@@ -839,48 +897,63 @@ class TestTopKModePruning:
         pruner = LegPruner(config)
         state = self.create_test_state()
 
-        # Create 2 legs with different ratios
-        leg1 = Leg(  # ratio = 10/100 = 0.1 (below threshold - prune)
+        # Need 3 legs: largest (exempt) + 2 to test threshold logic
+        # Largest leg (exempt) - range=120
+        largest = Leg(
             direction='bear',
-            origin_price=Decimal("200"),
+            origin_price=Decimal("220"),
             origin_index=0,
             pivot_price=Decimal("100"),
             pivot_index=1,
             price_at_creation=Decimal("110"),
             last_modified_bar=1,
-            _max_counter_leg_range=10.0,
+            _max_counter_leg_range=30.0,  # ratio=0.25 (below threshold but exempt)
         )
-        leg2 = Leg(  # ratio = 50/100 = 0.5 (above threshold - keep)
+        # leg1: ratio = 5/50 = 0.1 (below threshold - prune)
+        leg1 = Leg(
             direction='bear',
-            origin_price=Decimal("200"),
+            origin_price=Decimal("150"),
             origin_index=2,
             pivot_price=Decimal("100"),
             pivot_index=3,
             price_at_creation=Decimal("110"),
             last_modified_bar=3,
-            _max_counter_leg_range=50.0,
+            _max_counter_leg_range=5.0,
+        )
+        # leg2: ratio = 20/40 = 0.5 (above threshold - keep)
+        leg2 = Leg(
+            direction='bear',
+            origin_price=Decimal("140"),
+            origin_index=4,
+            pivot_price=Decimal("100"),
+            pivot_index=5,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=5,
+            _max_counter_leg_range=20.0,
         )
 
-        state.active_legs.extend([leg1, leg2])
+        state.active_legs.extend([largest, leg1, leg2])
 
         new_leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
-            origin_index=4,
+            origin_index=6,
             pivot_price=Decimal("105"),
-            pivot_index=5,
+            pivot_index=7,
             price_at_creation=Decimal("104"),
-            last_modified_bar=5,
+            last_modified_bar=7,
         )
 
-        bar = make_bar(5, 100.0, 106.0, 99.0, 105.0)
+        bar = make_bar(7, 100.0, 106.0, 99.0, 105.0)
         events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
 
         # Threshold mode: only leg1 pruned (below threshold)
-        # If top-k mode was active (k=1), both would need to be pruned to keep only 1
+        # largest is exempt, leg2 is above threshold
         assert len(events) == 1
         assert events[0].leg_id == leg1.leg_id
         assert events[0].reason == "turn_ratio"  # Not "turn_ratio_topk"
+        assert largest in state.active_legs
+        assert leg2 in state.active_legs
 
     def test_topk_mode_preserves_legacy_legs(self):
         """Legacy legs without _max_counter_leg_range are not pruned in top-k mode."""
@@ -888,8 +961,238 @@ class TestTopKModePruning:
         pruner = LegPruner(config)
         state = self.create_test_state()
 
-        # Legacy leg without _max_counter_leg_range
+        # Need 3 legs: largest (exempt) + legacy (preserved) + normal (pruned)
+        # With k=1, we keep top 1 of pruneable (non-largest) legs
+        # Legacy has inf ratio, normal has low ratio -> normal gets pruned
+
+        # Largest leg (exempt) - range=120
+        largest = Leg(
+            direction='bear',
+            origin_price=Decimal("220"),
+            origin_index=0,
+            pivot_price=Decimal("100"),
+            pivot_index=1,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=1,
+            _max_counter_leg_range=10.0,
+        )
+        # Legacy leg without _max_counter_leg_range (inf ratio - keeps)
         legacy_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("150"),
+            origin_index=2,
+            pivot_price=Decimal("100"),
+            pivot_index=3,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=3,
+            # No _max_counter_leg_range
+        )
+        # Normal leg with low ratio (pruned)
+        normal_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("140"),
+            origin_index=4,
+            pivot_price=Decimal("100"),
+            pivot_index=5,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=5,
+            _max_counter_leg_range=2.0,  # Very low ratio = 2/40 = 0.05
+        )
+
+        state.active_legs.extend([largest, legacy_leg, normal_leg])
+
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),
+            origin_index=6,
+            pivot_price=Decimal("105"),
+            pivot_index=7,
+            price_at_creation=Decimal("104"),
+            last_modified_bar=7,
+        )
+
+        bar = make_bar(7, 100.0, 106.0, 99.0, 105.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # Legacy leg preserved (inf ratio), normal leg pruned
+        # largest is exempt
+        assert len(events) == 1
+        assert events[0].leg_id == normal_leg.leg_id
+        assert largest in state.active_legs
+        assert legacy_leg in state.active_legs
+        assert normal_leg not in state.active_legs
+
+
+class TestLargestLegExemption:
+    """Tests for #344: Largest leg exemption from turn-ratio pruning."""
+
+    def create_test_state(self) -> DetectorState:
+        """Create a test detector state."""
+        return DetectorState()
+
+    def test_largest_leg_exempt_in_threshold_mode(self):
+        """Largest leg is not pruned even if below threshold."""
+        config = SwingConfig.default().with_min_turn_ratio(0.5)
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # Create 3 bear legs at same pivot with different ranges
+        # The largest leg has the LOWEST turn ratio (since range is in denominator)
+        # but should still be exempt from pruning
+
+        # Small leg: range=20, counter=40, ratio=2.0 (above threshold)
+        small_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("120"),
+            origin_index=0,
+            pivot_price=Decimal("100"),
+            pivot_index=1,
+            price_at_creation=Decimal("105"),
+            last_modified_bar=1,
+            _max_counter_leg_range=40.0,
+        )
+
+        # Medium leg: range=50, counter=20, ratio=0.4 (below threshold - would be pruned)
+        medium_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("150"),
+            origin_index=2,
+            pivot_price=Decimal("100"),
+            pivot_index=3,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=3,
+            _max_counter_leg_range=20.0,
+        )
+
+        # Largest leg: range=100, counter=10, ratio=0.1 (lowest - would be pruned, but EXEMPT)
+        largest_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("200"),
+            origin_index=4,
+            pivot_price=Decimal("100"),
+            pivot_index=5,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=5,
+            _max_counter_leg_range=10.0,
+        )
+
+        state.active_legs.extend([small_leg, medium_leg, largest_leg])
+
+        # New bull leg at origin 100 (triggers check)
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),
+            origin_index=6,
+            pivot_price=Decimal("105"),
+            pivot_index=7,
+            price_at_creation=Decimal("104"),
+            last_modified_bar=7,
+        )
+
+        bar = make_bar(7, 100.0, 106.0, 99.0, 105.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # Only medium_leg should be pruned (below threshold, not largest)
+        # largest_leg is exempt despite having the lowest ratio
+        assert len(events) == 1
+        assert events[0].leg_id == medium_leg.leg_id
+        assert medium_leg not in state.active_legs
+        assert largest_leg in state.active_legs  # Exempt!
+        assert small_leg in state.active_legs  # Above threshold
+
+    def test_largest_leg_exempt_in_topk_mode(self):
+        """Largest leg is not counted toward k limit in top-k mode."""
+        config = SwingConfig.default().with_max_turns_per_pivot(2)
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # Create 4 bear legs:
+        # - 1 largest (exempt from k count)
+        # - 3 others (only top 2 of these should survive)
+
+        # Leg A: range=20, counter=50, ratio=2.5 (high - keep)
+        leg_a = Leg(
+            direction='bear',
+            origin_price=Decimal("120"),
+            origin_index=0,
+            pivot_price=Decimal("100"),
+            pivot_index=1,
+            price_at_creation=Decimal("105"),
+            last_modified_bar=1,
+            _max_counter_leg_range=50.0,
+        )
+
+        # Leg B: range=30, counter=40, ratio=1.33 (medium - keep)
+        leg_b = Leg(
+            direction='bear',
+            origin_price=Decimal("130"),
+            origin_index=2,
+            pivot_price=Decimal("100"),
+            pivot_index=3,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=3,
+            _max_counter_leg_range=40.0,
+        )
+
+        # Leg C: range=40, counter=30, ratio=0.75 (lower - prune)
+        leg_c = Leg(
+            direction='bear',
+            origin_price=Decimal("140"),
+            origin_index=4,
+            pivot_price=Decimal("100"),
+            pivot_index=5,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=5,
+            _max_counter_leg_range=30.0,
+        )
+
+        # Largest leg: range=60, counter=10, ratio=0.17 (lowest - but EXEMPT)
+        largest_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("160"),
+            origin_index=6,
+            pivot_price=Decimal("100"),
+            pivot_index=7,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=7,
+            _max_counter_leg_range=10.0,
+        )
+
+        state.active_legs.extend([leg_a, leg_b, leg_c, largest_leg])
+
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),
+            origin_index=8,
+            pivot_price=Decimal("105"),
+            pivot_index=9,
+            price_at_creation=Decimal("104"),
+            last_modified_bar=9,
+        )
+
+        bar = make_bar(9, 100.0, 106.0, 99.0, 105.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # Largest exempt -> only 3 legs considered for top-2
+        # leg_c should be pruned (3rd highest ratio of the 3 pruneable legs)
+        assert len(events) == 1
+        assert events[0].leg_id == leg_c.leg_id
+        assert events[0].reason == "turn_ratio_topk"
+
+        # Survivors: largest (exempt) + leg_a + leg_b (top 2 of pruneable)
+        assert largest_leg in state.active_legs
+        assert leg_a in state.active_legs
+        assert leg_b in state.active_legs
+        assert leg_c not in state.active_legs
+
+    def test_single_leg_not_pruned(self):
+        """With only 1 counter-leg (which is also largest), nothing to prune."""
+        config = SwingConfig.default().with_min_turn_ratio(0.9)
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # Single leg with low ratio (would be pruned if not exempt)
+        only_leg = Leg(
             direction='bear',
             origin_price=Decimal("200"),
             origin_index=0,
@@ -897,37 +1200,177 @@ class TestTopKModePruning:
             pivot_index=1,
             price_at_creation=Decimal("110"),
             last_modified_bar=1,
-            # No _max_counter_leg_range
+            _max_counter_leg_range=5.0,  # ratio = 5/100 = 0.05 (very low)
         )
-        # Normal leg with low ratio
-        normal_leg = Leg(
+        state.active_legs.append(only_leg)
+
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),
+            origin_index=2,
+            pivot_price=Decimal("105"),
+            pivot_index=3,
+            price_at_creation=Decimal("104"),
+            last_modified_bar=3,
+        )
+
+        bar = make_bar(3, 100.0, 106.0, 99.0, 105.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # No pruning - single leg is largest and thus exempt
+        assert len(events) == 0
+        assert only_leg in state.active_legs
+
+    def test_topk_with_k_equals_pruneable_count(self):
+        """When k equals number of pruneable legs (excluding largest), no pruning."""
+        config = SwingConfig.default().with_max_turns_per_pivot(2)
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # 3 legs total: 1 largest (exempt) + 2 others (k=2, so both kept)
+        leg_a = Leg(
             direction='bear',
-            origin_price=Decimal("200"),
+            origin_price=Decimal("120"),
+            origin_index=0,
+            pivot_price=Decimal("100"),
+            pivot_index=1,
+            price_at_creation=Decimal("105"),
+            last_modified_bar=1,
+            _max_counter_leg_range=20.0,
+        )
+        leg_b = Leg(
+            direction='bear',
+            origin_price=Decimal("130"),
             origin_index=2,
             pivot_price=Decimal("100"),
             pivot_index=3,
             price_at_creation=Decimal("110"),
             last_modified_bar=3,
-            _max_counter_leg_range=5.0,  # Very low ratio
+            _max_counter_leg_range=15.0,
+        )
+        # Largest
+        largest_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("160"),
+            origin_index=4,
+            pivot_price=Decimal("100"),
+            pivot_index=5,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=5,
+            _max_counter_leg_range=5.0,
         )
 
-        state.active_legs.extend([legacy_leg, normal_leg])
+        state.active_legs.extend([leg_a, leg_b, largest_leg])
 
         new_leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
-            origin_index=4,
+            origin_index=6,
             pivot_price=Decimal("105"),
-            pivot_index=5,
+            pivot_index=7,
             price_at_creation=Decimal("104"),
-            last_modified_bar=5,
+            last_modified_bar=7,
         )
 
-        bar = make_bar(5, 100.0, 106.0, 99.0, 105.0)
+        bar = make_bar(7, 100.0, 106.0, 99.0, 105.0)
         events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
 
-        # Legacy leg preserved (inf ratio), normal leg pruned
+        # k=2, pruneable count=2, so nothing pruned
+        assert len(events) == 0
+        assert len(state.active_legs) == 3
+
+    def test_largest_exempt_preserves_primary_structure(self):
+        """
+        Verify the specific scenario from issue description.
+
+        5 bear legs sharing pivot at 5900:
+        A: range=20 → ratio=2.50 ✓ survives
+        B: range=30 → ratio=1.33 ✓ survives
+        C: range=40 → ratio=0.75 ✓ survives (top-3)
+        D: range=50 → ratio=0.40 ✗ pruned
+        E: range=60 → ratio=0.17 ✓ EXEMPT (largest)
+        """
+        config = SwingConfig.default().with_max_turns_per_pivot(3)
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # Build legs exactly as in issue description
+        leg_a = Leg(  # range=20, counter=50 → ratio=2.50
+            direction='bear',
+            origin_price=Decimal("5920"),
+            origin_index=0,
+            pivot_price=Decimal("5900"),
+            pivot_index=1,
+            price_at_creation=Decimal("5910"),
+            last_modified_bar=1,
+            _max_counter_leg_range=50.0,
+        )
+        leg_b = Leg(  # range=30, counter=40 → ratio=1.33
+            direction='bear',
+            origin_price=Decimal("5930"),
+            origin_index=2,
+            pivot_price=Decimal("5900"),
+            pivot_index=3,
+            price_at_creation=Decimal("5910"),
+            last_modified_bar=3,
+            _max_counter_leg_range=40.0,
+        )
+        leg_c = Leg(  # range=40, counter=30 → ratio=0.75
+            direction='bear',
+            origin_price=Decimal("5940"),
+            origin_index=4,
+            pivot_price=Decimal("5900"),
+            pivot_index=5,
+            price_at_creation=Decimal("5910"),
+            last_modified_bar=5,
+            _max_counter_leg_range=30.0,
+        )
+        leg_d = Leg(  # range=50, counter=20 → ratio=0.40
+            direction='bear',
+            origin_price=Decimal("5950"),
+            origin_index=6,
+            pivot_price=Decimal("5900"),
+            pivot_index=7,
+            price_at_creation=Decimal("5910"),
+            last_modified_bar=7,
+            _max_counter_leg_range=20.0,
+        )
+        leg_e = Leg(  # range=60, counter=10 → ratio=0.17 (LARGEST)
+            direction='bear',
+            origin_price=Decimal("5960"),
+            origin_index=8,
+            pivot_price=Decimal("5900"),
+            pivot_index=9,
+            price_at_creation=Decimal("5910"),
+            last_modified_bar=9,
+            _max_counter_leg_range=10.0,
+        )
+
+        state.active_legs.extend([leg_a, leg_b, leg_c, leg_d, leg_e])
+
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("5900"),
+            origin_index=10,
+            pivot_price=Decimal("5920"),
+            pivot_index=11,
+            price_at_creation=Decimal("5915"),
+            last_modified_bar=11,
+        )
+
+        bar = make_bar(11, 5900.0, 5920.0, 5895.0, 5915.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # Largest (leg_e) is exempt
+        # Of remaining 4 legs, keep top-3 by ratio: A(2.5), B(1.33), C(0.75)
+        # Prune D(0.40)
         assert len(events) == 1
-        assert events[0].leg_id == normal_leg.leg_id
-        assert legacy_leg in state.active_legs
-        assert normal_leg not in state.active_legs
+        assert events[0].leg_id == leg_d.leg_id
+
+        # Verify survivors
+        remaining_ids = {leg.leg_id for leg in state.active_legs}
+        assert leg_a.leg_id in remaining_ids
+        assert leg_b.leg_id in remaining_ids
+        assert leg_c.leg_id in remaining_ids
+        assert leg_e.leg_id in remaining_ids  # Largest - exempt
+        assert leg_d.leg_id not in remaining_ids  # Pruned

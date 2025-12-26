@@ -930,8 +930,8 @@ All thresholds are configurable. Defaults shown:
 | `origin_time_prune_threshold` | 0.0 | Time proximity % for origin-proximity consolidation (#294) |
 | `proximity_prune_strategy` | 'oldest' | Strategy for selecting survivor: 'oldest' or 'counter_trend' (#319) |
 | `min_branch_ratio` | 0.0 | Branch ratio for origin domination - prevents insignificant child legs (#337) |
-| `min_turn_ratio` | 0.0 | Turn ratio threshold for sibling pruning (threshold mode) (#341) |
-| `max_turns_per_pivot` | 0 | Top-k turn ratio pruning - keep only k highest-ratio legs per pivot (#342) |
+| `min_turn_ratio` | 0.0 | Turn ratio threshold for sibling pruning (threshold mode) (#341, #344) |
+| `max_turns_per_pivot` | 0 | Top-k turn ratio pruning - keep only k highest-ratio legs per pivot (#342, #344) |
 | `stale_extension_threshold` | 3.0 | Prune invalidated child legs at 3x range (root legs preserved) |
 
 Bull and bear can have different configs for asymmetric markets.
@@ -969,10 +969,11 @@ The Detection Config Panel in the sidebar provides sliders for adjusting thresho
 - Origin Range % threshold (0.0-0.5) — Range similarity for origin-proximity pruning (#294)
 - Origin Time % threshold (0.0-0.5) — Time proximity for origin-proximity pruning (#294)
 - Min Branch Ratio % threshold (0.0-0.2) — Branch ratio for origin domination (#337)
-- Turn Ratio Pruning mode toggle (#342):
+- Turn Ratio Pruning mode toggle (#342, #344):
   - Off: Disabled
   - %: Threshold mode with min_turn_ratio slider
   - Top-k: Top-k mode with max_turns_per_pivot slider
+  - Note: The largest leg at each pivot is always exempt from turn-ratio pruning (#344)
 
 Changes trigger automatic re-calibration via `PUT /api/replay/config`.
 
