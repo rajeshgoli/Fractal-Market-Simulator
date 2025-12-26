@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2025-12-25
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#349** — Frontend cleanup: remove dead code (ViewMode, CalibrationDataHierarchical), fix misleading names, refactor jumpToNextEvent
 - **#348** — Remove inner structure pruning: deleted feature code, tests, and docs
 - **#347** — Turn ratio pruning frontend UX: settings persistence fix, max turns to 20, dual-slider controls
 

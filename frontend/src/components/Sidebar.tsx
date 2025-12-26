@@ -11,7 +11,7 @@ import { LingerEventsPanel, REPLAY_LINGER_EVENTS, DAG_LINGER_EVENTS } from './Li
 import type { LingerEventConfig } from './LingerEventsPanel';
 import { MarketStructurePanel } from './MarketStructurePanel';
 
-// Re-export for backward compatibility
+// Re-export for convenience
 export { REPLAY_LINGER_EVENTS, DAG_LINGER_EVENTS };
 export type { LingerEventConfig, DagContext, ReplayContext };
 

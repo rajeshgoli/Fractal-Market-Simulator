@@ -40,14 +40,8 @@ import {
   clampAggregationToSource,
   LegEvent,
 } from '../types';
-import { ViewMode } from '../App';
 
-interface DAGViewProps {
-  currentMode: ViewMode;
-  onModeChange: (mode: ViewMode) => void;
-}
-
-export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) => {
+export const DAGView: React.FC = () => {
   // Chart and speed preferences (persisted to localStorage)
   const chartPrefs = useChartPreferences();
 
@@ -816,8 +810,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
             ? 'playing'
             : undefined
         }
-        currentMode={currentMode}
-        onModeChange={onModeChange}
         dataFileName={state.dataFileName}
         onOpenSettings={() => state.setIsSettingsOpen(true)}
       />

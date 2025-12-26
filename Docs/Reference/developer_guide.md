@@ -691,6 +691,12 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `useChartPreferences.ts` | Settings persistence to localStorage |
 | `useDAGViewState.ts` | DAG view consolidated state management |
 
+**Frontend Architecture Notes:**
+- DAGView is the sole view (ViewMode infrastructure removed in #349)
+- `useForwardPlayback` has two bar advance mechanisms:
+  - `renderNextBar`: Buffer-based for smooth continuous playback
+  - `advanceBar`: Direct API call for manual stepping (step forward, jump to event)
+
 **Settings Persistence (#347):**
 
 `useChartPreferences` persists user settings to localStorage, including:

@@ -125,8 +125,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       ? { bars: parseInt(processTillBars, 10) || 0, timestamp: 0 }
       : null;
 
-  // Check if we're in forward playback mode (have calibration data)
-  const isForwardPlayback = calibrationBarCount !== undefined && calibrationBarCount > 0;
+  // Check if we should show calibration stats (have calibration data)
+  const showCalibrationStats = calibrationBarCount !== undefined && calibrationBarCount > 0;
 
   // Format large numbers with K/M suffix
   const formatCount = (n: number): string => {
@@ -136,7 +136,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   };
 
   // Calculate remaining bars for forward playback
-  const remainingBars = isForwardPlayback && totalSourceBars !== undefined && windowOffset !== undefined
+  const remainingBars = showCalibrationStats && totalSourceBars !== undefined && windowOffset !== undefined
     ? Math.max(0, totalSourceBars - windowOffset - currentBar - 1)
     : 0;
 
@@ -178,14 +178,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
   // Get max datetime (end of data)
   const maxDatetime = maxTimestamp ? formatDatetimeLocal(maxTimestamp) : undefined;
-
-  // Calculate "+10K bars" preset datetime
-  const get10kBarsDate = (): string | null => {
-    if (!currentTimestamp) return null;
-    const targetTs = currentTimestamp + (10000 * resolutionMinutes * 60);
-    if (maxTimestamp && targetTs > maxTimestamp) return null;
-    return formatDatetimeLocal(targetTs);
-  };
 
   return (
     <div className="bg-app-secondary border-t border-b border-app-border p-3 flex flex-col md:flex-row items-center justify-between gap-4 select-none">
@@ -354,23 +346,36 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-xs text-app-muted">Jump:</span>
 
-            {/* +10K bars preset button - always show */}
-            <button
-              onClick={() => {
-                if (currentTimestamp && get10kBarsDate()) {
-                  setProcessTillDate(get10kBarsDate()!);
-                  setProcessTillBars('');
-                } else {
-                  setProcessTillBars('10000');
-                  setProcessTillDate('');
-                }
-              }}
-              disabled={isProcessingTill || isPlaying}
-              className="px-2 py-1 text-xs bg-app-bg border border-app-border rounded hover:bg-app-card hover:text-white text-app-muted transition-colors disabled:opacity-50"
-              title="Set target to 10,000 bars ahead"
-            >
-              +10K
-            </button>
+            {/* Bar count preset buttons */}
+            {[1000, 5000, 10000, 20000].map((barCount) => {
+              const label = barCount >= 1000 ? `${barCount / 1000}K` : barCount.toString();
+              const getPresetDate = (): string | null => {
+                if (!currentTimestamp) return null;
+                const targetTs = currentTimestamp + (barCount * resolutionMinutes * 60);
+                if (maxTimestamp && targetTs > maxTimestamp) return null;
+                return formatDatetimeLocal(targetTs);
+              };
+              return (
+                <button
+                  key={barCount}
+                  onClick={() => {
+                    const presetDate = getPresetDate();
+                    if (currentTimestamp && presetDate) {
+                      setProcessTillDate(presetDate);
+                      setProcessTillBars('');
+                    } else {
+                      setProcessTillBars(barCount.toString());
+                      setProcessTillDate('');
+                    }
+                  }}
+                  disabled={isProcessingTill || isPlaying}
+                  className="px-2 py-1 text-xs bg-app-bg border border-app-border rounded hover:bg-app-card hover:text-white text-app-muted transition-colors disabled:opacity-50"
+                  title={`Set target to ${label} bars ahead`}
+                >
+                  +{label}
+                </button>
+              );
+            })}
 
             {/* Show datetime picker when we have current timestamp, otherwise show bar input */}
             {currentTimestamp ? (
@@ -523,8 +528,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           </div>
         )}
 
-        {/* Bar Counter - different display for forward playback vs legacy */}
-        {isForwardPlayback ? (
+        {/* Bar Counter - calibration stats or simple progress */}
+        {showCalibrationStats ? (
           // Forward playback: show bar counter, calibrated, offset, remaining
           <div className="flex items-center gap-4">
             <div className="text-right">
@@ -553,7 +558,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             </div>
           </div>
         ) : (
-          // Legacy mode: show current bar / total bars
           <>
             <div className="text-right">
               <span className="text-[10px] text-app-muted uppercase tracking-wider block">Current Bar</span>

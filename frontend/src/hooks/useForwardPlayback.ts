@@ -450,21 +450,28 @@ export function useForwardPlayback({
     return true; // Bar rendered successfully
   }, [endOfData, clearTimers, filterEvents, lingerEnabled, enterLinger, fetchBatch, onNewBars, onAggregatedBarsChange, onDagStateChange, onSwingStateChange]);
 
-  // Legacy advanceBar - still used for stepForward and jumpToNextEvent
-  const advanceBar = useCallback(async () => {
+  // Direct API call for manual stepping (stepForward, jumpToNextEvent)
+  // Buffer-based renderNextBar is for smooth continuous playback only
+  // Returns events and endOfData status for caller inspection (e.g., jumpToNextEvent)
+  const advanceBar = useCallback(async (opts?: {
+    barsToAdvance?: number;  // Override barsPerAdvance (default: use hook's barsPerAdvance)
+    triggerLinger?: boolean;  // Whether to trigger linger on events (default: true)
+  }): Promise<{ events: ReplayEvent[]; endOfData: boolean }> => {
+    const { barsToAdvance = barsPerAdvance, triggerLinger = true } = opts ?? {};
+
     if (endOfData || advancePendingRef.current) {
-      return;
+      return { events: [], endOfData };
     }
 
     advancePendingRef.current = true;
     try {
       // Request aggregated bars and DAG state in the same API call
-      // Use barsPerAdvance to step by speed aggregation unit (e.g., 12 5m bars for 1H speed)
+      // Use barsToAdvance to step by speed aggregation unit (e.g., 12 5m bars for 1H speed)
       // Pass fromIndex (currentPosition) for BE resync if needed (#310)
       const response = await advanceReplay(
         calibrationBarCount,
         currentPosition,
-        barsPerAdvance,
+        barsToAdvance,
         chartAggregationScales,
         includeDagState,
         false,  // include_per_bar_dag_states
@@ -532,27 +539,32 @@ export function useForwardPlayback({
         isPlayingRef.current = false;  // Stop the playback loop
         clearTimers();
         setPlaybackState(PlaybackState.STOPPED);
-        return;
+        return { events: response.events, endOfData: true };
       }
 
       // Filter events for linger based on event type and scale filters
-      const filteredEvents = filterEvents(response.events);
-      if (filteredEvents.length > 0 && lingerEnabled) {
-        // Trigger linger only for filtered events when linger is enabled
-        // Pass wasPlaying=true since advanceBar is called during playback
-        enterLinger(filteredEvents, true);
+      if (triggerLinger) {
+        const filteredEvents = filterEvents(response.events);
+        if (filteredEvents.length > 0 && lingerEnabled) {
+          // Trigger linger only for filtered events when linger is enabled
+          // Pass wasPlaying=true since advanceBar is called during playback
+          enterLinger(filteredEvents, true);
+        }
       }
+
+      return { events: response.events, endOfData: false };
     } catch (err) {
       console.error('Failed to advance replay:', err);
       clearTimers();
       setPlaybackState(PlaybackState.PAUSED);
+      return { events: [], endOfData: false };
     } finally {
       advancePendingRef.current = false;
     }
   }, [calibrationBarCount, currentPosition, barsPerAdvance, chartAggregationScales, includeDagState, endOfData, clearTimers, enterLinger, filterEvents, lingerEnabled, onNewBars, onSwingStateChange, onAggregatedBarsChange, onDagStateChange]);
 
   // Ref to hold the latest advanceBar function
-  const advanceBarRef = useRef<() => Promise<void>>(async () => {});
+  const advanceBarRef = useRef<(opts?: { barsToAdvance?: number; triggerLinger?: boolean }) => Promise<{ events: ReplayEvent[]; endOfData: boolean }>>(async () => ({ events: [], endOfData: false }));
 
   // Keep advanceBarRef updated
   useEffect(() => {
@@ -916,6 +928,7 @@ export function useForwardPlayback({
   }, [allEvents, currentEventIndex, currentPosition, playbackState, exitLinger, clearTimers, calibrationBars, enterLinger, filterEvents]);
 
   // Jump to next event (advance until an event occurs)
+  // Reuses advanceBar for API response handling to avoid duplication
   const jumpToNextEvent = useCallback(async () => {
     if (endOfData) return;
 
@@ -936,96 +949,26 @@ export function useForwardPlayback({
 
     while (!foundEvent && iterations < maxIterations) {
       iterations++;
-      advancePendingRef.current = true;
 
-      try {
-        // For jumpToNextEvent, include aggregated bars and DAG state on the last iteration
-        // Pass fromIndex for BE resync if needed (#310)
-        const expectedPosition = currentPosition + iterations - 1;
-        const response = await advanceReplay(
-          calibrationBarCount,
-          expectedPosition,
-          1,
-          chartAggregationScales,
-          includeDagState,
-          false,  // include_per_bar_dag_states
-          expectedPosition  // fromIndex for BE resync
-        );
+      // Use advanceBar with triggerLinger=false so we can control linger manually
+      const { events, endOfData: reachedEnd } = await advanceBarRef.current({
+        barsToAdvance: 1,
+        triggerLinger: false,
+      });
 
-        if (response.end_of_data) {
-          setEndOfData(true);
-          // Still update position to show we reached the end
-          if (response.new_bars.length > 0) {
-            const newBarData: BarData[] = response.new_bars.map(bar => ({
-              index: bar.index,
-              timestamp: bar.timestamp,
-              open: bar.open,
-              high: bar.high,
-              low: bar.low,
-              close: bar.close,
-              source_start_index: bar.index,
-              source_end_index: bar.index,
-            }));
-            setVisibleBars(prev => [...prev, ...newBarData]);
-            setCurrentPosition(response.current_bar_index);
-            onNewBars?.(newBarData);
-            // Update aggregated bars and DAG state
-            if (response.aggregated_bars && onAggregatedBarsChange) {
-              onAggregatedBarsChange(response.aggregated_bars);
-            }
-            if (response.dag_state && onDagStateChange) {
-              onDagStateChange(response.dag_state);
-            }
-            // Update authoritative CSV index from backend (#297)
-            setCsvIndex(response.csv_index);
-          }
-          break;
+      if (reachedEnd) break;
+
+      // Check for filtered events (only linger on events matching filters)
+      const filteredEvents = filterEvents(events);
+      if (filteredEvents.length > 0) {
+        if (lingerEnabled) {
+          // Pass wasPlaying=false since this is manual navigation
+          enterLinger(filteredEvents, false);
         }
-
-        // Append new bars
-        if (response.new_bars.length > 0) {
-          const newBarData = formatReplayBarsData(response.new_bars);
-          setVisibleBars(prev => [...prev, ...newBarData]);
-          setCurrentPosition(response.current_bar_index);
-          onNewBars?.(newBarData);
-          // Update aggregated bars and DAG state
-          if (response.aggregated_bars && onAggregatedBarsChange) {
-            onAggregatedBarsChange(response.aggregated_bars);
-          }
-          if (response.dag_state && onDagStateChange) {
-            onDagStateChange(response.dag_state);
-          }
-        }
-
-        // Update swing state
-        setCurrentSwingState(response.swing_state);
-        onSwingStateChange?.(response.swing_state);
-
-        // Update authoritative CSV index from backend (#297)
-        setCsvIndex(response.csv_index);
-
-        // Accumulate all events for navigation history
-        if (response.events.length > 0) {
-          setAllEvents(prev => [...prev, ...response.events]);
-        }
-
-        // Check for filtered events (only linger on events matching filters)
-        const filteredEvents = filterEvents(response.events);
-        if (filteredEvents.length > 0) {
-          if (lingerEnabled) {
-            // Pass wasPlaying=false since this is manual navigation
-            enterLinger(filteredEvents, false);
-          }
-          foundEvent = true;
-        }
-      } catch (err) {
-        console.error('Failed to advance replay:', err);
-        break;
+        foundEvent = true;
       }
     }
-
-    advancePendingRef.current = false;
-  }, [endOfData, playbackState, exitLinger, clearTimers, calibrationBarCount, currentPosition, chartAggregationScales, includeDagState, enterLinger, filterEvents, lingerEnabled, onNewBars, onSwingStateChange, onAggregatedBarsChange, onDagStateChange]);
+  }, [endOfData, playbackState, exitLinger, clearTimers, enterLinger, filterEvents, lingerEnabled]);
 
   // Cleanup on unmount
   useEffect(() => {

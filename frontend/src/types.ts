@@ -131,9 +131,6 @@ export interface CalibrationData {
   active_swings_by_depth: SwingsByDepth;
 }
 
-// Type alias for backwards compatibility - CalibrationData already has hierarchical tree_stats
-export type CalibrationDataHierarchical = CalibrationData;
-
 // Calibration phase states
 export enum CalibrationPhase {
   NOT_STARTED = 'NOT_STARTED',
