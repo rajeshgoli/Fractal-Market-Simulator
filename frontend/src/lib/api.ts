@@ -525,6 +525,7 @@ export interface DetectionConfigUpdateRequest {
   origin_time_threshold?: number;  // Origin proximity time threshold (#294)
   min_branch_ratio?: number;  // Min branch ratio for origin domination (#337)
   min_turn_ratio?: number;  // Min turn ratio for sibling pruning (#341)
+  max_turns_per_pivot?: number;  // Top-k turn ratio pruning (#342)
   // Pruning algorithm toggles
   enable_engulfed_prune?: boolean;
   enable_inner_structure_prune?: boolean;

@@ -58,6 +58,58 @@ class TestTurnRatioConfig:
         assert config3.min_turn_ratio == 0.3
 
 
+class TestMaxTurnsPerPivotConfig:
+    """Tests for max_turns_per_pivot configuration (#342)."""
+
+    def test_config_default_is_zero(self):
+        """Default max_turns_per_pivot should be 0 (disabled)."""
+        config = SwingConfig.default()
+        assert config.max_turns_per_pivot == 0
+
+    def test_with_max_turns_per_pivot(self):
+        """with_max_turns_per_pivot creates new config with updated value."""
+        config = SwingConfig.default()
+        new_config = config.with_max_turns_per_pivot(3)
+
+        # Original unchanged
+        assert config.max_turns_per_pivot == 0
+
+        # New config updated
+        assert new_config.max_turns_per_pivot == 3
+
+        # Other fields preserved
+        assert new_config.bull.formation_fib == config.bull.formation_fib
+        assert new_config.min_turn_ratio == config.min_turn_ratio
+
+    def test_config_serialization(self):
+        """max_turns_per_pivot should serialize properly through with_* methods."""
+        config = SwingConfig.default().with_max_turns_per_pivot(5)
+
+        # Test that it persists through other with_ methods
+        config2 = config.with_bull(formation_fib=0.5)
+        assert config2.max_turns_per_pivot == 5
+
+        config3 = config.with_min_turn_ratio(0.3)
+        assert config3.max_turns_per_pivot == 5
+
+    def test_mutual_exclusivity_modes(self):
+        """Mode selection should be based on which value is set."""
+        # Both zero = disabled
+        config = SwingConfig.default()
+        assert config.min_turn_ratio == 0.0
+        assert config.max_turns_per_pivot == 0
+
+        # min_turn_ratio > 0 = threshold mode
+        config_threshold = config.with_min_turn_ratio(0.5)
+        assert config_threshold.min_turn_ratio == 0.5
+        assert config_threshold.max_turns_per_pivot == 0
+
+        # max_turns_per_pivot > 0 with min_turn_ratio = 0 = top-k mode
+        config_topk = config.with_max_turns_per_pivot(3)
+        assert config_topk.min_turn_ratio == 0.0
+        assert config_topk.max_turns_per_pivot == 3
+
+
 class TestLegTurnRatioProperty:
     """Tests for the turn_ratio property on Leg."""
 
@@ -617,3 +669,265 @@ class TestTurnRatioEdgeCases:
         assert low_ratio_leg.leg_id in events[0].leg_id
         assert low_ratio_leg not in state.active_legs
         assert high_ratio_leg in state.active_legs
+
+
+class TestTopKModePruning:
+    """Tests for top-k turn ratio pruning (#342)."""
+
+    def create_test_state(self) -> DetectorState:
+        """Create a test detector state."""
+        return DetectorState()
+
+    def test_no_pruning_when_disabled(self):
+        """No pruning when both min_turn_ratio and max_turns_per_pivot are 0."""
+        config = SwingConfig.default()  # Both 0
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # Add 5 counter-legs at same pivot
+        for i in range(5):
+            leg = Leg(
+                direction='bear',
+                origin_price=Decimal(str(200 - i * 10)),
+                origin_index=i,
+                pivot_price=Decimal("100"),
+                pivot_index=i + 1,
+                price_at_creation=Decimal("110"),
+                last_modified_bar=i + 1,
+                _max_counter_leg_range=float(10 + i * 5),
+            )
+            state.active_legs.append(leg)
+
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),
+            origin_index=10,
+            pivot_price=Decimal("105"),
+            pivot_index=11,
+            price_at_creation=Decimal("104"),
+            last_modified_bar=11,
+        )
+
+        bar = make_bar(11, 100.0, 106.0, 99.0, 105.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # No pruning
+        assert len(events) == 0
+        assert len(state.active_legs) == 5
+
+    def test_topk_mode_keeps_only_k_legs(self):
+        """Top-k mode keeps only the k highest-ratio legs."""
+        config = SwingConfig.default().with_max_turns_per_pivot(2)
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # Create 4 counter-legs with different ratios
+        # ratio = _max_counter_leg_range / range
+        leg1 = Leg(  # ratio = 10/100 = 0.1 (lowest - prune)
+            direction='bear',
+            origin_price=Decimal("200"),
+            origin_index=0,
+            pivot_price=Decimal("100"),
+            pivot_index=1,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=1,
+            _max_counter_leg_range=10.0,
+        )
+        leg2 = Leg(  # ratio = 40/80 = 0.5 (2nd highest - keep)
+            direction='bear',
+            origin_price=Decimal("180"),
+            origin_index=2,
+            pivot_price=Decimal("100"),
+            pivot_index=3,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=3,
+            _max_counter_leg_range=40.0,
+        )
+        leg3 = Leg(  # ratio = 60/60 = 1.0 (highest - keep)
+            direction='bear',
+            origin_price=Decimal("160"),
+            origin_index=4,
+            pivot_price=Decimal("100"),
+            pivot_index=5,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=5,
+            _max_counter_leg_range=60.0,
+        )
+        leg4 = Leg(  # ratio = 20/120 = 0.167 (3rd - prune)
+            direction='bear',
+            origin_price=Decimal("220"),
+            origin_index=6,
+            pivot_price=Decimal("100"),
+            pivot_index=7,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=7,
+            _max_counter_leg_range=20.0,
+        )
+
+        state.active_legs.extend([leg1, leg2, leg3, leg4])
+
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),
+            origin_index=8,
+            pivot_price=Decimal("105"),
+            pivot_index=9,
+            price_at_creation=Decimal("104"),
+            last_modified_bar=9,
+        )
+
+        bar = make_bar(9, 100.0, 106.0, 99.0, 105.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # Should prune 2 lowest-ratio legs (leg1 and leg4)
+        assert len(events) == 2
+        pruned_ids = {e.leg_id for e in events}
+        assert leg1.leg_id in pruned_ids
+        assert leg4.leg_id in pruned_ids
+
+        # leg2 and leg3 should remain
+        assert leg2 in state.active_legs
+        assert leg3 in state.active_legs
+        assert leg1 not in state.active_legs
+        assert leg4 not in state.active_legs
+
+        # Events should have correct reason
+        for event in events:
+            assert event.reason == "turn_ratio_topk"
+
+    def test_topk_mode_no_pruning_when_fewer_than_k_legs(self):
+        """Top-k mode doesn't prune if there are k or fewer legs."""
+        config = SwingConfig.default().with_max_turns_per_pivot(5)
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # Only 3 legs, but max_turns_per_pivot = 5
+        for i in range(3):
+            leg = Leg(
+                direction='bear',
+                origin_price=Decimal(str(200 - i * 10)),
+                origin_index=i,
+                pivot_price=Decimal("100"),
+                pivot_index=i + 1,
+                price_at_creation=Decimal("110"),
+                last_modified_bar=i + 1,
+                _max_counter_leg_range=float(10 + i * 5),
+            )
+            state.active_legs.append(leg)
+
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),
+            origin_index=10,
+            pivot_price=Decimal("105"),
+            pivot_index=11,
+            price_at_creation=Decimal("104"),
+            last_modified_bar=11,
+        )
+
+        bar = make_bar(11, 100.0, 106.0, 99.0, 105.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # No pruning - fewer legs than k
+        assert len(events) == 0
+        assert len(state.active_legs) == 3
+
+    def test_threshold_mode_takes_priority_over_topk(self):
+        """When min_turn_ratio > 0, threshold mode is used, ignoring max_turns_per_pivot."""
+        # Set both - threshold mode should take priority
+        config = SwingConfig.default().with_min_turn_ratio(0.3).with_max_turns_per_pivot(1)
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # Create 2 legs with different ratios
+        leg1 = Leg(  # ratio = 10/100 = 0.1 (below threshold - prune)
+            direction='bear',
+            origin_price=Decimal("200"),
+            origin_index=0,
+            pivot_price=Decimal("100"),
+            pivot_index=1,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=1,
+            _max_counter_leg_range=10.0,
+        )
+        leg2 = Leg(  # ratio = 50/100 = 0.5 (above threshold - keep)
+            direction='bear',
+            origin_price=Decimal("200"),
+            origin_index=2,
+            pivot_price=Decimal("100"),
+            pivot_index=3,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=3,
+            _max_counter_leg_range=50.0,
+        )
+
+        state.active_legs.extend([leg1, leg2])
+
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),
+            origin_index=4,
+            pivot_price=Decimal("105"),
+            pivot_index=5,
+            price_at_creation=Decimal("104"),
+            last_modified_bar=5,
+        )
+
+        bar = make_bar(5, 100.0, 106.0, 99.0, 105.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # Threshold mode: only leg1 pruned (below threshold)
+        # If top-k mode was active (k=1), both would need to be pruned to keep only 1
+        assert len(events) == 1
+        assert events[0].leg_id == leg1.leg_id
+        assert events[0].reason == "turn_ratio"  # Not "turn_ratio_topk"
+
+    def test_topk_mode_preserves_legacy_legs(self):
+        """Legacy legs without _max_counter_leg_range are not pruned in top-k mode."""
+        config = SwingConfig.default().with_max_turns_per_pivot(1)
+        pruner = LegPruner(config)
+        state = self.create_test_state()
+
+        # Legacy leg without _max_counter_leg_range
+        legacy_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("200"),
+            origin_index=0,
+            pivot_price=Decimal("100"),
+            pivot_index=1,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=1,
+            # No _max_counter_leg_range
+        )
+        # Normal leg with low ratio
+        normal_leg = Leg(
+            direction='bear',
+            origin_price=Decimal("200"),
+            origin_index=2,
+            pivot_price=Decimal("100"),
+            pivot_index=3,
+            price_at_creation=Decimal("110"),
+            last_modified_bar=3,
+            _max_counter_leg_range=5.0,  # Very low ratio
+        )
+
+        state.active_legs.extend([legacy_leg, normal_leg])
+
+        new_leg = Leg(
+            direction='bull',
+            origin_price=Decimal("100"),
+            origin_index=4,
+            pivot_price=Decimal("105"),
+            pivot_index=5,
+            price_at_creation=Decimal("104"),
+            last_modified_bar=5,
+        )
+
+        bar = make_bar(5, 100.0, 106.0, 99.0, 105.0)
+        events = pruner.prune_by_turn_ratio(state, new_leg, bar, datetime.now())
+
+        # Legacy leg preserved (inf ratio), normal leg pruned
+        assert len(events) == 1
+        assert events[0].leg_id == normal_leg.leg_id
+        assert legacy_leg in state.active_legs
+        assert normal_leg not in state.active_legs

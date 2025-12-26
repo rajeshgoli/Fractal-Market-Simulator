@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-24
 
@@ -11,6 +11,7 @@
 - #337 — Branch ratio origin domination (replaces CTR pruning)
 - #338 — Pending origin not updated when leg pivot extends (fixes branch ratio domination)
 - #341 — Turn ratio pruning for sibling legs at shared pivots
+- #342 — Top-k turn ratio pruning mode (alternative to threshold-based)
 - #343 — Replace threshold text inputs with Fib level dropdowns
 
 ---

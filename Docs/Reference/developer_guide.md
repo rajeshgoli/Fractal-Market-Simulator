@@ -424,6 +424,36 @@ This scales naturally through the hierarchy:
 
 Configuration: `SwingConfig.min_branch_ratio` (default: 0.0 = disabled)
 
+**Turn ratio pruning (#341, #342):**
+
+Filters sibling legs horizontally at shared pivots based on turn ratio:
+```
+turn_ratio = counter_leg._max_counter_leg_range / counter_leg.range
+```
+
+Turn ratio measures how far a leg extended relative to the counter-trend that created its origin. Low turn ratio means the leg extended far beyond what the structure justified ("punched above its weight class").
+
+Two mutually exclusive modes:
+1. **Threshold mode** (`min_turn_ratio > 0`): Prune legs with `turn_ratio < min_turn_ratio`
+2. **Top-k mode** (`min_turn_ratio == 0` and `max_turns_per_pivot > 0`): Keep only the k highest-ratio legs at each pivot
+
+```
+Threshold mode:
+  If turn_ratio < min_turn_ratio → prune the leg
+
+Top-k mode:
+  Sort all counter-legs at pivot by turn_ratio (descending)
+  Keep top k, prune the rest
+```
+
+When a new leg forms at origin O, counter-legs with pivot == O are checked.
+
+Configuration:
+- `SwingConfig.min_turn_ratio` (default: 0.0 = disabled)
+- `SwingConfig.max_turns_per_pivot` (default: 0 = disabled)
+
+If both are 0, turn ratio pruning is disabled. If `min_turn_ratio > 0`, threshold mode is used (ignoring `max_turns_per_pivot`).
+
 **Why pivot grouping is required:** Legs with different pivots can validly have newer legs with larger ranges (e.g., a leg that found a better origin AND a later pivot). Cross-pivot comparisons would incorrectly flag this as invalid.
 
 Example with 10% time threshold and 20% range threshold at bar 100:

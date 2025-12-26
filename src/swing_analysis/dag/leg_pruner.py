@@ -936,11 +936,15 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Prune counter-legs at the new leg's origin that have low turn ratio (#341).
+        Prune counter-legs at the new leg's origin based on turn ratio (#341, #342).
+
+        Two mutually exclusive modes:
+        1. **Threshold mode** (min_turn_ratio > 0): Prune if turn_ratio < threshold
+        2. **Top-k mode** (min_turn_ratio == 0, max_turns_per_pivot > 0): Keep only
+           the k highest-ratio legs at each pivot
 
         When a new leg forms at origin O, for each counter-leg whose pivot == O:
-        1. Compute turn_ratio = counter_leg._max_counter_leg_range / counter_leg.range
-        2. If turn_ratio < min_turn_ratio, prune the counter-leg
+        - turn_ratio = counter_leg._max_counter_leg_range / counter_leg.range
 
         This filters horizontally (siblings at shared pivots) rather than vertically
         (parent-child via branch ratio). It removes legs that have extended far
@@ -957,10 +961,17 @@ class LegPruner:
         """
         events: List[LegPrunedEvent] = []
         min_turn_ratio = self.config.min_turn_ratio
+        max_turns_per_pivot = self.config.max_turns_per_pivot
 
-        # Skip if turn ratio pruning is disabled
-        if min_turn_ratio <= 0:
-            return events
+        # Determine mode:
+        # - Threshold mode: min_turn_ratio > 0 (ignores max_turns_per_pivot)
+        # - Top-k mode: min_turn_ratio == 0 and max_turns_per_pivot > 0
+        # - Disabled: both are 0
+        use_threshold_mode = min_turn_ratio > 0
+        use_topk_mode = not use_threshold_mode and max_turns_per_pivot > 0
+
+        if not use_threshold_mode and not use_topk_mode:
+            return events  # Disabled
 
         # Find counter-legs: opposite direction, pivot == new_leg.origin
         opposite_direction = 'bear' if new_leg.direction == 'bull' else 'bull'
@@ -977,20 +988,64 @@ class LegPruner:
 
         pruned_leg_ids: Set[str] = set()
 
-        for counter_leg in counter_legs:
-            if counter_leg.range == 0:
-                continue
+        if use_threshold_mode:
+            # Threshold mode: prune legs with turn_ratio < min_turn_ratio
+            for counter_leg in counter_legs:
+                if counter_leg.range == 0:
+                    continue
 
-            # Compute turn_ratio = _max_counter_leg_range / counter_leg.range
-            # If _max_counter_leg_range is None, the leg was created before this
-            # feature - skip it (don't prune legacy legs)
-            if counter_leg._max_counter_leg_range is None:
-                continue
+                # If _max_counter_leg_range is None, the leg was created before this
+                # feature - skip it (don't prune legacy legs)
+                if counter_leg._max_counter_leg_range is None:
+                    continue
 
-            turn_ratio = counter_leg._max_counter_leg_range / float(counter_leg.range)
+                turn_ratio = counter_leg._max_counter_leg_range / float(counter_leg.range)
 
-            # Prune if turn_ratio < min_turn_ratio
-            if turn_ratio < min_turn_ratio:
+                if turn_ratio < min_turn_ratio:
+                    counter_leg.status = 'pruned'
+                    pruned_leg_ids.add(counter_leg.leg_id)
+                    events.append(LegPrunedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id=counter_leg.swing_id or "",
+                        leg_id=counter_leg.leg_id,
+                        reason="turn_ratio",
+                        explanation=(
+                            f"Turn ratio {turn_ratio:.3f} < {min_turn_ratio:.3f} threshold "
+                            f"(max_counter={counter_leg._max_counter_leg_range:.2f}, "
+                            f"leg_range={float(counter_leg.range):.2f})"
+                        ),
+                    ))
+        else:
+            # Top-k mode: keep only max_turns_per_pivot highest-ratio legs
+            # Score each leg by turn_ratio (skip legacy legs without _max_counter_leg_range)
+            scored_legs: List[Tuple[Leg, float]] = []
+            for counter_leg in counter_legs:
+                if counter_leg.range == 0:
+                    continue
+                if counter_leg._max_counter_leg_range is None:
+                    # Legacy leg - give it a neutral score so it's not pruned
+                    # but also not favored over legs with actual ratios
+                    scored_legs.append((counter_leg, float('inf')))
+                    continue
+                turn_ratio = counter_leg._max_counter_leg_range / float(counter_leg.range)
+                scored_legs.append((counter_leg, turn_ratio))
+
+            if len(scored_legs) <= max_turns_per_pivot:
+                # Not enough legs to prune
+                return events
+
+            # Sort by turn_ratio descending (highest ratio = most significant)
+            scored_legs.sort(key=lambda x: -x[1])
+
+            # Keep top k, prune the rest
+            legs_to_prune = scored_legs[max_turns_per_pivot:]
+
+            for counter_leg, turn_ratio in legs_to_prune:
+                # Don't prune legacy legs (inf ratio)
+                if turn_ratio == float('inf'):
+                    continue
+
                 counter_leg.status = 'pruned'
                 pruned_leg_ids.add(counter_leg.leg_id)
                 events.append(LegPrunedEvent(
@@ -998,9 +1053,9 @@ class LegPruner:
                     timestamp=timestamp,
                     swing_id=counter_leg.swing_id or "",
                     leg_id=counter_leg.leg_id,
-                    reason="turn_ratio",
+                    reason="turn_ratio_topk",
                     explanation=(
-                        f"Turn ratio {turn_ratio:.3f} < {min_turn_ratio:.3f} threshold "
+                        f"Turn ratio {turn_ratio:.3f} not in top-{max_turns_per_pivot} "
                         f"(max_counter={counter_leg._max_counter_leg_range:.2f}, "
                         f"leg_range={float(counter_leg.range):.2f})"
                     ),
