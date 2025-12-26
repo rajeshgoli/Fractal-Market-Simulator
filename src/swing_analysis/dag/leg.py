@@ -31,7 +31,7 @@ class Leg:
         retracement_pct: Current retracement percentage toward origin
         formed: Whether 38.2% threshold has been reached
         parent_leg_id: ID of parent leg if this is a child
-        status: 'active', 'stale', or 'invalidated'
+        status: 'active' or 'stale' (use origin_breached for invalidation check)
         bar_count: Number of bars since leg started
         gap_count: Number of gap bars in this leg
         last_modified_bar: Bar index when leg was last modified
@@ -47,7 +47,7 @@ class Leg:
     retracement_pct: Decimal = Decimal("0")
     formed: bool = False
     parent_leg_id: Optional[str] = None
-    status: Literal['active', 'stale', 'invalidated'] = 'active'
+    status: Literal['active', 'stale'] = 'active'
     bar_count: int = 0
     gap_count: int = 0
     last_modified_bar: int = 0

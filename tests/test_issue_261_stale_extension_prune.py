@@ -40,8 +40,9 @@ class TestStaleExtensionPruneOnlyChildren:
         bar1 = make_bar(1, 100.0, 110.0, 98.0, 108.0)
         detector.process_bar(bar1)
 
-        # Manually add an invalidated root bull leg (no parent)
+        # Manually add a breached root bull leg (no parent)
         # Origin=100, Pivot=110, Range=10
+        # Use max_origin_breach to indicate leg has been breached
         root_leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
@@ -50,7 +51,7 @@ class TestStaleExtensionPruneOnlyChildren:
             pivot_index=1,
             price_at_creation=Decimal("108"),
             last_modified_bar=1,
-            status='invalidated',
+            max_origin_breach=Decimal("1"),  # Indicates origin was breached
             parent_leg_id=None,  # ROOT leg - no parent
         )
         detector.state.active_legs.append(root_leg)
@@ -84,8 +85,9 @@ class TestStaleExtensionPruneOnlyChildren:
         bar1 = make_bar(1, 100.0, 110.0, 98.0, 108.0)
         detector.process_bar(bar1)
 
-        # Manually add an invalidated child bull leg (has parent)
+        # Manually add a breached child bull leg (has parent)
         # Origin=100, Pivot=110, Range=10
+        # Use max_origin_breach to indicate leg has been breached
         child_leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
@@ -94,7 +96,7 @@ class TestStaleExtensionPruneOnlyChildren:
             pivot_index=1,
             price_at_creation=Decimal("108"),
             last_modified_bar=1,
-            status='invalidated',
+            max_origin_breach=Decimal("1"),  # Indicates origin was breached
             parent_leg_id="some-parent-id",  # CHILD leg - has parent
         )
         detector.state.active_legs.append(child_leg)
@@ -126,8 +128,9 @@ class TestStaleExtensionPruneOnlyChildren:
         bar1 = make_bar(1, 100.0, 110.0, 90.0, 95.0)
         detector.process_bar(bar1)
 
-        # Manually add an invalidated root bear leg (no parent)
+        # Manually add a breached root bear leg (no parent)
         # Origin=110, Pivot=90, Range=20
+        # Use max_origin_breach to indicate leg has been breached
         root_leg = Leg(
             direction='bear',
             origin_price=Decimal("110"),
@@ -136,7 +139,7 @@ class TestStaleExtensionPruneOnlyChildren:
             pivot_index=1,
             price_at_creation=Decimal("95"),
             last_modified_bar=1,
-            status='invalidated',
+            max_origin_breach=Decimal("1"),  # Indicates origin was breached
             parent_leg_id=None,  # ROOT leg - no parent
         )
         detector.state.active_legs.append(root_leg)
@@ -164,8 +167,9 @@ class TestStaleExtensionPruneOnlyChildren:
         bar1 = make_bar(1, 100.0, 110.0, 90.0, 95.0)
         detector.process_bar(bar1)
 
-        # Manually add an invalidated child bear leg (has parent)
+        # Manually add a breached child bear leg (has parent)
         # Origin=110, Pivot=90, Range=20
+        # Use max_origin_breach to indicate leg has been breached
         child_leg = Leg(
             direction='bear',
             origin_price=Decimal("110"),
@@ -174,7 +178,7 @@ class TestStaleExtensionPruneOnlyChildren:
             pivot_index=1,
             price_at_creation=Decimal("95"),
             last_modified_bar=1,
-            status='invalidated',
+            max_origin_breach=Decimal("1"),  # Indicates origin was breached
             parent_leg_id="some-parent-id",  # CHILD leg - has parent
         )
         detector.state.active_legs.append(child_leg)
@@ -202,9 +206,10 @@ class TestStaleExtensionPruneOnlyChildren:
         bar1 = make_bar(1, 100.0, 110.0, 98.0, 108.0)
         detector.process_bar(bar1)
 
-        # Add invalidated child bull leg
+        # Add breached child bull leg
         # Origin=100, Pivot=110, Range=10
         # 3x extension = 100 - 30 = 70
+        # Use max_origin_breach to indicate leg has been breached
         child_leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
@@ -213,7 +218,7 @@ class TestStaleExtensionPruneOnlyChildren:
             pivot_index=1,
             price_at_creation=Decimal("108"),
             last_modified_bar=1,
-            status='invalidated',
+            max_origin_breach=Decimal("1"),  # Indicates origin was breached
             parent_leg_id="some-parent-id",
         )
         detector.state.active_legs.append(child_leg)

@@ -21,7 +21,7 @@ from src.swing_analysis.dag.leg_pruner import LegPruner
 from src.swing_analysis.dag.state import DetectorState
 from src.swing_analysis.swing_config import SwingConfig
 from src.swing_analysis.types import Bar
-from src.swing_analysis.events import LegCreatedEvent, LegPrunedEvent, LegInvalidatedEvent
+from src.swing_analysis.events import LegCreatedEvent, LegPrunedEvent, OriginBreachedEvent
 
 
 def make_bar(index: int, open_: float, high: float, low: float, close: float) -> Bar:
@@ -81,7 +81,7 @@ class TestInnerStructurePruningBasic:
         # Check we have bear legs from both H1 and H2
         bear_legs = [
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bear' and leg.status == 'active'
+            if leg.direction == 'bear' and leg.max_origin_breach is None
         ]
         # We should have at least one bear leg
         # Due to domination pruning, we might only have the H1->L1 leg
@@ -91,17 +91,17 @@ class TestInnerStructurePruningBasic:
         bar5 = make_bar(5, 5995.0, 6150.0, 5990.0, 6140.0)
         events5 = detector.process_bar(bar5)
 
-        # Check for invalidation events
-        invalidation_events = [e for e in events5 if isinstance(e, LegInvalidatedEvent)]
+        # Check for origin breach events
+        origin_breach_events = [e for e in events5 if isinstance(e, OriginBreachedEvent)]
 
         # Check for inner_structure prune events
         prune_events = [e for e in events5 if isinstance(e, LegPrunedEvent)]
         inner_structure_events = [e for e in prune_events if e.reason == 'inner_structure']
 
-        # Get remaining bull legs
+        # Get remaining bull legs (non-breached)
         bull_legs = [
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
 
         # If we had multiple bear legs invalidated together with containment,
@@ -160,7 +160,7 @@ class TestInnerStructurePruningBasic:
         # The bull leg from L2=5850 should survive (if it was created)
         bull_legs = [
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
         if bull_legs:
             # The surviving bull leg should be from L2=5850 (the deeper low)
@@ -267,10 +267,10 @@ class TestInnerStructurePruningSymmetric:
         prune_events = [e for e in events5 if isinstance(e, LegPrunedEvent)]
         inner_structure_events = [e for e in prune_events if e.reason == 'inner_structure']
 
-        # Get remaining bear legs
+        # Get remaining bear legs (non-breached)
         bear_legs = [
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bear' and leg.status == 'active'
+            if leg.direction == 'bear' and leg.max_origin_breach is None
         ]
 
         # The bear leg from the outer structure's pivot (H1=6100) should survive
@@ -329,10 +329,10 @@ class TestInnerStructurePruningMultipleNesting:
         prune_events = [e for e in events6 if isinstance(e, LegPrunedEvent)]
         inner_structure_events = [e for e in prune_events if e.reason == 'inner_structure']
 
-        # Get remaining bull legs
+        # Get remaining bull legs (non-breached)
         bull_legs = [
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
 
         # The bull leg from L1=5900 (the outermost structure) should survive
@@ -399,13 +399,14 @@ class TestLegPrunerUnit:
         timestamp = datetime.now()
 
         # Create two bear legs where one is contained in the other
+        # Use max_origin_breach to indicate legs have been breached
         outer_bear = Leg(
             direction='bear',
             origin_price=Decimal('6100'),  # Higher origin
             origin_index=0,
             pivot_price=Decimal('5900'),   # Lower pivot
             pivot_index=1,
-            status='invalidated',  # Just invalidated
+            max_origin_breach=Decimal('1'),  # Just breached
             formed=True,
         )
 
@@ -415,18 +416,17 @@ class TestLegPrunerUnit:
             origin_index=2,
             pivot_price=Decimal('5950'),   # Higher pivot (inner.pivot > outer.pivot)
             pivot_index=3,
-            status='invalidated',  # Just invalidated
+            max_origin_breach=Decimal('1'),  # Just breached
             formed=True,
         )
 
-        # Create bull legs from their pivots
+        # Create bull legs from their pivots (non-breached, so max_origin_breach is None)
         outer_bull = Leg(
             direction='bull',
             origin_price=Decimal('5900'),  # From outer bear's pivot
             origin_index=1,
             pivot_price=Decimal('6150'),   # Same current pivot
             pivot_index=4,
-            status='active',
             formed=True,
         )
 
@@ -436,7 +436,6 @@ class TestLegPrunerUnit:
             origin_index=3,
             pivot_price=Decimal('6150'),   # Same current pivot
             pivot_index=4,
-            status='active',
             formed=True,
         )
 
@@ -457,7 +456,7 @@ class TestLegPrunerUnit:
         # inner_bull should be removed from active_legs
         remaining_bull_legs = [
             leg for leg in state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
         assert len(remaining_bull_legs) == 1
         assert remaining_bull_legs[0].origin_price == Decimal('5900')
@@ -472,13 +471,14 @@ class TestLegPrunerUnit:
         timestamp = datetime.now()
 
         # Create two bear legs where one is contained
+        # Use max_origin_breach to indicate legs have been breached
         outer_bear = Leg(
             direction='bear',
             origin_price=Decimal('6100'),
             origin_index=0,
             pivot_price=Decimal('5900'),
             pivot_index=1,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),
             formed=True,
         )
 
@@ -488,7 +488,7 @@ class TestLegPrunerUnit:
             origin_index=2,
             pivot_price=Decimal('5950'),
             pivot_index=3,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),
             formed=True,
         )
 
@@ -499,7 +499,6 @@ class TestLegPrunerUnit:
             origin_index=3,
             pivot_price=Decimal('6150'),
             pivot_index=4,
-            status='active',
             formed=True,
         )
 
@@ -518,7 +517,7 @@ class TestLegPrunerUnit:
         # inner_bull should still exist
         remaining_bull_legs = [
             leg for leg in state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
         assert len(remaining_bull_legs) == 1
 
@@ -531,13 +530,14 @@ class TestLegPrunerUnit:
         state = DetectorState()
         timestamp = datetime.now()
 
+        # Use max_origin_breach to indicate legs have been breached
         outer_bear = Leg(
             direction='bear',
             origin_price=Decimal('6100'),
             origin_index=0,
             pivot_price=Decimal('5900'),
             pivot_index=1,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),
             formed=True,
         )
 
@@ -547,18 +547,17 @@ class TestLegPrunerUnit:
             origin_index=2,
             pivot_price=Decimal('5950'),
             pivot_index=3,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),
             formed=True,
         )
 
-        # Create bull legs with DIFFERENT current pivots
+        # Create bull legs with DIFFERENT current pivots (non-breached)
         outer_bull = Leg(
             direction='bull',
             origin_price=Decimal('5900'),
             origin_index=1,
             pivot_price=Decimal('6100'),   # Different pivot
             pivot_index=4,
-            status='active',
             formed=True,
         )
 
@@ -568,7 +567,6 @@ class TestLegPrunerUnit:
             origin_index=3,
             pivot_price=Decimal('6150'),   # Different pivot
             pivot_index=5,
-            status='active',
             formed=True,
         )
 
@@ -587,7 +585,7 @@ class TestLegPrunerUnit:
         # Both bull legs should still exist
         remaining_bull_legs = [
             leg for leg in state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
         assert len(remaining_bull_legs) == 2
 
@@ -642,10 +640,10 @@ class TestSequentialInvalidation:
             if isinstance(e, LegPrunedEvent) and e.reason == 'inner_structure'
         ]
 
-        # Get remaining bull legs
+        # Get remaining bull legs (non-breached)
         bull_legs = [
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
 
         # The key assertion: if both inner and outer bear legs were created
@@ -664,13 +662,13 @@ class TestSequentialInvalidation:
                 leg for leg in detector.state.active_legs
                 if leg.direction == 'bear'
             ]
-            invalidated_bears = [l for l in bear_legs if l.status == 'invalidated']
+            breached_bears = [l for l in bear_legs if l.max_origin_breach is not None]
 
-            # If we have 2+ invalidated bears, check containment
-            if len(invalidated_bears) >= 2:
+            # If we have 2+ breached bears, check containment
+            if len(breached_bears) >= 2:
                 # Find containment pairs
-                for inner in invalidated_bears:
-                    for outer in invalidated_bears:
+                for inner in breached_bears:
+                    for outer in breached_bears:
                         if inner.leg_id == outer.leg_id:
                             continue
                         # Bear containment: inner.origin < outer.origin AND inner.pivot > outer.pivot
@@ -706,15 +704,15 @@ class TestSequentialInvalidation:
         state = DetectorState()
         timestamp = datetime.now()
 
-        # Create the outer bear (invalidated first in real scenario, but
-        # for test we set both as invalidated)
+        # Create the outer bear (breached first in real scenario, but
+        # for test we set both as breached via max_origin_breach)
         outer_bear = Leg(
             direction='bear',
             origin_price=Decimal('4429.5'),
             origin_index=160,
             pivot_price=Decimal('4425.0'),
             pivot_index=179,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
@@ -725,29 +723,27 @@ class TestSequentialInvalidation:
             origin_index=189,
             pivot_price=Decimal('4426.25'),  # > outer.pivot (4425.0)
             pivot_index=191,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
-        # Create bull leg from outer pivot
+        # Create bull leg from outer pivot (non-breached)
         outer_bull = Leg(
             direction='bull',
             origin_price=Decimal('4425.0'),  # From outer bear's pivot
             origin_index=144,
             pivot_price=Decimal('4437.0'),   # Same pivot
             pivot_index=219,
-            status='active',
             formed=True,
         )
 
-        # Create bull leg from inner pivot (this should be pruned)
+        # Create bull leg from inner pivot (this should be pruned, non-breached)
         inner_bull = Leg(
             direction='bull',
             origin_price=Decimal('4426.25'),  # From inner bear's pivot
             origin_index=191,
             pivot_price=Decimal('4437.0'),    # Same pivot as outer_bull
             pivot_index=219,
-            status='active',
             formed=True,
         )
 
@@ -755,7 +751,7 @@ class TestSequentialInvalidation:
 
         bar = make_bar(219, 4435.0, 4437.0, 4434.0, 4436.5)
 
-        # Call prune_inner_structure_legs with both invalidated bears
+        # Call prune_inner_structure_legs with both breached bears
         events = pruner.prune_inner_structure_legs(
             state, [outer_bear, inner_bear], bar, timestamp
         )
@@ -768,7 +764,7 @@ class TestSequentialInvalidation:
         # Verify inner_bull was pruned, outer_bull remains
         remaining_bulls = [
             leg for leg in state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
         assert len(remaining_bulls) == 1
         assert remaining_bulls[0].origin_price == Decimal('4425.0')

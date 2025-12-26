@@ -435,7 +435,7 @@ class TestInvalidatedLegEngulfed:
             # Leg might have been pruned by turn pruning, that's ok
             return
 
-        assert target_leg.status == 'invalidated'
+        # Leg should have origin breached (max_origin_breach is not None)
         assert target_leg.max_origin_breach is not None
 
         # Now breach the pivot (price drops below original pivot)
@@ -516,6 +516,6 @@ class TestInvalidatedLegEngulfed:
             (leg for leg in detector.state.active_legs if leg.leg_id == leg_id),
             None
         )
-        if target_leg and target_leg.status == 'invalidated':
-            # Pivot breach should now be tracked for invalidated legs
+        if target_leg and target_leg.max_origin_breach is not None:
+            # Pivot breach should now be tracked for breached legs
             assert target_leg.max_pivot_breach is not None

@@ -72,7 +72,7 @@ class TestActiveLegSamePivot:
             origin_index=2,
             pivot_price=Decimal('90'),
             pivot_index=1,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
@@ -83,7 +83,7 @@ class TestActiveLegSamePivot:
             origin_index=3,
             pivot_price=Decimal('92'),   # > 90 (B's pivot) - inner!
             pivot_index=4,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
@@ -94,7 +94,6 @@ class TestActiveLegSamePivot:
             origin_index=1,
             pivot_price=Decimal('105'),
             pivot_index=5,
-            status='active',
             formed=True,
         )
 
@@ -105,7 +104,6 @@ class TestActiveLegSamePivot:
             origin_index=4,
             pivot_price=Decimal('105'),  # Same current pivot
             pivot_index=5,
-            status='active',
             formed=True,
         )
 
@@ -126,7 +124,7 @@ class TestActiveLegSamePivot:
         # Both bull legs should remain
         remaining_bulls = [
             leg for leg in state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
         assert len(remaining_bulls) == 2
 
@@ -158,7 +156,7 @@ class TestLargerInvalidatedLegSamePivot:
             origin_index=0,
             pivot_price=Decimal('90'),
             pivot_index=1,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
         # range = 100 - 90 = 10
@@ -170,7 +168,7 @@ class TestLargerInvalidatedLegSamePivot:
             origin_index=2,
             pivot_price=Decimal('90'),
             pivot_index=1,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
         # range = 98 - 90 = 8
@@ -182,7 +180,7 @@ class TestLargerInvalidatedLegSamePivot:
             origin_index=3,
             pivot_price=Decimal('92'),
             pivot_index=4,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
         # range = 96 - 92 = 4
@@ -194,7 +192,6 @@ class TestLargerInvalidatedLegSamePivot:
             origin_index=1,
             pivot_price=Decimal('105'),
             pivot_index=5,
-            status='active',
             formed=True,
         )
 
@@ -205,7 +202,6 @@ class TestLargerInvalidatedLegSamePivot:
             origin_index=4,
             pivot_price=Decimal('105'),
             pivot_index=5,
-            status='active',
             formed=True,
         )
 
@@ -225,7 +221,7 @@ class TestLargerInvalidatedLegSamePivot:
         # Check that bull_from_92 still exists
         remaining_bulls = [
             leg for leg in state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
 
         # The key check: if C is inner to B, we should NOT prune bull_from_92
@@ -266,7 +262,7 @@ class TestPruneWhenNoOtherLegsSharePivot:
             origin_index=2,
             pivot_price=Decimal('90'),
             pivot_index=1,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
@@ -277,7 +273,7 @@ class TestPruneWhenNoOtherLegsSharePivot:
             origin_index=3,
             pivot_price=Decimal('92'),
             pivot_index=4,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
@@ -288,7 +284,6 @@ class TestPruneWhenNoOtherLegsSharePivot:
             origin_index=1,
             pivot_price=Decimal('105'),
             pivot_index=5,
-            status='active',
             formed=True,
         )
 
@@ -299,7 +294,6 @@ class TestPruneWhenNoOtherLegsSharePivot:
             origin_index=4,
             pivot_price=Decimal('105'),
             pivot_index=5,
-            status='active',
             formed=True,
         )
 
@@ -321,7 +315,7 @@ class TestPruneWhenNoOtherLegsSharePivot:
         # Only bull_from_90 should remain
         remaining_bulls = [
             leg for leg in state.active_legs
-            if leg.direction == 'bull' and leg.status == 'active'
+            if leg.direction == 'bull' and leg.max_origin_breach is None
         ]
         assert len(remaining_bulls) == 1
         assert remaining_bulls[0].origin_price == Decimal('90')
@@ -355,7 +349,6 @@ class TestSymmetricBullCase:
             origin_index=0,
             pivot_price=Decimal('100'),
             pivot_index=1,
-            status='active',
             formed=True,
         )
 
@@ -366,7 +359,7 @@ class TestSymmetricBullCase:
             origin_index=2,
             pivot_price=Decimal('100'),
             pivot_index=1,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
@@ -377,7 +370,7 @@ class TestSymmetricBullCase:
             origin_index=3,
             pivot_price=Decimal('98'),   # < 100 (B's pivot) - inner!
             pivot_index=4,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
@@ -388,7 +381,6 @@ class TestSymmetricBullCase:
             origin_index=1,
             pivot_price=Decimal('85'),
             pivot_index=5,
-            status='active',
             formed=True,
         )
 
@@ -399,7 +391,6 @@ class TestSymmetricBullCase:
             origin_index=4,
             pivot_price=Decimal('85'),
             pivot_index=5,
-            status='active',
             formed=True,
         )
 
@@ -458,7 +449,7 @@ class TestRealWorldScenario:
             origin_index=600,
             pivot_price=Decimal('4510.0'),   # > 4501.75 - inner!
             pivot_index=700,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
@@ -469,7 +460,7 @@ class TestRealWorldScenario:
             origin_index=650,
             pivot_price=Decimal('4515.0'),   # > 4510.0 - inner!
             pivot_index=680,
-            status='invalidated',
+            max_origin_breach=Decimal('1'),  # Breached
             formed=True,
         )
 
@@ -480,7 +471,6 @@ class TestRealWorldScenario:
             origin_index=858,
             pivot_price=Decimal('4550.0'),
             pivot_index=1390,
-            status='active',
             formed=True,
         )
 
@@ -491,7 +481,6 @@ class TestRealWorldScenario:
             origin_index=700,
             pivot_price=Decimal('4550.0'),
             pivot_index=1390,
-            status='active',
             formed=True,
         )
 
@@ -502,7 +491,6 @@ class TestRealWorldScenario:
             origin_index=680,
             pivot_price=Decimal('4550.0'),
             pivot_index=1390,
-            status='active',
             formed=True,
         )
 

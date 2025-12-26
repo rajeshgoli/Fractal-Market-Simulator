@@ -6,7 +6,7 @@ one bar at a time via process_bar() and emits events for swing formation and Fib
 level crosses.
 
 **This layer handles:**
-- Leg tracking with 0.382 invalidation threshold
+- Leg tracking with origin breach as structural gate (#345)
 - Swing formation detection
 - Level cross event tracking
 - Parent-child relationship assignment
@@ -39,7 +39,6 @@ from ..events import (
     LevelCrossEvent,
     LegCreatedEvent,
     LegPrunedEvent,
-    LegInvalidatedEvent,
     OriginBreachedEvent,
     PivotBreachedEvent,
 )
@@ -342,10 +341,11 @@ class LegDetector:
             bar_high: Current bar's high as Decimal
             bar_low: Current bar's low as Decimal
         """
-        # Extend bull leg pivots on new highs (only if origin not breached #208)
+        # Extend bull leg pivots on new highs (only if origin not breached #208, #345)
         for leg in self.state.active_legs:
-            if leg.direction == 'bull' and leg.status == 'active':
-                if bar_high > leg.pivot_price and leg.max_origin_breach is None:
+            # Only extend legs that are structurally live (no origin breach)
+            if leg.direction == 'bull' and leg.max_origin_breach is None:
+                if bar_high > leg.pivot_price:
                     leg.update_pivot(bar_high, bar.index)
                     leg.last_modified_bar = bar.index
                     # Recalculate impulse when pivot extends (#236)
@@ -356,10 +356,11 @@ class LegDetector:
                         price=bar_high, bar_index=bar.index, direction='bear', source='pivot_extension'
                     )
 
-        # Extend bear leg pivots on new lows (only if origin not breached #208)
+        # Extend bear leg pivots on new lows (only if origin not breached #208, #345)
         for leg in self.state.active_legs:
-            if leg.direction == 'bear' and leg.status == 'active':
-                if bar_low < leg.pivot_price and leg.max_origin_breach is None:
+            # Only extend legs that are structurally live (no origin breach)
+            if leg.direction == 'bear' and leg.max_origin_breach is None:
+                if bar_low < leg.pivot_price:
                     leg.update_pivot(bar_low, bar.index)
                     leg.last_modified_bar = bar.index
                     # Recalculate impulse when pivot extends (#236)
@@ -413,13 +414,18 @@ class LegDetector:
         bar_high: Decimal,
         bar_low: Decimal,
         timestamp: datetime
-    ) -> List[SwingEvent]:
+    ) -> Tuple[List[SwingEvent], List[Leg]]:
         """
-        Update breach tracking for all active legs (#208).
+        Update breach tracking for all active legs (#208, #345).
 
         Tracks maximum breach beyond origin and pivot for each leg.
-        - Origin breach: price moved past the origin (invalidating direction)
+        - Origin breach: price moved past the origin (structural gate for behavior)
         - Pivot breach: price moved past the pivot (violating defended level)
+
+        Origin breach is now the sole structural gate (#345):
+        - When origin is breached, the leg is structurally compromised
+        - Extensions and formations are disabled for origin-breached legs
+        - If the leg has a swing, the swing is also invalidated
 
         Pivot breach is only tracked for FORMED legs. Once formed, the pivot
         is frozen as a structural reference. Price going past it = breach.
@@ -435,57 +441,74 @@ class LegDetector:
             timestamp: Timestamp for events
 
         Returns:
-            List of OriginBreachedEvent and PivotBreachedEvent for first-time breaches.
+            Tuple of (events, newly_breached_legs) where events include
+            OriginBreachedEvent, PivotBreachedEvent, and SwingInvalidatedEvent.
         """
         events: List[SwingEvent] = []
+        newly_breached_legs: List[Leg] = []
 
         for leg in self.state.active_legs:
             # Skip legs that are completely done (stale/pruned)
-            # But include 'invalidated' legs - they can still become engulfed
-            if leg.status not in ('active', 'invalidated'):
+            if leg.status != 'active':
                 continue
 
-            # Origin breach tracking (active legs only - invalidated already have origin breach)
-            if leg.status == 'active':
+            # Origin breach tracking (only for legs not yet breached)
+            if leg.max_origin_breach is None:
+                origin_just_breached = False
+                breach_price = Decimal("0")
                 if leg.direction == 'bull':
                     # Bull origin (low) breached when price goes below it
                     if bar_low < leg.origin_price:
                         breach = leg.origin_price - bar_low
-                        was_first_breach = leg.max_origin_breach is None
-                        if was_first_breach or breach > leg.max_origin_breach:
-                            leg.max_origin_breach = breach
-                        # Emit event on FIRST breach only
-                        if was_first_breach:
-                            events.append(OriginBreachedEvent(
-                                bar_index=bar.index,
-                                timestamp=timestamp,
-                                swing_id="",
-                                leg_id=leg.leg_id,
-                                breach_price=bar_low,
-                                breach_amount=breach,
-                            ))
+                        leg.max_origin_breach = breach
+                        origin_just_breached = True
+                        breach_price = bar_low
                 else:  # bear
                     # Bear origin (high) breached when price goes above it
                     if bar_high > leg.origin_price:
                         breach = bar_high - leg.origin_price
-                        was_first_breach = leg.max_origin_breach is None
-                        if was_first_breach or breach > leg.max_origin_breach:
-                            leg.max_origin_breach = breach
-                        # Emit event on FIRST breach only
-                        if was_first_breach:
-                            events.append(OriginBreachedEvent(
-                                bar_index=bar.index,
-                                timestamp=timestamp,
-                                swing_id="",
-                                leg_id=leg.leg_id,
-                                breach_price=bar_high,
-                                breach_amount=breach,
-                            ))
+                        leg.max_origin_breach = breach
+                        origin_just_breached = True
+                        breach_price = bar_high
 
-            # Pivot breach tracking (formed legs, including invalidated)
+                if origin_just_breached:
+                    newly_breached_legs.append(leg)
+                    events.append(OriginBreachedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        swing_id=leg.swing_id or "",
+                        leg_id=leg.leg_id,
+                        breach_price=breach_price,
+                        breach_amount=leg.max_origin_breach,
+                    ))
+                    # Propagate to swing if leg formed into one (#174, #345)
+                    if leg.swing_id:
+                        for swing in self.state.active_swings:
+                            if swing.swing_id == leg.swing_id and swing.status == 'active':
+                                swing.invalidate()
+                                events.append(SwingInvalidatedEvent(
+                                    bar_index=bar.index,
+                                    timestamp=timestamp,
+                                    swing_id=swing.swing_id,
+                                    reason="origin_breached",
+                                ))
+                                break
+            else:
+                # Update max_origin_breach if current breach is larger
+                if leg.direction == 'bull':
+                    if bar_low < leg.origin_price:
+                        breach = leg.origin_price - bar_low
+                        if breach > leg.max_origin_breach:
+                            leg.max_origin_breach = breach
+                else:  # bear
+                    if bar_high > leg.origin_price:
+                        breach = bar_high - leg.origin_price
+                        if breach > leg.max_origin_breach:
+                            leg.max_origin_breach = breach
+
+            # Pivot breach tracking (formed legs only)
             # Once formed, the pivot is frozen as a structural reference
             # Price going past it = breach (for unformed legs, it would just extend)
-            # Invalidated legs need pivot breach tracked for engulfed detection
             if leg.formed and leg.range > 0:
                 if leg.direction == 'bull':
                     # Bull pivot (HIGH) breached when price goes above it
@@ -499,7 +522,7 @@ class LegDetector:
                             events.append(PivotBreachedEvent(
                                 bar_index=bar.index,
                                 timestamp=timestamp,
-                                swing_id="",
+                                swing_id=leg.swing_id or "",
                                 leg_id=leg.leg_id,
                                 breach_price=bar_high,
                                 breach_amount=breach,
@@ -516,13 +539,13 @@ class LegDetector:
                             events.append(PivotBreachedEvent(
                                 bar_index=bar.index,
                                 timestamp=timestamp,
-                                swing_id="",
+                                swing_id=leg.swing_id or "",
                                 leg_id=leg.leg_id,
                                 breach_price=bar_low,
                                 breach_amount=breach,
                             ))
 
-        return events
+        return events, newly_breached_legs
 
     def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[SwingFormedEvent]:
         """
@@ -561,10 +584,23 @@ class LegDetector:
         # Note: CTR pruning removed in #337 - replaced by branch ratio origin domination
         # which prevents insignificant legs at creation time rather than pruning after.
 
-        # Update breach tracking for all legs (#208)
-        # Returns breach events for first-time origin/pivot breaches
-        breach_events = self._update_breach_tracking(bar, bar_high, bar_low, timestamp)
+        # Update breach tracking for all legs (#208, #345)
+        # Returns breach events and list of newly breached legs for inner structure pruning
+        breach_events, newly_breached_legs = self._update_breach_tracking(bar, bar_high, bar_low, timestamp)
         events.extend(breach_events)
+
+        # Prune inner structure legs when legs get origin-breached (#264, #279, #345)
+        if newly_breached_legs:
+            # Gather ALL origin-breached legs (current bar + previously breached)
+            all_breached = [
+                leg for leg in self.state.active_legs
+                if leg.max_origin_breach is not None
+            ]
+            if len(all_breached) >= 2:
+                inner_prune_events = self._pruner.prune_inner_structure_legs(
+                    self.state, all_breached, bar, timestamp
+                )
+                events.extend(inner_prune_events)
 
         # First bar initialization
         if self.state.prev_bar is None:
@@ -621,12 +657,12 @@ class LegDetector:
         elif bar_type == BarType.TYPE_3:
             events.extend(self._process_type3(bar, timestamp, bar_high, bar_low, bar_close, prev_high, prev_low))
 
-        # Increment bar count for all active legs
+        # Increment bar count for all live legs (origin not breached) (#345)
         for leg in self.state.active_legs:
-            if leg.status == 'active':
+            if leg.status == 'active' and leg.max_origin_breach is None:
                 leg.bar_count += 1
 
-        # Check 3x extension pruning for invalidated legs (#203)
+        # Check 3x extension pruning for origin-breached legs (#203, #345)
         extension_prune_events = self._check_extension_prune(bar, timestamp)
         events.extend(extension_prune_events)
 
@@ -685,9 +721,10 @@ class LegDetector:
         # Only create if there isn't already a bull leg with the same origin
         if self.state.pending_origins.get('bull'):
             pending = self.state.pending_origins['bull']
-            # Check if we already have a bull leg from this origin
+            # Check if we already have a live bull leg from this origin (#345)
+            # Origin-breached legs don't block new leg creation at the same price
             existing_bull_leg = any(
-                leg.direction == 'bull' and leg.status == 'active'
+                leg.direction == 'bull' and leg.max_origin_breach is None
                 and leg.origin_price == pending.price and leg.origin_index == pending.bar_index
                 for leg in self.state.active_legs
             )
@@ -765,9 +802,6 @@ class LegDetector:
         # Check for formations using close price (don't know H/L order within bar)
         events.extend(self._check_leg_formations(bar, timestamp, bar_close))
 
-        # Check for decisive invalidations
-        events.extend(self._check_leg_invalidations(bar, timestamp, bar_high, bar_low))
-
         return events
 
     def _process_type2_bear(
@@ -798,9 +832,10 @@ class LegDetector:
         # (tracking downward movement for possible bear retracement later)
         if self.state.pending_origins.get('bear'):
             pending = self.state.pending_origins['bear']
-            # Only create if we don't already have a bear leg with this origin
+            # Only create if we don't already have a live bear leg with this origin (#345)
+            # Origin-breached legs don't block new leg creation at the same price
             existing_bear_leg = any(
-                leg.direction == 'bear' and leg.status == 'active'
+                leg.direction == 'bear' and leg.max_origin_breach is None
                 and leg.origin_price == pending.price and leg.origin_index == pending.bar_index
                 for leg in self.state.active_legs
             )
@@ -876,9 +911,6 @@ class LegDetector:
 
         # Check for formations using close price
         events.extend(self._check_leg_formations(bar, timestamp, bar_close))
-
-        # Check for decisive invalidations
-        events.extend(self._check_leg_invalidations(bar, timestamp, bar_high, bar_low))
 
         return events
 
@@ -1043,25 +1075,24 @@ class LegDetector:
 
         # Update retracement for bull legs using bar.high (prev.L was before bar.H)
         # Bull: origin=LOW, pivot=HIGH, retracement = (current - origin) / range
+        # Only update for legs with live origin (#345)
         for leg in self.state.active_legs:
-            if leg.direction == 'bull' and leg.status == 'active':
+            if leg.direction == 'bull' and leg.max_origin_breach is None:
                 if leg.range > 0:
                     retracement = (bar_high - leg.origin_price) / leg.range
                     leg.retracement_pct = retracement
 
         # Update retracement for bear legs using bar.low (prev.H was before bar.L)
         # Bear: origin=HIGH, pivot=LOW, retracement = (origin - current) / range
+        # Only update for legs with live origin (#345)
         for leg in self.state.active_legs:
-            if leg.direction == 'bear' and leg.status == 'active':
+            if leg.direction == 'bear' and leg.max_origin_breach is None:
                 if leg.range > 0:
                     retracement = (leg.origin_price - bar_low) / leg.range
                     leg.retracement_pct = retracement
 
         # Check for formations (can use H/L for inside bars)
         events.extend(self._check_leg_formations_with_extremes(bar, timestamp, bar_high, bar_low))
-
-        # Check for decisive invalidations
-        events.extend(self._check_leg_invalidations(bar, timestamp, bar_high, bar_low))
 
         return events
 
@@ -1095,9 +1126,6 @@ class LegDetector:
         # Check for formations using close (conservative - don't know H/L order)
         events.extend(self._check_leg_formations(bar, timestamp, bar_close))
 
-        # Check invalidations
-        events.extend(self._check_leg_invalidations(bar, timestamp, bar_high, bar_low))
-
         return events
 
     def _check_leg_formations(
@@ -1118,7 +1146,8 @@ class LegDetector:
         formation_threshold = Decimal(str(self.config.bull.formation_fib))
 
         for leg in self.state.active_legs:
-            if leg.status != 'active' or leg.formed:
+            # Skip legs that are origin-breached (#345) - can't form swings
+            if leg.status != 'active' or leg.formed or leg.max_origin_breach is not None:
                 continue
 
             if leg.range == 0:
@@ -1152,7 +1181,8 @@ class LegDetector:
         formation_threshold = Decimal(str(self.config.bull.formation_fib))
 
         for leg in self.state.active_legs:
-            if leg.status != 'active' or leg.formed:
+            # Skip legs that are origin-breached (#345) - can't form swings
+            if leg.status != 'active' or leg.formed or leg.max_origin_breach is not None:
                 continue
 
             if leg.range == 0:
@@ -1244,115 +1274,11 @@ class LegDetector:
             parent_ids=[],  # Swing hierarchy removed (#301)
         )
 
-    def _check_leg_invalidations(
-        self, bar: Bar, timestamp: datetime, bar_high: Decimal, bar_low: Decimal
-    ) -> List[SwingEvent]:
-        """
-        Check for decisive invalidation of legs (#203).
-
-        A leg is decisively invalidated when price moves beyond the
-        configured invalidation threshold (default 0.382) of the leg's range
-        beyond the defended pivot.
-
-        When a leg is invalidated:
-        - Its status is set to 'invalidated' but it remains in active_legs (#203)
-        - If the leg formed into a swing, that swing is also invalidated (#174)
-
-        Invalidated legs remain visible until 3x extension prune (#203).
-
-        Returns:
-            List of LegInvalidatedEvent and SwingInvalidatedEvent for any
-            legs/swings invalidated.
-        """
-        events: List[SwingEvent] = []
-        invalidated_legs: List[Leg] = []
-        invalidation_prices: Dict[str, Decimal] = {}  # leg_id -> price at invalidation
-
-        for leg in self.state.active_legs:
-            if leg.status != 'active':
-                continue
-
-            if leg.range == 0:
-                continue
-
-            # Get per-direction invalidation threshold (#203)
-            if leg.direction == 'bull':
-                invalidation_threshold = Decimal(str(self.config.bull.invalidation_threshold))
-            else:
-                invalidation_threshold = Decimal(str(self.config.bear.invalidation_threshold))
-
-            threshold_amount = invalidation_threshold * leg.range
-
-            # Invalidation happens when price breaches threshold beyond the origin
-            # (the origin is the defended level that must hold)
-            # Bull: origin=LOW, invalidation if price drops below origin - threshold
-            # Bear: origin=HIGH, invalidation if price rises above origin + threshold
-            if leg.direction == 'bull':
-                invalidation_price = leg.origin_price - threshold_amount
-                if bar_low < invalidation_price:
-                    leg.status = 'invalidated'
-                    invalidated_legs.append(leg)
-                    invalidation_prices[leg.leg_id] = bar_low
-            else:  # bear
-                invalidation_price = leg.origin_price + threshold_amount
-                if bar_high > invalidation_price:
-                    leg.status = 'invalidated'
-                    invalidated_legs.append(leg)
-                    invalidation_prices[leg.leg_id] = bar_high
-
-        # Emit events for invalidated legs
-        for leg in invalidated_legs:
-            # Emit LegInvalidatedEvent (#168)
-            events.append(LegInvalidatedEvent(
-                bar_index=bar.index,
-                timestamp=timestamp,
-                swing_id=leg.swing_id or "",
-                leg_id=leg.leg_id,
-                invalidation_price=invalidation_prices.get(leg.leg_id, Decimal("0")),
-            ))
-
-            # Propagate invalidation to swing if leg formed into one (#174)
-            if leg.swing_id:
-                for swing in self.state.active_swings:
-                    if swing.swing_id == leg.swing_id and swing.status == 'active':
-                        swing.invalidate()
-                        events.append(SwingInvalidatedEvent(
-                            bar_index=bar.index,
-                            timestamp=timestamp,
-                            swing_id=swing.swing_id,
-                            reason="leg_invalidated",
-                        ))
-                        break
-
-        # Prune inner structure legs when bear legs are invalidated (#264, #279)
-        # When contained legs are invalidated, prune the counter-direction
-        # legs from inner pivots (they're redundant to outer-origin legs)
-        #
-        # #279 fix: Containment pairs are invalidated SEQUENTIALLY (inner first,
-        # then outer) because inner.origin < outer.origin. We must check newly
-        # invalidated legs against ALREADY invalidated legs, not just same-bar.
-        if invalidated_legs:
-            # Gather ALL invalidated legs (current bar + previously invalidated)
-            all_invalidated = [
-                leg for leg in self.state.active_legs
-                if leg.status == 'invalidated'
-            ]
-            if len(all_invalidated) >= 2:
-                inner_prune_events = self._pruner.prune_inner_structure_legs(
-                    self.state, all_invalidated, bar, timestamp
-                )
-                events.extend(inner_prune_events)
-
-        # NOTE: Invalidated legs are NOT removed here (#203)
-        # They remain visible until 3x extension prune in _check_extension_prune()
-
-        return events
-
     def _check_extension_prune(self, bar: Bar, timestamp: datetime) -> List[LegPrunedEvent]:
         """
-        Prune invalidated child legs that have reached 3x extension (#203, #261).
+        Prune origin-breached child legs that have reached 3x extension (#203, #261, #345).
 
-        Invalidated legs with a parent are pruned when price moves 3x their range
+        Origin-breached legs with a parent are pruned when price moves 3x their range
         beyond the origin. Root legs (no parent) are never pruned by this rule,
         preserving the anchor that began the move as historical reference.
 
@@ -1366,7 +1292,8 @@ class LegDetector:
         pruned_legs: List[Leg] = []
 
         for leg in self.state.active_legs:
-            if leg.status != 'invalidated':
+            # Only check origin-breached legs (#345)
+            if leg.max_origin_breach is None:
                 continue
 
             # Only prune child legs; root legs (no parent) are preserved (#261)
@@ -1438,7 +1365,8 @@ class LegDetector:
         turn_start = self.state.last_turn_bar.get(direction, -1)
 
         for leg in self.state.active_legs:
-            if leg.direction == direction and leg.status == 'active':
+            # Only consider legs with live origin (not breached) (#345)
+            if leg.direction == direction and leg.max_origin_breach is None:
                 # #202: Skip legs from previous turns
                 if leg.origin_index < turn_start:
                     continue
@@ -1674,8 +1602,7 @@ class LegDetector:
         eligible = [
             leg for leg in self.state.active_legs
             if leg.direction == direction
-            and leg.status == 'active'
-            and not leg.origin_breached  # Rule: non-breached only
+            and leg.max_origin_breach is None  # Rule: non-breached only (#345)
             and leg.origin_index < origin_index  # Earlier in time
         ]
 

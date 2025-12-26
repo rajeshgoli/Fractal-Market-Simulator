@@ -16,7 +16,7 @@ from src.swing_analysis.types import Bar
 from src.swing_analysis.events import (
     SwingFormedEvent,
     LegPrunedEvent,
-    LegInvalidatedEvent,
+    OriginBreachedEvent,
 )
 from src.ground_truth_annotator.routers.replay import (
     _event_to_lifecycle_event,
@@ -71,14 +71,15 @@ def sample_pruned_event():
 
 
 @pytest.fixture
-def sample_invalidated_event():
-    """Sample LegInvalidatedEvent for testing."""
-    return LegInvalidatedEvent(
+def sample_origin_breached_event():
+    """Sample OriginBreachedEvent for testing."""
+    return OriginBreachedEvent(
         bar_index=110,
         timestamp=datetime.now(),
         swing_id="swing_ghi789",
         leg_id="leg_ghi789",
-        invalidation_price=Decimal("4980.00"),
+        breach_price=Decimal("4980.00"),
+        breach_amount=Decimal("5.00"),
     )
 
 
@@ -170,19 +171,19 @@ class TestEventToLifecycleEvent:
         assert result.event_type == "pruned"
         assert "turn prune" in result.explanation.lower()
 
-    def test_invalidated_event_conversion(self, sample_invalidated_event, sample_bar_context):
-        """LegInvalidatedEvent should convert to 'invalidated' lifecycle event."""
+    def test_origin_breached_event_conversion(self, sample_origin_breached_event, sample_bar_context):
+        """OriginBreachedEvent should convert to 'origin_breached' lifecycle event."""
         result = _event_to_lifecycle_event(
-            sample_invalidated_event,
+            sample_origin_breached_event,
             sample_bar_context["bar_index"],
             sample_bar_context["csv_index"],
             sample_bar_context["timestamp"],
         )
 
         assert result is not None
-        assert result.leg_id == sample_invalidated_event.leg_id
-        assert result.event_type == "invalidated"
-        assert "invalidated" in result.explanation.lower()
+        assert result.leg_id == sample_origin_breached_event.leg_id
+        assert result.event_type == "origin_breached"
+        assert "breach" in result.explanation.lower()
 
 
 # ============================================================================

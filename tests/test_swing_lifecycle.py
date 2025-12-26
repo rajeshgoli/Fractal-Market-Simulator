@@ -302,7 +302,8 @@ class TestSwingInvalidationPropagation:
 
         # Check event details
         inv_event = invalidation_events[0]
-        assert inv_event.reason == "leg_invalidated"
+        # #345: Swing invalidation now triggered by origin breach instead of leg invalidation
+        assert inv_event.reason == "origin_breached"
 
         # The swing should now be invalidated
         bull_swings_after = [s for s in detector.get_active_swings() if s.direction == "bull"]

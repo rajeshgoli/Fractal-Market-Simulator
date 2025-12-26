@@ -264,9 +264,8 @@ class FeedbackAttachmentLifecycleEvent(BaseModel):
 
 
 class FeedbackDirectionConfig(BaseModel):
-    """Per-direction config in feedback snapshot."""
+    """Per-direction config in feedback snapshot (#345)."""
     formation_fib: float
-    invalidation_threshold: float
     engulfed_breach_threshold: float
 
 
@@ -401,8 +400,10 @@ class DagLegResponse(BaseModel):
     origin_index: int
     retracement_pct: float
     formed: bool
-    status: str  # "active", "stale", or "invalidated"
+    status: str  # "active" or "stale" (#345: invalidated status removed)
     bar_count: int
+    # #345: Origin breach tracking - true if origin has been breached (structural invalidation)
+    origin_breached: bool = False
     # Impulsiveness (0-100): Percentile rank of raw impulse vs all formed legs (#241)
     # More interpretable than raw impulse - 90+ is very impulsive, 10- is gradual
     impulsiveness: Optional[float] = None
@@ -510,21 +511,19 @@ class FollowedLegsEventsResponse(BaseModel):
 
 
 class DirectionConfigRequest(BaseModel):
-    """Per-direction detection configuration parameters.
+    """Per-direction detection configuration parameters (#345).
 
     These control swing detection thresholds for bull or bear directions.
     All values are floats representing Fibonacci ratios (0.0 - 1.0+).
     """
-    formation_fib: Optional[float] = None  # Formation threshold (default: 0.287)
-    invalidation_threshold: Optional[float] = None  # Invalidation threshold (default: 0.382)
+    formation_fib: Optional[float] = None  # Formation threshold (default: 0.236)
     engulfed_breach_threshold: Optional[float] = None  # Engulfed threshold (default: 0.0)
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "formation_fib": 0.382,
-                "invalidation_threshold": 0.382,
-                "engulfed_breach_threshold": 0.20,
+                "formation_fib": 0.236,
+                "engulfed_breach_threshold": 0.0,
             }
         }
     )
@@ -553,12 +552,12 @@ class SwingConfigUpdateRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "bull": {
-                    "formation_fib": 0.382,
-                    "invalidation_threshold": 0.382
+                    "formation_fib": 0.236,
+                    "engulfed_breach_threshold": 0.0
                 },
                 "bear": {
-                    "formation_fib": 0.382,
-                    "invalidation_threshold": 0.382
+                    "formation_fib": 0.236,
+                    "engulfed_breach_threshold": 0.0
                 },
                 "stale_extension_threshold": 3.0,
                 "origin_range_threshold": 0.05,
@@ -574,9 +573,8 @@ class SwingConfigUpdateRequest(BaseModel):
 
 
 class DirectionConfigResponse(BaseModel):
-    """Per-direction configuration values in response."""
+    """Per-direction configuration values in response (#345)."""
     formation_fib: float
-    invalidation_threshold: float
     engulfed_breach_threshold: float
 
 
@@ -601,14 +599,12 @@ class SwingConfigResponse(BaseModel):
         json_schema_extra={
             "example": {
                 "bull": {
-                    "formation_fib": 0.382,
-                    "invalidation_threshold": 0.382,
-                    "engulfed_breach_threshold": 0.20
+                    "formation_fib": 0.236,
+                    "engulfed_breach_threshold": 0.0
                 },
                 "bear": {
-                    "formation_fib": 0.382,
-                    "invalidation_threshold": 0.382,
-                    "engulfed_breach_threshold": 0.20
+                    "formation_fib": 0.236,
+                    "engulfed_breach_threshold": 0.0
                 },
                 "stale_extension_threshold": 3.0,
                 "origin_range_threshold": 0.05,

@@ -74,7 +74,9 @@ class LegPruner:
         turn_start = state.last_turn_bar.get(direction, -1)
 
         for leg in state.active_legs:
-            if leg.direction != direction or leg.status != 'active':
+            # Only consider active legs with live origin (not breached) (#345)
+            # Stale legs don't dominate - they're no longer actively tracking price
+            if leg.direction != direction or leg.status == 'stale' or leg.max_origin_breach is not None:
                 continue
             # #202: Skip legs from previous turns - they don't dominate current turn
             if leg.origin_index < turn_start:
@@ -132,10 +134,10 @@ class LegPruner:
         if range_threshold == 0 or time_threshold == 0:
             return events
 
-        # Get active legs of the specified direction
+        # Get live (non-breached) legs of the specified direction (#345)
         legs = [
             leg for leg in state.active_legs
-            if leg.direction == direction and leg.status == 'active'
+            if leg.direction == direction and leg.max_origin_breach is None
         ]
 
         if len(legs) <= 1:
@@ -517,37 +519,13 @@ class LegPruner:
         prune_events: List[LegPrunedEvent] = []
         legs_to_prune: List[Leg] = []
 
-        # Check active formed legs for engulfed condition
+        # Check formed legs for engulfed condition (#345)
+        # Engulfed: both origin AND pivot have been breached at some point
         for leg in state.active_legs:
-            if leg.status != 'active' or not leg.formed:
-                continue
-
-            if leg.range == 0:
+            if not leg.formed or leg.range == 0:
                 continue
 
             # Engulfed: both origin AND pivot have been breached
-            if leg.max_pivot_breach is not None and leg.max_origin_breach is not None:
-                legs_to_prune.append(leg)
-                prune_events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id=leg.swing_id or "",
-                    leg_id=leg.leg_id,
-                    reason="engulfed",
-                ))
-
-        # Also check invalidated legs for engulfed condition
-        # Invalidated legs already have origin breached; if pivot also breached, they're engulfed
-        # This cleans up noise from legs that were invalidated but still visible
-        for leg in state.active_legs:
-            if leg.status != 'invalidated' or not leg.formed:
-                continue
-
-            if leg.range == 0:
-                continue
-
-            # Invalidated legs by definition have origin breach
-            # Check if pivot breach also occurred -> engulfed
             if leg.max_pivot_breach is not None and leg.max_origin_breach is not None:
                 legs_to_prune.append(leg)
                 prune_events.append(LegPrunedEvent(
@@ -576,14 +554,14 @@ class LegPruner:
     def prune_inner_structure_legs(
         self,
         state: DetectorState,
-        invalidated_legs: List[Leg],
+        breached_legs: List[Leg],
         bar: Bar,
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Prune counter-direction legs from inner structure pivots (#264).
+        Prune counter-direction legs from inner structure pivots (#264, #345).
 
-        When multiple bear (or bull) legs are invalidated simultaneously, some may
+        When multiple bear (or bull) legs have their origin breached, some may
         be strictly contained inside others. The counter-direction legs originating
         from inner structure pivots are redundant when an outer-origin leg exists
         with the same current pivot.
@@ -591,7 +569,7 @@ class LegPruner:
         Example (bear direction):
         - H1=6100 → L1=5900 (outer bear leg)
         - H2=6050 → L2=5950 (inner bear leg, strictly contained in H1→L1)
-        - At H4=6150: Both are invalidated (origin breached)
+        - At H4=6150: Both are origin-breached
         - Bull leg L2→H4 is redundant because L1→H4 exists and covers the structure
         - Prune L2→H4, keep L1→H4
 
@@ -603,7 +581,7 @@ class LegPruner:
 
         Args:
             state: Current detector state (mutated)
-            invalidated_legs: Legs that were just invalidated in this bar
+            breached_legs: Legs with origin breached (max_origin_breach is not None)
             bar: Current bar (for event metadata)
             timestamp: Timestamp for events
 
@@ -617,18 +595,18 @@ class LegPruner:
         events: List[LegPrunedEvent] = []
         pruned_leg_ids: Set[str] = set()
 
-        # Group invalidated legs by direction
-        bear_invalidated = [leg for leg in invalidated_legs if leg.direction == 'bear']
-        bull_invalidated = [leg for leg in invalidated_legs if leg.direction == 'bull']
+        # Group breached legs by direction
+        bear_breached = [leg for leg in breached_legs if leg.direction == 'bear']
+        bull_breached = [leg for leg in breached_legs if leg.direction == 'bull']
 
-        # Process bear invalidated legs -> prune inner bull legs
+        # Process bear breached legs -> prune inner bull legs
         events.extend(self._prune_inner_structure_for_direction(
-            state, bear_invalidated, 'bull', bar, timestamp, pruned_leg_ids
+            state, bear_breached, 'bull', bar, timestamp, pruned_leg_ids
         ))
 
-        # Process bull invalidated legs -> prune inner bear legs
+        # Process bull breached legs -> prune inner bear legs
         events.extend(self._prune_inner_structure_for_direction(
-            state, bull_invalidated, 'bear', bar, timestamp, pruned_leg_ids
+            state, bull_breached, 'bear', bar, timestamp, pruned_leg_ids
         ))
 
         # Reparent children of pruned legs before removal (#281)
@@ -648,14 +626,14 @@ class LegPruner:
     def _prune_inner_structure_for_direction(
         self,
         state: DetectorState,
-        invalidated_legs: List[Leg],
+        breached_legs: List[Leg],
         counter_direction: str,
         bar: Bar,
         timestamp: datetime,
         pruned_leg_ids: Set[str],
     ) -> List[LegPrunedEvent]:
         """
-        Prune inner structure legs for a specific direction pair.
+        Prune inner structure legs for a specific direction pair (#345).
 
         No swing immunity for inner_structure pruning - if a leg is structurally
         inner (contained in a larger structure) and there's an outer-origin leg
@@ -663,8 +641,8 @@ class LegPruner:
 
         Args:
             state: Current detector state
-            invalidated_legs: Invalidated legs of one direction (e.g., bear)
-            counter_direction: The counter direction to prune ('bull' if invalidated are 'bear')
+            breached_legs: Origin-breached legs of one direction (e.g., bear)
+            counter_direction: The counter direction to prune ('bull' if breached are 'bear')
             bar: Current bar
             timestamp: Timestamp for events
             pruned_leg_ids: Set to track pruned leg IDs (mutated)
@@ -674,13 +652,13 @@ class LegPruner:
         """
         events: List[LegPrunedEvent] = []
 
-        if len(invalidated_legs) < 2:
+        if len(breached_legs) < 2:
             return events  # Need at least 2 legs to have containment
 
-        # Get active counter-direction legs (the ones we might prune)
+        # Get live counter-direction legs (the ones we might prune) (#345)
         counter_legs = [
             leg for leg in state.active_legs
-            if leg.direction == counter_direction and leg.status == 'active'
+            if leg.direction == counter_direction and leg.max_origin_breach is None
         ]
 
         if not counter_legs:
@@ -688,10 +666,10 @@ class LegPruner:
 
         # For each inner leg, find the smallest containing outer (immediate container)
         # and check if that outer is the largest at its pivot level.
-        for inner in invalidated_legs:
+        for inner in breached_legs:
             # Find all outers that contain this inner
             containing_outers: List[Leg] = []
-            for outer in invalidated_legs:
+            for outer in breached_legs:
                 if inner.leg_id == outer.leg_id:
                     continue
 
@@ -732,7 +710,7 @@ class LegPruner:
             # If a larger leg shares outer's pivot, the inner is part of a larger
             # structure and shouldn't be pruned.
             all_at_outer_pivot = [
-                leg for leg in list(state.active_legs) + list(invalidated_legs)
+                leg for leg in list(state.active_legs) + list(breached_legs)
                 if leg.direction == outer.direction
                 and leg.pivot_price == outer.pivot_price
             ]
@@ -752,11 +730,11 @@ class LegPruner:
                 if inner_leg.origin_price != inner.pivot_price:
                     continue
 
-                # Check if there's an outer-origin counter-leg with the same pivot
+                # Check if there's an outer-origin counter-leg with the same pivot (#345)
                 outer_leg_exists = any(
                     leg.origin_price == outer.pivot_price and
                     leg.pivot_price == inner_leg.pivot_price and
-                    leg.status == 'active' and
+                    leg.max_origin_breach is None and
                     leg.leg_id not in pruned_leg_ids
                     for leg in counter_legs
                 )
@@ -764,17 +742,17 @@ class LegPruner:
                 if not outer_leg_exists:
                     continue
 
-                # #282: If an ACTIVE leg shares outer's pivot, the structure is still
-                # relevant - don't prune. (The earlier "largest" check handles the case
-                # where a larger invalidated leg shares the pivot.)
-                active_at_outer_pivot = any(
-                    leg.status == 'active'
+                # #282: If a live (non-breached) leg shares outer's pivot, the structure
+                # is still relevant - don't prune. (The earlier "largest" check handles
+                # the case where a larger breached leg shares the pivot.) (#345)
+                live_at_outer_pivot = any(
+                    leg.max_origin_breach is None
                     and leg.direction == outer.direction
                     and leg.pivot_price == outer.pivot_price
                     and leg.leg_id != outer.leg_id
                     for leg in state.active_legs
                 )
-                if active_at_outer_pivot:
+                if live_at_outer_pivot:
                     continue
 
                 # No swing immunity for inner_structure pruning (#264)
@@ -783,7 +761,7 @@ class LegPruner:
                 # leg is redundant regardless of whether it formed a swing.
 
                 # Build detailed explanation showing the containment comparison
-                # inner/outer are the same-direction legs that were invalidated
+                # inner/outer are the same-direction legs that were breached
                 # inner_leg is the counter-direction leg being pruned
                 explanation = (
                     f"Inner {inner.direction} ({float(inner.origin_price):.2f}→"
@@ -869,10 +847,10 @@ class LegPruner:
         events: List[LegPrunedEvent] = []
         min_ratio = self.config.min_counter_trend_ratio
 
-        # Get formed legs of the specified direction
+        # Get formed legs of the specified direction (with live origin) (#345)
         legs_to_check = [
             leg for leg in state.active_legs
-            if leg.direction == direction and leg.status == 'active' and leg.formed
+            if leg.direction == direction and leg.max_origin_breach is None and leg.formed
         ]
 
         # Determine opposite direction
@@ -978,13 +956,13 @@ class LegPruner:
         if not use_threshold_mode and not use_topk_mode:
             return events  # Disabled
 
-        # Find counter-legs: opposite direction, pivot == new_leg.origin
+        # Find counter-legs: opposite direction, pivot == new_leg.origin (#345)
         opposite_direction = 'bear' if new_leg.direction == 'bull' else 'bull'
         counter_legs = [
             leg for leg in state.active_legs
             if leg.direction == opposite_direction
             and leg.pivot_price == new_leg.origin_price
-            and leg.status == 'active'
+            and leg.max_origin_breach is None  # Only consider live legs
             and leg.leg_id != new_leg.leg_id  # Exclude self (shouldn't match anyway)
         ]
 

@@ -191,11 +191,11 @@ export interface HighlightedDagItem {
 }
 
 export interface LegEvent {
-  type: 'LEG_CREATED' | 'LEG_PRUNED' | 'LEG_INVALIDATED';
+  type: 'LEG_CREATED' | 'LEG_PRUNED' | 'ORIGIN_BREACHED';  // #345: LEG_INVALIDATED replaced by ORIGIN_BREACHED
   leg_id: string;
   bar_index: number;
   direction: 'bull' | 'bear';
-  reason?: string;  // For pruned/invalidated events
+  reason?: string;  // For pruned events
   timestamp?: number;  // For display ordering
 }
 
@@ -203,7 +203,7 @@ export interface LegEvent {
 // Leg Visualization Types (Issue #172 - DAG View)
 // ============================================================================
 
-export type LegStatus = 'active' | 'stale' | 'invalidated';
+export type LegStatus = 'active' | 'stale';  // #345: invalidated status removed, use origin_breached
 
 export interface ActiveLeg {
   leg_id: string;
@@ -216,6 +216,8 @@ export interface ActiveLeg {
   formed: boolean;
   status: LegStatus;
   bar_count: number;
+  // #345: Origin breach tracking - true if origin has been breached (structural invalidation)
+  origin_breached: boolean;
   // Impulsiveness (0-100): Percentile rank of raw impulse vs all formed legs (#241)
   impulsiveness: number | null;
   // Spikiness (0-100): Sigmoid-normalized skewness of bar contributions (#241)
@@ -248,11 +250,12 @@ export const LEG_STATUS_STYLES: Record<LegStatus, {
     opacity: 0.5,
     color: { bull: '#F59E0B', bear: '#F59E0B' },  // Yellow for both
   },
-  invalidated: {
-    lineStyle: 'dotted',
-    opacity: 0.6,
-    color: { bull: '#22C55E', bear: '#EF4444' },  // Same direction colors, dotted
-  },
+};
+
+// #345: Style for origin-breached legs (applies on top of status style)
+export const ORIGIN_BREACHED_STYLE = {
+  lineStyle: 'dotted' as const,
+  opacity: 0.6,
 };
 
 // Aggregation scale options - standard timeframes
@@ -341,10 +344,10 @@ export function getAggregationMinutes(scale: AggregationScale): number {
 
 /**
  * Per-direction detection configuration.
+ * #345: invalidation_threshold removed - using origin breach as structural gate
  */
 export interface DirectionConfig {
-  formation_fib: number;       // Formation threshold (default: 0.287)
-  invalidation_threshold: number;  // Invalidation threshold (default: 0.382)
+  formation_fib: number;       // Formation threshold (default: 0.236)
   engulfed_breach_threshold: number;  // Engulfed threshold (default: 0.0)
 }
 
@@ -370,13 +373,11 @@ export interface DetectionConfig {
  */
 export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   bull: {
-    formation_fib: 0.287,
-    invalidation_threshold: 0.382,
+    formation_fib: 0.236,
     engulfed_breach_threshold: 0.0,
   },
   bear: {
-    formation_fib: 0.287,
-    invalidation_threshold: 0.382,
+    formation_fib: 0.236,
     engulfed_breach_threshold: 0.0,
   },
   stale_extension_threshold: 3.0,

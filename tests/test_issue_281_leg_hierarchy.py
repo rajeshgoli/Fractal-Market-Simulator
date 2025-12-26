@@ -521,26 +521,26 @@ class TestEdgeCases:
         assert L3.parent_leg_id == "L1"
 
     def test_only_active_legs_are_eligible_parents(self):
-        """Invalidated legs cannot be parents."""
+        """Breached legs (max_origin_breach is not None) cannot be parents."""
         config = SwingConfig.default()
         detector = LegDetector(config)
 
-        # Create invalidated leg
-        invalidated_leg = Leg(
-            leg_id="invalidated",
+        # Create breached leg (origin has been breached)
+        breached_leg = Leg(
+            leg_id="breached",
             direction='bull',
             origin_price=Decimal("90"),
             origin_index=0,
             pivot_price=Decimal("100"),
             pivot_index=1,
-            status='invalidated',
+            max_origin_breach=Decimal("5"),  # Origin was breached
         )
-        detector.state.active_legs.append(invalidated_leg)
+        detector.state.active_legs.append(breached_leg)
 
         # Try to find parent
         parent_id = detector._find_parent_for_leg('bull', Decimal("95"), 5)
 
-        # Should NOT find invalidated leg
+        # Should NOT find breached leg
         assert parent_id is None
 
     def test_only_earlier_legs_are_eligible_parents(self):

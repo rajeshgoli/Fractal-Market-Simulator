@@ -588,7 +588,7 @@ class TestTurnRatioEdgeCases:
             price_at_creation=Decimal("110"),
             last_modified_bar=1,
             _max_counter_leg_range=5.0,
-            status='invalidated',  # Not active
+            max_origin_breach=Decimal("1"),  # Not active (breached)
         )
         state.active_legs.append(inactive_leg)
 

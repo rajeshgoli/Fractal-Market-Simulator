@@ -279,9 +279,10 @@ class TestPivotExtension:
         config = SwingConfig.default()
         detector, events = calibrate(bars, config)
 
-        # Find bull legs and check their pivot matches the lowest point
+        # Find active, non-breached bull legs and check their pivot matches the lowest point
+        # Breached legs (max_origin_breach is not None) don't have extending pivots
         for leg in detector.state.active_legs:
-            if leg.direction == 'bull' and leg.status == 'active':
+            if leg.direction == 'bull' and leg.status == 'active' and leg.max_origin_breach is None:
                 pivot_bar = bars[leg.pivot_index]
                 actual_low = Decimal(str(pivot_bar.low))
                 assert leg.pivot_price == actual_low, (
@@ -309,9 +310,10 @@ class TestPivotExtension:
         config = SwingConfig.default()
         detector, events = calibrate(bars, config)
 
-        # Find bear legs and check their pivot matches the highest point
+        # Find active, non-breached bear legs and check their pivot matches the highest point
+        # Breached legs (max_origin_breach is not None) don't have extending pivots
         for leg in detector.state.active_legs:
-            if leg.direction == 'bear' and leg.status == 'active':
+            if leg.direction == 'bear' and leg.status == 'active' and leg.max_origin_breach is None:
                 pivot_bar = bars[leg.pivot_index]
                 actual_high = Decimal(str(pivot_bar.high))
                 assert leg.pivot_price == actual_high, (

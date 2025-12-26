@@ -33,7 +33,6 @@ from ...swing_analysis.events import (
     LevelCrossEvent,
     LegCreatedEvent,
     LegPrunedEvent,
-    LegInvalidatedEvent,
     OriginBreachedEvent,
     PivotBreachedEvent,
 )
@@ -225,15 +224,15 @@ def _event_to_response(
     elif isinstance(event, LevelCrossEvent):
         event_type = "LEVEL_CROSS"
         direction = swing.direction if swing else "bull"
-    # Leg events (#309)
+    # Leg events (#309, #345)
     elif isinstance(event, LegCreatedEvent):
         event_type = "LEG_CREATED"
         direction = event.direction
     elif isinstance(event, LegPrunedEvent):
         event_type = "LEG_PRUNED"
         direction = swing.direction if swing else "bull"
-    elif isinstance(event, LegInvalidatedEvent):
-        event_type = "LEG_INVALIDATED"
+    elif isinstance(event, OriginBreachedEvent):
+        event_type = "ORIGIN_BREACHED"  # #345: replaces LEG_INVALIDATED
         direction = swing.direction if swing else "bull"
     else:
         event_type = "UNKNOWN"
@@ -316,9 +315,9 @@ def _format_trigger_explanation(
             return f"Pruned ({reason}): {event.explanation}"
         return f"Pruned: {reason}"
 
-    if isinstance(event, LegInvalidatedEvent):
-        invalidation_price = float(event.invalidation_price)
-        return f"Leg invalidated at {invalidation_price:.2f}"
+    if isinstance(event, OriginBreachedEvent):  # #345: replaces LegInvalidatedEvent
+        breach_price = float(event.breach_price)
+        return f"Origin breached at {breach_price:.2f}"
 
     # Swing events require swing context
     if swing is None:
@@ -409,15 +408,15 @@ def _event_to_lifecycle_event(
                         f"range {abs(float(event.high_price) - float(event.low_price)):.2f} points"
         )
 
-    elif isinstance(event, LegInvalidatedEvent):
-        # Leg's origin was breached beyond threshold
+    elif isinstance(event, OriginBreachedEvent):  # #345: replaces LegInvalidatedEvent
+        # Leg's origin was breached
         return LifecycleEvent(
             leg_id=event.leg_id,
-            event_type="invalidated",
+            event_type="origin_breached",  # #345: replaces "invalidated"
             bar_index=bar_index,
             csv_index=csv_index,
             timestamp=timestamp,
-            explanation=f"Leg invalidated at price {float(event.invalidation_price):.2f}"
+            explanation=f"Origin breached at price {float(event.breach_price):.2f}"
         )
 
     elif isinstance(event, LegPrunedEvent):
@@ -1447,6 +1446,7 @@ def _build_dag_state(detector: LegDetector, window_offset: int = 0) -> DagStateR
             formed=leg.formed,
             status=leg.status,
             bar_count=leg.bar_count,
+            origin_breached=leg.max_origin_breach is not None,  # #345: structural gate
             # Impulsiveness and spikiness replace raw impulse (#241)
             impulsiveness=leg.impulsiveness,
             spikiness=leg.spikiness,
@@ -1585,6 +1585,7 @@ async def get_dag_state():
             formed=leg.formed,
             status=leg.status,
             bar_count=leg.bar_count,
+            origin_breached=leg.max_origin_breach is not None,  # #345: structural gate
             # Impulsiveness and spikiness replace raw impulse (#241)
             impulsiveness=leg.impulsiveness,
             spikiness=leg.spikiness,
@@ -1806,21 +1807,17 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     # Start with current config (preserve existing settings)
     new_config = detector.config
 
-    # Apply bull direction updates
+    # Apply bull direction updates (#345: invalidation_threshold removed)
     if request.bull:
         if request.bull.formation_fib is not None:
             new_config = new_config.with_bull(formation_fib=request.bull.formation_fib)
-        if request.bull.invalidation_threshold is not None:
-            new_config = new_config.with_bull(invalidation_threshold=request.bull.invalidation_threshold)
         if request.bull.engulfed_breach_threshold is not None:
             new_config = new_config.with_bull(engulfed_breach_threshold=request.bull.engulfed_breach_threshold)
 
-    # Apply bear direction updates
+    # Apply bear direction updates (#345: invalidation_threshold removed)
     if request.bear:
         if request.bear.formation_fib is not None:
             new_config = new_config.with_bear(formation_fib=request.bear.formation_fib)
-        if request.bear.invalidation_threshold is not None:
-            new_config = new_config.with_bear(invalidation_threshold=request.bear.invalidation_threshold)
         if request.bear.engulfed_breach_threshold is not None:
             new_config = new_config.with_bear(engulfed_breach_threshold=request.bear.engulfed_breach_threshold)
 
@@ -1867,16 +1864,14 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         f"{len(detector.get_active_swings())} active swings"
     )
 
-    # Build response with current config values
+    # Build response with current config values (#345: invalidation_threshold removed)
     return SwingConfigResponse(
         bull=DirectionConfigResponse(
             formation_fib=new_config.bull.formation_fib,
-            invalidation_threshold=new_config.bull.invalidation_threshold,
             engulfed_breach_threshold=new_config.bull.engulfed_breach_threshold,
         ),
         bear=DirectionConfigResponse(
             formation_fib=new_config.bear.formation_fib,
-            invalidation_threshold=new_config.bear.invalidation_threshold,
             engulfed_breach_threshold=new_config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=new_config.stale_extension_threshold,
@@ -1910,15 +1905,14 @@ async def get_detection_config():
     else:
         config = SwingConfig.default()
 
+    # #345: invalidation_threshold removed
     return SwingConfigResponse(
         bull=DirectionConfigResponse(
             formation_fib=config.bull.formation_fib,
-            invalidation_threshold=config.bull.invalidation_threshold,
             engulfed_breach_threshold=config.bull.engulfed_breach_threshold,
         ),
         bear=DirectionConfigResponse(
             formation_fib=config.bear.formation_fib,
-            invalidation_threshold=config.bear.invalidation_threshold,
             engulfed_breach_threshold=config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=config.stale_extension_threshold,
