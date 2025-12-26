@@ -163,7 +163,8 @@ export function useFollowLeg(): UseFollowLegReturn {
     if (leg.formed) {
       state = 'formed';
     }
-    if (leg.status === 'invalidated') {
+    // #345: Use origin_breached instead of status === 'invalidated'
+    if (leg.origin_breached) {
       state = 'invalidated';
     }
 

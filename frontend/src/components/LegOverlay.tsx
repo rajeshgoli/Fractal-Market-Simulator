@@ -67,7 +67,11 @@ function getColorWithOpacity(hexColor: string, opacity: number): string {
 /**
  * Get line style for LineSeries based on leg status.
  */
-function getLineStyleValue(status: 'active' | 'stale' | 'invalidated'): LineStyle {
+function getLineStyleValue(status: 'active' | 'stale', originBreached: boolean): LineStyle {
+  // If origin is breached, use dotted style regardless of status
+  if (originBreached) {
+    return LineStyle.Dotted;
+  }
   const style = LEG_STATUS_STYLES[status];
   switch (style.lineStyle) {
     case 'dashed':
@@ -179,13 +183,13 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
         // Not in hierarchy: faded/dimmed
         opacity = 0.15;
         lineWidth = 1 as LineWidth;
-        lineStyle = getLineStyleValue(leg.status);
+        lineStyle = getLineStyleValue(leg.status, leg.origin_breached);
       }
     } else {
       // Normal mode: use default highlighting
       opacity = isHighlighted ? 1.0 : style.opacity;
       lineWidth = (isHighlighted ? 4 : 2) as LineWidth;
-      lineStyle = isHighlighted ? LineStyle.Solid : getLineStyleValue(leg.status);
+      lineStyle = isHighlighted ? LineStyle.Solid : getLineStyleValue(leg.status, leg.origin_breached);
     }
 
     // Use follow color if leg is followed (#267), otherwise use direction color

@@ -202,8 +202,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     // Count from events
     for (const event of legEvents) {
-      if (event.type === 'LEG_INVALIDATED') {
-        stats.invalidated++;
+      if (event.type === 'ORIGIN_BREACHED') {
+        stats.invalidated++;  // Count origin breaches as "invalidated" for stats
       } else if (event.type === 'LEG_PRUNED' && event.reason) {
         const reason = event.reason.toLowerCase();
         if (reason.includes('engulfed')) {
@@ -376,12 +376,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         snapshot.detection_config = {
           bull: {
             formation_fib: detectionConfig.bull.formation_fib,
-            invalidation_threshold: detectionConfig.bull.invalidation_threshold,
             engulfed_breach_threshold: detectionConfig.bull.engulfed_breach_threshold,
           },
           bear: {
             formation_fib: detectionConfig.bear.formation_fib,
-            invalidation_threshold: detectionConfig.bear.invalidation_threshold,
             engulfed_breach_threshold: detectionConfig.bear.engulfed_breach_threshold,
           },
           stale_extension_threshold: detectionConfig.stale_extension_threshold,

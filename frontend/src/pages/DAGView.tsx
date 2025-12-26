@@ -64,7 +64,8 @@ function dagLegToActiveLeg(leg: DagLeg, windowOffset: number = 0): ActiveLeg {
     origin_index: leg.origin_index - windowOffset,  // Convert csv_index to local bar index
     retracement_pct: leg.retracement_pct,
     formed: leg.formed,
-    status: leg.status,
+    status: leg.status as 'active' | 'stale',  // #345: Only active/stale now
+    origin_breached: leg.origin_breached,
     bar_count: leg.bar_count,
     impulsiveness: leg.impulsiveness,
     spikiness: leg.spikiness,
@@ -309,7 +310,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
     const eventTypeMap: Record<LegEvent['type'], LifecycleEventWithLegInfo['event_type']> = {
       'LEG_CREATED': 'formed',
       'LEG_PRUNED': 'pruned',
-      'LEG_INVALIDATED': 'invalidated',
+      'ORIGIN_BREACHED': 'origin_breached',
     };
 
     const lifecycleEvent: LifecycleEventWithLegInfo = {

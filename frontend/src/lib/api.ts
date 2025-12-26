@@ -284,7 +284,6 @@ export interface PlaybackFeedbackEventContext {
 // Per-direction config in feedback snapshot
 export interface FeedbackDirectionConfig {
   formation_fib: number;
-  invalidation_threshold: number;
   engulfed_breach_threshold: number;
 }
 
@@ -405,7 +404,8 @@ export interface DagLeg {
   origin_index: number;
   retracement_pct: number;
   formed: boolean;
-  status: 'active' | 'stale' | 'invalidated';
+  status: 'active' | 'stale';  // #345: 'invalidated' removed, use origin_breached
+  origin_breached: boolean;    // #345: True if origin was breached (structural invalidation)
   bar_count: number;
   // Impulsiveness (0-100): Percentile rank of raw impulse vs all formed legs (#241)
   // More interpretable than raw impulse - 90+ is very impulsive, 10- is gradual

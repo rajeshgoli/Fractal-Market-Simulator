@@ -148,9 +148,9 @@ const EventTypeBadge: React.FC<{ type: LegEvent['type'] }> = ({ type }) => {
       style = 'bg-trading-orange/20 text-trading-orange';
       label = 'PRUNED';
       break;
-    case 'LEG_INVALIDATED':
+    case 'ORIGIN_BREACHED':
       style = 'bg-trading-bear/20 text-trading-bear';
-      label = 'INVALID';
+      label = 'BREACHED';
       break;
   }
 

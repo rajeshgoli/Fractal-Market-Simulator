@@ -94,9 +94,9 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
   const hasChanges = useMemo(() => {
     return (
       localConfig.bull.formation_fib !== config.bull.formation_fib ||
-      localConfig.bull.invalidation_threshold !== config.bull.invalidation_threshold ||
+      localConfig.bull.engulfed_breach_threshold !== config.bull.engulfed_breach_threshold ||
       localConfig.bear.formation_fib !== config.bear.formation_fib ||
-      localConfig.bear.invalidation_threshold !== config.bear.invalidation_threshold ||
+      localConfig.bear.engulfed_breach_threshold !== config.bear.engulfed_breach_threshold ||
       localConfig.stale_extension_threshold !== config.stale_extension_threshold ||
       localConfig.origin_range_threshold !== config.origin_range_threshold ||
       localConfig.origin_time_threshold !== config.origin_time_threshold ||
@@ -167,11 +167,11 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       const request: DetectionConfigUpdateRequest = {
         bull: {
           formation_fib: localConfig.bull.formation_fib,
-          invalidation_threshold: localConfig.bull.invalidation_threshold,
+          engulfed_breach_threshold: localConfig.bull.engulfed_breach_threshold,
         },
         bear: {
           formation_fib: localConfig.bear.formation_fib,
-          invalidation_threshold: localConfig.bear.invalidation_threshold,
+          engulfed_breach_threshold: localConfig.bear.engulfed_breach_threshold,
         },
         stale_extension_threshold: localConfig.stale_extension_threshold,
         origin_range_threshold: localConfig.origin_range_threshold,
@@ -309,7 +309,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
 
   const renderFibSelect = (
     direction: 'bull' | 'bear',
-    key: 'formation_fib' | 'invalidation_threshold'
+    key: 'formation_fib' | 'engulfed_breach_threshold'
   ) => {
     const value = localConfig[direction][key];
     const colorClass = direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
@@ -459,12 +459,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
           <span className="text-app-muted" title="Retracement required to form leg">Formation</span>
           {renderFibSelect('bull', 'formation_fib')}
           {renderFibSelect('bear', 'formation_fib')}
-        </div>
-        {/* Invalidation row */}
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
-          <span className="text-app-muted" title="Breach threshold for invalidation">Invalidation</span>
-          {renderFibSelect('bull', 'invalidation_threshold')}
-          {renderFibSelect('bear', 'invalidation_threshold')}
         </div>
       </div>
 
