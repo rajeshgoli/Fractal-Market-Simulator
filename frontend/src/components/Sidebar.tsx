@@ -1,12 +1,14 @@
 import React, { useState, useCallback, useRef, RefObject, useEffect, useMemo } from 'react';
 import { toPng } from 'html-to-image';
-import { EventType, PlaybackState, DetectionConfig, LegEvent, HighlightedDagItem } from '../types';
+import { PlaybackState, DetectionConfig, LegEvent, HighlightedDagItem } from '../types';
 import { Toggle } from './ui/Toggle';
-import { Filter, Activity, CheckCircle, XCircle, Eye, AlertTriangle, MessageSquare, Send, Pause, BarChart2, GitBranch, Scissors, Ban, Paperclip, X, ChevronDown, ChevronRight, Settings, RotateCcw, Zap, Maximize2 } from 'lucide-react';
+import { Filter, MessageSquare, Send, Pause, BarChart2, GitBranch, Paperclip, X, ChevronDown, ChevronRight, Settings, RotateCcw, Zap, Maximize2 } from 'lucide-react';
 import { submitPlaybackFeedback, PlaybackFeedbackEventContext, PlaybackFeedbackSnapshot, ReplayEvent, DagLeg } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
 import { LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
 import { DetectionConfigPanel, DetectionConfigPanelHandle } from './DetectionConfigPanel';
+import { calculateLegStats } from '../utils/legStatsUtils';
+import { getIconForEventType } from '../utils/eventTypeUtils';
 
 // Linger event configuration for mode-specific toggles
 export interface LingerEventConfig {
@@ -188,47 +190,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isDetectionConfigCollapsed, setIsDetectionConfigCollapsed] = useState(false);
   const [isMarketStructureCollapsed, setIsMarketStructureCollapsed] = useState(false);
 
-  // Compute leg statistics from events
-  const legStats = useMemo(() => {
-    const stats = {
-      invalidated: 0,
-      engulfed: 0,
-      staleExtension: 0,
-      proximity: 0,
-      innerStructure: 0,
-      minCtr: 0,
-      formed: 0,
-    };
-
-    // Count from events
-    for (const event of legEvents) {
-      if (event.type === 'ORIGIN_BREACHED') {
-        stats.invalidated++;  // Count origin breaches as "invalidated" for stats
-      } else if (event.type === 'LEG_PRUNED' && event.reason) {
-        const reason = event.reason.toLowerCase();
-        if (reason.includes('engulfed')) {
-          stats.engulfed++;
-        } else if (reason.includes('stale') || reason.includes('extension')) {
-          stats.staleExtension++;
-        } else if (reason.includes('proximity')) {
-          stats.proximity++;
-        } else if (reason.includes('inner')) {
-          stats.innerStructure++;
-        } else if (reason.includes('branch_ratio') || reason.includes('dominated')) {
-          stats.minCtr++;  // Repurposed for branch ratio domination
-        }
-      }
-    }
-
-    // Count formed from active legs
-    for (const leg of activeLegs) {
-      if (leg.formed) {
-        stats.formed++;
-      }
-    }
-
-    return stats;
-  }, [legEvents, activeLegs]);
+  // Compute leg statistics from events using shared utility
+  const legStats = useMemo(() => calculateLegStats(legEvents, activeLegs), [legEvents, activeLegs]);
 
   // Top 5 biggest legs (by price range)
   const biggestLegs = useMemo(() => {
@@ -455,31 +418,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   }, [handleFeedbackSubmit]);
 
-  const getIconForType = (type: string) => {
-    switch (type) {
-      case EventType.SWING_FORMED:
-      case 'SWING_FORMED':
-        return <Activity size={16} className="text-trading-purple" />;
-      case EventType.COMPLETION:
-      case 'SWING_COMPLETED':
-        return <CheckCircle size={16} className="text-trading-bull" />;
-      case EventType.INVALIDATION:
-      case 'SWING_INVALIDATED':
-        return <XCircle size={16} className="text-trading-bear" />;
-      case EventType.LEVEL_CROSS:
-      case 'LEVEL_CROSS':
-        return <Eye size={16} className="text-trading-blue" />;
-      case 'LEG_CREATED':
-        return <GitBranch size={16} className="text-trading-blue" />;
-      case 'LEG_PRUNED':
-        return <Scissors size={16} className="text-trading-orange" />;
-      case 'LEG_INVALIDATED':
-        return <Ban size={16} className="text-trading-bear" />;
-      default:
-        return <AlertTriangle size={16} className="text-trading-orange" />;
-    }
-  };
-
   return (
     <aside className={`flex flex-col bg-app-secondary border-r border-app-border h-full ${className}`}>
       {/* Linger Event Toggles - only shown when linger is enabled */}
@@ -517,7 +455,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 `}
               >
                 <div className="pt-1">
-                  {getIconForType(event.id)}
+                  {getIconForEventType(event.id)}
                 </div>
 
                 <div className="flex-1 min-w-0">

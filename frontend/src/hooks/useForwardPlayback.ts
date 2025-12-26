@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { PlaybackState, BarData, FilterState } from '../types';
 import { advanceReplay, reverseReplay, ReplayEvent, ReplaySwingState, AggregatedBarsResponse, DagStateResponse } from '../lib/api';
+import { formatReplayBarsData } from '../utils/barDataUtils';
 import { LINGER_DURATION_MS } from '../constants';
 
 // Fetch batch size for non-DAG mode (bars only, can batch aggressively)
@@ -476,16 +477,7 @@ export function useForwardPlayback({
 
       // Append new bars (process even if end_of_data to update UI correctly)
       if (response.new_bars.length > 0) {
-        const newBarData: BarData[] = response.new_bars.map(bar => ({
-          index: bar.index,
-          timestamp: bar.timestamp,
-          open: bar.open,
-          high: bar.high,
-          low: bar.low,
-          close: bar.close,
-          source_start_index: bar.index,
-          source_end_index: bar.index,
-        }));
+        const newBarData = formatReplayBarsData(response.new_bars);
 
         setVisibleBars(prev => {
           newVisibleBars = [...prev, ...newBarData];
@@ -992,16 +984,7 @@ export function useForwardPlayback({
 
         // Append new bars
         if (response.new_bars.length > 0) {
-          const newBarData: BarData[] = response.new_bars.map(bar => ({
-            index: bar.index,
-            timestamp: bar.timestamp,
-            open: bar.open,
-            high: bar.high,
-            low: bar.low,
-            close: bar.close,
-            source_start_index: bar.index,
-            source_end_index: bar.index,
-          }));
+          const newBarData = formatReplayBarsData(response.new_bars);
           setVisibleBars(prev => [...prev, ...newBarData]);
           setCurrentPosition(response.current_bar_index);
           onNewBars?.(newBarData);

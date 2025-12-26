@@ -27,8 +27,8 @@ import {
   advanceReplay,
   DagStateResponse,
   DagLeg,
-  ReplayBarData,
 } from '../lib/api';
+import { formatReplayBarsData } from '../utils/barDataUtils';
 import { LINGER_DURATION_MS } from '../constants';
 import {
   BarData,
@@ -645,17 +645,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ currentMode, onModeChange }) =
 
       // Update state with the response
       if (response.new_bars && response.new_bars.length > 0) {
-        const newBars: BarData[] = response.new_bars.map((bar: ReplayBarData) => ({
-          index: bar.index,
-          timestamp: bar.timestamp,
-          open: bar.open,
-          high: bar.high,
-          low: bar.low,
-          close: bar.close,
-          volume: 0,
-          source_start_index: bar.index,
-          source_end_index: bar.index,
-        }));
+        const newBars = formatReplayBarsData(response.new_bars);
 
         // Update sourceBars
         setSourceBars(prev => [...prev, ...newBars]);

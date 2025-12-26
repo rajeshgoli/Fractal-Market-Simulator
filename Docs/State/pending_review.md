@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 8
 
 **Last Review:** 2025-12-24
 
@@ -15,6 +15,7 @@
 - #343 — Replace threshold text inputs with Fib level dropdowns
 - #344 — Exempt largest leg from turn-ratio pruning (fixes #341/#342 edge case)
 - #345 — Remove invalidation_threshold and 'invalidated' status from DAG (use origin breach directly)
+- #333 — Extract shared frontend utilities (barData, legStats, eventType)
 
 ---
 
