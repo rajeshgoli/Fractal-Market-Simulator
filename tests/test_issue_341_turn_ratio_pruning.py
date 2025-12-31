@@ -1379,26 +1379,22 @@ class TestLargestLegExemption:
 class TestMaxTurnsPerPivotRawConfig:
     """Tests for max_turns_per_pivot_raw configuration (#355)."""
 
-    def test_config_default_is_zero(self):
-        """Default max_turns_per_pivot_raw should be 0 (disabled)."""
-        config = SwingConfig.default()
-        assert config.max_turns_per_pivot_raw == 0
-
     def test_with_max_turns_per_pivot_raw(self):
         """with_max_turns_per_pivot_raw creates new config with updated value."""
-        config = SwingConfig.default()
-        new_config = config.with_max_turns_per_pivot_raw(3)
+        original = SwingConfig.default()
+        original_value = original.max_turns_per_pivot_raw
+        new_config = original.with_max_turns_per_pivot_raw(3)
 
         # Original unchanged
-        assert config.max_turns_per_pivot_raw == 0
+        assert original.max_turns_per_pivot_raw == original_value
 
         # New config updated
         assert new_config.max_turns_per_pivot_raw == 3
 
         # Other fields preserved
-        assert new_config.bull.formation_fib == config.bull.formation_fib
-        assert new_config.min_turn_ratio == config.min_turn_ratio
-        assert new_config.max_turns_per_pivot == config.max_turns_per_pivot
+        assert new_config.bull.formation_fib == original.bull.formation_fib
+        assert new_config.min_turn_ratio == original.min_turn_ratio
+        assert new_config.max_turns_per_pivot == original.max_turns_per_pivot
 
     def test_config_serialization(self):
         """max_turns_per_pivot_raw should serialize properly through with_* methods."""
@@ -1416,8 +1412,8 @@ class TestMaxTurnsPerPivotRawConfig:
 
     def test_mutual_exclusivity_three_modes(self):
         """Mode selection should be based on priority: threshold > top-k > raw."""
-        # All zero = disabled
-        config = SwingConfig.default()
+        # Start from default (max_turns_per_pivot_raw=10), explicitly disable for this test
+        config = SwingConfig.default().with_max_turns_per_pivot_raw(0)
         assert config.min_turn_ratio == 0.0
         assert config.max_turns_per_pivot == 0
         assert config.max_turns_per_pivot_raw == 0
@@ -1449,7 +1445,7 @@ class TestRawCounterHeftModePruning:
 
     def test_no_pruning_when_all_disabled(self):
         """No pruning when all three modes are disabled."""
-        config = SwingConfig.default()  # All 0
+        config = SwingConfig.default().with_max_turns_per_pivot_raw(0)  # Explicitly disable
         pruner = LegPruner(config)
         state = self.create_test_state()
 

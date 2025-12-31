@@ -52,12 +52,6 @@ def make_bull_leg(
 class TestOriginProximityPruningConfig:
     """Test configuration for origin-proximity pruning."""
 
-    def test_default_thresholds_disabled(self):
-        """Default thresholds should be 0 (disabled)."""
-        config = SwingConfig.default()
-        assert config.origin_range_prune_threshold == 0.0
-        assert config.origin_time_prune_threshold == 0.0
-
     def test_with_origin_prune_updates_both(self):
         """with_origin_prune should update both thresholds."""
         config = SwingConfig.default().with_origin_prune(
@@ -68,12 +62,15 @@ class TestOriginProximityPruningConfig:
         assert config.origin_time_prune_threshold == 0.10
 
     def test_with_origin_prune_partial_update(self):
-        """with_origin_prune should update only provided threshold."""
-        config = SwingConfig.default().with_origin_prune(
+        """with_origin_prune should update only provided threshold, preserving others."""
+        original = SwingConfig.default()
+        original_time = original.origin_time_prune_threshold
+
+        config = original.with_origin_prune(
             origin_range_prune_threshold=0.05,
         )
         assert config.origin_range_prune_threshold == 0.05
-        assert config.origin_time_prune_threshold == 0.0  # unchanged
+        assert config.origin_time_prune_threshold == original_time  # unchanged
 
         config = config.with_origin_prune(
             origin_time_prune_threshold=0.10,
@@ -87,7 +84,10 @@ class TestOriginProximityPruningDisabled:
 
     def test_no_pruning_when_both_thresholds_zero(self):
         """No pruning should occur when both thresholds are 0."""
-        config = SwingConfig.default()  # Both thresholds are 0
+        config = SwingConfig.default().with_origin_prune(
+            origin_range_prune_threshold=0.0,
+            origin_time_prune_threshold=0.0,
+        )
         pruner = LegPruner(config)
 
         state = DetectorState()

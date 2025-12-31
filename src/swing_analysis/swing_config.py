@@ -58,23 +58,23 @@ class SwingConfig:
         bear: Configuration for bear swing detection.
         origin_range_prune_threshold: Threshold for origin-proximity consolidation by range (#294).
             Legs with similar ranges (relative difference < threshold) formed at similar
-            times are consolidated. Default 0.0 (disabled). Set > 0 to enable (e.g., 0.05 = 5%).
+            times are consolidated. Set to 0 to disable.
         origin_time_prune_threshold: Threshold for origin-proximity consolidation by time (#294).
             Legs formed close together in time (relative to older leg's age) are candidates
-            for consolidation. Default 0.0 (disabled). Set > 0 to enable (e.g., 0.10 = 10%).
+            for consolidation. Set to 0 to disable.
         proximity_prune_strategy: Strategy for which leg survives proximity pruning (#319).
             'oldest': Keep oldest leg in each cluster (legacy geometric approach).
             'counter_trend': Keep leg with highest counter-trend range (market-structure
-            aware, uses segment_deepest_price from parent). Default 'counter_trend'.
+            aware, uses segment_deepest_price from parent).
         stale_extension_threshold: Multiplier for removing invalidated child legs (#203, #261).
             Invalidated legs WITH A PARENT are pruned when price moves N x their range
             beyond origin. Root legs (no parent) are never pruned, preserving the anchor
-            that began the move. Default 3.0.
+            that began the move.
         emit_level_crosses: Whether to emit LevelCrossEvent when price crosses Fib
-            levels. Default False (disabled for performance). Set to True when
-            level cross events are needed. Can be toggled mid-stream via update_config().
+            levels. Disabled for performance by default. Can be toggled mid-stream
+            via update_config().
         enable_engulfed_prune: Whether to delete legs that are breached on both
-            origin and pivot sides. Default True.
+            origin and pivot sides.
 
     Example:
         >>> config = SwingConfig.default()
@@ -83,40 +83,17 @@ class SwingConfig:
     """
     bull: DirectionConfig = field(default_factory=DirectionConfig)
     bear: DirectionConfig = field(default_factory=DirectionConfig)
-    origin_range_prune_threshold: float = 0.0  # Disabled by default; set > 0 to enable
-    origin_time_prune_threshold: float = 0.0  # Disabled by default; set > 0 to enable
-    # Proximity pruning strategy (#319): 'oldest' (default) or 'counter_trend'
-    # 'oldest': Keep oldest leg in each cluster (purely geometric)
-    # 'counter_trend': Keep leg with highest counter-trend range (market-structure aware)
+    origin_range_prune_threshold: float = 0.02
+    origin_time_prune_threshold: float = 0.02
     proximity_prune_strategy: str = 'oldest'
-    # Branch ratio for origin domination (#337): prevents insignificant child legs
-    # A new leg's counter-trend must be >= min_branch_ratio * parent's counter-trend.
-    # This scales naturally through the hierarchy (children of children can be smaller).
-    # E.g., 0.1 means child's counter-trend must be at least 10% of parent's.
-    # Default 0.0 (disabled). Set > 0 to enable branch ratio domination.
     min_branch_ratio: float = 0.0
-    # Turn ratio for sibling pruning at shared pivots (#341): filters horizontally
-    # When a new leg forms at origin O, counter-legs with pivot=O are scored by:
-    #   turn_ratio = _max_counter_leg_range / leg.range
-    # Legs with turn_ratio < min_turn_ratio are pruned (too small for their context).
-    # E.g., 0.5 means leg cannot extend more than 2x its counter-trend.
-    # Default 0.0 (disabled). Set > 0 to enable turn ratio pruning.
     min_turn_ratio: float = 0.0
-    # Top-k turn ratio pruning (#342): alternative to threshold-based pruning
-    # When > 0, keeps only the k highest turn-ratio legs at each pivot.
-    # Mutually exclusive with min_turn_ratio and max_turns_per_pivot_raw:
-    #   - If min_turn_ratio > 0, uses threshold mode (ignores others)
-    #   - If min_turn_ratio == 0 and max_turns_per_pivot > 0, uses top-k by ratio mode
-    #   - If both are 0 and max_turns_per_pivot_raw > 0, uses top-k by raw counter-heft
-    #   - If all are 0, turn ratio pruning is disabled
-    # Default 0 (disabled). Set > 0 to enable top-k mode.
+    # Turn ratio mode selection (mutually exclusive):
+    #   - min_turn_ratio > 0: threshold mode (prune legs below ratio)
+    #   - max_turns_per_pivot > 0: top-k by ratio
+    #   - max_turns_per_pivot_raw > 0: top-k by raw counter-heft
     max_turns_per_pivot: int = 0
-    # Top-k raw counter-heft pruning (#355): alternative to ratio-based pruning
-    # When > 0, keeps only the k highest _max_counter_leg_range legs at each pivot.
-    # Uses raw counter-leg range instead of ratio for sorting.
-    # Mutually exclusive with min_turn_ratio and max_turns_per_pivot.
-    # Default 0 (disabled). Set > 0 to enable raw counter-heft mode.
-    max_turns_per_pivot_raw: int = 0
+    max_turns_per_pivot_raw: int = 10
     stale_extension_threshold: float = 3.0
     emit_level_crosses: bool = False
     # Pruning algorithm toggles (#288)

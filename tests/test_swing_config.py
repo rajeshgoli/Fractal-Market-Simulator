@@ -122,16 +122,6 @@ class TestSwingConfig:
         with pytest.raises(AttributeError):
             config.origin_range_prune_threshold = 0.1  # type: ignore
 
-    def test_origin_prune_thresholds_default(self):
-        """Origin prune thresholds should default to 0.0 (disabled) (#294)."""
-        config = SwingConfig()
-        assert config.origin_range_prune_threshold == 0.0
-        assert config.origin_time_prune_threshold == 0.0
-
-    def test_stale_extension_threshold_default(self):
-        """stale_extension_threshold should default to 3.0 (#261)."""
-        config = SwingConfig()
-        assert config.stale_extension_threshold == 3.0
 
 
 class TestSwingConfigBuilders:
@@ -170,14 +160,17 @@ class TestSwingConfigBuilders:
     def test_with_origin_prune(self):
         """with_origin_prune should create new config with modified thresholds (#294)."""
         original = SwingConfig.default()
+        original_range = original.origin_range_prune_threshold
+        original_time = original.origin_time_prune_threshold
+
         modified = original.with_origin_prune(
             origin_range_prune_threshold=0.10,
             origin_time_prune_threshold=0.20,
         )
 
         # Original unchanged
-        assert original.origin_range_prune_threshold == 0.0
-        assert original.origin_time_prune_threshold == 0.0
+        assert original.origin_range_prune_threshold == original_range
+        assert original.origin_time_prune_threshold == original_time
 
         # Modified has new values
         assert modified.origin_range_prune_threshold == 0.10

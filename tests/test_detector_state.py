@@ -80,8 +80,7 @@ class TestHierarchicalDetectorInitialization:
         """Detector initializes with default config."""
         detector = HierarchicalDetector()
         assert detector.config is not None
-        assert detector.config.origin_range_prune_threshold == 0.0
-        assert detector.config.origin_time_prune_threshold == 0.0
+        assert detector.config == SwingConfig.default()
 
     def test_custom_config(self):
         """Detector accepts custom config (#294)."""
