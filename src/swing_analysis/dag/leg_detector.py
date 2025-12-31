@@ -731,6 +731,11 @@ class LegDetector:
                 parent_leg_id = self._find_parent_for_leg('bull', pending.price, pending.bar_index)
                 # Capture counter-trend range at origin (#336)
                 origin_ctr = self._find_origin_counter_trend_range('bull', pending.price)
+                # #357: Treat None as 0.0 if opposite direction has bootstrapped
+                # (means counter-legs existed but none at this pivot → zero counter-trend)
+                # If opposite direction hasn't bootstrapped, None means truly unknown
+                if origin_ctr is None and self.state._has_created_bear_leg:
+                    origin_ctr = 0.0
                 new_leg = Leg(
                     direction='bull',
                     origin_price=pending.price,  # LOW - where upward move started
@@ -745,6 +750,8 @@ class LegDetector:
                     _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
                 )
                 self.state.active_legs.append(new_leg)
+                # #357: Mark that we've created a bull leg
+                self.state._has_created_bull_leg = True
                 # Prune counter-legs at origin with low turn ratio (#341)
                 turn_ratio_events = self._pruner.prune_by_turn_ratio(
                     self.state, new_leg, bar, timestamp
@@ -841,6 +848,11 @@ class LegDetector:
                 parent_leg_id = self._find_parent_for_leg('bear', pending.price, pending.bar_index)
                 # Capture counter-trend range at origin (#336)
                 origin_ctr = self._find_origin_counter_trend_range('bear', pending.price)
+                # #357: Treat None as 0.0 if opposite direction has bootstrapped
+                # (means counter-legs existed but none at this pivot → zero counter-trend)
+                # If opposite direction hasn't bootstrapped, None means truly unknown
+                if origin_ctr is None and self.state._has_created_bull_leg:
+                    origin_ctr = 0.0
                 new_bear_leg = Leg(
                     direction='bear',
                     origin_price=pending.price,  # HIGH - where downward move started
@@ -855,6 +867,8 @@ class LegDetector:
                     _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
                 )
                 self.state.active_legs.append(new_bear_leg)
+                # #357: Mark that we've created a bear leg
+                self.state._has_created_bear_leg = True
                 # Prune counter-legs at origin with low turn ratio (#341)
                 turn_ratio_events = self._pruner.prune_by_turn_ratio(
                     self.state, new_bear_leg, bar, timestamp
@@ -941,6 +955,9 @@ class LegDetector:
                     parent_leg_id = self._find_parent_for_leg('bear', pending_bear.price, pending_bear.bar_index)
                     # Capture counter-trend range at origin (#336)
                     origin_ctr = self._find_origin_counter_trend_range('bear', pending_bear.price)
+                    # #357: Treat None as 0.0 if opposite direction has bootstrapped
+                    if origin_ctr is None and self.state._has_created_bull_leg:
+                        origin_ctr = 0.0
                     new_bear_leg = Leg(
                         direction='bear',
                         origin_price=pending_bear.price,  # HIGH - where downward move started
@@ -955,6 +972,8 @@ class LegDetector:
                         _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
                     )
                     self.state.active_legs.append(new_bear_leg)
+                    # #357: Mark that we've created a bear leg
+                    self.state._has_created_bear_leg = True
                     # Prune counter-legs at origin with low turn ratio (#341)
                     turn_ratio_events = self._pruner.prune_by_turn_ratio(
                         self.state, new_bear_leg, bar, timestamp
@@ -1004,6 +1023,9 @@ class LegDetector:
                     parent_leg_id = self._find_parent_for_leg('bull', pending_bull.price, pending_bull.bar_index)
                     # Capture counter-trend range at origin (#336)
                     origin_ctr = self._find_origin_counter_trend_range('bull', pending_bull.price)
+                    # #357: Treat None as 0.0 if opposite direction has bootstrapped
+                    if origin_ctr is None and self.state._has_created_bear_leg:
+                        origin_ctr = 0.0
                     new_bull_leg = Leg(
                         direction='bull',
                         origin_price=pending_bull.price,  # LOW - where upward move started
@@ -1018,6 +1040,8 @@ class LegDetector:
                         _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
                     )
                     self.state.active_legs.append(new_bull_leg)
+                    # #357: Mark that we've created a bull leg
+                    self.state._has_created_bull_leg = True
                     # Prune counter-legs at origin with low turn ratio (#341)
                     turn_ratio_events = self._pruner.prune_by_turn_ratio(
                         self.state, new_bull_leg, bar, timestamp

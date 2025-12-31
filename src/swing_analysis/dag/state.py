@@ -86,6 +86,14 @@ class DetectorState:
     # Kept sorted for O(log n) percentile lookup using bisect
     formed_leg_impulses: List[float] = field(default_factory=list)
 
+    # Bootstrap tracking (#357): Track whether any leg of each direction has been created.
+    # Used to distinguish "no counter-trend leg exists" (before bootstrap) from
+    # "counter-trend legs existed but none at this pivot" (after bootstrap).
+    # Legs created before bootstrap are exempt from turn ratio pruning (truly unknown).
+    # Legs created after bootstrap with no counter-trend get _max_counter_leg_range = 0.0.
+    _has_created_bull_leg: bool = False
+    _has_created_bear_leg: bool = False
+
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization."""
         # Serialize active legs
@@ -180,6 +188,9 @@ class DetectorState:
             "prev_bar_type": self.prev_bar_type,
             # Population tracking (#241, #242)
             "formed_leg_impulses": self.formed_leg_impulses,
+            # Bootstrap tracking (#357)
+            "_has_created_bull_leg": self._has_created_bull_leg,
+            "_has_created_bear_leg": self._has_created_bear_leg,
         }
 
     @classmethod
@@ -276,6 +287,10 @@ class DetectorState:
         # Population tracking (#241, #242)
         formed_leg_impulses = data.get("formed_leg_impulses", [])
 
+        # Bootstrap tracking (#357)
+        has_created_bull_leg = data.get("_has_created_bull_leg", False)
+        has_created_bear_leg = data.get("_has_created_bear_leg", False)
+
         return cls(
             active_swings=swings,
             last_bar_index=data.get("last_bar_index", -1),
@@ -295,4 +310,7 @@ class DetectorState:
             prev_bar_type=prev_bar_type,
             # Population tracking (#241, #242)
             formed_leg_impulses=formed_leg_impulses,
+            # Bootstrap tracking (#357)
+            _has_created_bull_leg=has_created_bull_leg,
+            _has_created_bear_leg=has_created_bear_leg,
         )
