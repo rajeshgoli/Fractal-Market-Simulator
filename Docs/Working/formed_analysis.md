@@ -41,6 +41,26 @@ But `formed` is set when leg reaches 38.2% retracement. If origin is breached BE
 3. Engulfed pruning never fires (requires both breaches)
 4. Result: immortal zombie leg
 
+### Q: How can origin breach (100%) happen BEFORE 38.2% formation?
+
+**Answer:** This is valid market behavior, not a bug in timing.
+
+Traced the zombie leg timeline:
+```
+Bar 4473 (CSV 179577): L=3995.5 (becomes origin)
+Bar 4474 (CSV 179578): O=4017.75 H=4030.5 L=3997.0 C=4001.75
+  → TYPE_2_BULL (HH + HL)
+  → Bull leg created: origin=3995.5, pivot=4030.5, range=35
+  → Formation uses CLOSE: (4001.75 - 3995.5) / 35 = 17.86%
+  → Threshold = 23.6% → NOT FORMED (close didn't reach threshold)
+Bar 4475 (CSV 179579): L=3970.0 (below origin!)
+  → ORIGIN BREACHED (only 1 bar after creation!)
+```
+
+The bar's HIGH reached 4030.5 (100% = the pivot itself), but CLOSED at only 17.86%. Formation uses close price (conservative - don't know if high came before reversal within bar). The very next bar dropped below the origin.
+
+**This is a valid scenario** - market made a higher high, then immediately reversed before the leg could "confirm" via close.
+
 ---
 
 ## Audit of `formed` Usage in DAG Layer
@@ -86,6 +106,28 @@ if leg.status != 'active' or leg.swing_id is not None or leg.max_origin_breach i
 ```
 
 **Note:** When survivor inherits swing_id, its impulse wasn't added to `formed_leg_impulses`. Minor issue - original leg's impulse is already there.
+
+### Q: If swing_id is set when leg forms, isn't this exactly equivalent to formed?
+
+**Answer:** No! They can DIVERGE.
+
+When a leg is pruned by proximity, the survivor inherits swing_id but NOT formed:
+```python
+# leg_pruner.py:183
+survivor.swing_id = pruned_leg.swing_id
+# survivor.formed is NOT set to True!
+```
+
+So after proximity pruning:
+- Survivor has `swing_id` (inherited)
+- Survivor has `formed=False` (never updated)
+
+| Scenario | `formed` | `swing_id is not None` |
+|----------|----------|------------------------|
+| Leg reached 38.2% | True | True |
+| Survivor inherited swing | **False** | **True** |
+
+If we replace `formed` with `swing_id is not None`, survivors that inherited would now be treated as "formed". This is arguably correct - they represent a swing.
 
 ---
 
@@ -153,6 +195,23 @@ if leg.max_pivot_breach is not None and leg.max_origin_breach is not None:
 
 **Result:** Zombie legs will now be pruned when engulfed.
 
+### Q: What is the point of the range == 0 check?
+
+**Answer:** Defensive guard against edge case, not zombie prevention.
+
+`range == 0` happens when origin_price == pivot_price. Example:
+```
+Bar 1: Low=100, High=110 → pending bull origin = 100
+Bar 2: Low=95, High=100  → bull leg: origin=100, pivot=100 → range=0
+```
+
+This is an "equal extreme" edge case. The checks prevent:
+1. Division by zero in retracement calculation
+2. Division by zero in CTR ratio calculation
+3. Meaningless breach/engulfed checks
+
+These legs are harmless - they naturally fail other checks and remain insignificant.
+
 ---
 
 ### Usage 4: Counter-Trend Ratio Gate (line 617)
@@ -202,6 +261,35 @@ if retracement >= formation_threshold:
 
 ---
 
+### Q: How is swing_id being used? Is it just another way of tracking formation?
+
+**Answer:** swing_id has multiple purposes beyond just tracking formation.
+
+**swing_id Usage Categories:**
+
+| Category | Count | Description |
+|----------|-------|-------------|
+| Identity | ~10 | Links leg to SwingNode, equality/hash |
+| Event metadata | ~15 | Every event includes `swing_id` field |
+| Fib level tracking | 3 | `fib_levels_crossed[swing_id]` |
+| Reference layer lookup | 3 | `_swing_info.get(swing_id)` |
+| Existence check | ~5 | `if leg.swing_id:` to check if leg has swing |
+
+The codebase already uses `swing_id is not None` as a proxy for "leg has become a swing":
+```python
+# leg_pruner.py:182 - Check before transferring
+if pruned_leg.swing_id and not survivor.swing_id:
+
+# leg_detector.py:485 - Find corresponding SwingNode
+if leg.swing_id:
+    for swing in self.state.active_swings:
+        if swing.swing_id == leg.swing_id:
+```
+
+**Conclusion:** swing_id is the natural replacement for `formed`. It already indicates "this leg represents a swing" and is used for linking to SwingNode, events, and reference layer.
+
+---
+
 ### Usage 6: formed_leg_impulses Tracking (line 1279)
 
 **Current logic:**
@@ -218,7 +306,37 @@ bisect.insort(self.state.formed_leg_impulses, leg.impulse)
 
 ### Usage 7: State Serialization (state.py lines 109, 230)
 
-Just serialization/deserialization. If we remove `formed` from `Leg`, we'd remove it from state serialization too. Uses `leg_data.get("formed", False)` for backward compatibility.
+Just serialization/deserialization. If we remove `formed` from `Leg`, we'd remove it from state serialization too. Backward compatibility not needed - user can clear old data.
+
+---
+
+## SwingFormedEvent Emission
+
+### Q: If we remove formed, do we still emit SwingFormedEvent?
+
+**Answer:** Yes, no change needed.
+
+```
+_check_leg_formations() or _check_leg_formations_with_extremes()
+  ↓
+  if retracement >= formation_threshold:
+    ↓
+    leg.formed = True  ← Would be removed (but doesn't affect event)
+    ↓
+    _form_swing_from_leg()
+      ↓
+      Creates SwingNode
+      ↓
+      leg.swing_id = swing.swing_id
+      ↓
+      bisect.insort(formed_leg_impulses, leg.impulse)
+      ↓
+      active_swings.append(swing)
+      ↓
+      return SwingFormedEvent(...)  ← Still emitted based on threshold
+```
+
+`SwingFormedEvent` is emitted when threshold is reached, not based on `formed` status. The event is returned from `_form_swing_from_leg`, which is still called.
 
 ---
 
@@ -241,6 +359,8 @@ The reference layer:
 1. Maintains its own `_formed_refs` set
 2. Calculates formation based on current price (location >= 0.382)
 3. Tracks formation lifecycle independently of DAG
+
+Reference layer owns the "formed" concept and can implement to spec.
 
 ---
 
@@ -269,20 +389,6 @@ The "formation" concept (38.2% retracement threshold) should live in the referen
 
 ---
 
-## Open Questions / Further Investigation Needed
-
-1. **Swing inheritance edge cases:** When a leg inherits `swing_id` via proximity prune, should we update the SwingNode's prices to match the new leg's origin?
-
-2. **Backward compatibility:** Old saved states have `formed` field. Need migration strategy.
-
-3. **Test coverage:** Which tests rely on `formed` behavior? Need to update them.
-
-4. **Reference layer impact:** Does reference layer use `leg.formed` anywhere, or only its own `_formed_refs`?
-
-5. **Event emission:** Currently `SwingFormedEvent` is emitted when leg forms. If we remove `formed`, do we emit based on `swing_id` being set?
-
----
-
 ## Files to Modify
 
 1. `src/swing_analysis/dag/leg.py` - Remove `formed` field
@@ -295,8 +401,7 @@ The "formation" concept (38.2% retracement threshold) should live in the referen
 
 ## Next Steps
 
-1. Answer open questions above
-2. Check reference layer usage of `leg.formed`
-3. Identify affected tests
-4. Create implementation plan
-5. File GitHub issue
+1. Check if reference layer uses `leg.formed` anywhere
+2. Identify affected tests
+3. Create implementation plan
+4. File GitHub issue
