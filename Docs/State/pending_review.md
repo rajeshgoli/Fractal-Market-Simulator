@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-31
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#387** — Fix ReferenceLegOverlay not rendering in Levels at Play view (SVG positioning fix, overlay injection via ChartArea props)
 - **#386** — Fix view switching reset and reference-state endpoint error (AttributeError fix, current_bar_index added to session API, preserve state on view switch)
 - **#374-#382** — P1-UI Epic: Levels at Play View frontend implementation (9 issues: route/navigation, reference API endpoint, reference filtering, scale labels, direction colors, location indicator, hidden detection config, fade-out transitions, telemetry panel)
 - **#371, #372, #373** — Reference Layer P1.11-P1.13: Cold start handling, range distribution tracking (formed legs only), comprehensive test suite (34 tests)
