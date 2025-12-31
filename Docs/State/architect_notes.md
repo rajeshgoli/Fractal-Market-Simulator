@@ -13,58 +13,70 @@ Read in order:
 - Fibonacci-based structural analysis (0.382 formation/invalidation)
 - Resolution-agnostic (1m to 1mo)
 - SwingConfig centralizes all detection parameters
-- Discretization: structural events, not per-bar tokens
 - Calibration-first playback for causal evaluation
 - Backend-controlled data boundary for replay (single source of truth)
 - **DAG/Reference separation:** Structural tracking vs semantic filtering
 - **Rules by construction:** Temporal ordering from bar relationships (Type 1/2/3)
 - **Strict inter-bar causality:** Legs only form when pivots are from different bars (#189)
-- **Turn pruning:** Within-origin (keep largest) + active swing immunity
 - **Modular DAG layer:** dag/ subdirectory with LegDetector, LegPruner, state, calibrate, leg modules (#206)
 - **Structure-driven pruning:** Origin-proximity consolidation (time+range), pivot breach (10%), engulfed (strict) (#203, #208, #294)
-- **Impulse scoring:** Range/duration metric + impulsiveness/spikiness percentiles (#236, #241)
-- **Inner structure pruning:** Counter-direction legs from contained pivots pruned regardless of swing status (#264, #266)
+- **Counter-trend scoring:** Proximity pruning selects survivor by counter-trend range (#319)
+- **Two-impulse model:** Segment tracking with impulse_to_deepest, impulse_back, net_segment_impulse (#307)
 - **Leg hierarchy:** Parent-child relationships with reparenting on prune (#281)
 - **Runtime config:** Detection parameters adjustable via UI without restart (#288)
+- **Deterministic IDs:** Leg/swing IDs based on (direction, origin_price, origin_index) survive BE reset (#299)
+- **Session persistence:** UI preferences (charts, speed, config) persist via localStorage (#321)
+- **Origin breach as single gate:** No 'invalidated' status — use `max_origin_breach is not None` (#345)
+- **Branch ratio domination:** Creation-time filter prevents insignificant child legs (#337)
+- **Turn ratio pruning:** Horizontal sibling filter at shared pivots (threshold or top-k) (#341, #342, #344)
 
 **Known debt:**
-- #282 — Inner structure pruning should check active/larger bear legs at same pivot (follow-up from #264)
-- #262 — Prune orphaned inner structure legs at 3x completion
 - #240 — TODO: Empirically determine engulfed retention threshold based on impulse
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
-- #177 — Minor: missing `invalidated_at_bar` field, AppState/cache duplication
 
 ---
 
-## Current Phase: L1-L7 Validation
+## Current Phase: Reference Layer Design
 
-### Recent Changes — Dec 23 Review
+### L1-L7 Validation — COMPLETE (Dec 25, 2025)
 
-All 9 pending changes accepted. Summary:
+All 7 reference swings detected correctly with config: `origin_time_threshold=0.02`, `origin_range_threshold=0.02`, `max_turns_per_pivot_raw=10`
 
-| Issue(s) | Summary | Outcome |
-|----------|---------|---------|
-| #294 | Origin-proximity pruning | Accepted — Clean redesign replacing pivot-based proximity with origin (time, range) consolidation |
-| #288 (#289-#292) | Detection Config UI Panel | Accepted — Runtime threshold adjustment with pruning toggles |
-| #261 | Child-only stale extension pruning | Accepted — Re-enabled at 3.0× for child legs, roots preserved |
-| #281 | Leg hierarchy (parent-child) | Accepted — Fundamental improvement with reparenting on prune |
-| #279 | Sequential invalidation fix | Accepted — Inner structure now checks previously invalidated legs |
-| #278 | Backward navigation | Accepted — Backend reverse replay API |
-| #283 | Batch DAG states | Accepted — Performance: per-bar states in batch response |
-| #267 (#268-#276) | Follow Leg Feature | Accepted — Complete lifecycle tracking with visual markers |
-| Aggregation | Standard timeframe options | Accepted — 1m-1W with dynamic filtering |
+| Label | Expected | Found | Status |
+|-------|----------|-------|--------|
+| **L1** | origin=6166, pivot=4832 | origin=6166.50, pivot=4832.00 | BREACHED |
+| **L2** | origin=5837, pivot=4832 | origin=5837.25, pivot=4832.00 | BREACHED |
+| **L3** | origin=6955, pivot=6524 | origin=6953.75, pivot=6525.00 | intact |
+| **L4** | origin=6896, pivot=6524 | origin=6909.50, pivot=6525.00 | BREACHED |
+| **L5** | origin=6790, pivot=6524 | origin=6801.50, pivot=6525.00 | BREACHED |
+| **L6** | origin=6929, pivot=6771 | origin=6928.75, pivot=6771.50 | BREACHED |
+| **L7** | origin=6882, pivot=6770 | origin=6892.00, pivot=6771.50 | BREACHED |
 
-**Architectural observations:**
+**Key insight:** Reference swings (bull references) are **bear legs** in DAG terminology (origin=HIGH, pivot=LOW). Multiple siblings exist at shared pivots.
 
-1. **Origin-proximity pruning (#294)**: Major improvement over pivot-based proximity. The (time, range) space consolidation is conceptually cleaner — legs that started at similar times with similar ranges are genuinely redundant, whereas pivot grouping was too aggressive. Defensive check for invariant violations is good practice.
+### Next: Reference Layer
 
-2. **Detection Config Panel (#288)**: Proper separation — UI adjusts config, backend re-calibrates. The pruning toggles are valuable for understanding individual algorithm contributions. Config update preserves immutability via `with_*` methods.
+**Purpose:** Thin filter over DAG output to identify valid trading references per north star rules.
 
-3. **Leg hierarchy (#281)**: The `parent_leg_id` field with `reparent_children()` on prune is architecturally sound. Maintains hierarchy chain without gaps. Critical for understanding nested structure.
+**Spec:** `Docs/Working/reference_layer_spec.md`
 
-4. **Follow Leg (#267)**: Well-scoped feature. 5-leg limit prevents UI clutter. Color palette handles bull/bear distinction. Event markers (F/P/E/X/O!/P!) provide clear visual feedback. Implementation reuses existing LegDetector/LegPruner events.
+**Key capabilities:**
+1. Location check (price between 0 and 2 in reference frame)
+2. Scale classification (S/M/L/XL by range percentile)
+3. Scale-dependent invalidation tolerance (small: 0%, big: 15%/10%)
+4. Salience ranking (big/impulsive/early vs recent)
 
-5. **#282 requires follow-up**: Inner structure pruning has a gap — should check active/larger bear legs at same pivot before pruning bull leg from that pivot. This is a correctness issue, not a blocker, but should be addressed soon.
+**Design decision:** Reference Layer is a filter, not a capture mechanism. It answers "which current DAG legs qualify as valid trading references?" — doesn't freeze or store historical state.
+
+### Recent Changes — Dec 25 Review #2 (3 issues)
+
+All 3 pending changes accepted. Summary:
+
+| Issue | Summary | Outcome |
+|-------|---------|---------|
+| #347 | Turn ratio pruning frontend UX improvements | Accepted — Dual-slider mutual exclusion, deep merge for settings persistence |
+| #348 | Remove inner structure pruning | Accepted — Strong approval. Dead feature correctly deleted |
+| #349 | Frontend dead code removal epic | Accepted — ~142 lines removed, ViewMode infrastructure deleted |
 
 ### Pivot/Origin Semantics — FIXED
 
@@ -75,32 +87,6 @@ All 9 pending changes accepted. Summary:
 | Bull | LOW (move started) | HIGH (defended extreme) | origin_index < pivot_index |
 | Bear | HIGH (move started) | LOW (defended extreme) | origin_index < pivot_index |
 
-**#198 architectural audit completed:** Type classification, symmetric frames, and semantic enforcement reviewed. Conclusion: current design is sound. See `Docs/Working/arch_audit.md`.
-
-### Pending: #282 Inner Structure Refinement
-
-Issue #282 identifies a gap in inner structure pruning logic. Before pruning a bull leg from a bear's pivot, should verify:
-1. No active bear legs share that pivot
-2. No larger invalidated bear legs share that pivot
-
-**Recommendation:** File as engineering task, priority normal.
-
-### Next: Validate L1-L7 Detection
-
-With semantics enforced and codebase clean, L1-L7 validation can proceed:
-
-| Label | Structure | Expected Status |
-|-------|-----------|-----------------|
-| **L1** | 1=6166, 0=4832 | Should detect |
-| **L2** | 1=5837, 0=4832 | Should detect (sibling of L1) |
-| **L3** | 1=6955, 0=6524 | Should detect |
-| **L4** | 1=6896, 0=6524 | Should detect (sibling of L3) |
-| **L5** | 1=6790, 0=6524 | Should detect (sibling of L3) |
-| **L6** | 1=6929, 0=6771 | Should detect |
-| **L7** | 1=6882, 0=6770 | Should detect |
-
-**Validation method:** Use DAG Build Mode to observe leg/swing formation at key price levels. Hierarchy exploration mode now available to visualize parent-child relationships.
-
 ---
 
 ## System State
@@ -108,33 +94,41 @@ With semantics enforced and codebase clean, L1-L7 validation can proceed:
 | Component | Status | Notes |
 |-----------|--------|-------|
 | LegDetector (dag/) | **Complete** | O(n log k), modularized into 5 modules |
-| LegPruner (dag/) | **Complete** | Handles all pruning: domination, origin-proximity, breach, engulfed, inner structure |
+| LegPruner (dag/) | **Complete** | Handles: origin-proximity, breach, engulfed, turn ratio |
 | Leg Hierarchy | **Complete** | Parent-child with reparenting (#281) |
-| Origin-Proximity Pruning | **Complete** | Time+range consolidation replaces pivot-based (#294) |
+| Origin-Proximity Pruning | **Complete** | Counter-trend scoring default (#319) |
+| Branch Ratio Domination | **Complete** | Creation-time filter (#337) |
+| Turn Ratio Pruning | **Complete** | Threshold + top-k modes, largest leg exempt (#341, #342, #344) |
+| Segment Impulse | **Complete** | Two-impulse model: impulse_to_deepest, impulse_back (#307) |
+| Deterministic IDs | **Complete** | Leg/swing IDs survive BE reset (#299) |
 | Temporal Causality | **Fixed** | Strict inter-bar ordering (#189) |
 | Leg Origin Updates | **Fixed** | Origins update on price extensions (#188) |
+| Origin Breach | **Simplified** | No 'invalidated' status, breach at 0% (#345) |
 | SwingConfig | Complete | Centralizes all parameters including pruning toggles (#288) |
 | SwingNode | Complete | DAG hierarchy model |
 | ReferenceFrame | Complete | Central coordinate abstraction |
 | ReferenceLayer | Complete | Tolerance/completion rules |
-| Turn Pruning | Complete | Within-origin pruning + active swing immunity |
 | Pivot Breach Pruning | Complete | 10% threshold with replacement leg (#208) |
 | Engulfed Detection | Complete | Strict (0.0 threshold) deletes leg (#208, #236) |
-| Inner Structure Pruning | **Needs refinement** | Same-pivot check gap (#282) |
-| Impulse Metrics | **Complete** | Impulsiveness (percentile) + spikiness (sigmoid) (#241) |
+| Inner Structure Pruning | **Removed** | Deleted in #348 — disabled by default, worst-performing method |
 | Replay View | Complete | Tree-based UI, forward playback |
 | DAG Visualization | Complete | Leg/origin visualization, hover highlighting, chart interaction |
 | Hierarchy Exploration | **Complete** | Tree icon, lineage API, focus/ancestor/descendant display (#250) |
 | Chart Controls | **Complete** | Maximize/minimize per chart (#263) |
-| Detection Config Panel | **Complete** | Runtime threshold adjustment (#288) |
+| Detection Config Panel | **Complete** | Runtime threshold adjustment, Fib dropdowns (#288, #318, #343) |
+| Session Persistence | **Complete** | localStorage for charts, speed, config, linger (#321) |
+| Resizable Panels | **Complete** | Draggable explanation panel height (#321) |
 | Backward Navigation | **Complete** | Backend reverse replay API (#278) |
 | Follow Leg Feature | **Complete** | Lifecycle tracking, event markers (#267) |
 | Batch DAG States | **Complete** | Per-bar states in response (#283) |
-| Discretization | Complete | Works directly with SwingNode (no adapter) |
 | V2 API Schemas | Complete | HierarchicalSwingResponse, depth-based grouping |
+| Frontend Refactor | **Complete** | Utility extraction, component decomposition (#333, #334) |
+| Discretization | **Removed** | Will return with reference layer implementation |
+| Swing Hierarchy | **Removed** | O(n²) dead code; leg hierarchy used instead (#301) |
+| Turn/Domination Pruning | **Removed** | Redundant; creation-time check handles all cases (#296) |
 | Legacy Code | **Deleted** | All pre-DAG modules removed (#210, #219, #228) |
-| Test Suite | Healthy | 628 tests passing |
-| Documentation | **Current** | user_guide.md and developer_guide.md updated |
+| Test Suite | Healthy | 502 tests passing |
+| Documentation | Current | All docs updated |
 
 ---
 
@@ -142,9 +136,10 @@ With semantics enforced and codebase clean, L1-L7 validation can proceed:
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| `developer_guide.md` | Current | Includes origin-proximity pruning, leg hierarchy, detection config |
-| `user_guide.md` | Current | Includes detection config panel, follow leg, backward navigation |
-| `CLAUDE.md` | Current | — |
+| `developer_guide.md` | Current | Turn ratio, branch ratio, #345 documented |
+| `user_guide.md` | Current | O! marker, follow leg updated |
+| `DAG.md` | Current | Updated Dec 24 |
+| `CLAUDE.md` | Current | No changes needed |
 
 ---
 
@@ -152,10 +147,10 @@ With semantics enforced and codebase clean, L1-L7 validation can proceed:
 
 - **Hierarchical model:** Swings form a DAG, not discrete buckets
 - **Single algorithm:** process_bar() for both calibration and playback
-- **Fibonacci levels:** Extended grid for discretization (16 levels)
+- **Fibonacci levels:** Extended grid (16 levels)
 - **Resolution-agnostic:** 1m to 1mo source data supported
 - **Performance target:** <5s for 10K bars (achieved: 4.06s)
-- **Lean codebase:** 4 modules (data, swing_analysis, discretization, ground_truth_annotator)
+- **Lean codebase:** 3 modules (data, swing_analysis, ground_truth_annotator)
 - **Backend-controlled boundaries:** Backend owns data visibility
 - **DAG/Reference separation:** DAG tracks structural extremas; Reference layer defines "good reference" semantics
 - **Rules by construction:** Temporal ordering enforced by bar relationships, not post-hoc filtering
@@ -164,8 +159,12 @@ With semantics enforced and codebase clean, L1-L7 validation can proceed:
 - **Modular design:** dag/ subdirectory with clear separation of concerns (#206)
 - **Configurable thresholds:** All pruning/breach thresholds centralized in SwingConfig
 - **Strong deletion bias:** Actively remove unused code to maintain codebase clarity
-- **No swing immunity for structure:** Inner structure legs pruned regardless of formation status (#266)
 - **Runtime configurability:** Detection parameters adjustable without restart (#288)
+- **Data-driven simplification:** Remove code when profiling shows it's unnecessary (#296)
+- **Deterministic state:** IDs derived from immutable properties for reproducibility (#299)
+- **Counter-trend significance:** Proximity pruning prioritizes structural levels with strong counter-moves (#319)
+- **Creation-time filtering:** Prefer blocking leg creation over post-hoc pruning (#337)
+- **Single structural gate:** Origin breach is the only gate; no redundant 'invalidated' status (#345)
 
 ---
 
@@ -208,6 +207,12 @@ With semantics enforced and codebase clean, L1-L7 validation can proceed:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 25 | #347-#349 — Turn ratio UX, inner structure removal, frontend cleanup (3 changes) | All Accepted; dead feature deleted, docs current |
+| Dec 25 | #333-#346 — Frontend refactor, branch ratio, turn ratio, origin breach simplification (10 changes) | All Accepted; docs current |
+| Dec 24 | #322-#335 — Min CTR filter, dead code cleanup, in-app settings, regression fixes (11 changes) | All Accepted; docs current |
+| Dec 24 | #318-#321 — Counter-trend scoring, session persistence, UX (4 changes) | All Accepted; docs updated |
+| Dec 24 | #305, #309-#316 — UX improvements, API serialization, pruning fix (9 changes) | All Accepted; docs debt updated |
+| Dec 23 | #296-#303, #306, #307 — Performance, cleanup, segment impulse (10 changes) | All Accepted; docs debt noted |
 | Dec 23 | #294, #288, #261, #281, #279, #278, #283, #267, aggregation (9 changes) | All Accepted; #282 follow-up noted |
 | Dec 22 | #241, #248-#250, #260-#266, bugfixes — Impulse metrics, hierarchy exploration, inner structure pruning (10 changes) | All Accepted |
 | Dec 21 | #210, #219, #228, #236 — Cleanup epics + impulse score (4 epics, 25 subissues) | All Accepted; minor doc fixes #248, #249 |

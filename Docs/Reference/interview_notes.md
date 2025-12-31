@@ -4,6 +4,44 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## December 25, 2025 - Reference Layer Spec Corrections
+
+**Context:** User reviewed Reference Layer spec revision 1 and identified several premature decisions.
+
+### User Corrections
+
+**1. 0-2 validity for ALL scales**
+
+> "For all scales we should keep 0-2. So if you delete at invalidation, you miss all the extensions. The default extension in ES is typically at 2."
+
+Rev 1 incorrectly invalidated nested legs at origin (location=1). This would miss the entire extension zone (1-2) where ES typically completes. All scales need the full 0-2 range.
+
+**2. Origin breach ≠ instant invalidation**
+
+> "I also don't think you should remove a swing the instant origin is breached. If you do that especially on larger swings, you will be left with no reference swings at the edges when you have the best edge."
+
+Instant invalidation at origin breach is too aggressive. At the edges (when swings are being tested), that's exactly when you have the best trading edge. Tolerance is needed, especially for larger swings.
+
+**3. S/M/L/XL removal was premature**
+
+> "You went ahead and removed S, M, L, XL concepts — but I was merely suggesting this needs a think through. Can you still do north star vision without them? Maybe, maybe not — I'm not sure. I think there's some work to be done before making that decision. I don't even know what that work is."
+
+The user's original comment was an invitation to explore, not a decision to remove scale classification. The relationship between hierarchy depth and scale needs investigation before deciding.
+
+### Key Insight
+
+Product made premature decisions instead of presenting options. When user feedback poses a question ("do we still need this?"), the correct response is exploration, not unilateral decision.
+
+### Spec Updated
+
+Rev 2 of `Docs/Working/reference_layer_spec.md`:
+- Restored 0-2 validity for all scales
+- Added `origin_stress` tracking with scale-dependent tolerance before fatal breach
+- Restored S/M/L/XL classification
+- Added "Exploration Needed" section for scale vs hierarchy decision
+
+---
+
 ## December 21, 2025 - Inner Structure Pruning Rule
 
 **Context:** User observed that when price breaks past a structural high, multiple bull legs with the same pivot can exist — one from the "real" swing low and others from retrace lows inside the structure. The inner ones are noise.

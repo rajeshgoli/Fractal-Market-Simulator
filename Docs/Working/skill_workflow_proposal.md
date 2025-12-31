@@ -1,136 +1,70 @@
-# Skill-Based Workflow Decomposition Proposal
+# Skill-Based Workflow Proposal
 
-**Status:** Draft
+**Status:** Ready for Implementation
 **Author:** Director
 **Date:** 2025-12-31
+**Updated:** 2025-12-31 (aligned with official Anthropic Skills spec)
 
 ## Overview
 
-This proposal outlines a transition from monolithic persona definitions to a **persona + skills** model, where personas define role identity and skills encode repeatable procedures.
+This proposal migrates from ad-hoc `.claude/commands/` files to the **official Anthropic Skills format**, and adds persona-level enforcement to solve the trigger problem.
 
-## Motivation
+**Reference:** [github.com/anthropics/skills](https://github.com/anthropics/skills)
 
-Analysis of user prompt history (`~/.claude/history.jsonl`) revealed:
-- 2,928 prompts for this project
-- Repeated corrections for the same workflow rules (10-30 times each)
-- Clear patterns that can be encoded as skills
+## Problem Statement
 
-The same instructions are being repeated because they're embedded in ad-hoc prompts rather than encoded in reusable procedures.
+Analysis of 2,947 prompts from `~/.claude/history.jsonl` revealed:
 
-## Evidence: Repeated Correction Patterns
+| Friction Pattern | Frequency | Root Cause |
+|------------------|-----------|------------|
+| Push changes requests | 244 | Skill exists but not auto-invoked |
+| Doc update reminders | 145 | Skill exists but not auto-invoked |
+| Handoff corrections | 69 | Output format not enforced |
+| Issue filing requests | 82 | No streamlined skill |
+| Role invocation verbosity | 521 | No shortcuts |
+| Feedback investigation | 45 | No dedicated skill |
 
-### Source Data
+**Key insight:** Skills exist (`.claude/commands/`) but agents don't use them automatically. The problem is **trigger enforcement**, not skill definition.
 
-User prompts are stored in `~/.claude/history.jsonl` with format:
-```json
-{
-  "display": "prompt text",
-  "timestamp": 1765388570619,
-  "project": "/Users/rajesh/Desktop/fractal-market-simulator",
-  "sessionId": "..."
-}
+## Current State vs Official Spec
+
+| Aspect | Current `.claude/commands/` | Official Skills Spec |
+|--------|----------------------------|---------------------|
+| Structure | Flat `.md` files | Folders with `SKILL.md` |
+| Frontmatter | None | Required YAML (`name`, `description`) |
+| Installation | None (just exists) | Plugin system or local |
+| Invocation | `/command` slash | "Use the X skill..." |
+| Discovery | Manual | Description-based |
+
+## Solution: Two-Part Fix
+
+### Part 1: Adopt Official Skills Format
+
+Migrate to proper skills structure:
+
+```
+.claude/skills/
+├── handoff/
+│   └── SKILL.md
+├── doc_update/
+│   └── SKILL.md
+├── push_changes/
+│   └── SKILL.md
+├── file_issue/
+│   └── SKILL.md
+└── diagnose_feedback/
+    └── SKILL.md
 ```
 
-### Pattern Analysis
+### Part 2: Persona-Level Enforcement
 
-Extract prompts for analysis:
-```bash
-cat ~/.claude/history.jsonl | python3 -c "
-import json, sys
-for line in sys.stdin:
-    entry = json.loads(line)
-    if 'fractal-market-simulator' in entry.get('project', ''):
-        print(entry['display'])
-"
-```
+Add mandatory skill invocation to personas. Skills only work if agents know WHEN to use them.
 
-### Top Patterns Identified
+---
 
-| Pattern | Frequency | Example |
-|---------|-----------|---------|
-| Role invocation | 516 (17.6%) | "assume engineer role" |
-| Run tests | 394 (13.5%) | "run tests" |
-| Commit/push | 295 (10.1%) | "push changes" |
-| Issue work | 141 (4.8%) | "implement #357" |
-| Doc updates | 89 (3.0%) | "update user_guide" |
-| Feedback diagnosis | 67 (2.3%) | "look at my last feedback", "diagnose why" |
+## Skill Specifications (Official Format)
 
-### Repeated Corrections (High-Value Skill Candidates)
-
-#### 1. pending_review Rules (Corrected 10+ times)
-
-User prompts showing repeated corrections:
-```
-"do not update pending_review for each subissue, only one increment for the whole" (×8)
-"Pending review is updated after implementation not before"
-"Since this has no code change, do not update pending_review"
-"this is still issue 111" (exception for continuation)
-```
-
-**Extracted rules:**
-- Increment ONLY after implementation completes
-- For epics: ONE increment for entire epic, not per subissue
-- Skip if: doc-only change, continuation of existing issue, no code change
-
-#### 2. Doc Update Rules (Corrected 20+ times)
-
-User prompts showing repeated corrections:
-```
-"API documentation should not go into user_guide... should go to developer_guide"
-"Docs/reference/DAG.md for updates to how DAG behavior changes"
-"Be sure to update user_guide or developer_guide if needed" (×30+)
-```
-
-**Extracted rules:**
-- `DAG.md` — when touching `src/swing_analysis/dag/*`
-- `developer_guide.md` — APIs, architecture, implementation details
-- `user_guide.md` — user-facing behavior (NOT APIs)
-
-#### 3. Epic/Commit Rules (Corrected 15+ times)
-
-User prompts showing repeated corrections:
-```
-"push all changes in one atomic commit" (×12)
-"Close all subissues before closing the epic"
-"Engineer should fix sub issues sequentially, test, and verify"
-"there should be a subissue to update user_guide and developer_guide"
-```
-
-**Extracted rules:**
-- All changes in one atomic commit at end
-- Close subissues before closing epic
-- Sequential execution with testing
-- Doc update subissue required
-
-## Proposed Architecture
-
-### Current Model
-```
-Personas (full workflow embedded)
-├── engineer.md      ← Contains all procedures inline
-├── architect.md     ← Contains all procedures inline
-├── product.md
-└── director.md
-```
-
-### Proposed Model
-```
-Personas (identity + skill references)    Skills (procedures)
-├── engineer.md                           ├── handoff/
-├── architect.md                          ├── doc_update/
-├── product.md                            ├── push_changes/
-└── director.md                           ├── file_issue/
-                                          ├── work_issue/
-                                          └── process_feedback/
-```
-
-Personas become lighter — they define **which skills to invoke when** rather than embedding full procedures.
-
-## Skill Specifications
-
-### Skill 1: `/handoff`
-
-**Purpose:** Execute structured handoff between roles with proper artifact updates.
+### Skill 1: handoff
 
 ```
 .claude/skills/handoff/
@@ -138,78 +72,60 @@ Personas become lighter — they define **which skills to invoke when** rather t
 ```
 
 **SKILL.md:**
-```yaml
+```markdown
 ---
 name: handoff
-description: Execute structured handoff between roles. Use when completing work and transferring to another persona. Handles pending_review updates, artifact updates, and handoff instructions.
+description: Execute structured handoff between roles. Use after completing ANY
+  task to transfer work to the next persona. Outputs exactly ONE sentence in
+  format "As [role], read [artifact] and [action]." No preamble. No explanation.
 ---
 
 # Handoff
 
-## Procedure
+Output EXACTLY ONE LINE. Zero preamble. Zero explanation.
 
-1. Identify handoff type:
-   - **Engineer → Architect**: Work ready for review
-   - **Architect → Engineer**: Issue filed, ready for implementation
-   - **Architect → Product**: Question requiring product input
-   - **Product → Architect**: Direction updated, ready for technical breakdown
+## Format
 
-2. Execute checklist for handoff type:
+```
+As [role], read [artifact] and [action].
+```
 
-### Engineer → Architect
-- [ ] Tests passing
-- [ ] GitHub issue commented with implementation notes
-- [ ] `Docs/State/pending_review.md` incremented (see rules below)
-- [ ] User guide updated (if user-facing, non-API changes)
-- [ ] Developer guide updated (if API/implementation changes)
-- [ ] DAG.md updated (if touching dag/* code)
+## Rules
 
-### Architect → Engineer
-- [ ] GitHub issue created with clear requirements
-- [ ] `Docs/State/architect_notes.md` current
-- [ ] Parallelism specified (if multiple issues)
+1. **One sentence only.** If you have more to say, write it to docs first.
+2. **[role]** = engineer | architect | product | director
+3. **[artifact]** = the doc you just updated OR the GitHub issue you just created
+4. **[action]** = specific verb (implement, review, assess, diagnose)
 
-### Architect → Product
-- [ ] Question added to `Docs/Comms/questions.md`
-- [ ] Context provided (what decision is blocked)
+## Examples
 
-### Product → Architect
-- [ ] `Docs/State/product_direction.md` updated
-- [ ] Question in `Docs/Comms/questions.md` marked resolved
-- [ ] Moved to `Docs/Comms/archive.md`
+```
+As engineer, read GitHub issue #31 and implement the CSV export feature.
+```
 
-## pending_review Rules
+```
+As architect, read Docs/State/pending_review.md and review the 10 accumulated changes.
+```
 
-**When to increment:**
-- After implementation completes (not before)
-- Only for code changes (skip doc-only changes)
+## Pre-flight Check
 
-**When NOT to increment:**
-- Per subissue — only ONE increment for entire epic
-- Continuation of existing issue already in pending_review
-- Doc-only or config-only changes
+Before outputting, verify:
+- [ ] All context written to appropriate artifact (doc or issue)
+- [ ] Next agent can start immediately with ONLY this sentence
+- [ ] No additional explanation needed
 
-3. Output handoff summary:
-   ```
-   Handoff: Engineer → Architect
-   Completed: #357 (pivot breach pruning)
-   Pending review count: 3
-   Next action: Review pending changes
-   ```
+If any check fails, finish documentation work first.
 
 ## Blocking Conditions
 
 Do NOT handoff if:
 - Tests failing (Engineer)
-- pending_review >= 10 (Engineer — Architect must review first)
-- Question unanswered (Architect → Engineer on blocked issue)
+- pending_review >= 10 (Engineer must wait for Architect review)
 ```
 
 ---
 
-### Skill 2: `/doc_update`
-
-**Purpose:** Update reference documentation based on code changes.
+### Skill 2: doc_update
 
 ```
 .claude/skills/doc_update/
@@ -217,27 +133,38 @@ Do NOT handoff if:
 ```
 
 **SKILL.md:**
-```yaml
+```markdown
 ---
 name: doc_update
-description: Update reference documentation after code changes. Use after completing implementation to ensure docs are current. Determines which docs need updates based on what code changed.
+description: Update reference documentation after code changes. Use after
+  completing implementation. Determines which docs need updates based on what
+  code changed. Respects role ownership boundaries.
 ---
 
 # Doc Update
 
-## Procedure
+## Role Ownership
 
-1. Analyze changes to determine which docs need updates:
+Only update docs you own:
+
+| Role | Can Update |
+|------|------------|
+| Engineer | user_guide.md, developer_guide.md, DAG.md, pending_review.md |
+| Architect | architect_notes.md, pending_review.md (reset only) |
+| Product | product_direction.md, interview_notes.md |
+| Director | .claude/personas/*, .claude/skills/* |
+
+## Doc Routing Rules
 
 | Code Changed | Doc to Update |
 |--------------|---------------|
-| `src/swing_analysis/dag/*` | `Docs/Reference/DAG.md` |
-| Any API endpoints | `Docs/Reference/developer_guide.md` |
-| Architecture/implementation | `Docs/Reference/developer_guide.md` |
-| User-facing behavior | `Docs/Reference/user_guide.md` |
-| CLI arguments/options | `Docs/Reference/user_guide.md` |
+| `src/swing_analysis/dag/*` | Docs/Reference/DAG.md |
+| API endpoints | Docs/Reference/developer_guide.md |
+| Architecture/implementation | Docs/Reference/developer_guide.md |
+| User-facing behavior | Docs/Reference/user_guide.md |
+| CLI arguments/options | Docs/Reference/user_guide.md |
 
-2. Doc content rules:
+## Content Rules
 
 ### user_guide.md
 - How to USE the product
@@ -249,28 +176,28 @@ description: Update reference documentation after code changes. Use after comple
 - API documentation
 - Architecture overview
 - Implementation details
-- Setup instructions for developers
+- Setup instructions
 
 ### DAG.md
 - DAG node types and relationships
 - Pruning algorithms
 - Formation/extension logic
-- Hierarchy rules
 
-3. Update each applicable doc:
-   - Read current content
-   - Identify outdated sections
-   - Update to reflect current behavior
-   - Remove deprecated content
+## Cross-Role Requests
 
-4. Verify no stale references remain.
+If another role's docs need updating, add to `Docs/Comms/questions.md`:
+
+```markdown
+### YYYY-MM-DD - Doc Update Request
+- **From:** [your role]
+- **To:** [target role]
+- **Request:** [doc] needs update to reflect [change]
+```
 ```
 
 ---
 
-### Skill 3: `/push_changes`
-
-**Purpose:** Commit and push changes with proper attribution and structure.
+### Skill 3: push_changes
 
 ```
 .claude/skills/push_changes/
@@ -278,46 +205,25 @@ description: Update reference documentation after code changes. Use after comple
 ```
 
 **SKILL.md:**
-```yaml
+```markdown
 ---
 name: push_changes
-description: Commit and push changes to GitHub. Use after completing implementation and doc updates. Ensures atomic commits with proper messages. If there are uncommitted changes, commits them first.
+description: Commit and push changes to GitHub. Use after completing
+  implementation and doc updates. Commits uncommitted changes first if any
+  exist. Ensures atomic commits with proper messages.
 ---
 
 # Push Changes
 
 ## Procedure
 
-1. Check for uncommitted changes:
-   ```bash
-   git status
-   ```
+1. Check status: `git status`
+2. If uncommitted changes, stage and commit
+3. Push: `git push`
+4. Verify: `git status` shows clean
 
-2. If uncommitted changes exist, stage and commit:
-   ```bash
-   git add -A
-   git commit -m "$(cat <<'EOF'
-   Brief summary (fixes #NNN)
+## Commit Message Format
 
-   - Detail 1
-   - Detail 2
-   EOF
-   )"
-   ```
-
-3. Push to remote:
-   ```bash
-   git push
-   ```
-
-## Commit Rules
-
-### For Epics (multiple subissues)
-- **ONE commit for entire epic** — not per subissue
-- Close all subissues before closing epic
-- Reference epic number in commit message
-
-### Commit Message Format
 ```
 Brief summary in imperative mood (fixes #NNN)
 
@@ -326,66 +232,66 @@ Brief summary in imperative mood (fixes #NNN)
 - Any notable decisions
 ```
 
-### What NOT to commit
+Use HEREDOC for multi-line messages:
+```bash
+git commit -m "$(cat <<'EOF'
+Brief summary (fixes #NNN)
+
+- Detail 1
+- Detail 2
+EOF
+)"
+```
+
+## Epic Rules
+
+For epics with multiple subissues:
+- **ONE commit for entire epic** — not per subissue
+- Close all subissues before closing epic
+- Reference epic number in commit message
+
+## Exclusions
+
+Never commit:
 - `.DS_Store`, `__pycache__/`, `*.pyc`
 - `cache/` directory
 - Credentials or secrets
-
-## Verification
-
-After push, verify:
-```bash
-git status  # Should show "nothing to commit"
-git log -1  # Verify commit message
-```
+- `.claude/settings.local.json`
 ```
 
 ---
 
-### Skill 4: `/file_issue`
-
-**Purpose:** Create GitHub issues with proper structure.
+### Skill 4: file_issue
 
 ```
 .claude/skills/file_issue/
-├── SKILL.md
-└── references/
-    └── issue_templates.md
+└── SKILL.md
 ```
 
 **SKILL.md:**
-```yaml
+```markdown
 ---
 name: file_issue
-description: File a GitHub issue. Use when any persona needs to create a bug report, feature request, or epic. Handles issue structure, labeling, and cross-references.
+description: Create a GitHub issue with proper structure. Use when discovering
+  bugs, proposing features, or creating epics. Handles issue templates,
+  labeling, and epic subissue structure.
 ---
 
 # File Issue
 
+## Issue Types
+
+- **Bug**: Unexpected behavior (include repro steps)
+- **Feature**: New capability (include acceptance criteria)
+- **Epic**: Multi-issue feature (include subissues)
+
 ## Procedure
 
-1. Determine issue type:
-   - **Bug**: Unexpected behavior
-   - **Feature**: New capability
-   - **Epic**: Multi-issue feature
+1. Check for duplicates: `gh issue list --search "<keywords>" --limit 5`
+2. Create issue with appropriate template
+3. For epics, create subissues and link in epic body
 
-2. For epics, structure as subissues:
-   - Break into subissues for separate concerns
-   - Each subissue self-contained and testable
-   - Include doc subissue: "Update DAG.md, developer_guide.md, user_guide.md as needed"
-   - Final instruction in epic: "Push all changes in one atomic commit"
-   - Add to epic body: "Do not update pending_review per subissue — one increment for whole epic"
-
-3. Check for duplicates:
-   ```bash
-   gh issue list --search "<keywords>" --limit 5
-   ```
-
-4. Create issue using template from `references/issue_templates.md`
-
-5. For epics, link subissues in epic body.
-
-## Epic Body Template
+## Epic Structure
 
 ```markdown
 ## Overview
@@ -402,12 +308,10 @@ description: File a GitHub issue. Use when any persona needs to create a bug rep
 - Push all changes in one atomic commit
 - Close all subissues before closing epic
 ```
-```
 
-**references/issue_templates.md:**
+## Bug Template
+
 ```markdown
-# Bug Template
-
 ## Description
 [What's broken]
 
@@ -417,43 +321,12 @@ description: File a GitHub issue. Use when any persona needs to create a bug rep
 ## Expected vs Actual
 - Expected: ...
 - Actual: ...
-
----
-
-# Feature Template
-
-## Description
-[What capability to add]
-
-## Acceptance Criteria
-- [ ] ...
-
----
-
-# Epic Template
-
-## Overview
-[High-level goal]
-
-## Sub-Issues
-- [ ] #NNN - [description]
-- [ ] #NNN - Update documentation
-
-## Instructions for Engineer
-- Fix sub issues sequentially, test and verify each
-- Do NOT update pending_review per subissue
-- Push all changes in one atomic commit
-- Close all subissues before closing epic
-
-## Completion Criteria
-All sub-issues closed and verified.
+```
 ```
 
 ---
 
-### Skill 5: `/diagnose_feedback`
-
-**Purpose:** Investigate user observations from playback feedback and diagnose issues.
+### Skill 5: diagnose_feedback
 
 ```
 .claude/skills/diagnose_feedback/
@@ -461,142 +334,209 @@ All sub-issues closed and verified.
 ```
 
 **SKILL.md:**
-```yaml
+```markdown
 ---
 name: diagnose_feedback
-description: Investigate user observations from playback feedback. Use when user says "look at my feedback", "check my latest observation", "diagnose why this happened". Reads feedback JSON, analyzes DAG state snapshot, traces through code to explain behavior.
+description: Investigate user observations from playback feedback. Use when
+  user says "look at my feedback", "check my latest observation", or "diagnose
+  why". Reads feedback JSON, loads actual data, traces code execution. Never
+  speculates — always executes against real data.
 ---
 
 # Diagnose Feedback
 
-## Feedback File Structure
+## CRITICAL: No Speculation
 
-Location: `ground_truth/playback_feedback.json`
+**Never theorize by reading code alone.** Execute against real data and observe.
 
-Each observation contains:
-- `observation_id`: UUID for reference
-- `text`: User's question/observation
-- `playback_bar`: Bar index when observation was made
-- `snapshot`: Full state at observation time
-  - `dag_context.active_legs`: All active legs with origin/pivot prices and indices
-  - `dag_context.pending_origins`: Pending bull/bear origins
-  - `attachments`: Specific legs/items user attached to observation
-  - `detection_config`: Algorithm parameters in effect
-- `created_at`: Timestamp
+## Feedback Location
+
+`ground_truth/playback_feedback.json`
+
+## Observation Structure
+
+```json
+{
+  "observation_id": "uuid",
+  "text": "user's question",
+  "playback_bar": 12345,
+  "snapshot": {
+    "dag_context": {
+      "active_legs": [...],
+      "pending_origins": {...}
+    },
+    "attachments": [...],
+    "detection_config": {...}
+  }
+}
+```
 
 ## Procedure
 
-1. Read latest observation (or specific one if observation_id provided):
+1. Read latest observation (or specific ID if provided)
+2. Parse user's question from `text` field
+3. Extract context: attached legs, config parameters, bar indices
+4. Load price data from CSV (semicolon-delimited, no header)
+5. Run investigation harness with actual data:
+   ```bash
+   python scripts/investigate_leg.py --file test_data/es-5m.csv \
+       --offset <csv_index> --origin-price <price> ...
    ```
-   ground_truth/playback_feedback.json
-   ```
+6. Report findings based on EXECUTION, not assumption
 
-2. Parse the user's question from `text` field
-
-3. Extract relevant context from `snapshot`:
-   - Attached leg(s) from `attachments`
-   - Active legs from `dag_context.active_legs`
-   - Config parameters from `detection_config`
-   - Bar indices for data lookup
-
-4. Load price data from data file (semicolon-delimited, no header):
-   - Format: `date;time;open;high;low;close;volume`
-   - Use `csv_index` or calculate from `offset + playback_bar`
-
-5. Trace through code to explain:
-   - Why a leg was created/preserved/pruned
-   - What threshold was exceeded/not met
-   - What the algorithm saw at that bar
-
-6. Present diagnosis to user with:
-   - Summary of what happened
-   - Specific values (prices, ratios, thresholds)
-   - Code path that led to behavior
-
-## Resolution Actions
-
-After diagnosis, user may request:
-- **File issue**: Use `/file_issue` with diagnosis details
-- **Archive**: Move observation to `ground_truth/resolved_feedback.json`
-- **Move screenshot**: Archive corresponding screenshot from `ground_truth/screenshots/`
-
-## Common Diagnosis Patterns
+## Common Patterns
 
 | User Question | Investigation |
 |---------------|---------------|
 | "Why was this leg created?" | Check branch ratio, formation fib, origin conditions |
-| "Why was this leg pruned?" | Check proximity rules, turn ratio, engulfed conditions |
-| "Why no bear leg at origin?" | Check pending origins, counter-trend requirements |
-| "What was the counter trend?" | Calculate largest opposite-direction move within leg's range |
+| "Why was this leg pruned?" | Check proximity, turn ratio, engulfed conditions |
+| "Why no bear leg here?" | Check pending origins, counter-trend requirements |
 
-## Example Prompts That Trigger This Skill
+## Trigger Phrases
 
-- "Look at my last feedback item"
-- "Can you check my latest feedback and diagnose why this problem occurred"
+- "Look at my last feedback"
 - "Diagnose my latest observation"
-- "Look at my last feedback item and tell me why this happened"
 - "Check my latest observation in feedback json"
+- "Why did this happen?" (with feedback context)
 ```
 
 ---
 
-## Implementation Plan
+## Persona Updates Required
 
-### Phase 1: Create Skills Directory
-1. Create `.claude/skills/` directory structure
-2. Implement `/handoff`, `/doc_update`, `/push_changes` (most frequently corrected)
-3. Test with engineer workflow
+### Engineer Persona Addition
 
-### Phase 2: Update Personas
-1. Remove embedded procedures from persona files
-2. Add skill references: "Use `/handoff` skill when completing work"
-3. Keep role identity and context in personas
+Add to `engineer.md`:
 
-### Phase 3: Add Remaining Skills
-1. Implement `/file_issue`, `/diagnose_feedback`
-2. Consider `/work_issue` for full issue implementation workflow
+```markdown
+## Task Completion Protocol (MANDATORY)
 
-### Phase 4: Iterate
-1. Monitor for new repeated corrections
-2. Extract into skills as patterns emerge
-3. Update existing skills based on feedback
+After ANY code change, execute this sequence without stopping:
 
-## Open Questions
+1. **Test**: `python -m pytest tests/ -v`
+2. **Docs**: Use the doc_update skill
+3. **Push**: Use the push_changes skill
+4. **Close**: Comment on and close GitHub issue with summary
+5. **Handoff**: Use the handoff skill
 
-1. **Skill installation:** Should skills be in `.claude/skills/` or use Claude Code's plugin system?
-2. **Skill triggering:** Auto-trigger based on context vs explicit `/skill` invocation?
-3. **Persona↔Skill boundary:** How much context should skills assume vs require?
+This sequence is ATOMIC. Do not stop between steps.
+```
 
-## Next Steps
+### Architect Persona Addition
 
-1. User approval of this proposal
-2. Director implements Phase 1
-3. Test with real engineer workflow
-4. Iterate based on feedback
+Add to `architect.md`:
+
+```markdown
+## Review Completion Protocol
+
+After completing review:
+
+1. **Update**: architect_notes.md (forward-looking)
+2. **Reset**: pending_review.md count to 0
+3. **Create**: GitHub issues for Engineer OR questions for Product
+4. **Handoff**: Use the handoff skill with parallelism specified
+```
 
 ---
 
-## Appendix: Raw Prompt Analysis Commands
+## Quick Invocations (CLAUDE.md Addition)
 
-To reproduce the analysis:
+Add to reduce the 521 verbose role invocations:
+
+```markdown
+## Quick Role Invocations
+
+| You Say | Agent Understands |
+|---------|-------------------|
+| `eng #N` | As engineer, implement GitHub issue #N |
+| `arch review` | As architect, review pending_review.md |
+| `prod chat` | As product, discuss current direction |
+| `investigate` | Diagnose latest feedback observation |
+```
+
+---
+
+## Migration Plan
+
+### Phase 1: Create Skills (Day 1)
+
+1. Create `.claude/skills/` directory
+2. Create all 5 SKILL.md files per specs above
+3. Test skill invocation manually
+
+### Phase 2: Update Personas (Day 1)
+
+1. Add Task Completion Protocol to engineer.md
+2. Add Review Completion Protocol to architect.md
+3. Add skill references to other personas
+
+### Phase 3: Add Quick Invocations (Day 1)
+
+1. Add quick invocations section to CLAUDE.md
+2. Test shorthand recognition
+
+### Phase 4: Deprecate Old Commands (Day 2)
+
+1. Delete `.claude/commands/` directory
+2. Verify no references remain
+3. Test full workflow
+
+### Phase 5: Monitor (Ongoing)
+
+1. Track repeated corrections in future sessions
+2. Extract new patterns into skills
+3. Refine existing skills based on feedback
+
+---
+
+## Open Questions (Resolved)
+
+| Question | Resolution |
+|----------|------------|
+| Skill location? | `.claude/skills/` with official format |
+| Skill triggering? | Persona-level enforcement ("Use the X skill") |
+| Slash commands? | Deprecated in favor of "Use the X skill" |
+| Persona↔Skill boundary? | Personas define WHEN, skills define HOW |
+
+---
+
+## Expected Impact
+
+| Friction | Before | After |
+|----------|--------|-------|
+| Push changes requests | 244 | ~0 (persona enforced) |
+| Doc update reminders | 145 | ~0 (persona enforced) |
+| Handoff corrections | 69 | ~5 (stricter skill) |
+| Issue filing requests | 82 | ~10 (new skill) |
+| Role invocation | 521 | ~100 (quick invocations) |
+| Investigation requests | 45 | ~5 (dedicated skill) |
+
+**Estimated reduction: ~85% fewer repeated instructions.**
+
+---
+
+## Appendix: Analysis Commands
 
 ```bash
 # Count prompts for this project
-cat ~/.claude/history.jsonl | python3 -c "
+grep "fractal-market-simulator" ~/.claude/history.jsonl | wc -l
+
+# Extract prompts
+grep "fractal-market-simulator" ~/.claude/history.jsonl | python3 -c "
 import json, sys
-count = sum(1 for line in sys.stdin
-            if 'fractal-market-simulator' in json.loads(line).get('project', ''))
-print(f'Total prompts: {count}')
+for line in sys.stdin:
+    data = json.loads(line)
+    if 'display' in data:
+        print(data['display'][:200])
 "
 
-# Find repeated correction patterns
-cat ~/.claude/history.jsonl | python3 -c "
-import json, sys, re
-prompts = [json.loads(line)['display'] for line in sys.stdin
-           if 'fractal-market-simulator' in json.loads(line).get('project', '')]
-# Search for correction keywords
-for p in prompts:
-    if any(kw in p.lower() for kw in ['don\\'t', 'do not', 'only', 'must']):
-        print(p[:200])
+# Find correction patterns
+grep "fractal-market-simulator" ~/.claude/history.jsonl | python3 -c "
+import json, sys
+for line in sys.stdin:
+    data = json.loads(line)
+    p = data.get('display', '').lower()
+    if any(kw in p for kw in ['don\\'t', 'do not', 'should be', 'supposed to']):
+        print(data['display'][:150])
 "
 ```

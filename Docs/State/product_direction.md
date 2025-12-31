@@ -1,100 +1,74 @@
 # Product Direction
 
-**Last Updated:** December 21, 2025 (PM9)
+**Last Updated:** December 25, 2025
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Ship reliable, performant swing detection that correctly identifies the valid swings defined in `Docs/Reference/valid_swings.md`.**
+**Wire up Reference Layer to filter DAG output into valid trading references per north star rules.**
 
 ---
 
-## Current Phase: User Testing
+## Current Phase: Reference Layer Design
 
-DAG visualization complete. Now in **active user testing** phase using the Replay View to validate swing detection behavior against real ES data.
+DAG validation complete. L1-L7 detected correctly. Now designing the Reference Layer — a thin filter over DAG output that identifies valid trading references.
 
-**Status:** Testing uncovered leg creation bugs. Fixes in progress.
+**Status:** Spec drafted at `Docs/Working/reference_layer_spec.md`. Under review.
 
-**Active issues:** See [GitHub Issues](https://github.com/rajeshgoli/Fractal-Market-Simulator/issues) for current bugs. Issues are filed and resolved rapidly during this phase — GitHub is the source of truth.
-
-**Test data:** `test_data/es-5m.csv` at various offsets. Observations captured in `ground_truth/playback_feedback.json`.
+**Key insight from validation:** Reference swings are **bear legs** in DAG terminology (HIGH before LOW = bullish reference). The DAG correctly tracks these with origin breach status.
 
 ---
 
-## Upcoming: Hierarchy Exploration Mode (#250)
+## Completed: L1-L7 Validation (Dec 25, 2025)
 
-**Status:** Epic filed, ready for engineering.
+**Status:** Complete. All 7 reference swings detected correctly.
 
-Interactive visualization of parent-child relationships between legs. Users can explore full lineage (ancestors + descendants) from any leg.
+Config used: `origin_time_threshold=0.02`, `origin_range_threshold=0.02`, `max_turns_per_pivot_raw=10`
 
-| Feature | Description |
-|---------|-------------|
-| **Entry** | Hover 1s → tree icon → click to enter |
-| **In mode** | Full lineage highlighted, unrelated legs fade, connection lines show relationships |
-| **Navigation** | Click highlighted leg to recenter on its lineage |
-| **Exit** | Corner X button or ESC key |
+| Label | Expected | Found | Status |
+|-------|----------|-------|--------|
+| **L1** | origin=6166, pivot=4832 | origin=6166.50, pivot=4832.00 | BREACHED |
+| **L2** | origin=5837, pivot=4832 | origin=5837.25, pivot=4832.00 | BREACHED |
+| **L3** | origin=6955, pivot=6524 | origin=6953.75, pivot=6525.00 | **intact** |
+| **L4** | origin=6896, pivot=6524 | origin=6909.50, pivot=6525.00 | BREACHED |
+| **L5** | origin=6790, pivot=6524 | origin=6801.50, pivot=6525.00 | BREACHED |
+| **L6** | origin=6929, pivot=6771 | origin=6928.75, pivot=6771.50 | BREACHED |
+| **L7** | origin=6882, pivot=6770 | origin=6892.00, pivot=6771.50 | BREACHED |
 
-**Use case:** Build intuition about how the algorithm thinks; understand structural nesting.
-
-**Subissues:** #251-#258 (execute sequentially, atomic commit)
-
----
-
-## Upcoming: Impulsiveness & Spikiness Scores (#241)
-
-**Status:** Epic filed, ready for engineering.
-
-Refines raw `impulse` (points/bars) into two trader-interpretable metrics:
-
-| Metric | Formula | Range | Meaning |
-|--------|---------|-------|---------|
-| **Impulsiveness** | Percentile rank vs formed legs | 0-100 | How impulsive relative to history |
-| **Spikiness** | Moment-based skewness → sigmoid | 0-100 | Spike-driven (>50) vs smooth (<50) |
-
-**Use case:** Impulsive + low-spikiness leg in formation = trend continuation signal.
-
-**Subissues:** #242-#247 (execute sequentially, atomic commit)
+**Key findings:**
+- All references are bear legs (origin=HIGH, pivot=LOW)
+- Multiple siblings exist at shared pivots (e.g., L1/L2 share pivot 4832)
+- Breach status correctly reflects price action (L3 intact since price < 6953)
+- DAG structural detection is solid
 
 ---
 
-## Completed: DAG Visualization Mode (#167)
+## Completed: Self-Contained Playback Setup (#324)
 
-**Status:** Complete. Enables visual validation of DAG algorithm.
+**Status:** Complete. All 7 sub-issues (#325-#331) implemented.
 
 | Feature | Status |
 |---------|--------|
-| Recursive 10% pruning (#185) | Done |
-| Per-chart timeframe aggregation (#186) | Done |
-| DAG state API, panel, visualization (#168-#172) | Done |
-| Incremental playback, pruning, orphans (#179-#182) | Done |
+| **File selection** | Done — Dropdown picks CSV from `test_data/` |
+| **Start date** | Done — Date picker instead of CLI offset |
+| **Session persistence** | Done — App loads last session automatically |
+| **Process Till** | Done — Fast-forward to specific CSV index with progress |
+
+**Usage:** `python -m src.ground_truth_annotator.main` (no args needed)
 
 ---
 
 ## Completed: Previous Phases
 
+- #347-#349 Turn ratio UX, inner structure removal, frontend cleanup — Complete
+- #324 Self-contained playback — Complete
+- #250 Hierarchy exploration mode — Complete
+- #241 Impulsiveness & spikiness scores — Complete
+- #167 DAG visualization mode — Complete
 - #163 Sibling swing detection — Complete
 - #158 DAG-based swing detection — Complete (4.06s for 10K bars)
-- #159 Reference layer — Complete
-
----
-
-## Valid Swings Detection Status
-
-From `Docs/Reference/valid_swings.md` — ES as of Dec 18, 2025:
-
-| Label | Structure | Status |
-|-------|-----------|--------|
-| **L1** | 1=6166, 0=4832 | Detected |
-| **L2** | 1=5837, 0=4832 | Pending validation |
-| **L3** | 1=6955, 0=6524 | Detected |
-| **L4** | 1=6896, 0=6524 | Pending validation |
-| **L5** | 1=6790, 0=6524 | Pending validation |
-| **L6** | 1=6929, 0=6771 | Detected |
-| **L7** | 1=6882, 0=6770 | Pending validation |
-
-Full validation blocked until current leg creation bugs are fixed.
 
 ---
 
@@ -104,24 +78,32 @@ Full validation blocked until current leg creation bugs are fixed.
 |-----------|--------|
 | <5s for 10K bars | Done (#158) |
 | 100K window loads in frontend | Done (#158) |
-| Valid swings (L1-L7) detected | Blocked by open issues |
-| Sibling swings with same 0 detected | Blocked by open issues |
+| Valid swings (L1-L7) detected | **Done** (Dec 25) |
+| Sibling swings with same pivot detected | **Done** (Dec 25) |
 | Parent-child relationships correct | Done (#158) |
 | Visual validation of DAG behavior | Done (#167) |
 | Multi-timeframe chart view | Done (#186) |
+| Reference Layer filters valid references | Pending |
+
+---
+
+## Next: Reference Layer
+
+**Purpose:** Filter DAG legs to identify valid trading references per north star rules.
+
+**Key capabilities needed:**
+1. Location check (price between 0 and 2 in reference frame)
+2. Scale classification (S/M/L/XL by range percentile)
+3. Scale-dependent invalidation tolerance (small: 0%, big: 15%/10%)
+4. Salience ranking (big/impulsive/early vs recent)
+
+**Spec:** `Docs/Working/reference_layer_spec.md`
 
 ---
 
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- All open leg creation bugs fixed
-- L1-L7 validation complete
-- Unexpected detection behavior observed during testing
-
----
-
-## Previous Phase (Archived)
-
-- #185, #186 DAG refinements — Complete
-- #167 DAG visualization epic — Complete
+- Reference Layer spec approved
+- Reference Layer implementation complete
+- Unexpected behavior observed during testing
