@@ -153,6 +153,8 @@ class ReferenceState:
     by_depth: Dict[int, List['ReferenceSwing']]     # Grouped by hierarchy depth
     by_direction: Dict[str, List['ReferenceSwing']] # Grouped by bull/bear
     direction_imbalance: Optional[str]              # 'bull' | 'bear' | None
+    is_warming_up: bool = False                      # True if in cold start
+    warmup_progress: Tuple[int, int] = (0, 50)       # (current_count, required_count)
 
 
 @dataclass
@@ -308,6 +310,31 @@ class ReferenceLayer:
         # Track which leg_ids have been added to range distribution (to avoid duplicates)
         self._seen_leg_ids: Set[str] = set()
 
+    @property
+    def is_cold_start(self) -> bool:
+        """
+        True if not enough data for reliable scale classification.
+
+        During cold start, update() returns an empty ReferenceState because
+        scale percentiles are unreliable with insufficient data.
+
+        Returns:
+            True if distribution has fewer than min_swings_for_scale legs.
+        """
+        return len(self._range_distribution) < self.reference_config.min_swings_for_scale
+
+    @property
+    def cold_start_progress(self) -> Tuple[int, int]:
+        """
+        Returns (current_count, required_count) for cold start progress.
+
+        Use this for UI display like "Warming up: 35/50 swings collected".
+
+        Returns:
+            Tuple of (current swings in distribution, required minimum).
+        """
+        return (len(self._range_distribution), self.reference_config.min_swings_for_scale)
+
     def _compute_big_swing_threshold(self, swings: List[SwingNode]) -> Decimal:
         """
         Compute the range threshold for big swing classification.
@@ -448,16 +475,22 @@ class ReferenceLayer:
 
     def _update_range_distribution(self, legs: List[Leg]) -> None:
         """
-        Update range distribution with new legs.
+        Update range distribution with ranges from formed legs.
 
-        Only adds legs that haven't been seen before (tracked by leg_id).
-        This ensures we don't double-count legs across update() calls.
+        Only includes formed legs (leg.formed == True) to match the
+        population used for scale classification. Legs that haven't
+        reached 38.2% retracement are not structurally confirmed and
+        should not influence percentile boundaries.
+
+        Range distribution is all-time (not windowed). DAG pruning
+        naturally handles recency by removing old legs.
 
         Args:
-            legs: List of legs from the DAG.
+            legs: List of active legs from the DAG.
         """
         for leg in legs:
-            if leg.leg_id not in self._seen_leg_ids:
+            # Only track formed legs for scale classification
+            if leg.formed and leg.leg_id not in self._seen_leg_ids:
                 self._seen_leg_ids.add(leg.leg_id)
                 self._add_to_range_distribution(leg.range)
 
@@ -745,13 +778,15 @@ class ReferenceLayer:
         self._update_range_distribution(legs)
 
         # Cold start check: not enough swings for meaningful scale classification
-        if len(self._range_distribution) < self.reference_config.min_swings_for_scale:
+        if self.is_cold_start:
             return ReferenceState(
                 references=[],
                 by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
                 by_depth={},
                 by_direction={'bull': [], 'bear': []},
                 direction_imbalance=None,
+                is_warming_up=True,
+                warmup_progress=self.cold_start_progress,
             )
 
         references: List[ReferenceSwing] = []
@@ -817,6 +852,8 @@ class ReferenceLayer:
             by_depth=by_depth,
             by_direction=by_direction,
             direction_imbalance=imbalance,
+            is_warming_up=False,
+            warmup_progress=self.cold_start_progress,
         )
 
     def get_reference_swings(
