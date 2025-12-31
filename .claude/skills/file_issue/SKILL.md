@@ -7,10 +7,16 @@ description: Create a GitHub issue with proper structure. Use when discovering
 
 # File Issue
 
+## When to File
+
+**Default: File an issue.** Tracking matters for all non-trivial work, even direct user requests.
+
+Only skip for truly trivial changes (typo fixes, comment edits). When in doubt, file.
+
 ## Procedure
 
 1. Check for duplicates: `gh issue list --search "<keywords>" --limit 5`
-2. Create issue with appropriate template below
+2. If no duplicate, create issue with appropriate template below
 3. For epics, create subissues first, then reference them in epic body
 
 ---
