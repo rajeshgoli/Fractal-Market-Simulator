@@ -30,7 +30,7 @@ End-of-task orchestrator. Runs completion steps in order, skipping those not nee
 **Check**: Is there already a GitHub issue for this work?
 
 - Run `gh issue list --search "<keywords>" --limit 5` if unsure
-- **If no issue AND work warrants tracking**: Create issue with `gh issue create`
+- **If no issue AND work warrants tracking**: Create issue using templates from `.claude/skills/file_issue/SKILL.md`
 - **If issue exists**: Report "File issue: Not needed (working on #NNN)"
 - **If trivial**: Report "File issue: Not needed (trivial change)"
 
