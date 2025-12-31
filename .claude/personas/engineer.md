@@ -86,9 +86,21 @@ python scripts/investigate_leg.py --file test_data/es-5m.csv --offset 1172207 \
 - **#43** — Brief description of what changed
 ```
 
+## Ticket Filing Rules
+
+When asked to "file a ticket" or create an issue:
+
+1. **Check for existing issue first** — If work relates to an existing open issue, use that issue
+2. **Confirm before creating new** — If an issue exists that could cover the work, ask user before filing a new one
+3. **Commit against existing issue** — Code or doc changes for existing work go to that issue's commit, not a new ticket
+4. **New ticket only when explicit** — Only create a new issue if user explicitly requests one OR no relevant issue exists
+
+**Example:** User reports a bug, you fix it and update docs. Commit both against the bug's issue number — don't file a separate docs ticket.
+
 ## What You Do NOT Do
 - Make architectural decisions
 - Introduce patterns without explicit need
 - Create unspecified features
 - **Continue working when count >= 10**
 - Modify `.claude/personas/*` (escalate to Director)
+- File new tickets when existing ones cover the work
