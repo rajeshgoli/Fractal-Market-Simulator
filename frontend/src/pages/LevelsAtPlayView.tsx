@@ -43,8 +43,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   // Session settings (persisted to localStorage)
   const sessionSettings = useSessionSettings();
 
-  // Reference state hook
-  const { referenceState, fetchReferenceState, fadingRefs } = useReferenceState();
+  // Reference state hook (Phase 2: includes sticky leg support)
+  const { referenceState, fetchReferenceState, fadingRefs, stickyLegIds, toggleStickyLeg } = useReferenceState();
 
   // Core state
   const [isLoading, setIsLoading] = useState(true);
@@ -634,6 +634,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 references={referenceState?.references ?? []}
                 fadingRefs={fadingRefs}
                 bars={visibleChart1Bars}
+                stickyLegIds={stickyLegIds}
+                onLegClick={toggleStickyLeg}
               />
             }
             chart2Overlay={
@@ -643,6 +645,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 references={referenceState?.references ?? []}
                 fadingRefs={fadingRefs}
                 bars={visibleChart2Bars}
+                stickyLegIds={stickyLegIds}
+                onLegClick={toggleStickyLeg}
               />
             }
           />

@@ -759,6 +759,89 @@ class ReferenceLayer:
             result[r.leg.direction].append(r)
         return result
 
+    def get_active_levels(self, state: ReferenceState) -> Dict[float, List[LevelInfo]]:
+        """
+        Get key price levels from all valid references.
+
+        Returns dict keyed by fib ratio with LevelInfo including source reference.
+        Used for level visualization and confluence detection.
+
+        Args:
+            state: ReferenceState from update() containing valid references.
+
+        Returns:
+            Dict mapping fib ratio to list of LevelInfo for that ratio.
+            Each LevelInfo contains the price, ratio, and source reference.
+
+        Example:
+            >>> state = ref_layer.update(legs, bar)
+            >>> levels = ref_layer.get_active_levels(state)
+            >>> levels[0.382]  # All 38.2% levels from valid references
+            [LevelInfo(price=4105.0, ratio=0.382, reference=ref1), ...]
+        """
+        levels: Dict[float, List[LevelInfo]] = {}
+        ratios = [0, 0.382, 0.5, 0.618, 1, 1.382, 1.5, 1.618, 2]
+
+        for ref in state.references:
+            frame = ReferenceFrame(
+                anchor0=ref.leg.pivot_price,
+                anchor1=ref.leg.origin_price,
+                direction="BULL" if ref.leg.direction == 'bear' else "BEAR"
+            )
+            for ratio in ratios:
+                price = float(frame.get_fib_price(ratio))
+                if ratio not in levels:
+                    levels[ratio] = []
+                levels[ratio].append(LevelInfo(
+                    price=price,
+                    ratio=ratio,
+                    reference=ref,
+                ))
+
+        return levels
+
+    def add_crossing_tracking(self, leg_id: str) -> None:
+        """
+        Add a leg to level crossing monitoring.
+
+        When a leg is tracked, level crossing events can be detected
+        for that specific leg. Use remove_crossing_tracking() to stop.
+
+        Args:
+            leg_id: The leg_id to start tracking.
+        """
+        self._tracked_for_crossing.add(leg_id)
+
+    def remove_crossing_tracking(self, leg_id: str) -> None:
+        """
+        Remove a leg from level crossing monitoring.
+
+        Args:
+            leg_id: The leg_id to stop tracking.
+        """
+        self._tracked_for_crossing.discard(leg_id)
+
+    def is_tracked_for_crossing(self, leg_id: str) -> bool:
+        """
+        Check if a leg is being tracked for level crossings.
+
+        Args:
+            leg_id: The leg_id to check.
+
+        Returns:
+            True if the leg is currently tracked.
+        """
+        return leg_id in self._tracked_for_crossing
+
+    def get_tracked_leg_ids(self) -> Set[str]:
+        """
+        Get all leg IDs currently being tracked for level crossings.
+
+        Returns:
+            Set of leg_ids that are tracked.
+        """
+        return self._tracked_for_crossing.copy()
+
     def update(self, legs: List[Leg], bar: Bar) -> ReferenceState:
         """
         Main entry point. Called each bar after DAG processes.

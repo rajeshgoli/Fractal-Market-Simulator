@@ -1957,6 +1957,26 @@ class ReferenceStateApiResponse(BaseModel):
     direction_imbalance: Optional[str]
     is_warming_up: bool
     warmup_progress: List[int]
+    tracked_leg_ids: List[str] = []  # Leg IDs tracked for level crossing
+
+
+class FibLevelResponse(BaseModel):
+    """API response for a single fib level."""
+    price: float
+    ratio: float
+    leg_id: str
+    scale: str
+    direction: str
+
+
+class ActiveLevelsResponse(BaseModel):
+    """API response for all active fib levels."""
+    levels_by_ratio: Dict[str, List[FibLevelResponse]]  # Keyed by ratio as string
+
+
+class TrackLegRequest(BaseModel):
+    """Request to track a leg for level crossing."""
+    leg_id: str
 
 
 def _reference_swing_to_response(ref: 'ReferenceSwing') -> ReferenceSwingResponse:
@@ -2080,4 +2100,141 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
         direction_imbalance=ref_state.direction_imbalance,
         is_warming_up=ref_state.is_warming_up,
         warmup_progress=list(ref_state.warmup_progress),
+        tracked_leg_ids=list(reference_layer.get_tracked_leg_ids()),
     )
+
+
+@router.get("/api/reference/levels", response_model=ActiveLevelsResponse)
+async def get_reference_levels(bar_index: Optional[int] = Query(None)):
+    """
+    Get all fib levels from valid references.
+
+    Returns fib levels (0, 0.382, 0.5, 0.618, 1, 1.382, 1.5, 1.618, 2) for each
+    valid reference. Used for hover preview and sticky level display.
+
+    Args:
+        bar_index: Optional bar index for state. Uses current playback position if not provided.
+
+    Returns:
+        ActiveLevelsResponse with levels grouped by fib ratio.
+    """
+    from ..api import get_state
+    from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceState
+
+    global _replay_cache
+
+    try:
+        state = get_state()
+    except Exception:
+        return ActiveLevelsResponse(levels_by_ratio={})
+
+    detector = _replay_cache.get("detector")
+    if detector is None:
+        return ActiveLevelsResponse(levels_by_ratio={})
+
+    reference_layer = _replay_cache.get("reference_layer")
+    if reference_layer is None:
+        reference_layer = ReferenceLayer()
+        _replay_cache["reference_layer"] = reference_layer
+
+    target_index = bar_index
+    if target_index is None:
+        target_index = _replay_cache.get("last_bar_index", 0)
+
+    if target_index >= 0 and target_index < len(state.source_bars):
+        bar = state.source_bars[target_index]
+    elif len(state.source_bars) > 0:
+        bar = state.source_bars[-1]
+    else:
+        return ActiveLevelsResponse(levels_by_ratio={})
+
+    active_legs = detector.state.active_legs
+    ref_state: ReferenceState = reference_layer.update(active_legs, bar)
+
+    # Get active levels
+    levels_dict = reference_layer.get_active_levels(ref_state)
+
+    # Convert to response format
+    levels_by_ratio: Dict[str, List[FibLevelResponse]] = {}
+    for ratio, level_infos in levels_dict.items():
+        ratio_key = str(ratio)
+        levels_by_ratio[ratio_key] = [
+            FibLevelResponse(
+                price=info.price,
+                ratio=info.ratio,
+                leg_id=info.reference.leg.leg_id,
+                scale=info.reference.scale,
+                direction=info.reference.leg.direction,
+            )
+            for info in level_infos
+        ]
+
+    return ActiveLevelsResponse(levels_by_ratio=levels_by_ratio)
+
+
+@router.post("/api/reference/track/{leg_id}")
+async def track_leg_for_crossing(leg_id: str):
+    """
+    Add a leg to level crossing tracking.
+
+    When tracked, the leg's fib levels become "sticky" - they persist
+    on the chart even when the mouse moves away. Multiple legs can be
+    tracked simultaneously.
+
+    Args:
+        leg_id: The leg_id to start tracking.
+
+    Returns:
+        Success message with current tracked leg count.
+    """
+    from ...swing_analysis.reference_layer import ReferenceLayer
+
+    global _replay_cache
+
+    reference_layer = _replay_cache.get("reference_layer")
+    if reference_layer is None:
+        reference_layer = ReferenceLayer()
+        _replay_cache["reference_layer"] = reference_layer
+
+    reference_layer.add_crossing_tracking(leg_id)
+
+    return {
+        "success": True,
+        "leg_id": leg_id,
+        "tracked_count": len(reference_layer.get_tracked_leg_ids()),
+    }
+
+
+@router.delete("/api/reference/track/{leg_id}")
+async def untrack_leg_for_crossing(leg_id: str):
+    """
+    Remove a leg from level crossing tracking.
+
+    The leg's fib levels will no longer be sticky and will only appear
+    on hover.
+
+    Args:
+        leg_id: The leg_id to stop tracking.
+
+    Returns:
+        Success message with current tracked leg count.
+    """
+    from ...swing_analysis.reference_layer import ReferenceLayer
+
+    global _replay_cache
+
+    reference_layer = _replay_cache.get("reference_layer")
+    if reference_layer is None:
+        return {
+            "success": True,
+            "leg_id": leg_id,
+            "tracked_count": 0,
+        }
+
+    reference_layer.remove_crossing_tracking(leg_id)
+
+    return {
+        "success": True,
+        "leg_id": leg_id,
+        "tracked_count": len(reference_layer.get_tracked_leg_ids()),
+    }

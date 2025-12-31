@@ -595,7 +595,11 @@ export interface ReferenceStateResponse {
   warmup_progress: [number, number];
 }
 
-export async function fetchReferenceState(barIndex?: number): Promise<ReferenceStateResponse> {
+export interface ReferenceStateResponseExtended extends ReferenceStateResponse {
+  tracked_leg_ids: string[];
+}
+
+export async function fetchReferenceState(barIndex?: number): Promise<ReferenceStateResponseExtended> {
   const url = barIndex !== undefined
     ? `${API_BASE}/reference-state?bar_index=${barIndex}`
     : `${API_BASE}/reference-state`;
@@ -603,6 +607,56 @@ export async function fetchReferenceState(barIndex?: number): Promise<ReferenceS
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(errorData.detail || `Failed to fetch reference state: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ============================================================================
+// Fib Levels API (Issue #388 - Reference Layer Phase 2)
+// ============================================================================
+
+export interface FibLevel {
+  price: number;
+  ratio: number;
+  leg_id: string;
+  scale: 'S' | 'M' | 'L' | 'XL';
+  direction: 'bull' | 'bear';
+}
+
+export interface ActiveLevelsResponse {
+  levels_by_ratio: Record<string, FibLevel[]>;
+}
+
+export async function fetchActiveLevels(barIndex?: number): Promise<ActiveLevelsResponse> {
+  const url = barIndex !== undefined
+    ? `${API_BASE}/reference/levels?bar_index=${barIndex}`
+    : `${API_BASE}/reference/levels`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch active levels: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function trackLegForCrossing(legId: string): Promise<{ success: boolean; leg_id: string; tracked_count: number }> {
+  const response = await fetch(`${API_BASE}/reference/track/${encodeURIComponent(legId)}`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to track leg: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function untrackLegForCrossing(legId: string): Promise<{ success: boolean; leg_id: string; tracked_count: number }> {
+  const response = await fetch(`${API_BASE}/reference/track/${encodeURIComponent(legId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to untrack leg: ${response.statusText}`);
   }
   return response.json();
 }
