@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2025-12-25
 
@@ -12,6 +12,8 @@
 - #356: Add turn ratio pruning stat to Market Structure panel
 - #357: Treat None counter-trend as zero for turn ratio pruning
 - #358: Fix detection config settings resetting on page refresh
+- #361: Add depth field to Leg for O(1) hierarchy depth lookup
+- #362: Create ReferenceConfig dataclass for Reference Layer
 
 ---
 

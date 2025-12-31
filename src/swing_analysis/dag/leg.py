@@ -96,6 +96,10 @@ class Leg:
     # (i.e., opposite-direction legs whose pivot == this leg's origin)
     # This captures "how strong was the trend that created my origin"
     _max_counter_leg_range: Optional[float] = None
+    # Hierarchy depth (#361): 0 = root, 1 = first-level child, etc.
+    # Stored at leg creation for O(1) lookup (avoiding O(depth) traversal).
+    # Used by Reference Layer for A/B testing scale vs hierarchy classification.
+    depth: int = 0
 
     def __post_init__(self) -> None:
         """Compute deterministic leg_id if not provided."""

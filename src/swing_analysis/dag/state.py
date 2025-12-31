@@ -130,6 +130,8 @@ class DetectorState:
                 # Counter-trend ratio (#336)
                 "counter_trend_ratio": leg.counter_trend_ratio,
                 "origin_counter_trend_range": leg.origin_counter_trend_range,
+                # Hierarchy depth (#361)
+                "depth": leg.depth,
             })
 
         # Serialize pending origins
@@ -251,6 +253,8 @@ class DetectorState:
                 # Counter-trend ratio (#336)
                 counter_trend_ratio=leg_data.get("counter_trend_ratio"),
                 origin_counter_trend_range=leg_data.get("origin_counter_trend_range"),
+                # Hierarchy depth (#361)
+                depth=leg_data.get("depth", 0),
             )
             active_legs.append(leg)
 

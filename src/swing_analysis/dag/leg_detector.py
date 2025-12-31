@@ -736,6 +736,8 @@ class LegDetector:
                 # If opposite direction hasn't bootstrapped, None means truly unknown
                 if origin_ctr is None and self.state._has_created_bear_leg:
                     origin_ctr = 0.0
+                # Compute hierarchy depth (#361)
+                depth = self._compute_depth_for_leg(parent_leg_id)
                 new_leg = Leg(
                     direction='bull',
                     origin_price=pending.price,  # LOW - where upward move started
@@ -748,6 +750,7 @@ class LegDetector:
                     parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                     origin_counter_trend_range=origin_ctr,  # (#336)
                     _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
+                    depth=depth,  # Hierarchy depth (#361)
                 )
                 self.state.active_legs.append(new_leg)
                 # #357: Mark that we've created a bull leg
@@ -853,6 +856,8 @@ class LegDetector:
                 # If opposite direction hasn't bootstrapped, None means truly unknown
                 if origin_ctr is None and self.state._has_created_bull_leg:
                     origin_ctr = 0.0
+                # Compute hierarchy depth (#361)
+                depth = self._compute_depth_for_leg(parent_leg_id)
                 new_bear_leg = Leg(
                     direction='bear',
                     origin_price=pending.price,  # HIGH - where downward move started
@@ -865,6 +870,7 @@ class LegDetector:
                     parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                     origin_counter_trend_range=origin_ctr,  # (#336)
                     _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
+                    depth=depth,  # Hierarchy depth (#361)
                 )
                 self.state.active_legs.append(new_bear_leg)
                 # #357: Mark that we've created a bear leg
@@ -958,6 +964,8 @@ class LegDetector:
                     # #357: Treat None as 0.0 if opposite direction has bootstrapped
                     if origin_ctr is None and self.state._has_created_bull_leg:
                         origin_ctr = 0.0
+                    # Compute hierarchy depth (#361)
+                    depth = self._compute_depth_for_leg(parent_leg_id)
                     new_bear_leg = Leg(
                         direction='bear',
                         origin_price=pending_bear.price,  # HIGH - where downward move started
@@ -970,6 +978,7 @@ class LegDetector:
                         parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                         origin_counter_trend_range=origin_ctr,  # (#336)
                         _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
+                        depth=depth,  # Hierarchy depth (#361)
                     )
                     self.state.active_legs.append(new_bear_leg)
                     # #357: Mark that we've created a bear leg
@@ -1026,6 +1035,8 @@ class LegDetector:
                     # #357: Treat None as 0.0 if opposite direction has bootstrapped
                     if origin_ctr is None and self.state._has_created_bear_leg:
                         origin_ctr = 0.0
+                    # Compute hierarchy depth (#361)
+                    depth = self._compute_depth_for_leg(parent_leg_id)
                     new_bull_leg = Leg(
                         direction='bull',
                         origin_price=pending_bull.price,  # LOW - where upward move started
@@ -1038,6 +1049,7 @@ class LegDetector:
                         parent_leg_id=parent_leg_id,  # Hierarchy assignment (#281)
                         origin_counter_trend_range=origin_ctr,  # (#336)
                         _max_counter_leg_range=origin_ctr,  # (#341) Turn ratio denominator
+                        depth=depth,  # Hierarchy depth (#361)
                     )
                     self.state.active_legs.append(new_bull_leg)
                     # #357: Mark that we've created a bull leg
@@ -1591,6 +1603,23 @@ class LegDetector:
             if leg.leg_id == leg_id:
                 return leg
         return None
+
+    def _compute_depth_for_leg(self, parent_leg_id: Optional[str]) -> int:
+        """
+        Compute hierarchy depth for a new leg (#361).
+
+        Args:
+            parent_leg_id: ID of the parent leg, or None if root.
+
+        Returns:
+            Depth value: 0 for root, parent.depth + 1 otherwise.
+        """
+        if parent_leg_id is None:
+            return 0
+        parent = self._find_leg_by_id(parent_leg_id)
+        if parent is None:
+            return 0  # Parent not found, treat as root
+        return parent.depth + 1
 
     def _find_parent_for_leg(self, direction: str, origin_price: Decimal, origin_index: int) -> Optional[str]:
         """
