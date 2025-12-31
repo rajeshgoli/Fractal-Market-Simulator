@@ -36,7 +36,143 @@ Read in order:
 
 ---
 
-## Current Phase: Reference Layer Design
+## Current Phase: Reference Layer Implementation
+
+### Spec Review Complete — Dec 31, 2025
+
+**Spec:** `Docs/Working/reference_layer_spec.md` (Revision 4)
+
+### Compatibility Analysis
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| **ReferenceFrame** | ✅ Compatible | Uses `ratio()`/`price()` vs spec's `to_ratio()`/`to_price()` — same semantics |
+| **Leg dataclass** | ⚠️ Needs depth | Has `parent_leg_id` but no `depth` field; must compute or add |
+| **Leg.impulsiveness** | ✅ Available | Percentile 0-100, exactly what spec needs |
+| **Existing ReferenceLayer** | ⚠️ Minimal | Only has big/small tolerance; needs major extension |
+| **SwingConfig** | ⚠️ Needs extension | No Reference Layer params (formation threshold, salience weights) |
+| **DAG active_legs** | ✅ Compatible | Provides all required fields except depth |
+
+**Required Additions:**
+
+1. **Leg.depth** — Compute from `parent_leg_id` chain or add field
+2. **ReferenceConfig** — New dataclass for Reference Layer parameters
+3. **ReferenceSwing** — New dataclass per spec (wraps Leg with scale/location/salience)
+4. **ReferenceState** — New dataclass for grouped output
+5. **Extend ReferenceLayer** — Formation, location, salience, grouping methods
+
+### Design Decisions
+
+1. **Leg.depth** — Compute at leg creation, store as field (O(1) lookup vs O(depth) traversal)
+2. **ReferenceConfig** — Separate from SwingConfig; Reference Layer is an independent consumer
+3. **API naming** — Use existing `ratio()`/`price()` methods; no rename needed
+4. **Cold start** — Exclude refs until 50+ formed legs (use `state.formed_leg_impulses` length)
+5. **Formation tracking** — Reference Layer maintains its own `_formed_refs: Set[str]` (once formed, stays formed until fatally breached)
+
+---
+
+## Reference Layer Epic Decomposition
+
+Four phases from spec, decomposed into implementable issues. Each epic is independently testable and shippable.
+
+### Phase 1: Core Backend + Levels at Play UI (Foundation)
+
+**Epic #P1: Reference Layer Core** — Backend implementation
+
+| # | Issue | Description | Depends On |
+|---|-------|-------------|------------|
+| P1.1 | Add depth field to Leg | Compute `depth` from parent chain at creation; store as field | — |
+| P1.2 | Create ReferenceConfig | New dataclass with all Reference Layer params (formation, tolerance, salience weights) | — |
+| P1.3 | Create ReferenceSwing dataclass | Wraps Leg with scale, depth, location, salience_score | P1.2 |
+| P1.4 | Create ReferenceState dataclass | Groups references by_scale, by_depth, by_direction; direction_imbalance | P1.3 |
+| P1.5 | Implement scale classification | `_classify_scale()` using percentile buckets (S/M/L/XL) | P1.2 |
+| P1.6 | Implement location computation | `_compute_location()` using ReferenceFrame.ratio() | — |
+| P1.7 | Implement price-based formation | `_is_formed_for_reference()` — 38.2% threshold, once formed stays formed | P1.6 |
+| P1.8 | Implement fatal breach detection | `_is_fatally_breached()` with scale-dependent tolerance | P1.5, P1.6 |
+| P1.9 | Implement salience computation | `_compute_salience()` with scale-dependent weights | P1.5 |
+| P1.10 | Implement ReferenceLayer.update() | Main entry point processing legs per bar | P1.3-P1.9 |
+| P1.11 | Add cold start handling | Return empty state until 50+ formed legs | P1.10 |
+| P1.12 | Implement range distribution tracking | `_update_range_distribution()` for percentile computation | P1.10 |
+| P1.13 | Write comprehensive test suite | Unit tests for all core methods | P1.1-P1.12 |
+
+**Epic #P1-UI: Levels at Play View** — Frontend implementation
+
+| # | Issue | Description | Depends On |
+|---|-------|-------------|------------|
+| P1-UI.1 | Add "Levels at Play" route | Hamburger menu entry, separate from DAG View | — |
+| P1-UI.2 | Create Reference API endpoint | `/api/reference-state` returning ReferenceState JSON | P1.10 |
+| P1-UI.3 | Filter display to valid references | Only show legs with location 0-2 and formed=true | P1-UI.2 |
+| P1-UI.4 | Add scale labels | S/M/L/XL badge on each leg | P1-UI.3 |
+| P1-UI.5 | Add direction colors | Bull (green) vs Bear (red) styling | P1-UI.3 |
+| P1-UI.6 | Add location indicator | Show 0-2 position per reference | P1-UI.3 |
+| P1-UI.7 | Hide detection config | Remove DAG detection panel from this view | P1-UI.1 |
+| P1-UI.8 | Implement fade-out transition | Animate removal when reference becomes invalid | P1-UI.3 |
+| P1-UI.9 | Add telemetry panel | Reference counts by scale, direction imbalance, biggest/most impulsive | P1-UI.2 |
+
+**Parallelism:** P1 (backend) and P1-UI (frontend) can run in parallel after P1.10 is complete.
+
+### Phase 2: Fib Level Interaction
+
+**Epic #P2: Fib Level Display**
+
+| # | Issue | Description | Depends On |
+|---|-------|-------------|------------|
+| P2.1 | Implement get_active_levels() | Return fib levels with source reference info | P1.10 |
+| P2.2 | Add hover preview | Show all 9 fib levels as horizontal lines on hover | P2.1 |
+| P2.3 | Implement click-to-stick | Click makes fib levels persist; click again un-sticks | P2.2 |
+| P2.4 | Color-code by source | Distinguish fib levels from different references | P2.3 |
+| P2.5 | Track sticky state in Reference Layer | `_tracked_for_crossing` set persisted | P2.3 |
+
+### Phase 3: Structure Panel + Confluence
+
+**Epic #P3: Level Analysis**
+
+| # | Issue | Description | Depends On |
+|---|-------|-------------|------------|
+| P3.1 | Implement get_confluence_zones() | Cluster levels within percentage tolerance | P2.1 |
+| P3.2 | Create structure panel UI | Three sections: touched/active/current | P1-UI.2 |
+| P3.3 | Track levels touched this session | Historical record of which levels were hit | P3.2 |
+| P3.4 | Show currently active levels | Levels within striking distance of current price | P3.2 |
+| P3.5 | Show current bar touches | Levels touched on most recent bar | P3.2 |
+| P3.6 | Display confluence zones | Thicker bands with participating references labeled | P3.1 |
+
+### Phase 4: Opt-in Level Crossing
+
+**Epic #P4: Level Crossing Tracking**
+
+| # | Issue | Description | Depends On |
+|---|-------|-------------|------------|
+| P4.1 | Implement add_crossing_tracking() | Add leg to crossing monitoring | P2.5 |
+| P4.2 | Implement remove_crossing_tracking() | Remove leg from monitoring | P4.1 |
+| P4.3 | Add "track" button to leg UI | User clicks to enable crossing events for a leg | P4.1 |
+| P4.4 | Emit crossing events | Generate events when tracked levels are crossed | P4.1 |
+| P4.5 | Display crossing events in panel | Show in structure panel when levels are crossed | P4.4, P3.2 |
+
+### Parallel Exploration Task
+
+| # | Issue | Description | Depends On |
+|---|-------|-------------|------------|
+| EXP.1 | Analyze depth vs scale correlation | Compute correlation, identify disagreement cases | P1.1, P1.5 |
+
+---
+
+## Implementation Order
+
+**Sequential dependencies:**
+1. P1.1-P1.12 (backend core) → P1.13 (tests) → P1-UI.1-P1-UI.9 (frontend)
+2. P2.1 → P2.2 → P2.3 → P2.4-P2.5
+3. P3.1 + P3.2 (parallel) → P3.3-P3.6
+4. P4.1-P4.2 → P4.3 → P4.4-P4.5
+
+**Suggested execution:**
+- Sprint 1: P1 (Core Backend) — 13 issues
+- Sprint 2: P1-UI (Levels at Play UI) — 9 issues + EXP.1 (parallel)
+- Sprint 3: P2 (Fib Levels) — 5 issues
+- Sprint 4: P3 + P4 (Structure Panel + Crossing) — 11 issues
+
+**Total: 38 issues across 4 phases**
+
+---
 
 ### L1-L7 Validation — COMPLETE (Dec 25, 2025)
 
@@ -53,20 +189,6 @@ All 7 reference swings detected correctly with config: `origin_time_threshold=0.
 | **L7** | origin=6882, pivot=6770 | origin=6892.00, pivot=6771.50 | BREACHED |
 
 **Key insight:** Reference swings (bull references) are **bear legs** in DAG terminology (origin=HIGH, pivot=LOW). Multiple siblings exist at shared pivots.
-
-### Next: Reference Layer
-
-**Purpose:** Thin filter over DAG output to identify valid trading references per north star rules.
-
-**Spec:** `Docs/Working/reference_layer_spec.md`
-
-**Key capabilities:**
-1. Location check (price between 0 and 2 in reference frame)
-2. Scale classification (S/M/L/XL by range percentile)
-3. Scale-dependent invalidation tolerance (small: 0%, big: 15%/10%)
-4. Salience ranking (big/impulsive/early vs recent)
-
-**Design decision:** Reference Layer is a filter, not a capture mechanism. It answers "which current DAG legs qualify as valid trading references?" — doesn't freeze or store historical state.
 
 ### Recent Changes — Dec 25 Review #2 (3 issues)
 
