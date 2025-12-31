@@ -283,3 +283,4 @@ Skills in `.claude/skills/` are invoked with "Use the X skill" or `/skill_name`:
 | file_issue | When discovering bugs or proposing features |
 | diagnose_feedback | When user says "look at my feedback" or similar |
 | interview | Interview user to complete a spec (`/interview <spec-name>`) |
+| finish | End-of-task orchestrator (`/finish`) — runs doc_update, file_issue, push_changes, handoff as needed |
