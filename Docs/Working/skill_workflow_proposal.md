@@ -465,6 +465,15 @@ description: Investigate user observations from playback feedback. Use when
 | "Why was this leg pruned?" | Check proximity, turn ratio, engulfed conditions |
 | "Why no bear leg here?" | Check pending origins, counter-trend requirements |
 
+## Cleanup (After Resolution)
+
+Once investigation is complete and user confirms resolution:
+
+1. Move observation from `ground_truth/playback_feedback.json` to `ground_truth/resolved_feedback.json`
+2. If observation has screenshot attachments:
+   - Move from `screenshots/` to `screenshots/archive/`
+3. Confirm cleanup: "Observation [id] archived."
+
 ## Trigger Phrases
 
 - "Look at my last feedback"
