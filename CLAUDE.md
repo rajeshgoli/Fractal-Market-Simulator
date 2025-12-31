@@ -282,3 +282,4 @@ Skills in `.claude/skills/` are invoked with "Use the X skill" or `/skill_name`:
 | push_changes | After implementation complete, to commit and push |
 | file_issue | When discovering bugs or proposing features |
 | diagnose_feedback | When user says "look at my feedback" or similar |
+| interview | Interview user to complete a spec (`/interview <spec-name>`) |

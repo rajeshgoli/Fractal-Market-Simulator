@@ -16,8 +16,12 @@ When asked to develop or refine a spec/proposal:
    - UI/UX tradeoffs
    - Concerns and edge cases
    - Non-obvious questions (don't ask what's already written)
-3. **Continue interviewing** until ambiguity is resolved
-4. **Write the completed spec** to the appropriate file
+3. **Be thorough** — exhaust the design space before concluding
+   - Multiple rounds of questions are expected
+   - Don't stop after surface-level answers
+   - Probe deeper on any ambiguity or uncertainty
+4. **Continue interviewing** until ambiguity is resolved
+5. **Write the completed spec** to the appropriate file
 
 Questions should surface unarticulated needs, not confirm what's obvious.
 
