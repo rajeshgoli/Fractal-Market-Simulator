@@ -24,7 +24,7 @@ See Docs/Reference/valid_swings.md for the canonical rules.
 import bisect
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Set
 
 from .swing_config import SwingConfig
 from .swing_node import SwingNode
@@ -87,6 +87,72 @@ class ReferenceSwing:
     depth: int                    # Hierarchy depth from DAG (for A/B testing)
     location: float               # Current price in reference frame (0-2 range, capped)
     salience_score: float         # Higher = more relevant reference
+
+
+@dataclass
+class LevelInfo:
+    """
+    A fib level with its source reference.
+
+    Used for level-based queries like get_active_levels() and confluence zone
+    detection. Each LevelInfo ties a price level back to its source reference
+    for attribution.
+
+    Attributes:
+        price: The absolute price level.
+        ratio: The fib ratio (0, 0.382, 0.5, 0.618, 1, 1.382, 1.5, 1.618, 2).
+        reference: The ReferenceSwing that produced this level.
+
+    Example:
+        >>> level = LevelInfo(price=4105.0, ratio=0.382, reference=ref)
+        >>> level.price
+        4105.0
+    """
+    price: float                  # The price level
+    ratio: float                  # The fib ratio (0, 0.382, 0.5, etc.)
+    reference: 'ReferenceSwing'   # Source reference
+
+
+@dataclass
+class ReferenceState:
+    """
+    Complete reference layer output for a given bar.
+
+    This is the top-level output of ReferenceLayer.update(). Contains all valid
+    references sorted by salience, plus convenience groupings for UI display
+    and analysis.
+
+    Attributes:
+        references: All valid references, ranked by salience (highest first).
+        by_scale: References grouped by S/M/L/XL scale classification.
+        by_depth: References grouped by hierarchy depth (0 = root).
+        by_direction: References grouped by 'bull' or 'bear'.
+        direction_imbalance: 'bull' if bull refs > 2× bear refs,
+            'bear' if bear refs > 2× bull refs, None if balanced.
+
+    Design Notes:
+        - No internal limit on references (UI can limit display)
+        - Grouping dicts are views into the references list (not copies)
+        - direction_imbalance highlights when one direction dominates
+
+    Example:
+        >>> state = ReferenceState(
+        ...     references=[ref1, ref2, ref3],
+        ...     by_scale={'L': [ref1], 'M': [ref2, ref3]},
+        ...     by_depth={0: [ref1], 1: [ref2, ref3]},
+        ...     by_direction={'bull': [ref1, ref2], 'bear': [ref3]},
+        ...     direction_imbalance='bull',
+        ... )
+        >>> len(state.references)
+        3
+        >>> state.direction_imbalance
+        'bull'
+    """
+    references: List['ReferenceSwing']              # All valid, ranked by salience
+    by_scale: Dict[str, List['ReferenceSwing']]     # Grouped by S/M/L/XL
+    by_depth: Dict[int, List['ReferenceSwing']]     # Grouped by hierarchy depth
+    by_direction: Dict[str, List['ReferenceSwing']] # Grouped by bull/bear
+    direction_imbalance: Optional[str]              # 'bull' | 'bear' | None
 
 
 @dataclass
@@ -234,6 +300,11 @@ class ReferenceLayer:
         # Range distribution for scale classification (sorted for O(log n) percentile)
         # All-time distribution; DAG pruning handles recency per spec
         self._range_distribution: List[Decimal] = []
+        # Track which legs have formed as references (price reached formation threshold)
+        # Once formed, stays formed until fatally breached
+        self._formed_refs: Set[str] = set()
+        # Track which legs are monitored for level crossings (opt-in per leg)
+        self._tracked_for_crossing: Set[str] = set()
 
     def _compute_big_swing_threshold(self, swings: List[SwingNode]) -> Decimal:
         """
@@ -372,6 +443,215 @@ class ReferenceLayer:
             leg_range: Absolute range of the leg to add.
         """
         bisect.insort(self._range_distribution, leg_range)
+
+    def _compute_location(self, leg: Leg, current_price: Decimal) -> float:
+        """
+        Compute location in reference frame.
+
+        Location tells us where current price sits within the reference frame:
+        - 0 = at defended pivot
+        - 1 = at origin
+        - 2 = at completion target (2x extension)
+        - < 0 = pivot breached
+        - > 2 = past completion
+
+        For bull reference (bear leg, high→low):
+        - Origin = HIGH (where bear move started)
+        - Defended pivot = LOW (must hold for bullish setup)
+        - 0 = pivot (low), 1 = origin (high), 2 = target below pivot
+
+        For bear reference (bull leg, low→high):
+        - Origin = LOW (where bull move started)
+        - Defended pivot = HIGH (must hold for bearish setup)
+        - 0 = pivot (high), 1 = origin (low), 2 = target above pivot
+
+        Args:
+            leg: The leg to compute location for
+            current_price: Current price (typically bar close)
+
+        Returns:
+            Location as float (NOT capped — capping happens in output)
+        """
+        frame = ReferenceFrame(
+            anchor0=leg.pivot_price,   # defended pivot = 0
+            anchor1=leg.origin_price,  # origin = 1
+            direction="BULL" if leg.direction == 'bear' else "BEAR"
+        )
+        return float(frame.ratio(current_price))
+
+    def _is_formed_for_reference(self, leg: Leg, current_price: Decimal) -> bool:
+        """
+        Check if leg has reached formation threshold.
+
+        Formation is PRICE-BASED, not age-based. A leg becomes a valid reference
+        when the subsequent confirming move reaches the formation threshold
+        (default 38.2%).
+
+        Example: Bear leg from $110 (origin) to $100 (pivot), range = $10.
+        - Formation threshold = 0.382 (38.2%)
+        - Price must rise to $103.82 (38.2% retracement from pivot toward origin)
+        - At that point, location = 0.382, swing is formed
+        - Once formed, stays formed until fatally breached
+
+        Args:
+            leg: The leg to check
+            current_price: Current price
+
+        Returns:
+            True if formed (or was previously formed)
+        """
+        # Once formed, always formed (until fatal breach removes it)
+        if leg.leg_id in self._formed_refs:
+            return True
+
+        location = self._compute_location(leg, current_price)
+        threshold = self.reference_config.formation_fib_threshold  # 0.382
+
+        # Formation occurs when price retraces TO the threshold
+        # Location 0 = pivot, Location 1 = origin
+        # For formation, price must move from pivot toward origin by at least threshold
+        # This means location must be >= threshold
+        if location >= threshold:
+            self._formed_refs.add(leg.leg_id)
+            return True
+
+        return False
+
+    def _is_fatally_breached(
+        self,
+        leg: Leg,
+        scale: str,
+        location: float,
+        bar_close_location: float
+    ) -> bool:
+        """
+        Check if reference is fatally breached.
+
+        A reference is fatally breached if ANY of these conditions are met:
+        1. Pivot breach: location < 0 (price went past defended pivot)
+        2. Completion: location > 2 (price completed 2x target)
+        3. Origin breach: Scale-dependent (see below)
+
+        Scale-dependent origin breach (per north star):
+        - S/M: Default zero tolerance (configurable via small_origin_tolerance)
+        - L/XL: Two thresholds — trade breach (15%) AND close breach (10%)
+
+        Args:
+            leg: The leg to check
+            scale: Scale classification ('S', 'M', 'L', 'XL')
+            location: Current price location in reference frame (from bar high/low)
+            bar_close_location: Location of bar close (for L/XL close breach)
+
+        Returns:
+            True if fatally breached (should be removed from references)
+        """
+        # Pivot breach (location < 0)
+        if location < 0:
+            # Remove from formed refs if present
+            self._formed_refs.discard(leg.leg_id)
+            return True
+
+        # Past completion (location > 2)
+        if location > 2:
+            self._formed_refs.discard(leg.leg_id)
+            return True
+
+        # Origin breach — scale-dependent per north star
+        if scale in ('S', 'M'):
+            # S/M: Default zero tolerance (configurable)
+            if location > (1.0 + self.reference_config.small_origin_tolerance):
+                self._formed_refs.discard(leg.leg_id)
+                return True
+        else:  # L, XL
+            # L/XL: Two thresholds
+            # Trade breach: invalidates if price TRADES beyond 15%
+            if location > (1.0 + self.reference_config.big_trade_breach_tolerance):
+                self._formed_refs.discard(leg.leg_id)
+                return True
+            # Close breach: invalidates if price CLOSES beyond 10%
+            if bar_close_location > (1.0 + self.reference_config.big_close_breach_tolerance):
+                self._formed_refs.discard(leg.leg_id)
+                return True
+
+        return False
+
+    def _normalize_range(self, leg_range: float) -> float:
+        """
+        Normalize range to 0-1 based on distribution.
+
+        Args:
+            leg_range: Absolute range of the leg
+
+        Returns:
+            Normalized score from 0 to 1. Returns 0.5 if distribution is empty.
+        """
+        if not self._range_distribution:
+            return 0.5
+        max_range = float(max(self._range_distribution))
+        if max_range == 0:
+            return 0.5
+        return min(leg_range / max_range, 1.0)
+
+    def _compute_salience(self, leg: Leg, scale: str, current_bar_index: int) -> float:
+        """
+        Compute salience score for ranking references.
+
+        North star: big, impulsive, and early (for large swings)
+                    vs recent (for small swings).
+
+        Components:
+        1. range_score — Normalized range (0-1)
+        2. impulse_score — leg.impulsiveness / 100 (0-1), skip if None
+        3. recency_score — 1 / (1 + age/1000) decay function
+
+        Scale-dependent weights:
+        - L/XL: range=0.5, impulse=0.4, recency=0.1
+        - S/M: range=0.2, impulse=0.3, recency=0.5
+
+        Args:
+            leg: The leg to score
+            scale: Scale classification
+            current_bar_index: Current bar index for recency calculation
+
+        Returns:
+            Salience score (higher = more relevant)
+        """
+        # Range score: normalized against distribution
+        range_score = self._normalize_range(float(leg.range))
+
+        # Impulse score: percentile from DAG
+        use_impulse = leg.impulsiveness is not None
+        impulse_score = leg.impulsiveness / 100 if use_impulse else 0
+
+        # Recency score: fixed decay
+        age = current_bar_index - leg.origin_index
+        recency_score = 1 / (1 + age / 1000)
+
+        # Scale-dependent weights
+        if scale in ('L', 'XL'):
+            weights = {
+                'range': self.reference_config.big_range_weight,
+                'impulse': self.reference_config.big_impulse_weight,
+                'recency': self.reference_config.big_recency_weight
+            }
+        else:
+            weights = {
+                'range': self.reference_config.small_range_weight,
+                'impulse': self.reference_config.small_impulse_weight,
+                'recency': self.reference_config.small_recency_weight
+            }
+
+        # Normalize weights if impulse is missing
+        if not use_impulse:
+            total = weights['range'] + weights['recency']
+            if total > 0:
+                weights['range'] /= total
+                weights['recency'] /= total
+            weights['impulse'] = 0
+
+        return (weights['range'] * range_score +
+                weights['impulse'] * impulse_score +
+                weights['recency'] * recency_score)
 
     def get_reference_swings(
         self,

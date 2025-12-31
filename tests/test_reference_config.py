@@ -35,10 +35,13 @@ class TestReferenceConfigDefaults:
         assert config.formation_fib_threshold == 0.382
 
     def test_default_origin_tolerances(self):
-        """Origin breach tolerances should match spec."""
+        """Origin breach tolerances should match north star spec."""
         config = ReferenceConfig.default()
-        assert config.small_origin_tolerance == 0.05  # 5% for S/M
-        assert config.big_origin_tolerance == 0.15    # 15% for L/XL
+        # S/M: default zero tolerance per north star
+        assert config.small_origin_tolerance == 0.0   # 0% for S/M per north star
+        # L/XL: two thresholds per north star
+        assert config.big_trade_breach_tolerance == 0.15  # 15% trade breach
+        assert config.big_close_breach_tolerance == 0.10  # 10% close breach
 
     def test_default_big_salience_weights(self):
         """Big swing (L/XL) salience weights should match spec."""
@@ -112,8 +115,9 @@ class TestReferenceConfigSerialization:
         assert data["m_threshold"] == 0.30
         assert data["min_swings_for_scale"] == 50
         assert data["formation_fib_threshold"] == 0.382
-        assert data["small_origin_tolerance"] == 0.05
-        assert data["big_origin_tolerance"] == 0.15
+        assert data["small_origin_tolerance"] == 0.0
+        assert data["big_trade_breach_tolerance"] == 0.15
+        assert data["big_close_breach_tolerance"] == 0.10
         assert data["big_range_weight"] == 0.5
         assert data["big_impulse_weight"] == 0.4
         assert data["big_recency_weight"] == 0.1
@@ -132,7 +136,8 @@ class TestReferenceConfigSerialization:
             "min_swings_for_scale": 100,
             "formation_fib_threshold": 0.5,
             "small_origin_tolerance": 0.10,
-            "big_origin_tolerance": 0.20,
+            "big_trade_breach_tolerance": 0.20,
+            "big_close_breach_tolerance": 0.15,
             "big_range_weight": 0.4,
             "big_impulse_weight": 0.5,
             "big_recency_weight": 0.1,
@@ -151,7 +156,8 @@ class TestReferenceConfigSerialization:
         assert config.min_swings_for_scale == 100
         assert config.formation_fib_threshold == 0.5
         assert config.small_origin_tolerance == 0.10
-        assert config.big_origin_tolerance == 0.20
+        assert config.big_trade_breach_tolerance == 0.20
+        assert config.big_close_breach_tolerance == 0.15
         assert config.big_range_weight == 0.4
         assert config.big_impulse_weight == 0.5
         assert config.big_recency_weight == 0.1
@@ -180,7 +186,8 @@ class TestReferenceConfigSerialization:
             min_swings_for_scale=75,
             formation_fib_threshold=0.45,
             small_origin_tolerance=0.08,
-            big_origin_tolerance=0.18,
+            big_trade_breach_tolerance=0.18,
+            big_close_breach_tolerance=0.12,
             big_range_weight=0.45,
             big_impulse_weight=0.45,
             big_recency_weight=0.10,
@@ -231,13 +238,16 @@ class TestReferenceConfigBuilders:
         original = ReferenceConfig.default()
         modified = original.with_tolerance(
             small_origin_tolerance=0.10,
-            big_origin_tolerance=0.25,
+            big_trade_breach_tolerance=0.25,
+            big_close_breach_tolerance=0.18,
         )
 
-        assert original.small_origin_tolerance == 0.05
-        assert original.big_origin_tolerance == 0.15
+        assert original.small_origin_tolerance == 0.0
+        assert original.big_trade_breach_tolerance == 0.15
+        assert original.big_close_breach_tolerance == 0.10
         assert modified.small_origin_tolerance == 0.10
-        assert modified.big_origin_tolerance == 0.25
+        assert modified.big_trade_breach_tolerance == 0.25
+        assert modified.big_close_breach_tolerance == 0.18
 
     def test_with_salience_weights(self):
         """with_salience_weights should modify salience weights."""
@@ -323,8 +333,10 @@ class TestReferenceConfigUsage:
         """Create config with looser breach tolerance."""
         config = ReferenceConfig.default().with_tolerance(
             small_origin_tolerance=0.15,
-            big_origin_tolerance=0.25,
+            big_trade_breach_tolerance=0.25,
+            big_close_breach_tolerance=0.20,
         )
 
         assert config.small_origin_tolerance == 0.15
-        assert config.big_origin_tolerance == 0.25
+        assert config.big_trade_breach_tolerance == 0.25
+        assert config.big_close_breach_tolerance == 0.20
