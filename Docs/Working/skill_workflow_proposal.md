@@ -1,9 +1,9 @@
 # Skill-Based Workflow Proposal
 
-**Status:** Ready for Implementation
+**Status:** Approved
 **Author:** Director
 **Date:** 2025-12-31
-**Updated:** 2025-12-31 (aligned with official Anthropic Skills spec)
+**Updated:** 2025-12-31 (Director review: softened cognitive modes, documented quick invocations decision)
 
 ## Overview
 
@@ -17,14 +17,59 @@ Analysis of 2,947 prompts from `~/.claude/history.jsonl` revealed:
 
 | Friction Pattern | Frequency | Root Cause |
 |------------------|-----------|------------|
-| Push changes requests | 244 | Skill exists but not auto-invoked |
-| Doc update reminders | 145 | Skill exists but not auto-invoked |
-| Handoff corrections | 69 | Output format not enforced |
-| Issue filing requests | 82 | No streamlined skill |
-| Role invocation verbosity | 521 | No shortcuts |
-| Feedback investigation | 45 | No dedicated skill |
+| `/doc_update` manual invocations | 52+ | Skill exists but not auto-triggered |
+| Push/commit reminders | 25+ | Agents ask instead of auto-committing |
+| Role invocation verbosity | 20+ | "as engineer implement #X" repeated |
+| Handoff format corrections | 15+ | Paragraphs instead of one sentence |
+| DAG.md update reminders | 10+ | No link between DAG code and DAG.md |
+| Investigation speculation | 10+ | Agents theorize instead of running code |
+| Subissue pending_review | 5+ | Agents increment count per subissue |
+| Doc location corrections | 5+ | API docs in user_guide instead of dev_guide |
 
 **Key insight:** Skills exist (`.claude/commands/`) but agents don't use them automatically. The problem is **trigger enforcement**, not skill definition.
+
+---
+
+## Exploration Responsibility
+
+**Origin:** This principle emerged from workflow friction analysis — Engineers were frequently re-litigating product decisions mid-implementation, causing scope creep and wasted cycles. The solution: upstream roles (Product, Architect) own broad exploration; Engineers execute from resolved specs.
+
+### Principle
+
+Product and Architect should thoroughly explore options and resolve ambiguity BEFORE handoff to Engineer. Engineers execute from specs rather than re-litigating upstream decisions.
+
+| Persona | Exploration Scope | Primary Tools |
+|---------|-------------------|---------------|
+| **Product** | Broad: user needs, market context, UX tradeoffs | `AskUserQuestion` for spec interviews |
+| **Architect** | Broad: technical tradeoffs, cross-cutting concerns, patterns | `AskUserQuestion` for design discussions |
+| **Engineer** | Focused: codebase investigation, implementation approaches | Read, Grep, Bash for debugging |
+| **Director** | Meta: workflow system optimization | History analysis, process review |
+
+### Engineer Clarifications
+
+Engineers MAY still:
+- Investigate codebases to understand implementation context
+- Ask clarifying questions when new information emerges during implementation
+- Make tactical implementation choices within spec boundaries (library selection, etc.)
+
+Frequent clarification needs suggest upstream specs need improvement, but occasional questions are normal and expected.
+
+### Product: Spec Interview Protocol
+
+When asked to develop or refine a spec/proposal:
+
+1. **Read the spec** thoroughly
+2. **Use `AskUserQuestion` tool** for in-depth interviews:
+   - Technical implementation choices
+   - UI/UX tradeoffs
+   - Concerns and edge cases
+   - Non-obvious questions (don't ask what's already written)
+3. **Continue interviewing** until ambiguity is resolved
+4. **Write the completed spec** to the appropriate file
+
+Questions should surface unarticulated needs, not confirm what's obvious.
+
+---
 
 ## Current State vs Official Spec
 
@@ -121,6 +166,7 @@ If any check fails, finish documentation work first.
 Do NOT handoff if:
 - Tests failing (Engineer)
 - pending_review >= 10 (Engineer must wait for Architect review)
+
 ```
 
 ---
@@ -404,22 +450,57 @@ description: Investigate user observations from playback feedback. Use when
 
 ## Persona Updates Required
 
+### Product Persona Addition
+
+Add to `product.md`:
+
+```markdown
+## Cognitive Mode: Polymath
+
+Product operates in exploratory mode — bringing diverse perspectives, surfacing unarticulated needs, and asking non-obvious questions.
+
+## Spec Interview Protocol
+
+When asked to develop or refine a spec/proposal:
+
+1. **Read the spec** thoroughly
+2. **Use `AskUserQuestion` tool** for in-depth interviews:
+   - Technical implementation choices
+   - UI/UX tradeoffs
+   - Concerns and edge cases
+   - Non-obvious questions (don't ask what's already written)
+3. **Continue interviewing** until ambiguity is resolved
+4. **Write the completed spec** to the appropriate file
+
+Questions should surface unarticulated needs, not confirm what's obvious.
+```
+
 ### Engineer Persona Addition
 
 Add to `engineer.md`:
 
 ```markdown
-## Task Completion Protocol (MANDATORY)
+## Issue Pickup Protocol (MANDATORY)
 
-After ANY code change, execute this sequence without stopping:
+When picking up a GitHub issue:
+
+1. **Read issue AND all comments**: `gh issue view N --comments`
+   - Comments contain clarifications, scope changes, and critical context
+   - Never start implementation without reading the full thread
+2. **Check product direction**: Verify issue serves current objective in product_direction.md
+
+## Task Completion Protocol
+
+After code changes, execute this sequence in order:
 
 1. **Test**: `python -m pytest tests/ -v`
+   - If tests fail: STOP. Fix failures before proceeding.
 2. **Docs**: Use the doc_update skill
 3. **Push**: Use the push_changes skill
 4. **Close**: Comment on and close GitHub issue with summary
 5. **Handoff**: Use the handoff skill
 
-This sequence is ATOMIC. Do not stop between steps.
+Execute sequentially. Stop immediately if tests fail or user interrupts. Resume from last successful step if interrupted.
 ```
 
 ### Architect Persona Addition
@@ -439,49 +520,27 @@ After completing review:
 
 ---
 
-## Quick Invocations (CLAUDE.md Addition)
-
-Add to reduce the 521 verbose role invocations:
-
-```markdown
-## Quick Role Invocations
-
-| You Say | Agent Understands |
-|---------|-------------------|
-| `eng #N` | As engineer, implement GitHub issue #N |
-| `arch review` | As architect, review pending_review.md |
-| `prod chat` | As product, discuss current direction |
-| `investigate` | Diagnose latest feedback observation |
-```
-
----
-
 ## Migration Plan
 
-### Phase 1: Create Skills (Day 1)
+### Phase 1: Create Skills
 
 1. Create `.claude/skills/` directory
 2. Create all 5 SKILL.md files per specs above
 3. Test skill invocation manually
 
-### Phase 2: Update Personas (Day 1)
+### Phase 2: Update Personas
 
 1. Add Task Completion Protocol to engineer.md
 2. Add Review Completion Protocol to architect.md
 3. Add skill references to other personas
 
-### Phase 3: Add Quick Invocations (Day 1)
-
-1. Add quick invocations section to CLAUDE.md
-2. Test shorthand recognition
-
-### Phase 4: Deprecate Old Commands (Day 2)
+### Phase 3: Deprecate Old Commands
 
 1. Delete `.claude/commands/` directory
 2. Verify no references remain
 3. Test full workflow
 
-### Phase 5: Monitor (Ongoing)
+### Phase 4: Monitor (Ongoing)
 
 1. Track repeated corrections in future sessions
 2. Extract new patterns into skills
@@ -504,18 +563,68 @@ Add to reduce the 521 verbose role invocations:
 
 | Friction | Before | After |
 |----------|--------|-------|
-| Push changes requests | 244 | ~0 (persona enforced) |
-| Doc update reminders | 145 | ~0 (persona enforced) |
-| Handoff corrections | 69 | ~5 (stricter skill) |
-| Issue filing requests | 82 | ~10 (new skill) |
-| Role invocation | 521 | ~100 (quick invocations) |
-| Investigation requests | 45 | ~5 (dedicated skill) |
+| `/doc_update` manual calls | 52+ | ~0 (auto-triggered in completion protocol) |
+| Push/commit reminders | 25+ | ~0 (auto-commit in push_changes) |
+| Handoff corrections | 15+ | ~2 (strict one-sentence rule) |
+| DAG.md update reminders | 10+ | ~0 (doc routing rules) |
+| Investigation speculation | 10+ | ~2 (diagnose_feedback skill enforces execution) |
+| Subissue pending_review | 5+ | ~0 (epic rules explicit) |
+| Doc location corrections | 5+ | ~0 (content rules in doc_update) |
 
-**Estimated reduction: ~85% fewer repeated instructions.**
+**Estimated reduction: ~80% fewer repeated instructions.**
+
+### Not Addressed: Role Invocation Verbosity
+
+The original proposal included "quick invocations" to reduce the 20+ verbose role invocations observed:
+
+| Shortcut | Expands To |
+|----------|------------|
+| `eng #N` | As engineer, implement GitHub issue #N |
+| `arch review` | As architect, review pending_review.md |
+| `prod chat` | As product, discuss current direction |
+| `investigate` | Diagnose latest feedback observation |
+
+**Director recommendation:** Do not implement. The explicit "As engineer, read X and implement Y" format is:
+- Self-documenting in conversation history
+- Unambiguous (no collision with natural language like "eng is broken")
+- Consistent with the handoff skill's one-sentence format
+
+The verbosity is a feature, not a bug.
 
 ---
 
-## Appendix: Analysis Commands
+## Appendix A: Representative Correction Patterns
+
+From history analysis, these exact corrections were repeated:
+
+**Push/Commit:**
+- "push all changes to remote github"
+- "push changes to github"
+- "Yes and push all changes to the repo"
+
+**Documentation:**
+- "update user_guide or developer_guide if needed"
+- "API documentation should not go into user_guide"
+- "Update docs/reference/developer_guide.md"
+- "update DAG.md when touching DAG code"
+
+**Handoff:**
+- "write a clean sentence or two to handoff"
+- "give me handoff sentence"
+- "you're supposed to say something like 'As [persona] read [doc] and [action]'"
+
+**Investigation:**
+- "run the code and tell me what happens"
+- "Look at my latest observation in feedback json"
+- "Trace code and tell me where I went wrong"
+
+**Pending Review:**
+- "don't update pending review per subissue"
+- "Make only one update in pending_review (don't create per subissue ticket)"
+
+---
+
+## Appendix B: Analysis Commands
 
 ```bash
 # Count prompts for this project
