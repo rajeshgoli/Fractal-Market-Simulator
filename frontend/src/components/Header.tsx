@@ -1,5 +1,6 @@
-import React from 'react';
-import { Menu, Monitor, Clock, Settings } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Menu, Monitor, Clock, Settings, ChevronDown, BarChart3, Layers } from 'lucide-react';
+import type { ViewMode } from '../App';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -8,6 +9,8 @@ interface HeaderProps {
   calibrationStatus?: 'calibrating' | 'calibrated' | 'playing';
   dataFileName?: string;
   onOpenSettings?: () => void;
+  currentView?: ViewMode;
+  onNavigate?: (view: ViewMode) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,7 +20,29 @@ export const Header: React.FC<HeaderProps> = ({
   calibrationStatus,
   dataFileName,
   onOpenSettings,
+  currentView = 'dag',
+  onNavigate,
 }) => {
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) {
+        setIsViewMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const viewOptions = [
+    { value: 'dag' as ViewMode, label: 'DAG View', icon: BarChart3 },
+    { value: 'levels-at-play' as ViewMode, label: 'Levels at Play', icon: Layers },
+  ];
+
+  const currentViewOption = viewOptions.find(v => v.value === currentView) || viewOptions[0];
   // Format timestamp for display (fixed-width)
   const formatTimestamp = (ts?: string) => {
     if (!ts) return { date: '---', time: '--:--:--' };
@@ -46,10 +71,44 @@ export const Header: React.FC<HeaderProps> = ({
           <Menu size={20} />
         </button>
 
-        {/* Title */}
+        {/* Title with View Switcher */}
         <div className="flex items-center gap-2">
           <Monitor className="text-trading-blue" size={18} />
           <h1 className="font-bold tracking-wide text-sm">MARKET STRUCTURE ANALYSIS</h1>
+
+          {/* View Switcher Dropdown */}
+          {onNavigate && (
+            <div className="relative" ref={viewMenuRef}>
+              <button
+                onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-app-card rounded border border-app-border hover:border-app-muted transition-colors"
+              >
+                <currentViewOption.icon size={14} className="text-trading-blue" />
+                <span>{currentViewOption.label}</span>
+                <ChevronDown size={12} className={`text-app-muted transition-transform ${isViewMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isViewMenuOpen && (
+                <div className="absolute top-full left-0 mt-1 bg-app-card border border-app-border rounded shadow-lg z-50 min-w-[150px]">
+                  {viewOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        onNavigate(option.value);
+                        setIsViewMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-app-secondary transition-colors ${
+                        currentView === option.value ? 'bg-app-secondary text-trading-blue' : 'text-app-text'
+                      }`}
+                    >
+                      <option.icon size={14} />
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Calibration Status Badge */}

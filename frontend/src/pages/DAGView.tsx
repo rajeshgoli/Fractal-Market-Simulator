@@ -41,8 +41,13 @@ import {
   clampAggregationToSource,
   LegEvent,
 } from '../types';
+import type { ViewMode } from '../App';
 
-export const DAGView: React.FC = () => {
+interface DAGViewProps {
+  onNavigate?: (view: ViewMode) => void;
+}
+
+export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
   // Chart and speed preferences (persisted to localStorage)
   const chartPrefs = useChartPreferences();
 
@@ -838,6 +843,8 @@ export const DAGView: React.FC = () => {
         }
         dataFileName={state.dataFileName}
         onOpenSettings={() => state.setIsSettingsOpen(true)}
+        currentView="dag"
+        onNavigate={onNavigate}
       />
 
       <div className="flex-1 flex min-h-0">

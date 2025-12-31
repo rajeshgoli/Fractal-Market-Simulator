@@ -558,3 +558,50 @@ export async function updateDetectionConfig(
   }
   return response.json();
 }
+
+// ============================================================================
+// Reference State API (Issue #375 - Reference Layer UI)
+// ============================================================================
+
+export interface ReferenceSwing {
+  leg_id: string;
+  scale: 'S' | 'M' | 'L' | 'XL';
+  depth: number;
+  location: number;
+  salience_score: number;
+  direction: 'bull' | 'bear';
+  origin_price: number;
+  origin_index: number;
+  pivot_price: number;
+  pivot_index: number;
+}
+
+export interface ReferenceStateResponse {
+  references: ReferenceSwing[];
+  by_scale: {
+    S: ReferenceSwing[];
+    M: ReferenceSwing[];
+    L: ReferenceSwing[];
+    XL: ReferenceSwing[];
+  };
+  by_depth: Record<number, ReferenceSwing[]>;
+  by_direction: {
+    bull: ReferenceSwing[];
+    bear: ReferenceSwing[];
+  };
+  direction_imbalance: 'bull' | 'bear' | null;
+  is_warming_up: boolean;
+  warmup_progress: [number, number];
+}
+
+export async function fetchReferenceState(barIndex?: number): Promise<ReferenceStateResponse> {
+  const url = barIndex !== undefined
+    ? `${API_BASE}/reference-state?bar_index=${barIndex}`
+    : `${API_BASE}/reference-state`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch reference state: ${response.statusText}`);
+  }
+  return response.json();
+}

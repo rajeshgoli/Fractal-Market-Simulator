@@ -1924,3 +1924,160 @@ async def get_detection_config():
         max_turns_per_pivot_raw=config.max_turns_per_pivot_raw,
         enable_engulfed_prune=config.enable_engulfed_prune,
     )
+
+
+# ============================================================================
+# Reference State Endpoint (#375 - Reference Layer UI)
+# ============================================================================
+
+
+from pydantic import BaseModel
+
+
+class ReferenceSwingResponse(BaseModel):
+    """API response for a single reference swing."""
+    leg_id: str
+    scale: str
+    depth: int
+    location: float
+    salience_score: float
+    direction: str
+    origin_price: float
+    origin_index: int
+    pivot_price: float
+    pivot_index: int
+
+
+class ReferenceStateApiResponse(BaseModel):
+    """API response for reference layer state."""
+    references: List[ReferenceSwingResponse]
+    by_scale: Dict[str, List[ReferenceSwingResponse]]
+    by_depth: Dict[int, List[ReferenceSwingResponse]]
+    by_direction: Dict[str, List[ReferenceSwingResponse]]
+    direction_imbalance: Optional[str]
+    is_warming_up: bool
+    warmup_progress: List[int]
+
+
+def _reference_swing_to_response(ref: 'ReferenceSwing') -> ReferenceSwingResponse:
+    """Convert ReferenceSwing to API response."""
+    from ...swing_analysis.reference_layer import ReferenceSwing
+    return ReferenceSwingResponse(
+        leg_id=ref.leg.leg_id,
+        scale=ref.scale,
+        depth=ref.depth,
+        location=ref.location,
+        salience_score=ref.salience_score,
+        direction=ref.leg.direction,
+        origin_price=float(ref.leg.origin_price),
+        origin_index=ref.leg.origin_index,
+        pivot_price=float(ref.leg.pivot_price),
+        pivot_index=ref.leg.pivot_index,
+    )
+
+
+@router.get("/api/reference-state", response_model=ReferenceStateApiResponse)
+async def get_reference_state(bar_index: Optional[int] = Query(None)):
+    """
+    Get reference layer state at a given bar index.
+
+    The reference layer filters DAG legs through formation, location, and
+    breach checks, then annotates qualifying legs with scale and salience.
+
+    Args:
+        bar_index: Optional bar index for state. Uses current playback position if not provided.
+
+    Returns:
+        ReferenceStateApiResponse with all valid references and groupings.
+    """
+    from ..api import get_state
+    from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceState
+
+    global _replay_cache
+
+    try:
+        state = get_state()
+    except Exception:
+        # Return empty state if not initialized
+        return ReferenceStateApiResponse(
+            references=[],
+            by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
+            by_depth={},
+            by_direction={'bull': [], 'bear': []},
+            direction_imbalance=None,
+            is_warming_up=True,
+            warmup_progress=[0, 50],
+        )
+
+    detector = _replay_cache.get("detector")
+    if detector is None:
+        return ReferenceStateApiResponse(
+            references=[],
+            by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
+            by_depth={},
+            by_direction={'bull': [], 'bear': []},
+            direction_imbalance=None,
+            is_warming_up=True,
+            warmup_progress=[0, 50],
+        )
+
+    # Get or create reference layer
+    reference_layer = _replay_cache.get("reference_layer")
+    if reference_layer is None:
+        reference_layer = ReferenceLayer()
+        _replay_cache["reference_layer"] = reference_layer
+
+    # Determine the target bar index
+    target_index = bar_index
+    if target_index is None:
+        target_index = _replay_cache.get("last_bar_index", 0)
+
+    # Get bar at target index
+    if target_index >= 0 and target_index < len(state.source_bars):
+        bar = state.source_bars[target_index]
+    elif len(state.source_bars) > 0:
+        bar = state.source_bars[-1]
+    else:
+        return ReferenceStateApiResponse(
+            references=[],
+            by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
+            by_depth={},
+            by_direction={'bull': [], 'bear': []},
+            direction_imbalance=None,
+            is_warming_up=True,
+            warmup_progress=[0, 50],
+        )
+
+    # Get active legs from detector
+    active_legs = detector.get_active_legs()
+
+    # Update reference layer and get state
+    ref_state: ReferenceState = reference_layer.update(active_legs, bar)
+
+    # Convert to API response
+    refs_response = [_reference_swing_to_response(r) for r in ref_state.references]
+
+    by_scale_response = {
+        scale: [_reference_swing_to_response(r) for r in refs]
+        for scale, refs in ref_state.by_scale.items()
+    }
+
+    by_depth_response = {
+        depth: [_reference_swing_to_response(r) for r in refs]
+        for depth, refs in ref_state.by_depth.items()
+    }
+
+    by_direction_response = {
+        direction: [_reference_swing_to_response(r) for r in refs]
+        for direction, refs in ref_state.by_direction.items()
+    }
+
+    return ReferenceStateApiResponse(
+        references=refs_response,
+        by_scale=by_scale_response,
+        by_depth=by_depth_response,
+        by_direction=by_direction_response,
+        direction_imbalance=ref_state.direction_imbalance,
+        is_warming_up=ref_state.is_warming_up,
+        warmup_progress=list(ref_state.warmup_progress),
+    )
