@@ -305,6 +305,8 @@ class ReferenceLayer:
         self._formed_refs: Set[str] = set()
         # Track which legs are monitored for level crossings (opt-in per leg)
         self._tracked_for_crossing: Set[str] = set()
+        # Track which leg_ids have been added to range distribution (to avoid duplicates)
+        self._seen_leg_ids: Set[str] = set()
 
     def _compute_big_swing_threshold(self, swings: List[SwingNode]) -> Decimal:
         """
@@ -443,6 +445,21 @@ class ReferenceLayer:
             leg_range: Absolute range of the leg to add.
         """
         bisect.insort(self._range_distribution, leg_range)
+
+    def _update_range_distribution(self, legs: List[Leg]) -> None:
+        """
+        Update range distribution with new legs.
+
+        Only adds legs that haven't been seen before (tracked by leg_id).
+        This ensures we don't double-count legs across update() calls.
+
+        Args:
+            legs: List of legs from the DAG.
+        """
+        for leg in legs:
+            if leg.leg_id not in self._seen_leg_ids:
+                self._seen_leg_ids.add(leg.leg_id)
+                self._add_to_range_distribution(leg.range)
 
     def _compute_location(self, leg: Leg, current_price: Decimal) -> float:
         """
@@ -652,6 +669,155 @@ class ReferenceLayer:
         return (weights['range'] * range_score +
                 weights['impulse'] * impulse_score +
                 weights['recency'] * recency_score)
+
+    def _group_by_scale(
+        self,
+        refs: List[ReferenceSwing],
+    ) -> Dict[str, List[ReferenceSwing]]:
+        """
+        Group references by scale classification.
+
+        Args:
+            refs: List of ReferenceSwing to group.
+
+        Returns:
+            Dict mapping scale ('S', 'M', 'L', 'XL') to list of references.
+        """
+        result: Dict[str, List[ReferenceSwing]] = {'S': [], 'M': [], 'L': [], 'XL': []}
+        for r in refs:
+            result[r.scale].append(r)
+        return result
+
+    def _group_by_depth(
+        self,
+        refs: List[ReferenceSwing],
+    ) -> Dict[int, List[ReferenceSwing]]:
+        """
+        Group references by hierarchy depth.
+
+        Args:
+            refs: List of ReferenceSwing to group.
+
+        Returns:
+            Dict mapping depth (0 = root) to list of references.
+        """
+        result: Dict[int, List[ReferenceSwing]] = {}
+        for r in refs:
+            if r.depth not in result:
+                result[r.depth] = []
+            result[r.depth].append(r)
+        return result
+
+    def _group_by_direction(
+        self,
+        refs: List[ReferenceSwing],
+    ) -> Dict[str, List[ReferenceSwing]]:
+        """
+        Group references by direction.
+
+        Args:
+            refs: List of ReferenceSwing to group.
+
+        Returns:
+            Dict mapping direction ('bull', 'bear') to list of references.
+        """
+        result: Dict[str, List[ReferenceSwing]] = {'bull': [], 'bear': []}
+        for r in refs:
+            result[r.leg.direction].append(r)
+        return result
+
+    def update(self, legs: List[Leg], bar: Bar) -> ReferenceState:
+        """
+        Main entry point. Called each bar after DAG processes.
+
+        One bar at a time. No look-ahead. Always assume real-time flow.
+
+        Args:
+            legs: Active legs from DAG.
+            bar: Current bar with OHLC.
+
+        Returns:
+            ReferenceState with all valid references.
+        """
+        current_price = Decimal(str(bar.close))
+
+        # Update range distribution with any new legs
+        self._update_range_distribution(legs)
+
+        # Cold start check: not enough swings for meaningful scale classification
+        if len(self._range_distribution) < self.reference_config.min_swings_for_scale:
+            return ReferenceState(
+                references=[],
+                by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
+                by_depth={},
+                by_direction={'bull': [], 'bear': []},
+                direction_imbalance=None,
+            )
+
+        references: List[ReferenceSwing] = []
+        for leg in legs:
+            scale = self._classify_scale(leg.range)
+            location = self._compute_location(leg, current_price)
+
+            # Formation check (price-based)
+            if not self._is_formed_for_reference(leg, current_price):
+                continue
+
+            # Compute location from bar extremes for breach check
+            # For bull reference (bear leg): defended pivot is LOW, price must stay above
+            # For bear reference (bull leg): defended pivot is HIGH, price must stay below
+            bar_high = Decimal(str(bar.high))
+            bar_low = Decimal(str(bar.low))
+
+            if leg.direction == 'bear':
+                # Bull reference: pivot is LOW, use bar_low for max breach check
+                extreme_location = self._compute_location(leg, bar_low)
+            else:
+                # Bear reference: pivot is HIGH, use bar_high for max breach check
+                extreme_location = self._compute_location(leg, bar_high)
+
+            bar_close_location = location  # location is already computed from close
+
+            # Validity check (location + tolerance)
+            if self._is_fatally_breached(leg, scale, extreme_location, bar_close_location):
+                # Already removed from formed refs by _is_fatally_breached
+                continue
+
+            salience = self._compute_salience(leg, scale, bar.index)
+
+            references.append(ReferenceSwing(
+                leg=leg,
+                scale=scale,
+                depth=leg.depth,
+                location=min(location, 2.0),  # Cap at 2.0
+                salience_score=salience,
+            ))
+
+        # Sort by salience (descending)
+        references.sort(key=lambda r: r.salience_score, reverse=True)
+
+        # Build groupings
+        by_scale = self._group_by_scale(references)
+        by_depth = self._group_by_depth(references)
+        by_direction = self._group_by_direction(references)
+
+        # Compute direction imbalance
+        bull_count = len(by_direction.get('bull', []))
+        bear_count = len(by_direction.get('bear', []))
+        if bull_count > bear_count * 2:
+            imbalance: Optional[str] = 'bull'
+        elif bear_count > bull_count * 2:
+            imbalance = 'bear'
+        else:
+            imbalance = None
+
+        return ReferenceState(
+            references=references,
+            by_scale=by_scale,
+            by_depth=by_depth,
+            by_direction=by_direction,
+            direction_imbalance=imbalance,
+        )
 
     def get_reference_swings(
         self,

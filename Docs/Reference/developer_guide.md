@@ -567,12 +567,60 @@ for swing, result in completed:
 **Key operations:**
 | Method | Purpose |
 |--------|---------|
+| `update(legs, bar)` | **Main entry point.** Process legs each bar, return ReferenceState |
 | `get_reference_swings(swings)` | Get all swings with tolerances computed |
 | `check_invalidation(swing, bar)` | Apply Rule 2.2 with touch/close thresholds |
 | `check_completion(swing, bar)` | Check if swing should be marked complete |
 | `get_big_swings(swings)` | Get only big swings (top 10% by range) |
 | `update_invalidation_on_bar(swings, bar)` | Batch invalidation check |
 | `update_completion_on_bar(swings, bar)` | Batch completion check |
+
+**Using update() with DAG legs:**
+
+```python
+from src.swing_analysis.reference_layer import ReferenceLayer, ReferenceState
+from src.swing_analysis.reference_config import ReferenceConfig
+from src.swing_analysis.dag.leg_detector import LegDetector
+
+# Initialize
+config = ReferenceConfig.default()
+ref_layer = ReferenceLayer(reference_config=config)
+detector = LegDetector(...)
+
+# Process each bar
+for bar in bars:
+    detector.process_bar(bar)
+    legs = detector.get_active_legs()
+
+    # Get valid trading references
+    state: ReferenceState = ref_layer.update(legs, bar)
+
+    # Access references sorted by salience
+    for ref in state.references:
+        print(f"{ref.scale} {ref.leg.direction} at {ref.location:.2f}")
+
+    # Access groupings
+    xl_refs = state.by_scale['XL']
+    root_refs = state.by_depth.get(0, [])
+
+    # Check market bias
+    if state.direction_imbalance == 'bull':
+        print("Bull-dominated environment")
+```
+
+**ReferenceState fields:**
+- `references`: All valid references, sorted by salience (highest first)
+- `by_scale`: Dict grouping by S/M/L/XL scale
+- `by_depth`: Dict grouping by hierarchy depth (0 = root)
+- `by_direction`: Dict grouping by 'bull'/'bear'
+- `direction_imbalance`: 'bull' if bulls > 2× bears, 'bear' if vice versa, else None
+
+**ReferenceSwing fields:**
+- `leg`: The underlying DAG Leg
+- `scale`: Size classification ('S', 'M', 'L', 'XL') from percentiles
+- `depth`: Hierarchy depth from DAG (0 = root)
+- `location`: Price position in reference frame (0-2, capped)
+- `salience_score`: Relevance ranking (higher = more relevant)
 
 *Note: Separation filtering (Rules 4.1, 4.2) has been removed (#164). The DAG handles separation at formation time via origin-proximity and breach pruning.*
 
