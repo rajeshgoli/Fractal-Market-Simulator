@@ -40,7 +40,8 @@ src/
 frontend/                           # React + Vite DAG View
 ├── src/
 │   ├── pages/
-│   │   └── DAGView.tsx             # Main DAG visualization page
+│   │   ├── DAGView.tsx             # Main DAG visualization page
+│   │   └── LevelsAtPlayView.tsx    # Reference Layer visualization (#374)
 │   ├── components/
 │   │   ├── ChartArea.tsx           # Dual lightweight-charts
 │   │   ├── LegOverlay.tsx          # Leg visualization
@@ -779,19 +780,26 @@ cd frontend && npm run build  # Output: frontend/dist/
 | Component | Purpose |
 |-----------|---------|
 | `DAGView.tsx` | Main DAG visualization page |
+| `LevelsAtPlayView.tsx` | Reference Layer visualization page (#374) |
 | `ChartArea.tsx` | Two stacked lightweight-charts |
 | `LegOverlay.tsx` | Leg visualization (includes tree icon hover) |
+| `ReferenceLegOverlay.tsx` | Reference visualization with scale/direction/location (#377-#379) |
 | `HierarchyModeOverlay.tsx` | Hierarchy exploration mode (exit button, connection lines, status) |
 | `PlaybackControls.tsx` | Play/pause/step transport |
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |
+| `ReferenceTelemetryPanel.tsx` | Reference counts and direction imbalance (#382) |
 | `Sidebar.tsx` | Event filters, feedback input, attachment display |
 | `useForwardPlayback.ts` | Forward-only playback (step back via backend API) |
 | `useHierarchyMode.ts` | Hierarchy exploration state management (#250) |
+| `useReferenceState.ts` | Reference Layer state with fade-out transitions (#381) |
 | `useChartPreferences.ts` | Settings persistence to localStorage |
 | `useDAGViewState.ts` | DAG view consolidated state management |
 
 **Frontend Architecture Notes:**
-- DAGView is the sole view (ViewMode infrastructure removed in #349)
+- Two view modes available via Header dropdown (#374):
+  - **DAG View**: Full DAG exploration with leg overlays, hierarchy mode, detection config
+  - **Levels at Play View**: Reference Layer visualization with scale labels, direction colors, location indicators
+- App.tsx routes between views using `ViewMode` state
 - `useForwardPlayback` has two bar advance mechanisms:
   - `renderNextBar`: Buffer-based for smooth continuous playback
   - `advanceBar`: Direct API call for manual stepping (step forward, jump to event)
@@ -970,6 +978,18 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 # }
 # Returns updated configuration after re-calibration
 # Note (#345): invalidation_threshold removed; origin breach detected at 0%
+
+# Reference State: GET /api/reference-state?bar_index=NNN
+# Returns Reference Layer output for Levels at Play view (#374-#382):
+# - references: All valid ReferenceSwings, sorted by salience (highest first)
+#   - leg_id, scale (S/M/L/XL), depth, location (0-2), salience_score
+#   - direction, origin_price, origin_index, pivot_price, pivot_index
+# - by_scale: References grouped by scale {S: [], M: [], L: [], XL: []}
+# - by_depth: References grouped by hierarchy depth {0: [], 1: [], ...}
+# - by_direction: References grouped by direction {bull: [], bear: []}
+# - direction_imbalance: 'bull' | 'bear' | null (>2x ratio)
+# - is_warming_up: True if in cold start (insufficient swings for scale classification)
+# - warmup_progress: [current_count, required_count] (e.g., [35, 50])
 ```
 
 **Reference Layer Integration:**
