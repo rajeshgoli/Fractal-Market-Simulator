@@ -65,10 +65,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     const calculatePositions = () => {
       const positions: LegPosition[] = [];
 
-      // Combine active references with fading ones
-      const allRefs = [...references];
-
-      for (const ref of allRefs) {
+      for (const ref of references) {
         // Find bar indices for origin and pivot
         const originBar = bars.find(b =>
           b.source_start_index <= ref.origin_index && b.source_end_index >= ref.origin_index
@@ -117,7 +114,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   return (
     <svg
       className="absolute inset-0 pointer-events-none"
-      style={{ width: '100%', height: '100%' }}
+      style={{ width: '100%', height: '100%', zIndex: 100 }}
     >
       {legPositions.map((pos) => (
         <LegLine key={pos.ref.leg_id} position={pos} />

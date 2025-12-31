@@ -65,9 +65,10 @@ interface SingleChartProps {
   onChartReady?: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void;
   savedZoom?: LogicalRange | null;
   onZoomChange?: (range: LogicalRange | null) => void;
+  children?: React.ReactNode;
 }
 
-const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady, savedZoom, onZoomChange }) => {
+const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady, savedZoom, onZoomChange, children }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -196,7 +197,11 @@ const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady, savedZoom
     }
   }, [data, savedZoom]);
 
-  return <div ref={chartContainerRef} className="w-full h-full" />;
+  return (
+    <div ref={chartContainerRef} className="w-full h-full chart-container relative">
+      {children}
+    </div>
+  );
 };
 
 interface ChartAreaProps {
@@ -217,6 +222,9 @@ interface ChartAreaProps {
   // Maximized chart state
   maximizedChart?: 1 | 2 | null;
   onMaximizedChartChange?: (value: 1 | 2 | null) => void;
+  // Overlay render props
+  chart1Overlay?: React.ReactNode;
+  chart2Overlay?: React.ReactNode;
 }
 
 export const ChartArea: React.FC<ChartAreaProps> = ({
@@ -235,6 +243,8 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
   onChart2ZoomChange,
   maximizedChart,
   onMaximizedChartChange,
+  chart1Overlay,
+  chart2Overlay,
 }) => {
   const toggleChart1Maximize = () => {
     onMaximizedChartChange?.(maximizedChart === 1 ? null : 1);
@@ -263,7 +273,9 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
             onChartReady={onChart1Ready}
             savedZoom={chart1Zoom}
             onZoomChange={onChart1ZoomChange}
-          />
+          >
+            {chart1Overlay}
+          </SingleChart>
         </div>
       )}
 
@@ -284,7 +296,9 @@ export const ChartArea: React.FC<ChartAreaProps> = ({
             onChartReady={onChart2Ready}
             savedZoom={chart2Zoom}
             onZoomChange={onChart2ZoomChange}
-          />
+          >
+            {chart2Overlay}
+          </SingleChart>
         </div>
       )}
     </div>

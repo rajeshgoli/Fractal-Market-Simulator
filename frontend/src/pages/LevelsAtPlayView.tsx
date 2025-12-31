@@ -627,21 +627,24 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             onChart2ZoomChange={chartPrefs.setChart2Zoom}
             maximizedChart={chartPrefs.maximizedChart}
             onMaximizedChartChange={chartPrefs.setMaximizedChart}
-          />
-
-          <ReferenceLegOverlay
-            chart={chart1Ref.current}
-            series={series1Ref.current}
-            references={referenceState?.references ?? []}
-            fadingRefs={fadingRefs}
-            bars={visibleChart1Bars}
-          />
-          <ReferenceLegOverlay
-            chart={chart2Ref.current}
-            series={series2Ref.current}
-            references={referenceState?.references ?? []}
-            fadingRefs={fadingRefs}
-            bars={visibleChart2Bars}
+            chart1Overlay={
+              <ReferenceLegOverlay
+                chart={chart1Ref.current}
+                series={series1Ref.current}
+                references={referenceState?.references ?? []}
+                fadingRefs={fadingRefs}
+                bars={visibleChart1Bars}
+              />
+            }
+            chart2Overlay={
+              <ReferenceLegOverlay
+                chart={chart2Ref.current}
+                series={series2Ref.current}
+                references={referenceState?.references ?? []}
+                fadingRefs={fadingRefs}
+                bars={visibleChart2Bars}
+              />
+            }
           />
 
           <div className="shrink-0 z-10">
