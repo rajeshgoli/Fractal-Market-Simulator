@@ -424,7 +424,7 @@ This scales naturally through the hierarchy:
 
 Configuration: `SwingConfig.min_branch_ratio` (default: 0.0 = disabled)
 
-**Turn ratio pruning (#341, #342, #344):**
+**Turn ratio pruning (#341, #342, #344, #357):**
 
 Filters sibling legs horizontally at shared pivots based on turn ratio:
 ```
@@ -432,6 +432,15 @@ turn_ratio = counter_leg._max_counter_leg_range / counter_leg.range
 ```
 
 Turn ratio measures how far a leg extended relative to the counter-trend that created its origin. Low turn ratio means the leg extended far beyond what the structure justified ("punched above its weight class").
+
+**Bootstrap tracking (#357):** `_max_counter_leg_range` can be:
+- `None` (exempt): Leg created before any opposite-direction leg existed (truly unknown counter-trend)
+- `0.0` (most prunable): Leg created after opposite direction bootstrapped, but no counter-leg at that pivot
+- `> 0.0` (normal): Actual counter-trend range captured at leg creation
+
+The distinction is tracked via `DetectorState._has_created_bull_leg` and `_has_created_bear_leg` flags. When creating a bull leg, if no bear leg with pivot at that origin exists:
+- Before any bear leg ever created → `_max_counter_leg_range = None` (exempt)
+- After bear legs exist → `_max_counter_leg_range = 0.0` (turn_ratio = 0, most prunable)
 
 Two mutually exclusive modes:
 1. **Threshold mode** (`min_turn_ratio > 0`): Prune legs with `turn_ratio < min_turn_ratio`
