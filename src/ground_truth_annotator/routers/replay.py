@@ -2049,7 +2049,7 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
         )
 
     # Get active legs from detector
-    active_legs = detector.get_active_legs()
+    active_legs = detector.state.active_legs
 
     # Update reference layer and get state
     ref_state: ReferenceState = reference_layer.update(active_legs, bar)

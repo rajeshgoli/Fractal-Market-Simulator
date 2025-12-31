@@ -689,9 +689,23 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
 
         const source = await fetchBars(smallestValid);
 
-        state.setCalibrationPhase(CalibrationPhase.CALIBRATING);
-        const calibration = await fetchCalibration(0);
-        state.setCalibrationData(calibration);
+        // Check if backend already has state (don't reset on view switch)
+        const hasExistingState = session.current_bar_index !== null && session.current_bar_index >= 0;
+
+        if (hasExistingState) {
+          // Backend has state - use it without resetting
+          // Only calibration_bar_count is used for existing state, other fields are placeholders
+          state.setCalibrationData({
+            calibration_bar_count: session.current_bar_index! + 1,
+          } as any);
+          // Sync forward playback with backend position
+          forwardPlayback.syncToPosition(session.current_bar_index!, [], 0, []);
+        } else {
+          // No existing state - initialize fresh
+          state.setCalibrationPhase(CalibrationPhase.CALIBRATING);
+          const calibration = await fetchCalibration(0);
+          state.setCalibrationData(calibration);
+        }
 
         state.setSourceBars([]);
         state.setCalibrationBars([]);
@@ -738,7 +752,12 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
           console.warn('Failed to sync detection config:', err);
         }
 
-        state.setCalibrationPhase(CalibrationPhase.CALIBRATED);
+        // If we had existing state, go straight to PLAYING phase
+        if (hasExistingState) {
+          state.setCalibrationPhase(CalibrationPhase.PLAYING);
+        } else {
+          state.setCalibrationPhase(CalibrationPhase.CALIBRATED);
+        }
 
         state.setSessionInfo(prev => prev ? {
           ...prev,

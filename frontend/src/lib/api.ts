@@ -79,6 +79,7 @@ export interface SessionInfo {
   window_offset: number;
   total_source_bars: number;
   calibration_bar_count: number | null;
+  current_bar_index: number | null;  // Current playback position (-1 = not started, null = no session)
   scale: string;
   created_at: string;
   annotation_count: number;

@@ -502,9 +502,23 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
         const source = await fetchBars(smallestValid);
 
-        setCalibrationPhase(CalibrationPhase.CALIBRATING);
-        const calibration = await fetchCalibration(0);
-        setCalibrationData(calibration);
+        // Check if backend already has state (don't reset on view switch)
+        const hasExistingState = session.current_bar_index !== null && session.current_bar_index >= 0;
+
+        if (hasExistingState) {
+          // Backend has state - use it without resetting
+          // Only calibration_bar_count is used for existing state, other fields are placeholders
+          setCalibrationData({
+            calibration_bar_count: session.current_bar_index! + 1,
+          } as any);
+          // Sync forward playback with backend position
+          forwardPlayback.syncToPosition(session.current_bar_index!, [], 0, []);
+        } else {
+          // No existing state - initialize fresh
+          setCalibrationPhase(CalibrationPhase.CALIBRATING);
+          const calibration = await fetchCalibration(0);
+          setCalibrationData(calibration);
+        }
 
         setSourceBars([]);
         setCalibrationBars([]);
@@ -516,7 +530,12 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         setChart1Bars(bars1);
         setChart2Bars(bars2);
 
-        setCalibrationPhase(CalibrationPhase.CALIBRATED);
+        // If we had existing state, go straight to PLAYING phase
+        if (hasExistingState) {
+          setCalibrationPhase(CalibrationPhase.PLAYING);
+        } else {
+          setCalibrationPhase(CalibrationPhase.CALIBRATED);
+        }
 
         setSessionInfo(prev => prev ? {
           ...prev,

@@ -265,6 +265,7 @@ async def get_session():
             "window_offset": 0,
             "total_source_bars": 0,
             "calibration_bar_count": None,
+            "current_bar_index": None,
             "scale": "S",
             "created_at": "",
             "annotation_count": 0,
@@ -280,6 +281,7 @@ async def get_session():
         "window_offset": s.window_offset,
         "total_source_bars": s.total_source_bars,
         "calibration_bar_count": s.calibration_bar_count,
+        "current_bar_index": s.playback_index,
         "scale": "S",  # Default scale
         "created_at": "",
         "annotation_count": 0,
