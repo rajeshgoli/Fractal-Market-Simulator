@@ -990,6 +990,21 @@ The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for inc
 # - direction_imbalance: 'bull' | 'bear' | null (>2x ratio)
 # - is_warming_up: True if in cold start (insufficient swings for scale classification)
 # - warmup_progress: [current_count, required_count] (e.g., [35, 50])
+# - tracked_leg_ids: List of leg IDs tracked for level crossing (sticky legs)
+
+# Fib Levels: GET /api/reference/levels?bar_index=NNN (#388)
+# Returns all fib levels from valid references for hover preview and sticky display:
+# - levels_by_ratio: Dict keyed by ratio string ("0", "0.382", "0.5", etc.)
+#   - Each ratio maps to list of FibLevel: {price, ratio, leg_id, scale, direction}
+# Used for computing horizontal level lines on chart
+
+# Track Leg: POST /api/reference/track/{leg_id} (#388)
+# Add a leg to level crossing tracking (makes its fib levels "sticky")
+# Returns: {success: bool, leg_id: string, tracked_count: int}
+
+# Untrack Leg: DELETE /api/reference/track/{leg_id} (#388)
+# Remove a leg from level crossing tracking
+# Returns: {success: bool, leg_id: string, tracked_count: int}
 ```
 
 **Reference Layer Integration:**
