@@ -391,11 +391,45 @@ The "formation" concept (38.2% retracement threshold) should live in the referen
 
 ## Files to Modify
 
+### DAG Layer (Core Changes)
+
 1. `src/swing_analysis/dag/leg.py` - Remove `formed` field
 2. `src/swing_analysis/dag/leg_detector.py` - Update all usages
 3. `src/swing_analysis/dag/leg_pruner.py` - Update all usages
 4. `src/swing_analysis/dag/state.py` - Remove from serialization
-5. Tests - Update as needed
+
+### API Layer (ground_truth_annotator)
+
+5. `src/ground_truth_annotator/schemas.py`
+   - Line 401: `formed: bool` in LegInfo - derive from `swing_id is not None`
+6. `src/ground_truth_annotator/routers/replay.py`
+   - Lines 1446, 1585: `formed=leg.formed` - compute from `swing_id is not None`
+
+### Frontend (UI Cleanup)
+
+7. `frontend/src/types.ts`
+   - Line 213: `formed: boolean` - keep for API compatibility, derived on backend
+8. `frontend/src/utils/legStatsUtils.ts`
+   - Counts formed legs - no change needed if API still provides `formed`
+9. `frontend/src/components/MarketStructurePanel.tsx`
+   - Displays formed count - no change needed
+10. `frontend/src/hooks/useFollowLeg.ts`
+    - Uses 'formed' state - no change needed
+11. `frontend/src/components/EventMarkersOverlay.tsx`
+    - Event type handling - no change needed
+
+### Strategy for API/UI
+
+The API can **derive** `formed` from `swing_id is not None` when serializing legs for the frontend. This keeps the frontend unchanged while removing the field from the DAG layer.
+
+```python
+# In routers/replay.py when building LegInfo:
+formed=leg.swing_id is not None,  # Derive from swing_id
+```
+
+### Tests
+
+12. Tests - Update assertions that check `leg.formed` to check `leg.swing_id is not None`
 
 ---
 
