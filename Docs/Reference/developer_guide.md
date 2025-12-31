@@ -509,80 +509,24 @@ Configuration:
 
 ### Reference Layer
 
-**File:** `src/swing_analysis/reference_layer.py`
+**Files:**
+- `src/swing_analysis/reference_layer.py` — Core logic
+- `src/swing_analysis/reference_config.py` — Configuration
 
-Post-processes DAG output to produce trading references. Applies semantic filtering rules from `Docs/Reference/valid_swings.md`.
+The Reference Layer is a thin filter over DAG's active legs that determines which legs qualify as valid trading references. It applies semantic rules (formation, breach, salience) to structural output from the DAG.
 
-**Big vs Small (range-based definition):**
-- **Big swing** = top 10% by range (historically called XL)
-- **Small swing** = all other swings
+**Design:** DAG tracks structural extremas; Reference Layer applies semantic filtering. Clean separation keeps DAG simple.
 
-This is determined by range percentile, computed via `ReferenceLayer._compute_big_swing_threshold()`.
+#### Primary API: update()
 
-```python
-from src.swing_analysis.reference_layer import (
-    ReferenceLayer,
-    ReferenceSwingInfo,
-    InvalidationResult,
-    CompletionResult,
-)
-from src.swing_analysis.dag import calibrate
-from src.swing_analysis.swing_config import SwingConfig
-
-# Get swings from DAG
-detector, events = calibrate(bars)
-swings = detector.get_active_swings()
-
-# Apply reference layer filters
-config = SwingConfig.default()
-ref_layer = ReferenceLayer(config)
-reference_swings = ref_layer.get_reference_swings(swings)
-
-# Check invalidation on new bar with touch/close thresholds
-for info in reference_swings:
-    result = ref_layer.check_invalidation(info.swing, bar)
-    if result.is_invalidated:
-        print(f"{info.swing.swing_id} invalidated: {result.reason}")
-
-# Check completion on new bar
-for info in reference_swings:
-    result = ref_layer.check_completion(info.swing, bar)
-    if result.is_completed:
-        print(f"{info.swing.swing_id} completed")
-
-# Get only big swings (top 10% by range)
-big_swings = ref_layer.get_big_swings(swings)
-
-# Batch invalidation check
-invalidated = ref_layer.update_invalidation_on_bar(swings, bar)
-for swing, result in invalidated:
-    swing.invalidate()
-
-# Batch completion check
-completed = ref_layer.update_completion_on_bar(swings, bar)
-for swing, result in completed:
-    swing.complete()
-```
-
-**Key operations:**
-| Method | Purpose |
-|--------|---------|
-| `update(legs, bar)` | **Main entry point.** Process legs each bar, return ReferenceState |
-| `get_reference_swings(swings)` | Get all swings with tolerances computed |
-| `check_invalidation(swing, bar)` | Apply Rule 2.2 with touch/close thresholds |
-| `check_completion(swing, bar)` | Check if swing should be marked complete |
-| `get_big_swings(swings)` | Get only big swings (top 10% by range) |
-| `update_invalidation_on_bar(swings, bar)` | Batch invalidation check |
-| `update_completion_on_bar(swings, bar)` | Batch completion check |
-
-**Using update() with DAG legs:**
+The main entry point processes legs each bar and returns grouped references:
 
 ```python
-from src.swing_analysis.reference_layer import ReferenceLayer, ReferenceState
+from src.swing_analysis.reference_layer import ReferenceLayer, ReferenceState, ReferenceSwing
 from src.swing_analysis.reference_config import ReferenceConfig
 from src.swing_analysis.dag.leg_detector import LegDetector
 
-# Initialize
+# Initialize with configuration
 config = ReferenceConfig.default()
 ref_layer = ReferenceLayer(reference_config=config)
 detector = LegDetector(...)
@@ -595,53 +539,151 @@ for bar in bars:
     # Get valid trading references
     state: ReferenceState = ref_layer.update(legs, bar)
 
-    # Access references sorted by salience
+    # Access references sorted by salience (highest first)
     for ref in state.references:
         print(f"{ref.scale} {ref.leg.direction} at {ref.location:.2f}")
 
     # Access groupings
     xl_refs = state.by_scale['XL']
     root_refs = state.by_depth.get(0, [])
+    bull_refs = state.by_direction['bull']
 
     # Check market bias
     if state.direction_imbalance == 'bull':
         print("Bull-dominated environment")
 ```
 
-**ReferenceState fields:**
-- `references`: All valid references, sorted by salience (highest first)
-- `by_scale`: Dict grouping by S/M/L/XL scale
-- `by_depth`: Dict grouping by hierarchy depth (0 = root)
-- `by_direction`: Dict grouping by 'bull'/'bear'
-- `direction_imbalance`: 'bull' if bulls > 2× bears, 'bear' if vice versa, else None
+#### ReferenceConfig
 
-**ReferenceSwing fields:**
-- `leg`: The underlying DAG Leg
-- `scale`: Size classification ('S', 'M', 'L', 'XL') from percentiles
-- `depth`: Hierarchy depth from DAG (0 = root)
-- `location`: Price position in reference frame (0-2, capped)
-- `salience_score`: Relevance ranking (higher = more relevant)
+Separate from SwingConfig — different lifecycle, UI-tunable independently.
 
-*Note: Separation filtering (Rules 4.1, 4.2) has been removed (#164). The DAG handles separation at formation time via origin-proximity and breach pruning.*
+```python
+from src.swing_analysis.reference_config import ReferenceConfig
 
-**Invalidation thresholds (Rule 2.2):**
-| Swing Size | Touch Tolerance | Close Tolerance |
-|------------|-----------------|-----------------|
-| Big (no parent) | 0.15 × range | 0.10 × range |
-| Small (has parent) | 0 (absolute) | 0 (absolute) |
+# Default configuration
+config = ReferenceConfig.default()
 
-**Completion rules:**
-| Swing Size | Completion Rule |
-|------------|-----------------|
-| Big (no parent) | Never complete — keep active indefinitely |
-| Small (has parent) | Complete at 2× extension |
+# Customize with builder methods
+config = ReferenceConfig.default().with_tolerance(
+    small_origin_tolerance=0.0,      # S/M: 0% (default per north star)
+    big_trade_breach_tolerance=0.15, # L/XL: 15% trade breach
+    big_close_breach_tolerance=0.10, # L/XL: 10% close breach
+).with_salience_weights(
+    big_range_weight=0.5,            # L/XL: range-heavy
+    big_impulse_weight=0.4,
+    big_recency_weight=0.1,
+    small_range_weight=0.2,          # S/M: recency-heavy
+    small_impulse_weight=0.3,
+    small_recency_weight=0.5,
+)
+```
+
+**Key ReferenceConfig fields:**
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `xl_threshold` | 0.90 | Percentile for XL (top 10%) |
+| `l_threshold` | 0.60 | Percentile for L (top 40%) |
+| `m_threshold` | 0.30 | Percentile for M (top 70%) |
+| `min_swings_for_scale` | 50 | Cold start threshold |
+| `formation_fib_threshold` | 0.382 | Price-based formation level |
+| `small_origin_tolerance` | 0.0 | S/M origin breach (0% per north star) |
+| `big_trade_breach_tolerance` | 0.15 | L/XL trade breach (15%) |
+| `big_close_breach_tolerance` | 0.10 | L/XL close breach (10%) |
+
+#### Output Dataclasses
+
+**ReferenceState** — Complete output for a bar:
+| Field | Type | Description |
+|-------|------|-------------|
+| `references` | `List[ReferenceSwing]` | All valid refs, sorted by salience |
+| `by_scale` | `Dict[str, List]` | Grouped by S/M/L/XL |
+| `by_depth` | `Dict[int, List]` | Grouped by hierarchy depth |
+| `by_direction` | `Dict[str, List]` | Grouped by bull/bear |
+| `direction_imbalance` | `Optional[str]` | 'bull'/'bear' if >2× imbalance |
+
+**ReferenceSwing** — A qualified trading reference:
+| Field | Type | Description |
+|-------|------|-------------|
+| `leg` | `Leg` | The underlying DAG Leg |
+| `scale` | `str` | 'S', 'M', 'L', or 'XL' |
+| `depth` | `int` | Hierarchy depth (0 = root) |
+| `location` | `float` | Price position 0-2 (capped) |
+| `salience_score` | `float` | Relevance ranking |
+
+#### Scale Classification
+
+Based on range percentile within all-time distribution:
+
+| Scale | Percentile | Description |
+|-------|------------|-------------|
+| XL | ≥ 90% | Top 10% by range |
+| L | 60-90% | Large swings |
+| M | 30-60% | Medium swings |
+| S | < 30% | Small swings |
+
+#### Formation and Breach
+
+**Formation:** Price-based, not age-based. A leg becomes a valid reference when price retraces to the formation threshold (default 38.2%). Once formed, stays formed until fatally breached.
+
+**Fatal breach conditions:**
+1. **Pivot breach**: location < 0 (price past defended pivot)
+2. **Completion**: location > 2 (past 2× target)
+3. **Origin breach**: Scale-dependent:
+
+| Scale | Trade Breach | Close Breach |
+|-------|--------------|--------------|
+| S, M | 0% (default) | 0% |
+| L, XL | 15% | 10% |
+
+#### Salience Computation
+
+Ranks references by relevance. Scale-dependent weights:
+
+| Component | L/XL Weight | S/M Weight |
+|-----------|-------------|------------|
+| Range | 0.5 | 0.2 |
+| Impulse | 0.4 | 0.3 |
+| Recency | 0.1 | 0.5 |
+
+**Philosophy:** Big swings should be "big, impulsive, and early." Small swings prioritize recency.
+
+#### Cold Start
+
+Returns empty ReferenceState until `min_swings_for_scale` legs (default 50) have been seen. This ensures meaningful percentile classification.
+
+#### Legacy SwingNode API
+
+For backward compatibility, the older SwingNode-based API remains:
+
+```python
+from src.swing_analysis.reference_layer import (
+    ReferenceLayer,
+    ReferenceSwingInfo,
+    InvalidationResult,
+    CompletionResult,
+)
+
+# Get swings from DAG
+detector, events = calibrate(bars)
+swings = detector.get_active_swings()
+
+# Apply reference layer filters
+ref_layer = ReferenceLayer(config)
+reference_swings = ref_layer.get_reference_swings(swings)
+
+# Check invalidation/completion
+for info in reference_swings:
+    result = ref_layer.check_invalidation(info.swing, bar)
+    if result.is_invalidated:
+        print(f"{info.swing.swing_id} invalidated: {result.reason}")
+```
 
 **ReferenceSwingInfo fields:**
 - `swing`: The underlying SwingNode
 - `touch_tolerance`: Tolerance for wick violations
 - `close_tolerance`: Tolerance for close violations
 - `is_reference`: Whether swing passes all filters
-- `filter_reason`: Why filtered (if not reference)
 - `is_big()`: Method to check if swing is big (no parents)
 
 ---
