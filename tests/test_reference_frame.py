@@ -460,15 +460,15 @@ class TestIsFormedBull:
 
     def test_price_below_formation_not_formed(self, bull_frame):
         """Price below formation threshold is not formed."""
-        # 5020 = 0.2 ratio, default formation_fib = 0.287
+        # 5020 = 0.2 ratio, default formation_fib = 0.236
         assert bull_frame.is_formed(Decimal("5020")) is False
-        # 5028 = 0.28 ratio
-        assert bull_frame.is_formed(Decimal("5028")) is False
+        # 5023 = 0.23 ratio - just under threshold
+        assert bull_frame.is_formed(Decimal("5023")) is False
 
     def test_price_at_formation_is_formed(self, bull_frame):
         """Price at formation threshold is formed."""
-        # 5028.7 = 0.287 ratio
-        assert bull_frame.is_formed(Decimal("5028.7")) is True
+        # 5023.6 = 0.236 ratio (exactly at threshold)
+        assert bull_frame.is_formed(Decimal("5023.6")) is True
 
     def test_price_above_formation_is_formed(self, bull_frame):
         """Price above formation threshold is formed."""
@@ -664,8 +664,8 @@ class TestToleranceEdgeCases:
 
     def test_formed_just_below_threshold(self, bull_frame):
         """Price just below formation threshold is not formed."""
-        # 5028.6 = 0.286 ratio
-        assert bull_frame.is_formed(Decimal("5028.6")) is False
+        # 5023.5 = 0.235 ratio, just below default 0.236
+        assert bull_frame.is_formed(Decimal("5023.5")) is False
 
     def test_completed_exactly_at_two(self, bull_frame):
         """Price exactly at 2.0 is completed."""

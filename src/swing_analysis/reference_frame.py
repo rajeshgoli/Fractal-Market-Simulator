@@ -111,7 +111,7 @@ class ReferenceFrame:
         ratio = self.ratio(price)
         return ratio < Decimal(str(-tolerance))
 
-    def is_formed(self, price: Decimal, formation_fib: float = 0.287) -> bool:
+    def is_formed(self, price: Decimal, formation_fib: float = 0.236) -> bool:
         """
         Check if price has breached formation threshold.
 
@@ -121,7 +121,7 @@ class ReferenceFrame:
 
         Args:
             price: Current price to check
-            formation_fib: Fib level that triggers formation (default 0.287)
+            formation_fib: Fib level that triggers formation (default 0.236)
 
         Returns:
             True if price is at or beyond formation_fib

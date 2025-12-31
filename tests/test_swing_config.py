@@ -19,8 +19,8 @@ class TestDirectionConfig:
         """Default values should match documented magic numbers."""
         config = DirectionConfig()
 
-        # Formation fib: 0.287 per valid_swings.md Rule 3
-        assert config.formation_fib == 0.287
+        # Formation fib: 0.236 (23.6% Fibonacci level)
+        assert config.formation_fib == 0.236
 
         # Self-separation: 0.10 per Rule 4.1
         assert config.self_separation == 0.10
@@ -143,7 +143,7 @@ class TestSwingConfigBuilders:
         modified = original.with_bull(formation_fib=0.382)
 
         # Original unchanged
-        assert original.bull.formation_fib == 0.287
+        assert original.bull.formation_fib == 0.236
 
         # Modified has new value
         assert modified.bull.formation_fib == 0.382
@@ -165,7 +165,7 @@ class TestSwingConfigBuilders:
 
         # Other values preserved
         assert modified.bull == original.bull
-        assert modified.bear.formation_fib == 0.287
+        assert modified.bear.formation_fib == 0.236
 
     def test_with_origin_prune(self):
         """with_origin_prune should create new config with modified thresholds (#294)."""
