@@ -1,24 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 11
+**Unreviewed Change Count:** 1
 
-**Last Review:** 2025-12-25
+**Last Review:** 2025-12-31
 
 ---
 
 ## Pending Changes
 
-- #355: Raw counter-heft mode for turn ratio pruning
-- #356: Add turn ratio pruning stat to Market Structure panel
-- #357: Treat None counter-trend as zero for turn ratio pruning
-- #358: Fix detection config settings resetting on page refresh
-- #361: Add depth field to Leg for O(1) hierarchy depth lookup
-- #362: Create ReferenceConfig dataclass for Reference Layer
-- #363: Create ReferenceSwing dataclass wrapping Leg with scale/depth/location/salience
-- #365: Implement scale classification using percentile-based buckets (S/M/L/XL)
-- #364, #366, #367, #368, #369, #383: Reference Layer Phase 1 — ReferenceState dataclass, location computation, price-based formation, fatal breach detection, salience computation, and ReferenceConfig north star tolerance fix
-- #384: Update DAG detection config defaults (origin prune 2%, max heft turns 10) + test resilience improvements
-- #370: Implement ReferenceLayer.update() — main entry point for Reference Layer Phase 1
+- **#371, #372, #373** — Reference Layer P1.11-P1.13: Cold start handling, range distribution tracking (formed legs only), comprehensive test suite (34 tests)
 
 ---
 
@@ -26,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 31 | #355-#358, #361-#370, #383, #384 — Turn ratio modes, Reference Layer Phase 1 backend, config defaults (11 changes) | All Accepted; Ref Layer P1 backend complete; doc update needed for developer_guide.md |
 | Dec 25 | #347-#349 — Turn ratio UX, inner structure removal, frontend cleanup (3 changes) | All Accepted; dead feature deleted, docs current |
 | Dec 25 | #333-#346 — Frontend refactor, branch ratio, turn ratio, origin breach simplification (10 changes) | All Accepted; docs current |
 | Dec 24 | #322-#335 — Min CTR filter, dead code cleanup, in-app settings, regressions (11 changes) | All Accepted; docs current |
