@@ -1,9 +1,28 @@
 # Reference Layer Specification
 
-**Status:** Draft (Revised)
+**Status:** Approved
 **Author:** Product
 **Date:** December 31, 2025
-**Revision:** 5 — Origin breach tolerance correction (aligned with north star)
+**Revision:** 6 — Merged addendum from formed_analysis.md investigation
+
+---
+
+## Revision 6 Summary (Dec 31, 2025)
+
+**Merged addendum from formed_analysis.md investigation:**
+
+The investigation revealed that `formed`, `SwingNode`, and `swing_id` were architectural mistakes in the DAG layer. These concepts belong exclusively in the Reference Layer.
+
+Key additions from addendum:
+1. **DAG Contract section** — Explicit list of what DAG provides and does NOT provide
+2. **Events Emitted section** — Reference Layer owns all trading events (formed, invalidated, completed, level_cross)
+3. **FormationRecord** — Tracks when leg became reference with `formed_at_bar` and `formed_at_price`
+4. **ReferenceSwing.leg_id and formed_at_bar** — Primary identity and formation timestamp
+5. **ReferenceState.events** — Accumulator for events emitted each bar
+6. **Impulse distribution note** — Clarifies DAG provides impulsiveness even during cold start
+7. **Level cross state** — Reference Layer owns `_tracked_for_crossing` and `_last_level`
+
+**Status change:** Draft → Approved (Phase 1 backend and frontend complete)
 
 ---
 
@@ -126,6 +145,33 @@ From caller:
 - `current_bar`: Bar with OHLC
 - `all_ranges`: Historical range distribution (all-time, from formed legs)
 
+### DAG Contract
+
+DAG provides only `Leg` objects with pure geometry and breach state:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `leg_id` | str | Unique identifier (e.g., `leg_bull_4425.50_1234`) |
+| `direction` | str | 'bull' or 'bear' |
+| `origin_price` | Decimal | Where the leg started |
+| `origin_index` | int | Bar index of origin |
+| `pivot_price` | Decimal | The defended extreme |
+| `pivot_index` | int | Bar index of pivot |
+| `range` | Decimal | \|pivot - origin\| |
+| `impulse` | float | Points per bar |
+| `impulsiveness` | Optional[float] | Percentile 0-100 |
+| `max_origin_breach` | Optional[Decimal] | Maximum breach past origin |
+| `max_pivot_breach` | Optional[Decimal] | Maximum breach past pivot |
+| `status` | str | 'active' or 'invalidated' |
+
+**DAG does NOT provide:**
+- `SwingNode` — removed (was redundant wrapper around Leg)
+- `swing_id` — removed (was single-leg identifier, not linkage)
+- `formed` — removed (trading concept, belongs in Reference Layer)
+- `formed_at_bar` — removed (Reference Layer tracks this)
+
+The Reference Layer exclusively owns the "formation" concept.
+
 ---
 
 ## Outputs
@@ -135,10 +181,19 @@ From caller:
 class ReferenceSwing:
     """A DAG leg that qualifies as a valid trading reference."""
     leg: Leg                      # The underlying DAG leg
+    leg_id: str                   # Convenience: leg.leg_id (primary identity)
     scale: str                    # 'S' | 'M' | 'L' | 'XL' (percentile-based)
     depth: int                    # Hierarchy depth from DAG (for A/B testing)
     location: float               # Current price in reference frame (0-2 range, capped)
     salience_score: float         # Higher = more relevant reference
+    formed_at_bar: int            # When this reference formed
+
+@dataclass
+class FormationRecord:
+    """Tracks when a leg became a valid reference."""
+    leg_id: str
+    formed_at_bar: int
+    formed_at_price: Decimal      # Price when threshold was reached
 
 @dataclass
 class LevelInfo:
@@ -155,6 +210,7 @@ class ReferenceState:
     by_depth: Dict[int, List[ReferenceSwing]]  # Grouped by hierarchy depth (for A/B)
     by_direction: Dict[str, List[ReferenceSwing]]  # Grouped by bull/bear
     direction_imbalance: Optional[str]  # 'bull' | 'bear' | None if balanced
+    events: List[ReferenceEvent]  # Events emitted this bar (formed, invalidated, completed, level_cross)
 ```
 
 **Design notes:**
@@ -162,6 +218,37 @@ class ReferenceState:
 - `location` capped at 2.0 (suffices for 99.999% of swings)
 - `depth` included for A/B testing scale vs hierarchy
 - `direction_imbalance` highlights when one direction dominates
+- `leg_id` is the only identifier. There is no `swing_id` anywhere in the system.
+
+---
+
+## Events Emitted
+
+Reference Layer emits trading-relevant events. DAG emits only structural events.
+
+### Reference Layer Events
+
+| Event | Trigger | Fields |
+|-------|---------|--------|
+| `ReferenceFormedEvent` | Leg first reaches formation threshold | `leg_id`, `bar_index`, `scale`, `direction` |
+| `ReferenceInvalidatedEvent` | Reference fatally breached | `leg_id`, `bar_index`, `reason`, `breach_amount` |
+| `ReferenceCompletedEvent` | Reference reaches 2.0 target | `leg_id`, `bar_index`, `completion_price` |
+| `LevelCrossEvent` | Tracked leg crosses fib level | `leg_id`, `bar_index`, `level`, `price` |
+
+### DAG Events (Structural Only)
+
+| Event | Description |
+|-------|-------------|
+| `LegCreatedEvent` | New leg detected |
+| `LegPrunedEvent` | Leg removed (staleness, proximity, engulfed, etc.) |
+| `LegInvalidatedEvent` | Leg origin breached beyond -38.2% |
+| `OriginBreachedEvent` | Leg origin first breached |
+| `PivotBreachedEvent` | Leg pivot first breached |
+
+**Removed from DAG:**
+- `SwingFormedEvent` → replaced by `ReferenceFormedEvent`
+- `SwingInvalidatedEvent` → replaced by `ReferenceInvalidatedEvent`
+- `SwingCompletedEvent` → replaced by `ReferenceCompletedEvent`
 
 ---
 
@@ -315,6 +402,14 @@ Until 50+ swings have accumulated, scale classification is unreliable. During co
 - **Exclude all references** from output (no scale classification possible)
 - UI can show "Warming up: N/50 swings collected"
 
+### Impulse Distribution
+
+DAG tracks `leg_impulses` (all legs, not just formed). Reference Layer uses this for impulsiveness percentile calculation.
+
+During cold start:
+- Scale classification unavailable (need 50+ legs for percentile)
+- Impulsiveness available immediately (DAG provides)
+
 ### What Scale Classification Provides
 
 Scale is used for:
@@ -451,7 +546,9 @@ class ReferenceLayer:
     def __init__(self, config: ReferenceConfig = None):
         self.config = config or ReferenceConfig.default()
         self._range_distribution = []  # All-time, updated incrementally
+        self._formed_refs: Dict[str, FormationRecord] = {}  # leg_id -> record
         self._tracked_for_crossing: Set[str] = set()  # Leg IDs being monitored
+        self._last_level: Dict[str, float] = {}  # leg_id -> last fib level (for cross detection)
 
     def update(self, legs: List[Leg], bar: Bar) -> ReferenceState:
         """
@@ -695,11 +792,16 @@ Three sections:
 
 ### Telemetry Panel
 
-Like DAG's market structure panel. Shows:
-- Reference counts by scale: "XL: 2, L: 5, M: 12, S: 23"
-- Direction imbalance: "Bull-heavy (3:1)"
-- Formation/invalidation events: "Ref #123 formed", "Ref #456 invalidated"
-- Biggest and most impulsive active references
+Shows real-time reference state (like DAG's market structure panel):
+- **Reference counts by scale:** "XL: 2, L: 5, M: 12, S: 23"
+- **Direction imbalance:** "Bull-heavy (3:1)"
+- **Recent events:**
+  - "Ref leg_bear_4500.25_1234 formed at bar 5678"
+  - "Ref leg_bull_4425.50_1000 invalidated (origin breach)"
+- **Biggest active:** Top reference by range
+- **Most impulsive:** Top reference by impulse
+
+Events use `leg_id` as identifier (no swing_id).
 
 ### Opt-in Level Crossing
 
@@ -708,6 +810,20 @@ Level crossing is expensive (N refs × M levels × bars). Use selective tracking
 2. Only tracked legs generate crossing events
 3. Events appear in structure panel
 4. State lives in Reference Layer (`_tracked_for_crossing`)
+
+**Level Cross State:**
+
+Reference Layer owns level crossing entirely:
+
+```python
+# Which legs are being monitored for level crosses
+_tracked_for_crossing: Set[str] = set()  # leg_ids
+
+# Last known level for each tracked leg (to detect crosses)
+_last_level: Dict[str, float] = {}  # leg_id -> last fib level
+```
+
+DAG does not track fib levels. The `fib_levels_crossed` dict has been removed from DAG.
 
 ### Implementation Path
 
@@ -872,8 +988,8 @@ Reference Layer is working when:
 1. ~~Address initial feedback~~ ✅ Done in Rev 1-2
 2. ~~Add UI visualization~~ ✅ Done in Rev 3
 3. ~~In-depth interview corrections~~ ✅ Done in Rev 4
-4. **Get user sign-off on Rev 4**
-5. **Implementation Phase 1:** Levels at Play route + filtered legs + labels + telemetry
+4. ~~Get user sign-off on Rev 4~~ ✅ Approved
+5. ~~Implementation Phase 1~~ ✅ Complete (#360, #361-#387)
 6. **Implementation Phase 2:** Fib level hover/click-to-stick
 7. **Implementation Phase 3:** Structure panel + confluence zones
 8. **Implementation Phase 4:** Opt-in level crossing

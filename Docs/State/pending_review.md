@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2025-12-31
 
@@ -8,10 +8,7 @@
 
 ## Pending Changes
 
-- **#387** — Fix ReferenceLegOverlay not rendering in Levels at Play view (SVG positioning fix, overlay injection via ChartArea props)
-- **#386** — Fix view switching reset and reference-state endpoint error (AttributeError fix, current_bar_index added to session API, preserve state on view switch)
-- **#374-#382** — P1-UI Epic: Levels at Play View frontend implementation (9 issues: route/navigation, reference API endpoint, reference filtering, scale labels, direction colors, location indicator, hidden detection config, fade-out transitions, telemetry panel)
-- **#371, #372, #373** — Reference Layer P1.11-P1.13: Cold start handling, range distribution tracking (formed legs only), comprehensive test suite (34 tests)
+(None — all reviewed)
 
 ---
 
@@ -19,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 31 | #371-#387 — Reference Layer Phase 1 UI + bugfixes (17 issues) | All Accepted; Phase 1 complete; spec updated to Rev 6 |
 | Dec 31 | #355-#358, #361-#370, #383, #384 — Turn ratio modes, Reference Layer Phase 1 backend, config defaults (11 changes) | All Accepted; Ref Layer P1 backend complete; doc update needed for developer_guide.md |
 | Dec 25 | #347-#349 — Turn ratio UX, inner structure removal, frontend cleanup (3 changes) | All Accepted; dead feature deleted, docs current |
 | Dec 25 | #333-#346 — Frontend refactor, branch ratio, turn ratio, origin breach simplification (10 changes) | All Accepted; docs current |

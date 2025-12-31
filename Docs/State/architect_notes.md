@@ -38,11 +38,11 @@ Read in order:
 
 ## Current Phase: Reference Layer Implementation
 
-### Phase 1 Backend: COMPLETE — Dec 31, 2025
+### Phase 1: COMPLETE — Dec 31, 2025
 
-**Spec:** `Docs/Working/reference_layer_spec.md` (Revision 5)
+**Spec:** `Docs/Working/reference_layer_spec.md` (Revision 6 — Approved)
 
-All Phase 1 backend issues (#361-#370, #383) are implemented and tested:
+Phase 1 is fully complete (backend + frontend, 27 issues #361-#387):
 
 | Component | Status | Issue |
 |-----------|--------|-------|
@@ -92,21 +92,21 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 | P1.13 | (in issues) Test suite | Comprehensive coverage | ✅ |
 | — | #383 Fix ReferenceConfig tolerances | North star alignment | ✅ |
 
-**Epic #P1-UI: Levels at Play View** — Frontend implementation
+**Epic #P1-UI: Levels at Play View** — ✅ COMPLETE
 
-| # | Issue | Description | Depends On |
-|---|-------|-------------|------------|
-| P1-UI.1 | Add "Levels at Play" route | Hamburger menu entry, separate from DAG View | — |
-| P1-UI.2 | Create Reference API endpoint | `/api/reference-state` returning ReferenceState JSON | P1.10 |
-| P1-UI.3 | Filter display to valid references | Only show legs with location 0-2 and formed=true | P1-UI.2 |
-| P1-UI.4 | Add scale labels | S/M/L/XL badge on each leg | P1-UI.3 |
-| P1-UI.5 | Add direction colors | Bull (green) vs Bear (red) styling | P1-UI.3 |
-| P1-UI.6 | Add location indicator | Show 0-2 position per reference | P1-UI.3 |
-| P1-UI.7 | Hide detection config | Remove DAG detection panel from this view | P1-UI.1 |
-| P1-UI.8 | Implement fade-out transition | Animate removal when reference becomes invalid | P1-UI.3 |
-| P1-UI.9 | Add telemetry panel | Reference counts by scale, direction imbalance, biggest/most impulsive | P1-UI.2 |
-
-**Parallelism:** P1 (backend) and P1-UI (frontend) can run in parallel after P1.10 is complete.
+| # | Issue | Description | Status |
+|---|-------|-------------|--------|
+| P1-UI.1 | #374 Add "Levels at Play" route | Hamburger menu entry | ✅ |
+| P1-UI.2 | #375 Create Reference API endpoint | `/api/reference-state` | ✅ |
+| P1-UI.3 | #376 Filter display to valid references | Location 0-2 + formed | ✅ |
+| P1-UI.4 | #377 Add scale labels | S/M/L/XL badge | ✅ |
+| P1-UI.5 | #378 Add direction colors | Bull (green) / Bear (red) | ✅ |
+| P1-UI.6 | #379 Add location indicator | 0-2 position | ✅ |
+| P1-UI.7 | #380 Hide detection config | DAG panel hidden | ✅ |
+| P1-UI.8 | #381 Implement fade-out transition | Opacity animation | ✅ |
+| P1-UI.9 | #382 Add telemetry panel | Reference counts, imbalance | ✅ |
+| — | #386 Fix view switching | State preservation | ✅ |
+| — | #387 Fix overlay rendering | SVG positioning | ✅ |
 
 ### Phase 2: Fib Level Interaction
 
@@ -157,13 +157,13 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 
 **Status:**
 - ✅ P1 (Core Backend) — COMPLETE (13 issues)
-- ⏳ P1-UI (Levels at Play UI) — NEXT (9 issues)
-- P2 (Fib Levels) — 5 issues
+- ✅ P1-UI (Levels at Play UI) — COMPLETE (11 issues including bugfixes)
+- ⏳ P2 (Fib Levels) — NEXT (5 issues)
 - P3 + P4 (Structure Panel + Crossing) — 11 issues
 
-**Next step:** P1-UI (Levels at Play View) — Frontend to display Reference Layer output
+**Next step:** P2 (Fib Level Display) — Hover preview and click-to-stick for fib levels
 
-**Remaining: 25 issues across 3 phases**
+**Remaining: 16 issues across 3 phases**
 
 ---
 
@@ -222,7 +222,7 @@ All 3 pending changes accepted. Summary:
 | SwingConfig | Complete | Centralizes all parameters including pruning toggles (#288) |
 | SwingNode | Complete | DAG hierarchy model |
 | ReferenceFrame | Complete | Central coordinate abstraction |
-| ReferenceLayer | **Phase 1 Complete** | update(), ReferenceSwing, ReferenceState, scale/salience (#361-#370) |
+| ReferenceLayer | **Phase 1 Complete** | Core + Levels at Play UI (#361-#387) |
 | Pivot Breach Pruning | Complete | 10% threshold with replacement leg (#208) |
 | Engulfed Detection | Complete | Strict (0.0 threshold) deletes leg (#208, #236) |
 | Inner Structure Pruning | **Removed** | Deleted in #348 — disabled by default, worst-performing method |
@@ -322,6 +322,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 31 | #371-#387 — Reference Layer Phase 1 UI + bugfixes (17 issues) | All Accepted; Phase 1 complete; spec updated to Rev 6 |
 | Dec 31 | #355-#358, #361-#370, #383, #384 — Turn ratio modes, Reference Layer Phase 1 backend (11 changes) | All Accepted; Ref Layer P1 backend complete; developer_guide.md update needed |
 | Dec 25 | #347-#349 — Turn ratio UX, inner structure removal, frontend cleanup (3 changes) | All Accepted; dead feature deleted, docs current |
 | Dec 25 | #333-#346 — Frontend refactor, branch ratio, turn ratio, origin breach simplification (10 changes) | All Accepted; docs current |
