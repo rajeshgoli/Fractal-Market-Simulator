@@ -21,6 +21,7 @@ Design: Option A (post-filter DAG output) per DAG spec.
 See Docs/Reference/valid_swings.md for the canonical rules.
 """
 
+import bisect
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import List, Optional, Dict, Tuple
@@ -28,7 +29,64 @@ from typing import List, Optional, Dict, Tuple
 from .swing_config import SwingConfig
 from .swing_node import SwingNode
 from .reference_frame import ReferenceFrame
+from .reference_config import ReferenceConfig
 from .types import Bar
+from .dag.leg import Leg
+
+
+@dataclass
+class ReferenceSwing:
+    """
+    A DAG leg that qualifies as a valid trading reference.
+
+    This is the primary output of the Reference Layer. Each ReferenceSwing
+    wraps a Leg from the DAG with reference-layer specific annotations.
+
+    The Reference Layer filters DAG legs through formation, location, and
+    breach checks, then annotates qualifying legs with scale and salience.
+
+    Attributes:
+        leg: The underlying DAG leg (not a copy).
+        scale: Size classification ('S', 'M', 'L', or 'XL') based on
+            range percentile within historical population.
+        depth: Hierarchy depth from DAG (0 = root, 1+ = nested).
+            Used for A/B testing scale vs hierarchy classification.
+        location: Current price position in reference frame (0-2 range).
+            0 = at defended pivot, 1 = at origin, 2 = at completion target.
+            Capped at 2.0 in output per spec.
+        salience_score: Relevance ranking (higher = more relevant).
+            Computed from range, impulse, and recency with scale-dependent
+            weights.
+
+    Example:
+        >>> from swing_analysis.reference_layer import ReferenceSwing
+        >>> from swing_analysis.dag.leg import Leg
+        >>> from decimal import Decimal
+        >>>
+        >>> leg = Leg(
+        ...     direction='bear',
+        ...     origin_price=Decimal("110"),
+        ...     origin_index=100,
+        ...     pivot_price=Decimal("100"),
+        ...     pivot_index=105,
+        ... )
+        >>> ref = ReferenceSwing(
+        ...     leg=leg,
+        ...     scale='L',
+        ...     depth=0,
+        ...     location=0.382,
+        ...     salience_score=0.75,
+        ... )
+        >>> ref.scale
+        'L'
+        >>> ref.location
+        0.382
+    """
+    leg: Leg                      # The underlying DAG leg
+    scale: str                    # 'S' | 'M' | 'L' | 'XL' (percentile-based)
+    depth: int                    # Hierarchy depth from DAG (for A/B testing)
+    location: float               # Current price in reference frame (0-2 range, capped)
+    salience_score: float         # Higher = more relevant reference
 
 
 @dataclass
@@ -156,16 +214,26 @@ class ReferenceLayer:
     # Big swing threshold (top X% by range)
     BIG_SWING_PERCENTILE = 0.10  # Top 10%
 
-    def __init__(self, config: SwingConfig = None):
+    def __init__(
+        self,
+        config: SwingConfig = None,
+        reference_config: ReferenceConfig = None,
+    ):
         """
         Initialize the Reference layer.
 
         Args:
             config: SwingConfig with thresholds. If None, uses defaults.
+            reference_config: ReferenceConfig for scale classification and
+                salience computation. If None, uses defaults.
         """
         self.config = config or SwingConfig.default()
+        self.reference_config = reference_config or ReferenceConfig.default()
         self._swing_info: Dict[str, ReferenceSwingInfo] = {}
         self._big_swing_threshold: Optional[Decimal] = None
+        # Range distribution for scale classification (sorted for O(log n) percentile)
+        # All-time distribution; DAG pruning handles recency per spec
+        self._range_distribution: List[Decimal] = []
 
     def _compute_big_swing_threshold(self, swings: List[SwingNode]) -> Decimal:
         """
@@ -226,6 +294,84 @@ class ReferenceLayer:
             return self.BIG_SWING_TOUCH_TOLERANCE, self.BIG_SWING_CLOSE_TOLERANCE
         else:
             return 0.0, 0.0
+
+    def _compute_percentile(self, leg_range: Decimal) -> float:
+        """
+        Compute percentile rank of leg_range in the range distribution.
+
+        Uses bisect for O(log n) lookup in the sorted distribution.
+        The percentile indicates what fraction of historical ranges are
+        smaller than the given range.
+
+        Args:
+            leg_range: Absolute range of the leg to classify.
+
+        Returns:
+            Percentile value from 0 to 100. Returns 50.0 if distribution
+            is empty (default to middle).
+
+        Example:
+            >>> ref_layer._range_distribution = [Decimal("5"), Decimal("10"), Decimal("15"), Decimal("20")]
+            >>> ref_layer._compute_percentile(Decimal("12"))  # 2 of 4 are below
+            50.0
+        """
+        if not self._range_distribution:
+            return 50.0  # Default to middle
+
+        # Use bisect_left for count of values strictly less than leg_range
+        count_below = bisect.bisect_left(self._range_distribution, leg_range)
+        return (count_below / len(self._range_distribution)) * 100
+
+    def _classify_scale(self, leg_range: Decimal) -> str:
+        """
+        Classify leg into S/M/L/XL based on range percentile.
+
+        Scale thresholds from ReferenceConfig:
+        - XL: Top 10% (percentile >= 90)
+        - L:  60-90% (percentile >= 60)
+        - M:  30-60% (percentile >= 30)
+        - S:  Bottom 30% (percentile < 30)
+
+        Args:
+            leg_range: Absolute range of the leg to classify.
+
+        Returns:
+            Scale string: 'S', 'M', 'L', or 'XL'.
+
+        Example:
+            >>> config = ReferenceConfig.default()
+            >>> ref_layer = ReferenceLayer(reference_config=config)
+            >>> # After populating _range_distribution with 100 values...
+            >>> ref_layer._classify_scale(Decimal("95"))  # Top 10%
+            'XL'
+        """
+        percentile = self._compute_percentile(leg_range)
+
+        # Convert threshold ratios to percentiles (e.g., 0.90 -> 90.0)
+        xl_pct = self.reference_config.xl_threshold * 100
+        l_pct = self.reference_config.l_threshold * 100
+        m_pct = self.reference_config.m_threshold * 100
+
+        if percentile >= xl_pct:
+            return 'XL'
+        elif percentile >= l_pct:
+            return 'L'
+        elif percentile >= m_pct:
+            return 'M'
+        else:
+            return 'S'
+
+    def _add_to_range_distribution(self, leg_range: Decimal) -> None:
+        """
+        Add a leg range to the sorted distribution.
+
+        Uses bisect.insort for O(log n) insertion while maintaining sorted order.
+        The distribution is all-time; DAG pruning handles recency per spec.
+
+        Args:
+            leg_range: Absolute range of the leg to add.
+        """
+        bisect.insort(self._range_distribution, leg_range)
 
     def get_reference_swings(
         self,

@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 8
 
 **Last Review:** 2025-12-25
 
@@ -14,6 +14,8 @@
 - #358: Fix detection config settings resetting on page refresh
 - #361: Add depth field to Leg for O(1) hierarchy depth lookup
 - #362: Create ReferenceConfig dataclass for Reference Layer
+- #363: Create ReferenceSwing dataclass wrapping Leg with scale/depth/location/salience
+- #365: Implement scale classification using percentile-based buckets (S/M/L/XL)
 
 ---
 
