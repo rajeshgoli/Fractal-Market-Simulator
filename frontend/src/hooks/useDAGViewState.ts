@@ -138,6 +138,7 @@ interface UseDAGViewStateReturn {
   // Detection config
   detectionConfig: DetectionConfig;
   setDetectionConfig: (value: DetectionConfig) => void;
+  setDetectionConfigFromServer: (value: DetectionConfig) => void;
 
   // Chart refs
   chart1Ref: React.MutableRefObject<IChartApi | null>;
@@ -289,6 +290,12 @@ export function useDAGViewState({
     saveDetectionConfig(value);
   }, [saveDetectionConfig]);
 
+  // Server initialization path - updates state without saving to localStorage
+  // Used when fetching config from server on page load (#358)
+  const setDetectionConfigFromServer = useCallback((value: DetectionConfig) => {
+    setDetectionConfigState(value);
+  }, []);
+
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
   const chart2Ref = useRef<IChartApi | null>(null);
@@ -414,6 +421,7 @@ export function useDAGViewState({
     // Detection config
     detectionConfig,
     setDetectionConfig,
+    setDetectionConfigFromServer,
 
     // Chart refs
     chart1Ref,

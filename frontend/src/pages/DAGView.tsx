@@ -702,7 +702,8 @@ export const DAGView: React.FC = () => {
 
         try {
           const config = await fetchDetectionConfig();
-          state.setDetectionConfig(config);
+          // Use server-only setter to avoid overwriting saved localStorage preferences (#358)
+          state.setDetectionConfigFromServer(config);
         } catch (err) {
           console.warn('Failed to fetch detection config, using defaults:', err);
         }
