@@ -30,7 +30,7 @@ import {
   clampAggregationToSource,
 } from '../types';
 import type { ViewMode } from '../App';
-import type { IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 
 interface LevelsAtPlayViewProps {
   onNavigate: (view: ViewMode) => void;
@@ -64,8 +64,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
   const chart2Ref = useRef<IChartApi | null>(null);
-  const series1Ref = useRef<ISeriesApi<'Candlestick', Time, CandlestickData<Time>> | null>(null);
-  const series2Ref = useRef<ISeriesApi<'Candlestick', Time, CandlestickData<Time>> | null>(null);
+  const series1Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const series2Ref = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const syncChartsToPositionRef = useRef<(index: number) => void>(() => {});
 
   // Compute available speed aggregation options
@@ -208,12 +208,12 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   }, [chart2Bars, currentPlaybackPosition, calibrationPhase, computeLiveBar]);
 
   // Chart ready handlers
-  const handleChart1Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick', Time, CandlestickData<Time>>) => {
+  const handleChart1Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
     chart1Ref.current = chart;
     series1Ref.current = series;
   }, []);
 
-  const handleChart2Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick', Time, CandlestickData<Time>>) => {
+  const handleChart2Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
     chart2Ref.current = chart;
     series2Ref.current = series;
   }, []);
@@ -616,7 +616,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             references={referenceState?.references ?? []}
             fadingRefs={fadingRefs}
             bars={visibleChart1Bars}
-            currentPosition={currentPlaybackPosition}
           />
           <ReferenceLegOverlay
             chart={chart2Ref.current}
@@ -624,7 +623,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             references={referenceState?.references ?? []}
             fadingRefs={fadingRefs}
             bars={visibleChart2Bars}
-            currentPosition={currentPlaybackPosition}
           />
 
           <div className="shrink-0 z-10">

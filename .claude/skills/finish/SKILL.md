@@ -37,7 +37,18 @@ Only skip for truly trivial changes (typo fixes, comment edits). When in doubt, 
 
 ---
 
-## Step 3: Push Changes
+## Step 3: Build Verification
+
+**Check**: Were frontend files modified?
+
+- Run `git diff --name-only HEAD | grep -q "^frontend/"` to detect FE changes
+- **If FE changed**: Run `cd frontend && npm run build`
+  - If build fails: STOP. Fix TypeScript errors before proceeding.
+- **If no FE changes**: Report "Build: Not needed (no frontend changes)"
+
+---
+
+## Step 4: Push Changes
 
 **Check**: Run `git status`
 
@@ -55,7 +66,7 @@ Brief summary in imperative mood (fixes #NNN)
 
 ---
 
-## Step 4: Handoff
+## Step 5: Handoff
 
 **Check**: Is there a next step requiring another persona?
 
@@ -73,6 +84,7 @@ After completing, summarize:
 
 - Doc update: [Done / Not needed (reason)]
 - File issue: [Done #NNN / Not needed (reason)]
+- Build: [Done / Not needed (reason)]
 - Push changes: [Done (commit hash) / Not needed (reason)]
 - Handoff: [Done / Not needed (reason)]
 ```

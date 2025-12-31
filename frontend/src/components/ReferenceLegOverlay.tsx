@@ -1,15 +1,14 @@
-import React, { useMemo, useLayoutEffect, useState } from 'react';
-import type { IChartApi, ISeriesApi, CandlestickData, Time } from 'lightweight-charts';
+import React, { useLayoutEffect, useState } from 'react';
+import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts';
 import { ReferenceSwing } from '../lib/api';
 import { BarData } from '../types';
 
 interface ReferenceLegOverlayProps {
   chart: IChartApi | null;
-  series: ISeriesApi<'Candlestick', Time, CandlestickData<Time>> | null;
+  series: ISeriesApi<'Candlestick'> | null;
   references: ReferenceSwing[];
   fadingRefs: Set<string>;
   bars: BarData[];
-  currentPosition: number;
 }
 
 interface LegPosition {
@@ -27,7 +26,6 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   references,
   fadingRefs,
   bars,
-  currentPosition,
 }) => {
   const [legPositions, setLegPositions] = useState<LegPosition[]>([]);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });

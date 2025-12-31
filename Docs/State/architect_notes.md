@@ -38,36 +38,32 @@ Read in order:
 
 ## Current Phase: Reference Layer Implementation
 
-### Spec Review Complete — Dec 31, 2025
+### Phase 1 Backend: COMPLETE — Dec 31, 2025
 
-**Spec:** `Docs/Working/reference_layer_spec.md` (Revision 4)
+**Spec:** `Docs/Working/reference_layer_spec.md` (Revision 5)
 
-### Compatibility Analysis
+All Phase 1 backend issues (#361-#370, #383) are implemented and tested:
 
-| Component | Status | Notes |
+| Component | Status | Issue |
 |-----------|--------|-------|
-| **ReferenceFrame** | ✅ Compatible | Uses `ratio()`/`price()` vs spec's `to_ratio()`/`to_price()` — same semantics |
-| **Leg dataclass** | ⚠️ Needs depth | Has `parent_leg_id` but no `depth` field; must compute or add |
-| **Leg.impulsiveness** | ✅ Available | Percentile 0-100, exactly what spec needs |
-| **Existing ReferenceLayer** | ⚠️ Minimal | Only has big/small tolerance; needs major extension |
-| **SwingConfig** | ⚠️ Needs extension | No Reference Layer params (formation threshold, salience weights) |
-| **DAG active_legs** | ✅ Compatible | Provides all required fields except depth |
+| **Leg.depth** | ✅ Complete | #361 — O(1) lookup at creation |
+| **ReferenceConfig** | ✅ Complete | #362, #383 — North star tolerances correct |
+| **ReferenceSwing** | ✅ Complete | #363 — Wraps Leg with scale/depth/location/salience |
+| **ReferenceState** | ✅ Complete | #364 — Grouped output with direction imbalance |
+| **Scale classification** | ✅ Complete | #365 — Percentile-based S/M/L/XL |
+| **Location computation** | ✅ Complete | #366 — ReferenceFrame.ratio() |
+| **Formation** | ✅ Complete | #367 — Price-based, once formed stays formed |
+| **Fatal breach** | ✅ Complete | #368 — Scale-dependent tolerances |
+| **Salience** | ✅ Complete | #369 — Scale-dependent weights |
+| **update() entry point** | ✅ Complete | #370 — Main API for processing legs |
 
-**Required Additions:**
+### Design Decisions (Implemented)
 
-1. **Leg.depth** — Compute from `parent_leg_id` chain or add field
-2. **ReferenceConfig** — New dataclass for Reference Layer parameters
-3. **ReferenceSwing** — New dataclass per spec (wraps Leg with scale/location/salience)
-4. **ReferenceState** — New dataclass for grouped output
-5. **Extend ReferenceLayer** — Formation, location, salience, grouping methods
-
-### Design Decisions
-
-1. **Leg.depth** — Compute at leg creation, store as field (O(1) lookup vs O(depth) traversal)
-2. **ReferenceConfig** — Separate from SwingConfig; Reference Layer is an independent consumer
-3. **API naming** — Use existing `ratio()`/`price()` methods; no rename needed
-4. **Cold start** — Exclude refs until 50+ formed legs (use `state.formed_leg_impulses` length)
-5. **Formation tracking** — Reference Layer maintains its own `_formed_refs: Set[str]` (once formed, stays formed until fatally breached)
+1. **Leg.depth** — Computed at leg creation, stored as field (O(1) lookup)
+2. **ReferenceConfig** — Separate from SwingConfig; different lifecycle
+3. **Formation tracking** — Reference Layer maintains `_formed_refs: Set[str]` (once formed, stays formed until fatally breached)
+4. **Cold start** — Exclude refs until 50+ formed legs
+5. **Range distribution** — All-time; DAG pruning handles recency
 
 ---
 
@@ -77,23 +73,24 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 
 ### Phase 1: Core Backend + Levels at Play UI (Foundation)
 
-**Epic #P1: Reference Layer Core** — Backend implementation
+**Epic #P1: Reference Layer Core** — Backend implementation — ✅ COMPLETE
 
-| # | Issue | Description | Depends On |
-|---|-------|-------------|------------|
-| P1.1 | Add depth field to Leg | Compute `depth` from parent chain at creation; store as field | — |
-| P1.2 | Create ReferenceConfig | New dataclass with all Reference Layer params (formation, tolerance, salience weights) | — |
-| P1.3 | Create ReferenceSwing dataclass | Wraps Leg with scale, depth, location, salience_score | P1.2 |
-| P1.4 | Create ReferenceState dataclass | Groups references by_scale, by_depth, by_direction; direction_imbalance | P1.3 |
-| P1.5 | Implement scale classification | `_classify_scale()` using percentile buckets (S/M/L/XL) | P1.2 |
-| P1.6 | Implement location computation | `_compute_location()` using ReferenceFrame.ratio() | — |
-| P1.7 | Implement price-based formation | `_is_formed_for_reference()` — 38.2% threshold, once formed stays formed | P1.6 |
-| P1.8 | Implement fatal breach detection | `_is_fatally_breached()` with scale-dependent tolerance | P1.5, P1.6 |
-| P1.9 | Implement salience computation | `_compute_salience()` with scale-dependent weights | P1.5 |
-| P1.10 | Implement ReferenceLayer.update() | Main entry point processing legs per bar | P1.3-P1.9 |
-| P1.11 | Add cold start handling | Return empty state until 50+ formed legs | P1.10 |
-| P1.12 | Implement range distribution tracking | `_update_range_distribution()` for percentile computation | P1.10 |
-| P1.13 | Write comprehensive test suite | Unit tests for all core methods | P1.1-P1.12 |
+| # | Issue | Description | Status |
+|---|-------|-------------|--------|
+| P1.1 | #361 Add depth field to Leg | O(1) lookup at creation | ✅ |
+| P1.2 | #362 Create ReferenceConfig | All Reference Layer params | ✅ |
+| P1.3 | #363 Create ReferenceSwing dataclass | Wraps Leg with scale/depth/location/salience | ✅ |
+| P1.4 | #364 Create ReferenceState dataclass | Grouped output with direction_imbalance | ✅ |
+| P1.5 | #365 Implement scale classification | Percentile-based S/M/L/XL | ✅ |
+| P1.6 | #366 Implement location computation | ReferenceFrame.ratio() | ✅ |
+| P1.7 | #367 Implement price-based formation | 38.2% threshold, once formed stays formed | ✅ |
+| P1.8 | #368 Implement fatal breach detection | Scale-dependent tolerance per north star | ✅ |
+| P1.9 | #369 Implement salience computation | Scale-dependent weights | ✅ |
+| P1.10 | #370 Implement ReferenceLayer.update() | Main entry point | ✅ |
+| P1.11 | (in #370) Cold start handling | Empty state until 50+ legs | ✅ |
+| P1.12 | (in #370) Range distribution tracking | Sorted list with bisect | ✅ |
+| P1.13 | (in issues) Test suite | Comprehensive coverage | ✅ |
+| — | #383 Fix ReferenceConfig tolerances | North star alignment | ✅ |
 
 **Epic #P1-UI: Levels at Play View** — Frontend implementation
 
@@ -158,19 +155,15 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 
 ## Implementation Order
 
-**Sequential dependencies:**
-1. P1.1-P1.12 (backend core) → P1.13 (tests) → P1-UI.1-P1-UI.9 (frontend)
-2. P2.1 → P2.2 → P2.3 → P2.4-P2.5
-3. P3.1 + P3.2 (parallel) → P3.3-P3.6
-4. P4.1-P4.2 → P4.3 → P4.4-P4.5
+**Status:**
+- ✅ P1 (Core Backend) — COMPLETE (13 issues)
+- ⏳ P1-UI (Levels at Play UI) — NEXT (9 issues)
+- P2 (Fib Levels) — 5 issues
+- P3 + P4 (Structure Panel + Crossing) — 11 issues
 
-**Suggested execution:**
-- Sprint 1: P1 (Core Backend) — 13 issues
-- Sprint 2: P1-UI (Levels at Play UI) — 9 issues + EXP.1 (parallel)
-- Sprint 3: P2 (Fib Levels) — 5 issues
-- Sprint 4: P3 + P4 (Structure Panel + Crossing) — 11 issues
+**Next step:** P1-UI (Levels at Play View) — Frontend to display Reference Layer output
 
-**Total: 38 issues across 4 phases**
+**Remaining: 25 issues across 3 phases**
 
 ---
 
@@ -229,7 +222,7 @@ All 3 pending changes accepted. Summary:
 | SwingConfig | Complete | Centralizes all parameters including pruning toggles (#288) |
 | SwingNode | Complete | DAG hierarchy model |
 | ReferenceFrame | Complete | Central coordinate abstraction |
-| ReferenceLayer | Complete | Tolerance/completion rules |
+| ReferenceLayer | **Phase 1 Complete** | update(), ReferenceSwing, ReferenceState, scale/salience (#361-#370) |
 | Pivot Breach Pruning | Complete | 10% threshold with replacement leg (#208) |
 | Engulfed Detection | Complete | Strict (0.0 threshold) deletes leg (#208, #236) |
 | Inner Structure Pruning | **Removed** | Deleted in #348 — disabled by default, worst-performing method |
@@ -249,8 +242,8 @@ All 3 pending changes accepted. Summary:
 | Swing Hierarchy | **Removed** | O(n²) dead code; leg hierarchy used instead (#301) |
 | Turn/Domination Pruning | **Removed** | Redundant; creation-time check handles all cases (#296) |
 | Legacy Code | **Deleted** | All pre-DAG modules removed (#210, #219, #228) |
-| Test Suite | Healthy | 502 tests passing |
-| Documentation | Current | All docs updated |
+| Test Suite | Healthy | 629 tests passing |
+| Documentation | Current | All docs updated (#385) |
 
 ---
 
@@ -258,7 +251,7 @@ All 3 pending changes accepted. Summary:
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| `developer_guide.md` | Current | Turn ratio, branch ratio, #345 documented |
+| `developer_guide.md` | Current | Reference Layer Phase 1 API documented (#385) |
 | `user_guide.md` | Current | O! marker, follow leg updated |
 | `DAG.md` | Current | Updated Dec 24 |
 | `CLAUDE.md` | Current | No changes needed |
@@ -329,6 +322,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 31 | #355-#358, #361-#370, #383, #384 — Turn ratio modes, Reference Layer Phase 1 backend (11 changes) | All Accepted; Ref Layer P1 backend complete; developer_guide.md update needed |
 | Dec 25 | #347-#349 — Turn ratio UX, inner structure removal, frontend cleanup (3 changes) | All Accepted; dead feature deleted, docs current |
 | Dec 25 | #333-#346 — Frontend refactor, branch ratio, turn ratio, origin breach simplification (10 changes) | All Accepted; docs current |
 | Dec 24 | #322-#335 — Min CTR filter, dead code cleanup, in-app settings, regression fixes (11 changes) | All Accepted; docs current |
