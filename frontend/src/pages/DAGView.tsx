@@ -23,6 +23,7 @@ import {
   fetchCalibration,
   fetchDagState,
   fetchDetectionConfig,
+  updateDetectionConfig,
   restartSession,
   advanceReplay,
 } from '../lib/api';
@@ -701,11 +702,35 @@ export const DAGView: React.FC = () => {
         state.setDagState(initialDagState);
 
         try {
-          const config = await fetchDetectionConfig();
-          // Use server-only setter to avoid overwriting saved localStorage preferences (#358)
-          state.setDetectionConfigFromServer(config);
+          // If we have saved preferences, push them to server to override defaults (#358)
+          if (chartPrefs.detectionConfig) {
+            const savedConfig = chartPrefs.detectionConfig;
+            const pushedConfig = await updateDetectionConfig({
+              bull: {
+                formation_fib: savedConfig.bull.formation_fib,
+                engulfed_breach_threshold: savedConfig.bull.engulfed_breach_threshold,
+              },
+              bear: {
+                formation_fib: savedConfig.bear.formation_fib,
+                engulfed_breach_threshold: savedConfig.bear.engulfed_breach_threshold,
+              },
+              stale_extension_threshold: savedConfig.stale_extension_threshold,
+              origin_range_threshold: savedConfig.origin_range_threshold,
+              origin_time_threshold: savedConfig.origin_time_threshold,
+              min_branch_ratio: savedConfig.min_branch_ratio,
+              min_turn_ratio: savedConfig.min_turn_ratio,
+              max_turns_per_pivot: savedConfig.max_turns_per_pivot,
+              max_turns_per_pivot_raw: savedConfig.max_turns_per_pivot_raw,
+              enable_engulfed_prune: savedConfig.enable_engulfed_prune,
+            });
+            state.setDetectionConfigFromServer(pushedConfig);
+          } else {
+            // No saved preferences, just fetch server defaults
+            const config = await fetchDetectionConfig();
+            state.setDetectionConfigFromServer(config);
+          }
         } catch (err) {
-          console.warn('Failed to fetch detection config, using defaults:', err);
+          console.warn('Failed to sync detection config:', err);
         }
 
         state.setCalibrationPhase(CalibrationPhase.CALIBRATED);
