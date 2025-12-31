@@ -64,7 +64,7 @@ Changes take effect immediately after restart. Session settings persist across b
 
 ### Detection Config Panel
 
-The Detection Config panel in the sidebar controls the leg detection algorithm parameters. All settings persist across browser sessions.
+The Detection Config panel in the sidebar controls the leg detection algorithm parameters. All settings persist across browser sessions and are automatically applied to the server on app startup—no need to click Apply after refresh.
 
 #### Turn Ratio Pruning (#347)
 

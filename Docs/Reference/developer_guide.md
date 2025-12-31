@@ -706,7 +706,7 @@ cd frontend && npm run build  # Output: frontend/dist/
   - `renderNextBar`: Buffer-based for smooth continuous playback
   - `advanceBar`: Direct API call for manual stepping (step forward, jump to event)
 
-**Settings Persistence (#347):**
+**Settings Persistence (#347, #358):**
 
 `useChartPreferences` persists user settings to localStorage, including:
 - Chart aggregation scales, zoom levels, maximized state
@@ -715,6 +715,17 @@ cd frontend && npm run build  # Output: frontend/dist/
 - Detection config (full `DetectionConfig` object)
 
 Schema evolution is handled via `mergeDetectionConfig()`, which deep-merges saved config with `DEFAULT_DETECTION_CONFIG` to ensure new fields (like `min_turn_ratio`, `max_turns_per_pivot`) have defaults when loading older saved configs.
+
+**Server sync on startup (#358):**
+
+When the app loads with saved detection config in localStorage, it's automatically pushed to the server via `updateDetectionConfig()`. This ensures:
+- User preferences override server defaults from the first bar
+- No manual "Apply" needed after page refresh
+- Server and client state stay synchronized
+
+Implementation in `DAGView.tsx`:
+- `setDetectionConfig()` — Updates state AND saves to localStorage (used after Apply)
+- `setDetectionConfigFromServer()` — Updates state only (used during server fetch to avoid overwriting saved preferences)
 
 **Backward Navigation:**
 
