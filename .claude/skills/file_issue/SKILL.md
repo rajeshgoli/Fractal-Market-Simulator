@@ -50,38 +50,35 @@ description: Create a GitHub issue with proper structure. Use when discovering
 
 ## Feature Template
 
+Focus on WHAT (behavior/capability), not HOW (implementation).
+
 ```markdown
 ## Summary
 
-[One paragraph: what capability to add and why]
+[One paragraph: what capability and why it matters]
 
-## Design
+## Behavior
 
-[Technical approach, tradeoffs considered]
+[Describe what the user sees/experiences]
 
-| Option | Pros | Cons |
-|--------|------|------|
-| A | ... | ... |
-| B | ... | ... |
+### Flow
+1. User does X
+2. System responds with Y
+3. Result is Z
 
-**Chosen:** [which and why]
-
-## Implementation
-
-### Backend
-- [ ] `file.py` — [change description]
-
-### Frontend
-- [ ] `Component.tsx` — [change description]
-
-### Config
-- Add `field_name: type = default` to `SwingConfig`
+### UI (if applicable)
+- Where it appears
+- What controls exist
+- What feedback user gets
 
 ## Acceptance Criteria
 
-- [ ] [Testable condition]
-- [ ] [Testable condition]
+- [ ] [Observable behavior]
+- [ ] [Observable behavior]
+- [ ] [Edge case handled]
 ```
+
+**Note:** Implementation details (files, code) belong in sub-issues or are left to Engineer discretion. The feature issue defines the WHAT; Engineer determines HOW.
 
 ---
 
