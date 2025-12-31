@@ -270,3 +270,15 @@ Docs/
 - If uncertain which role fits, ask before proceeding
 
 See `.claude/CLAUDE_ADDENDUM.md` for full protocol.
+
+## Available Skills
+
+Skills in `.claude/skills/` are invoked with "Use the X skill" or `/skill_name`:
+
+| Skill | When to Use |
+|-------|-------------|
+| handoff | After completing any task, to transfer to next persona |
+| doc_update | After code changes, to update reference docs |
+| push_changes | After implementation complete, to commit and push |
+| file_issue | When discovering bugs or proposing features |
+| diagnose_feedback | When user says "look at my feedback" or similar |

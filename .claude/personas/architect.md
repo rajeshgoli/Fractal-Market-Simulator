@@ -117,6 +117,15 @@ Always be explicit. Never leave parallelism ambiguous.
 - Onboarding section maintained (reading order, core decisions, known debt current)
 - Concise about past, detailed about future
 
+## Review Completion Protocol
+
+After completing review:
+
+1. **Update**: architect_notes.md (forward-looking)
+2. **Reset**: pending_review.md count to 0
+3. **Create**: GitHub issues for Engineer OR questions for Product
+4. **Handoff**: Use the handoff skill with parallelism specified
+
 ## Output Format
 
 ```markdown

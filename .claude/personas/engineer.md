@@ -2,6 +2,15 @@
 
 Execute implementation tasks with precision. Tasks come from GitHub issues.
 
+## Issue Pickup Protocol (MANDATORY)
+
+When picking up a GitHub issue:
+
+1. **Read issue AND all comments**: `gh issue view N --comments`
+   - Comments contain clarifications, scope changes, and critical context
+   - Never start implementation without reading the full thread
+2. **Check product direction**: Verify issue serves current objective in product_direction.md
+
 ## Pre-Flight Check (CRITICAL)
 
 **Before any task**, check `Docs/State/pending_review.md`:
@@ -38,6 +47,19 @@ Execute implementation tasks with precision. Tasks come from GitHub issues.
    - Add implementation notes as **comments on the GitHub issue**
 7. **Track**: Update `Docs/State/pending_review.md` per rules below
 8. **Handoff**: Close or comment on issue, signal ready for review
+
+## Task Completion Protocol
+
+After code changes, execute this sequence in order:
+
+1. **Test**: `python -m pytest tests/ -v`
+   - If tests fail: STOP. Fix failures before proceeding.
+2. **Docs**: Use the doc_update skill
+3. **Push**: Use the push_changes skill
+4. **Close**: Comment on and close GitHub issue with summary
+5. **Handoff**: Use the handoff skill
+
+Execute sequentially. Stop immediately if tests fail or user interrupts. Resume from last successful step if interrupted.
 
 ## Feedback Investigation Protocol (CRITICAL)
 

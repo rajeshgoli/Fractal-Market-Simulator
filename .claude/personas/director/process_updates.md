@@ -4,6 +4,42 @@ Revision history for workflow system changes.
 
 ---
 
+## 2025-12-31: Migrated to Official Skills Format
+
+**Triggered by:** Analysis of 2,947 prompts revealed 80%+ of repeated user corrections could be eliminated by proper skill triggering.
+
+**Root Cause:** Skills existed (`.claude/commands/`) but agents didn't use them automatically. The problem was trigger enforcement, not skill definition.
+
+**Changes Made:**
+
+1. **Created `.claude/skills/` with 5 official-format skills:**
+   - `handoff/SKILL.md` — One-sentence role transfer
+   - `doc_update/SKILL.md` — Reference doc updates with routing rules
+   - `push_changes/SKILL.md` — Commit and push with scope rules
+   - `file_issue/SKILL.md` — GitHub issue creation with templates
+   - `diagnose_feedback/SKILL.md` — Investigation protocol with no-speculation rule
+
+2. **Updated persona files with mandatory skill invocation:**
+   - `engineer.md` — Added Issue Pickup Protocol and Task Completion Protocol (test → doc_update → push_changes → close → handoff)
+   - `architect.md` — Added Review Completion Protocol
+   - `product.md` — Added Cognitive Mode: Polymath and Spec Interview Protocol
+
+3. **Backed up old commands:** `.claude/commands` → `.claude/commands.bak`
+
+4. **Updated CLAUDE.md:** Added "Available Skills" section with trigger guidance
+
+5. **Archived proposal:** `Docs/Working/skill_workflow_proposal.md` → `Docs/Archive/workflow/`
+
+**Key Design Decisions:**
+- Skills are atomic — they never invoke other skills
+- Personas define WHEN, skills define HOW
+- pending_review updates: +1 per epic, not per subissue
+- Subissues commit independently (assume parallelism)
+
+**Expected Impact:** ~80% reduction in repeated user corrections for push/commit, doc updates, handoff format, and investigation speculation.
+
+---
+
 ## 2025-12-18: Reinforced pending_review.md Rule in Product Persona
 
 **Triggered by:** Product role again updated `pending_review.md` when filing GitHub issues #131 and #132 (no code changes).
