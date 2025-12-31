@@ -8,31 +8,60 @@ description: Complete current task by running doc_update, file_issue, push_chang
 
 End-of-task orchestrator. Runs completion steps in order, skipping those not needed.
 
-## Procedure
+---
 
-Execute each step, reporting status:
+## Step 1: Doc Update
 
-### 1. Doc Update
-- **Check**: Were code changes made that affect user_guide.md, developer_guide.md, or DAG.md?
-- **If yes**: Read `.claude/skills/doc_update/SKILL.md` and follow it
-- **If no**: Report "Doc update: Not needed (no code changes affecting docs)"
+**Check**: Were code changes made that affect docs?
 
-### 2. File Issue
-- **Check**: Is there already a GitHub issue for this work?
-- **If no issue exists AND work warrants tracking**: Read `.claude/skills/file_issue/SKILL.md` and follow it
+| Code Changed | Doc to Update |
+|--------------|---------------|
+| `src/swing_analysis/dag/*` | Docs/Reference/DAG.md |
+| API endpoints / architecture | Docs/Reference/developer_guide.md |
+| User-facing behavior / CLI | Docs/Reference/user_guide.md |
+
+**If needed**: Update the appropriate doc(s).
+**If not**: Report "Doc update: Not needed (no doc-affecting changes)"
+
+---
+
+## Step 2: File Issue
+
+**Check**: Is there already a GitHub issue for this work?
+
+- Run `gh issue list --search "<keywords>" --limit 5` if unsure
+- **If no issue AND work warrants tracking**: Create issue with `gh issue create`
 - **If issue exists**: Report "File issue: Not needed (working on #NNN)"
-- **If trivial work**: Report "File issue: Not needed (trivial change)"
+- **If trivial**: Report "File issue: Not needed (trivial change)"
 
-### 3. Push Changes
-- **Check**: `git status` — are there uncommitted or unpushed changes?
-- **If yes**: Read `.claude/skills/push_changes/SKILL.md` and follow it
-- **If no changes**: Report "Push changes: Not needed (nothing to push)"
-- **If already pushed**: Report "Push changes: Not needed (already pushed)"
+---
 
-### 4. Handoff
-- **Check**: Is there a next step requiring another persona?
-- **If yes**: Read `.claude/skills/handoff/SKILL.md` and follow it
-- **If no**: Report "Handoff: Not needed (task complete, no next step)"
+## Step 3: Push Changes
+
+**Check**: Run `git status`
+
+- **If uncommitted changes**: Stage relevant files (exclude `.DS_Store`, `cache/`, `__pycache__/`, `.claude/settings.local.json`), commit with descriptive message
+- **If unpushed commits**: Run `git push`
+- **If clean and pushed**: Report "Push changes: Not needed (already pushed)"
+
+Commit message format:
+```
+Brief summary in imperative mood (fixes #NNN)
+
+- What changed
+- Why it changed
+```
+
+---
+
+## Step 4: Handoff
+
+**Check**: Is there a next step requiring another persona?
+
+- **If yes**: Output ONE sentence: `As [role], read [artifact] and [action].`
+- **If no**: Report "Handoff: Not needed (task complete)"
+
+---
 
 ## Output Format
 
@@ -46,9 +75,3 @@ After completing, summarize:
 - Push changes: [Done (commit hash) / Not needed (reason)]
 - Handoff: [Done / Not needed (reason)]
 ```
-
-## Rules
-
-- Execute steps in order (doc_update → file_issue → push_changes → handoff)
-- Never skip a check — always evaluate need
-- Be honest about what wasn't needed and why
