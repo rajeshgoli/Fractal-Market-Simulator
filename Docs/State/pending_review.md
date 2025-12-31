@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 10
+**Unreviewed Change Count:** 11
 
 **Last Review:** 2025-12-25
 
@@ -18,6 +18,7 @@
 - #365: Implement scale classification using percentile-based buckets (S/M/L/XL)
 - #364, #366, #367, #368, #369, #383: Reference Layer Phase 1 — ReferenceState dataclass, location computation, price-based formation, fatal breach detection, salience computation, and ReferenceConfig north star tolerance fix
 - #384: Update DAG detection config defaults (origin prune 2%, max heft turns 10) + test resilience improvements
+- #370: Implement ReferenceLayer.update() — main entry point for Reference Layer Phase 1
 
 ---
 
