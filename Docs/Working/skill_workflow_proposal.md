@@ -3,7 +3,7 @@
 **Status:** Approved
 **Author:** Director
 **Date:** 2025-12-31
-**Updated:** 2025-12-31 (Director review: softened cognitive modes, documented quick invocations decision)
+**Updated:** 2025-12-31 (Director review: invocation, commit scope, pending_review rules, skill isolation)
 
 ## Overview
 
@@ -23,7 +23,7 @@ Analysis of 2,947 prompts from `~/.claude/history.jsonl` revealed:
 | Handoff format corrections | 15+ | Paragraphs instead of one sentence |
 | DAG.md update reminders | 10+ | No link between DAG code and DAG.md |
 | Investigation speculation | 10+ | Agents theorize instead of running code |
-| Subissue pending_review | 5+ | Agents increment count per subissue |
+| Subissue pending_review | 5+ | Engineers incrementing count per subissue |
 | Doc location corrections | 5+ | API docs in user_guide instead of dev_guide |
 
 **Key insight:** Skills exist (`.claude/commands/`) but agents don't use them automatically. The problem is **trigger enforcement**, not skill definition.
@@ -78,7 +78,7 @@ Questions should surface unarticulated needs, not confirm what's obvious.
 | Structure | Flat `.md` files | Folders with `SKILL.md` |
 | Frontmatter | None | Required YAML (`name`, `description`) |
 | Installation | None (just exists) | Plugin system or local |
-| Invocation | `/command` slash | "Use the X skill..." |
+| Invocation | `/command` slash only | Both `/skill` and "Use the X skill" |
 | Discovery | Manual | Description-based |
 
 ## Solution: Two-Part Fix
@@ -104,6 +104,17 @@ Migrate to proper skills structure:
 ### Part 2: Persona-Level Enforcement
 
 Add mandatory skill invocation to personas. Skills only work if agents know WHEN to use them.
+
+### Part 3: Skill Isolation Principle
+
+Skills are atomic units. They never invoke other skills.
+
+| Responsible For | Example |
+|-----------------|---------|
+| **Personas** | Sequencing: "run tests → doc_update → push_changes → handoff" |
+| **Skills** | Single concern: push_changes only commits/pushes, never updates docs |
+
+This keeps skills composable and prevents circular dependencies.
 
 ---
 
@@ -200,6 +211,17 @@ Only update docs you own:
 | Product | product_direction.md, interview_notes.md |
 | Director | .claude/personas/*, .claude/skills/* |
 
+## pending_review Update Rules
+
+| Change Type | Update pending_review? |
+|-------------|------------------------|
+| Doc-only changes | No |
+| Bug fix (code) | Yes, +1 |
+| Epic completion | Yes, +1 (not per subissue) |
+| Refactor/feature | Yes, +1 |
+
+Only Architect resets pending_review to 0 after review.
+
 ## Doc Routing Rules
 
 | Code Changed | Doc to Update |
@@ -289,10 +311,15 @@ EOF
 )"
 ```
 
-## Epic Rules
+## Commit Scope
 
-For epics with multiple subissues:
-- **ONE commit for entire epic** — not per subissue
+| Context | Commit Strategy |
+|---------|-----------------|
+| Working on subissue | Assume parallelism. Commit and push independently. |
+| Working on epic directly | One atomic commit for entire epic. |
+| Conflict detected | Only ask if same file modified by another in-progress subissue. |
+
+For epics worked directly (not via subissues):
 - Close all subissues before closing epic
 - Reference epic number in commit message
 
@@ -522,25 +549,34 @@ After completing review:
 
 ## Migration Plan
 
-### Phase 1: Create Skills
+Single-session implementation:
 
-1. Create `.claude/skills/` directory
-2. Create all 5 SKILL.md files per specs above
-3. Test skill invocation manually
+1. Create `.claude/skills/` directory with all 5 SKILL.md files
+2. Update persona files with protocols (engineer.md, architect.md, product.md)
+3. Backup old commands: `mv .claude/commands .claude/commands.bak`
+4. Add "Available Skills" section to CLAUDE.md
+5. Test one full workflow cycle
+6. Delete backup after confirming skills work
 
-### Phase 2: Update Personas
+### CLAUDE.md Addition
 
-1. Add Task Completion Protocol to engineer.md
-2. Add Review Completion Protocol to architect.md
-3. Add skill references to other personas
+Add to CLAUDE.md:
 
-### Phase 3: Deprecate Old Commands
+```markdown
+## Available Skills
 
-1. Delete `.claude/commands/` directory
-2. Verify no references remain
-3. Test full workflow
+Skills in `.claude/skills/` are invoked with "Use the X skill" or `/skill_name`:
 
-### Phase 4: Monitor (Ongoing)
+| Skill | When to Use |
+|-------|-------------|
+| handoff | After completing any task, to transfer to next persona |
+| doc_update | After code changes, to update reference docs |
+| push_changes | After implementation complete, to commit and push |
+| file_issue | When discovering bugs or proposing features |
+| diagnose_feedback | When user says "look at my feedback" or similar |
+```
+
+### Ongoing
 
 1. Track repeated corrections in future sessions
 2. Extract new patterns into skills
@@ -554,8 +590,9 @@ After completing review:
 |----------|------------|
 | Skill location? | `.claude/skills/` with official format |
 | Skill triggering? | Persona-level enforcement ("Use the X skill") |
-| Slash commands? | Deprecated in favor of "Use the X skill" |
+| Slash commands? | Both `/skill` and "Use the X skill" work; prefer natural language |
 | Persona↔Skill boundary? | Personas define WHEN, skills define HOW |
+| Engineer-to-engineer review? | Not required. Architect review sufficient for single-contributor project. |
 
 ---
 
