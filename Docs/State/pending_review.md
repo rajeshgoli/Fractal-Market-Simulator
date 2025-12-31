@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-25
 
@@ -12,7 +12,6 @@
 - #356: Add turn ratio pruning stat to Market Structure panel
 - #357: Treat None counter-trend as zero for turn ratio pruning
 - #358: Fix detection config settings resetting on page refresh
-- #359: Document detection config persistence behavior
 
 ---
 
