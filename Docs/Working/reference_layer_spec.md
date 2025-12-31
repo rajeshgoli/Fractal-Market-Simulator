@@ -18,11 +18,10 @@ Spec had drifted from north star. Fixed to match `product_north_star.md` lines 1
 | S/M | 5% tolerance | **0% (instant invalidation)** |
 | L/XL | 15% single threshold | **15% trade + 10% close (two thresholds)** |
 
-ReferenceConfig fields renamed:
-- Removed: `small_origin_tolerance`, `big_origin_tolerance`
+ReferenceConfig fields updated:
+- `small_origin_tolerance: float = 0.0` — S/M default to zero tolerance per north star (configurable for tuning)
+- Removed: `big_origin_tolerance` (single threshold)
 - Added: `big_trade_breach_tolerance` (0.15), `big_close_breach_tolerance` (0.10)
-
-S/M have fixed zero tolerance per north star (not configurable).
 
 ---
 
@@ -263,8 +262,8 @@ def is_fatally_breached(leg, scale: str, location: float, bar_close_location: fl
 
     # Scale-dependent origin breach tolerance (location past 1.0)
     if scale in ('S', 'M'):
-        # S/M: Zero tolerance — instant invalidation on any breach
-        return location > 1.0
+        # S/M: Default zero tolerance (configurable)
+        return location > (1.0 + config.small_origin_tolerance)  # default 0.0
     else:  # L, XL
         # L/XL: Two thresholds
         # Trade breach: invalidates if price TRADES beyond 15%
@@ -276,7 +275,7 @@ def is_fatally_breached(leg, scale: str, location: float, bar_close_location: fl
         return False
 ```
 
-**Note:** L/XL tolerance values should be UI tunable (like detection config). S/M have fixed zero tolerance per north star.
+**Note:** All tolerance values are UI tunable (like detection config). S/M defaults to 0% per north star but can be adjusted for tuning.
 
 ---
 
@@ -587,7 +586,8 @@ class ReferenceConfig:
     formation_fib_threshold: float = 0.382  # 38.2% retracement
 
     # Origin breach tolerance — per north star (product_north_star.md lines 122-128)
-    # S/M: Zero tolerance (instant invalidation) — NOT configurable
+    # S/M: Zero tolerance by default (configurable for tuning)
+    small_origin_tolerance: float = 0.0  # Default 0% per north star
     # L/XL: Two thresholds — UI TUNABLE
     big_trade_breach_tolerance: float = 0.15  # Invalidates if TRADES beyond 15%
     big_close_breach_tolerance: float = 0.10  # Invalidates if CLOSES beyond 10%
@@ -781,7 +781,7 @@ Reference Layer provides data. Pattern detection is downstream:
 
 2. **0-2 validity range** — **RESOLVED: All scales use 0-2.**
 
-3. **Origin breach handling** — **RESOLVED: Per north star.** S/M: zero tolerance (instant invalidation). L/XL: two thresholds (15% trade, 10% close). L/XL tolerances UI tunable.
+3. **Origin breach handling** — **RESOLVED: Per north star.** S/M: default zero tolerance (configurable). L/XL: two thresholds (15% trade, 10% close). All tolerances UI tunable.
 
 4. **Formation basis** — **RESOLVED: Price-based (fib threshold), not age-based.**
 
