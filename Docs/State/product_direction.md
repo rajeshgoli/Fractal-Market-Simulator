@@ -1,23 +1,48 @@
 # Product Direction
 
-**Last Updated:** December 25, 2025
+**Last Updated:** December 31, 2025
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Wire up Reference Layer to filter DAG output into valid trading references per north star rules.**
+**Add observability to Reference Layer before building Fib level features (P2).**
 
 ---
 
-## Current Phase: Reference Layer Design
+## Current Phase: Reference Observation (#400)
 
-DAG validation complete. L1-L7 detected correctly. Now designing the Reference Layer — a thin filter over DAG output that identifies valid trading references.
+Reference Layer Phase 1 complete (backend + Levels at Play UI). Before building P2 (Fib Level Display), adding observability to understand filtering behavior.
 
-**Status:** Spec drafted at `Docs/Working/reference_layer_spec.md`. Under review.
+**Epic:** #400 Reference Observation Mode
+- #401 Backend: Filter Status API
+- #402 Frontend: Observation UI
 
-**Key insight from validation:** Reference swings are **bear legs** in DAG terminology (HIGH before LOW = bullish reference). The DAG correctly tracks these with origin breach status.
+**Spec:** `Docs/Working/reference_observation_spec.md`
+
+**Key features:**
+- "Show Filtered" toggle in left nav (Levels at Play view)
+- Filtered legs highlighted, valid refs muted when toggle on
+- Filter stats panel (counts by reason, pass rate)
+- Explanation panel shows why each leg was filtered
+
+---
+
+## Completed: Reference Layer Phase 1 (Dec 31, 2025)
+
+**Status:** Complete. Backend + Levels at Play UI (27 issues, #361-#387).
+
+| Component | Status |
+|-----------|--------|
+| ReferenceConfig | Complete |
+| ReferenceSwing/ReferenceState | Complete |
+| Scale classification (S/M/L/XL) | Complete |
+| Location computation | Complete |
+| Formation tracking | Complete |
+| Fatal breach detection | Complete |
+| Salience scoring | Complete |
+| Levels at Play view | Complete |
 
 ---
 
@@ -37,31 +62,11 @@ Config used: `origin_time_threshold=0.02`, `origin_range_threshold=0.02`, `max_t
 | **L6** | origin=6929, pivot=6771 | origin=6928.75, pivot=6771.50 | BREACHED |
 | **L7** | origin=6882, pivot=6770 | origin=6892.00, pivot=6771.50 | BREACHED |
 
-**Key findings:**
-- All references are bear legs (origin=HIGH, pivot=LOW)
-- Multiple siblings exist at shared pivots (e.g., L1/L2 share pivot 4832)
-- Breach status correctly reflects price action (L3 intact since price < 6953)
-- DAG structural detection is solid
-
----
-
-## Completed: Self-Contained Playback Setup (#324)
-
-**Status:** Complete. All 7 sub-issues (#325-#331) implemented.
-
-| Feature | Status |
-|---------|--------|
-| **File selection** | Done — Dropdown picks CSV from `test_data/` |
-| **Start date** | Done — Date picker instead of CLI offset |
-| **Session persistence** | Done — App loads last session automatically |
-| **Process Till** | Done — Fast-forward to specific CSV index with progress |
-
-**Usage:** `python -m src.replay_server.main` (no args needed)
-
 ---
 
 ## Completed: Previous Phases
 
+- #361-#387 Reference Layer Phase 1 — Complete
 - #347-#349 Turn ratio UX, inner structure removal, frontend cleanup — Complete
 - #324 Self-contained playback — Complete
 - #250 Hierarchy exploration mode — Complete
@@ -78,32 +83,28 @@ Config used: `origin_time_threshold=0.02`, `origin_range_threshold=0.02`, `max_t
 |-----------|--------|
 | <5s for 10K bars | Done (#158) |
 | 100K window loads in frontend | Done (#158) |
-| Valid swings (L1-L7) detected | **Done** (Dec 25) |
-| Sibling swings with same pivot detected | **Done** (Dec 25) |
+| Valid swings (L1-L7) detected | Done (Dec 25) |
+| Sibling swings with same pivot detected | Done (Dec 25) |
 | Parent-child relationships correct | Done (#158) |
 | Visual validation of DAG behavior | Done (#167) |
 | Multi-timeframe chart view | Done (#186) |
-| Reference Layer filters valid references | Pending |
+| Reference Layer filters valid references | **Done** (#361-#387) |
+| Reference Layer observability | Pending (#400) |
 
 ---
 
-## Next: Reference Layer
+## Roadmap
 
-**Purpose:** Filter DAG legs to identify valid trading references per north star rules.
-
-**Key capabilities needed:**
-1. Location check (price between 0 and 2 in reference frame)
-2. Scale classification (S/M/L/XL by range percentile)
-3. Scale-dependent invalidation tolerance (small: 0%, big: 15%/10%)
-4. Salience ranking (big/impulsive/early vs recent)
-
-**Spec:** `Docs/Working/reference_layer_spec.md`
+1. **Reference Observation** (#400) — Current
+2. **P2: Fib Level Display** — Hover/click for fib levels
+3. **P3: Structure Panel + Confluence** — Level analysis
+4. **P4: Level Crossing Tracking** — Opt-in crossing events
 
 ---
 
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- Reference Layer spec approved
-- Reference Layer implementation complete
+- Reference Observation epic complete
 - Unexpected behavior observed during testing
+- Ready to start P2 (Fib Level Display)

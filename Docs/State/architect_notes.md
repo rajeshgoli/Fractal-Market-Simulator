@@ -192,13 +192,14 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 - ✅ P1 (Core Backend) — COMPLETE (13 issues)
 - ✅ P1-UI (Levels at Play UI) — COMPLETE (11 issues including bugfixes)
 - ✅ DAG Cleanup (#394) — COMPLETE (vestiges tracked in architect_fixes.md)
-- ⏳ **Architectural Fixes** — NEXT (see `Docs/Working/architect_fixes.md`)
+- ⏳ **Reference Observation (#400)** — NEXT (2 issues: #401, #402)
+- Architectural Fixes — After observation (see `Docs/Working/architect_fixes.md`)
 - P2 (Fib Levels) — After arch fixes (5 issues)
 - P3 + P4 (Structure Panel + Crossing) — 11 issues
 
-**Next step:** Architectural fixes epic — module rename, schema unification, dead code removal
+**Next step:** Reference Observation epic (#400) — filter status API + observation UI in Levels at Play
 
-**Remaining: 16 issues across arch fixes + 3 phases**
+**Spec:** `Docs/Working/reference_observation_spec.md`
 
 ---
 
