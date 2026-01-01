@@ -621,17 +621,13 @@ def init_app(
 # ============================================================================
 
 from .routers import (
-    replay_router,
     dag_router,
     reference_router,
-    config_router,
     feedback_router,
 )
 
-app.include_router(replay_router)
 app.include_router(dag_router)
 app.include_router(reference_router)
-app.include_router(config_router)
 app.include_router(feedback_router)
 
 

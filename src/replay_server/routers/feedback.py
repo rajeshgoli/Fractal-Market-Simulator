@@ -4,7 +4,7 @@ Feedback router for Replay View.
 Provides endpoints for playback feedback/observation submission.
 
 Endpoints:
-- POST /api/playback/feedback - Submit playback feedback
+- POST /api/feedback/submit - Submit playback feedback
 """
 
 import base64
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["feedback"])
 
 
-@router.post("/api/playback/feedback", response_model=PlaybackFeedbackResponse)
+@router.post("/api/feedback/submit", response_model=PlaybackFeedbackResponse)
 async def submit_feedback(request: PlaybackFeedbackRequest):
     """
     Submit playback feedback/observation.

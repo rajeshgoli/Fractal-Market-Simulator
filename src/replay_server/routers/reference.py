@@ -4,7 +4,7 @@ Reference Layer router for Replay View.
 Provides endpoints for Reference Layer state, active levels, and level tracking.
 
 Endpoints:
-- GET /api/reference-state - Get reference layer state
+- GET /api/reference/state - Get reference layer state
 - GET /api/reference/levels - Get all fib levels from valid references
 - POST /api/reference/track/{leg_id} - Add leg to crossing tracking
 - DELETE /api/reference/track/{leg_id} - Remove leg from crossing tracking
@@ -22,7 +22,7 @@ from ..schemas import (
     FilteredLegResponse,
     FilterStatsResponse,
 )
-from .cache import get_cache
+from .cache import get_replay_cache, is_initialized
 
 router = APIRouter(tags=["reference"])
 
@@ -86,7 +86,27 @@ def _compute_filter_stats(all_statuses, valid_leg_ids: set) -> FilterStatsRespon
     )
 
 
-@router.get("/api/reference-state", response_model=ReferenceStateApiResponse)
+def _empty_response() -> ReferenceStateApiResponse:
+    """Return an empty reference state response."""
+    return ReferenceStateApiResponse(
+        references=[],
+        by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
+        by_depth={},
+        by_direction={'bull': [], 'bear': []},
+        direction_imbalance=None,
+        is_warming_up=True,
+        warmup_progress=[0, 50],
+        filtered_legs=[],
+        filter_stats=FilterStatsResponse(
+            total_legs=0,
+            valid_count=0,
+            pass_rate=0.0,
+            by_reason={'not_formed': 0, 'pivot_breached': 0, 'origin_breached': 0, 'completed': 0, 'cold_start': 0},
+        ),
+    )
+
+
+@router.get("/api/reference/state", response_model=ReferenceStateApiResponse)
 async def get_reference_state(bar_index: Optional[int] = Query(None)):
     """
     Get reference layer state at a given bar index.
@@ -104,54 +124,24 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
     from ..api import get_state
     from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceState, FilterReason
 
-    cache = get_cache()
+    cache = get_replay_cache()
 
     try:
         state = get_state()
     except Exception:
-        return ReferenceStateApiResponse(
-            references=[],
-            by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
-            by_depth={},
-            by_direction={'bull': [], 'bear': []},
-            direction_imbalance=None,
-            is_warming_up=True,
-            warmup_progress=[0, 50],
-            filtered_legs=[],
-            filter_stats=FilterStatsResponse(
-                total_legs=0,
-                valid_count=0,
-                pass_rate=0.0,
-                by_reason={'not_formed': 0, 'pivot_breached': 0, 'origin_breached': 0, 'completed': 0, 'cold_start': 0},
-            ),
-        )
+        return _empty_response()
 
-    if not cache.is_initialized():
-        return ReferenceStateApiResponse(
-            references=[],
-            by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
-            by_depth={},
-            by_direction={'bull': [], 'bear': []},
-            direction_imbalance=None,
-            is_warming_up=True,
-            warmup_progress=[0, 50],
-            filtered_legs=[],
-            filter_stats=FilterStatsResponse(
-                total_legs=0,
-                valid_count=0,
-                pass_rate=0.0,
-                by_reason={'not_formed': 0, 'pivot_breached': 0, 'origin_breached': 0, 'completed': 0, 'cold_start': 0},
-            ),
-        )
+    if not is_initialized():
+        return _empty_response()
 
     # Get or create reference layer
-    if cache.reference_layer is None:
-        cache.reference_layer = ReferenceLayer()
+    if cache.get("reference_layer") is None:
+        cache["reference_layer"] = ReferenceLayer()
 
     # Determine the target bar index
     target_index = bar_index
     if target_index is None:
-        target_index = cache.last_bar_index
+        target_index = cache.get("last_bar_index", 0)
 
     # Get bar at target index
     if target_index >= 0 and target_index < len(state.source_bars):
@@ -159,31 +149,18 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
     elif len(state.source_bars) > 0:
         bar = state.source_bars[-1]
     else:
-        return ReferenceStateApiResponse(
-            references=[],
-            by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
-            by_depth={},
-            by_direction={'bull': [], 'bear': []},
-            direction_imbalance=None,
-            is_warming_up=True,
-            warmup_progress=[0, 50],
-            filtered_legs=[],
-            filter_stats=FilterStatsResponse(
-                total_legs=0,
-                valid_count=0,
-                pass_rate=0.0,
-                by_reason={'not_formed': 0, 'pivot_breached': 0, 'origin_breached': 0, 'completed': 0, 'cold_start': 0},
-            ),
-        )
+        return _empty_response()
 
     # Get active legs from detector
-    active_legs = cache.detector.state.active_legs
+    detector = cache["detector"]
+    active_legs = detector.state.active_legs
 
     # Update reference layer and get state
-    ref_state: ReferenceState = cache.reference_layer.update(active_legs, bar)
+    ref_layer = cache["reference_layer"]
+    ref_state: ReferenceState = ref_layer.update(active_legs, bar)
 
     # Get all legs with filter status for observation mode
-    all_statuses = cache.reference_layer.get_all_with_status(active_legs, bar)
+    all_statuses = ref_layer.get_all_with_status(active_legs, bar)
 
     # Build valid leg IDs set for stats
     valid_leg_ids = {r.leg.leg_id for r in ref_state.references}
@@ -224,7 +201,7 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
         direction_imbalance=ref_state.direction_imbalance,
         is_warming_up=ref_state.is_warming_up,
         warmup_progress=list(ref_state.warmup_progress),
-        tracked_leg_ids=list(cache.reference_layer.get_tracked_leg_ids()),
+        tracked_leg_ids=list(ref_layer.get_tracked_leg_ids()),
         filtered_legs=filtered_legs,
         filter_stats=filter_stats,
     )
@@ -247,22 +224,22 @@ async def get_reference_levels(bar_index: Optional[int] = Query(None)):
     from ..api import get_state
     from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceState
 
-    cache = get_cache()
+    cache = get_replay_cache()
 
     try:
         state = get_state()
     except Exception:
         return ActiveLevelsResponse(levels_by_ratio={})
 
-    if not cache.is_initialized():
+    if not is_initialized():
         return ActiveLevelsResponse(levels_by_ratio={})
 
-    if cache.reference_layer is None:
-        cache.reference_layer = ReferenceLayer()
+    if cache.get("reference_layer") is None:
+        cache["reference_layer"] = ReferenceLayer()
 
     target_index = bar_index
     if target_index is None:
-        target_index = cache.last_bar_index
+        target_index = cache.get("last_bar_index", 0)
 
     if target_index >= 0 and target_index < len(state.source_bars):
         bar = state.source_bars[target_index]
@@ -271,11 +248,13 @@ async def get_reference_levels(bar_index: Optional[int] = Query(None)):
     else:
         return ActiveLevelsResponse(levels_by_ratio={})
 
-    active_legs = cache.detector.state.active_legs
-    ref_state: ReferenceState = cache.reference_layer.update(active_legs, bar)
+    detector = cache["detector"]
+    active_legs = detector.state.active_legs
+    ref_layer = cache["reference_layer"]
+    ref_state: ReferenceState = ref_layer.update(active_legs, bar)
 
     # Get active levels
-    levels_dict = cache.reference_layer.get_active_levels(ref_state)
+    levels_dict = ref_layer.get_active_levels(ref_state)
 
     # Convert to response format
     levels_by_ratio: Dict[str, List[FibLevelResponse]] = {}
@@ -311,17 +290,18 @@ async def track_leg_for_crossing(leg_id: str):
     """
     from ...swing_analysis.reference_layer import ReferenceLayer
 
-    cache = get_cache()
+    cache = get_replay_cache()
 
-    if cache.reference_layer is None:
-        cache.reference_layer = ReferenceLayer()
+    if cache.get("reference_layer") is None:
+        cache["reference_layer"] = ReferenceLayer()
 
-    cache.reference_layer.add_crossing_tracking(leg_id)
+    ref_layer = cache["reference_layer"]
+    ref_layer.add_crossing_tracking(leg_id)
 
     return {
         "success": True,
         "leg_id": leg_id,
-        "tracked_count": len(cache.reference_layer.get_tracked_leg_ids()),
+        "tracked_count": len(ref_layer.get_tracked_leg_ids()),
     }
 
 
@@ -338,19 +318,20 @@ async def untrack_leg_for_crossing(leg_id: str):
     Returns:
         Success message with current tracked leg count.
     """
-    cache = get_cache()
+    cache = get_replay_cache()
 
-    if cache.reference_layer is None:
+    if cache.get("reference_layer") is None:
         return {
             "success": True,
             "leg_id": leg_id,
             "tracked_count": 0,
         }
 
-    cache.reference_layer.remove_crossing_tracking(leg_id)
+    ref_layer = cache["reference_layer"]
+    ref_layer.remove_crossing_tracking(leg_id)
 
     return {
         "success": True,
         "leg_id": leg_id,
-        "tracked_count": len(cache.reference_layer.get_tracked_leg_ids()),
+        "tracked_count": len(ref_layer.get_tracked_leg_ids()),
     }

@@ -874,7 +874,7 @@ canStepBack: boolean;  // true when currentPosition > 0
 ```
 
 **Implementation details:**
-- `stepBack()` calls `POST /api/replay/reverse` to replay from bar 0 to current-1
+- `stepBack()` calls `POST /api/dag/reverse` to replay from bar 0 to current-1
 - Backend resets detector and replays all bars to the target position
 - Response includes full DAG state, swing state, and aggregated bars
 - ~0.25s latency for 1k bars (acceptable for single-step backward)
@@ -971,14 +971,15 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # Returns application configuration including visualization mode
 # {mode: "calibration" | "dag"}
 
-# Calibration: GET /api/replay/calibrate?bar_count=10000
-# Returns swings grouped by depth with tree statistics
+# Init: POST /api/dag/init (#410)
+# Initializes detector with empty state, ready for incremental bar processing
+# Returns empty calibration response (no bars processed)
 
-# Advance: POST /api/replay/advance
+# Advance: POST /api/dag/advance
 # {calibration_bar_count, current_bar_index, advance_by}
 # Processes bars using detector.process_bar() and returns events
 
-# Reverse: POST /api/replay/reverse
+# Reverse: POST /api/dag/reverse
 # {current_bar_index, include_aggregated_bars?, include_dag_state?}
 # Resets detector and replays from bar 0 to current_bar_index - 1
 # Returns same response format as /advance (ReplayAdvanceResponse)
@@ -1004,27 +1005,27 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # - events: Array of LifecycleEvent objects with leg_id, direction, event_type,
 #   bar_index, csv_index, timestamp, explanation
 
-# Detection Config: GET /api/replay/config
+# Detection Config: GET /api/dag/config (#410)
 # Returns current detection configuration:
-# - bull/bear: Per-direction thresholds (formation_fib, engulfed_breach_threshold)
 # - stale_extension_threshold: Extension multiplier for stale pruning
 # - origin_range_threshold: Range similarity threshold for origin-proximity pruning (#294)
 # - origin_time_threshold: Time proximity threshold for origin-proximity pruning (#294)
+# - max_turns: Maximum turns per pivot (#404)
+# - engulfed_breach_threshold: Symmetric engulfed threshold (#404)
 
-# Detection Config Update: PUT /api/replay/config
-# Updates detection config and re-calibrates from bar 0:
+# Detection Config Update: PUT /api/dag/config (#410)
+# Updates detection config (applies to future bars, no re-calibration):
 # Request body (all fields optional):
 # {
-#   "bull": {"formation_fib": 0.382, "engulfed_breach_threshold": 0.0},
-#   "bear": {"formation_fib": 0.382, "engulfed_breach_threshold": 0.0},
 #   "stale_extension_threshold": 3.0,
 #   "origin_range_threshold": 0.05,
-#   "origin_time_threshold": 0.10
+#   "origin_time_threshold": 0.10,
+#   "max_turns": 3,
+#   "engulfed_breach_threshold": 0.20
 # }
-# Returns updated configuration after re-calibration
-# Note (#345): invalidation_threshold removed; origin breach detected at 0%
+# Returns updated configuration
 
-# Reference State: GET /api/reference-state?bar_index=NNN
+# Reference State: GET /api/reference/state?bar_index=NNN (#410)
 # Returns Reference Layer output for Levels at Play view (#374-#382):
 # - references: All valid ReferenceSwings, sorted by salience (highest first)
 #   - leg_id, scale (S/M/L/XL), depth, location (0-2), salience_score

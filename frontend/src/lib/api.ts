@@ -104,10 +104,16 @@ export async function fetchBars(scale?: AggregationScale): Promise<BarData[]> {
   return response.json();
 }
 
-export async function fetchCalibration(barCount: number = 10000): Promise<CalibrationData> {
-  const response = await fetch(`${API_BASE}/replay/calibrate?bar_count=${barCount}`);
+export async function fetchCalibration(_barCount: number = 10000): Promise<CalibrationData> {
+  // Note: _barCount is ignored - init always starts with empty detector (#410)
+  const response = await fetch(`${API_BASE}/dag/init`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
   if (!response.ok) {
-    throw new Error(`Failed to run calibration: ${response.statusText}`);
+    throw new Error(`Failed to initialize: ${response.statusText}`);
   }
   return response.json();
 }
@@ -220,7 +226,7 @@ export async function advanceReplay(
     requestBody.from_index = fromIndex;
   }
 
-  const response = await fetch(`${API_BASE}/replay/advance`, {
+  const response = await fetch(`${API_BASE}/dag/advance`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -228,7 +234,7 @@ export async function advanceReplay(
     body: JSON.stringify(requestBody),
   });
   if (!response.ok) {
-    throw new Error(`Failed to advance replay: ${response.statusText}`);
+    throw new Error(`Failed to advance: ${response.statusText}`);
   }
   return response.json();
 }
@@ -255,7 +261,7 @@ export async function reverseReplay(
     requestBody.include_dag_state = includeDagState;
   }
 
-  const response = await fetch(`${API_BASE}/replay/reverse`, {
+  const response = await fetch(`${API_BASE}/dag/reverse`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -263,7 +269,7 @@ export async function reverseReplay(
     body: JSON.stringify(requestBody),
   });
   if (!response.ok) {
-    throw new Error(`Failed to reverse replay: ${response.statusText}`);
+    throw new Error(`Failed to reverse: ${response.statusText}`);
   }
   return response.json();
 }
@@ -367,7 +373,7 @@ export async function submitPlaybackFeedback(
   snapshot: PlaybackFeedbackSnapshot,
   screenshotData?: string  // Base64 encoded PNG
 ): Promise<PlaybackFeedbackResponse> {
-  const response = await fetch(`${API_BASE}/playback/feedback`, {
+  const response = await fetch(`${API_BASE}/feedback/submit`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -481,7 +487,7 @@ export async function fetchFollowedLegsEvents(
 ): Promise<FollowedLegsEventsResponse> {
   const legIdsParam = legIds.join(',');
   const response = await fetch(
-    `${API_BASE}/followed-legs/events?leg_ids=${encodeURIComponent(legIdsParam)}&since_bar=${sinceBar}`
+    `${API_BASE}/dag/followed-legs?leg_ids=${encodeURIComponent(legIdsParam)}&since_bar=${sinceBar}`
   );
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: response.statusText }));
@@ -524,7 +530,7 @@ export interface DetectionConfigUpdateRequest {
  * Fetch current detection configuration.
  */
 export async function fetchDetectionConfig(): Promise<DetectionConfig> {
-  const response = await fetch(`${API_BASE}/replay/config`);
+  const response = await fetch(`${API_BASE}/dag/config`);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(errorData.detail || `Failed to fetch detection config: ${response.statusText}`);
@@ -533,13 +539,13 @@ export async function fetchDetectionConfig(): Promise<DetectionConfig> {
 }
 
 /**
- * Update detection configuration and re-calibrate.
- * Returns the updated configuration after re-calibration.
+ * Update detection configuration.
+ * Returns the updated configuration.
  */
 export async function updateDetectionConfig(
   request: DetectionConfigUpdateRequest
 ): Promise<DetectionConfig> {
-  const response = await fetch(`${API_BASE}/replay/config`, {
+  const response = await fetch(`${API_BASE}/dag/config`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -619,8 +625,8 @@ export interface ReferenceStateResponseExtended extends ReferenceStateResponse {
 
 export async function fetchReferenceState(barIndex?: number): Promise<ReferenceStateResponseExtended> {
   const url = barIndex !== undefined
-    ? `${API_BASE}/reference-state?bar_index=${barIndex}`
-    : `${API_BASE}/reference-state`;
+    ? `${API_BASE}/reference/state?bar_index=${barIndex}`
+    : `${API_BASE}/reference/state`;
   const response = await fetch(url);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: response.statusText }));
