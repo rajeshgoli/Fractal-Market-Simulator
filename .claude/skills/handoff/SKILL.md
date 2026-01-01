@@ -1,35 +1,41 @@
 ---
 name: handoff
 description: Execute structured handoff between roles. Use after completing ANY
-  task to transfer work to the next persona. Outputs exactly ONE sentence in
-  format "As [role], read [artifact] and [action]." No preamble. No explanation.
+  task to transfer work to the next persona. Outputs 1-4 sentences starting with
+  "As [role]" followed by ordered actions. No preamble. No explanation.
 ---
 
 # Handoff
 
-Output EXACTLY ONE LINE. Zero preamble. Zero explanation.
+Output 1-4 SENTENCES. Zero preamble. Zero explanation.
 
 ## Format
 
 ```
-As [role], read [artifact] and [action].
+As [role], [action sequence].
 ```
 
 ## Rules
 
-1. **One sentence only.** If you have more to say, write it to docs first.
+1. **1-4 sentences max.** Start with "As [role]". List actions in order.
 2. **[role]** = engineer | architect | product | director
-3. **[artifact]** = the doc you just updated OR the GitHub issue you just created
-4. **[action]** = specific verb (implement, review, assess, diagnose)
+3. **Actions** = specific verbs with artifacts (read, merge, update, create, implement)
+4. **Order matters** — list prerequisite actions before dependent ones.
 
 ## Examples
 
+Simple (1 sentence):
 ```
 As engineer, read GitHub issue #31 and implement the CSV export feature.
 ```
 
+Complex (multi-sentence):
 ```
-As architect, read Docs/State/pending_review.md and review the 10 accumulated changes.
+As architect, read Docs/Working/reference_layer_spec.md and reference_layer_spec_addendum.md. Review Docs/State/architect_notes.md and completed work in #360. Merge the spec and addendum, update architect notes, then create the next epic for engineer.
+```
+
+```
+As product, read Docs/Comms/questions.md and answer the open design questions. Update product_direction.md with decisions, then handoff to architect.
 ```
 
 ## Pre-flight Check

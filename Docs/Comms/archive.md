@@ -2,6 +2,39 @@
 
 ---
 
+## Q-2025-12-31-1: Dual Cache Technical Debt
+
+**From:** Engineer
+**To:** Architect
+**Date:** 2025-12-31
+**Status:** Resolved
+
+### Problem
+
+The backend had three parallel cache entities that weren't synchronized:
+
+| Location | Variable | State |
+|----------|----------|-------|
+| `replay.py:95` | `_replay_cache` | Dict — **actually used**, has all data |
+| `cache.py:76` | `_replay_cache` | Dict — **always empty**, never written to |
+| `cache.py:61` | `_cache` | Dataclass — **never synced**, always stale |
+
+This caused #409 and required a workaround in `dag.py:198-205`.
+
+### Resolution (Architect)
+
+**Decision:** Consolidate to ONE dict in ONE location.
+
+1. Delete `ReplayCache` dataclass, sync functions, and empty dict from `cache.py`
+2. Move `_replay_cache` dict from `replay.py` to `cache.py`
+3. Update `replay.py` to import from `.cache`
+4. Update `get_cache()` to return the dict directly
+5. Remove `dag.py` workaround
+
+**Issue filed:** #410
+
+---
+
 ## Q-2025-12-19-1: DAG Visualization Mode Feasibility
 
 **From:** Product
