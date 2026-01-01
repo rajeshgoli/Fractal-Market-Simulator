@@ -101,7 +101,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         swings_found: feedbackContext.swingsFoundByScale,
         swings_invalidated: feedbackContext.swingsInvalidated,
         swings_completed: feedbackContext.swingsCompleted,
-        mode,
       };
 
       if (lingerEvent) {
