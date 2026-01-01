@@ -341,11 +341,14 @@ class LegDetector:
                     leg.last_modified_bar = bar.index
                     # Recalculate impulse when pivot extends (#236)
                     leg.impulse = _calculate_impulse(leg.range, leg.origin_index, leg.pivot_index)
-                    # Update pending bear origin to this pivot (#338)
+                    # Update pending bear origin to this pivot (#338, #395)
                     # This ensures bear legs form at bull pivots where R0 will match
-                    self.state.pending_origins['bear'] = PendingOrigin(
-                        price=bar_high, bar_index=bar.index, direction='bear', source='pivot_extension'
-                    )
+                    # Only update if new price is higher (better for bear legs)
+                    existing_bear = self.state.pending_origins.get('bear')
+                    if existing_bear is None or bar_high > existing_bear.price:
+                        self.state.pending_origins['bear'] = PendingOrigin(
+                            price=bar_high, bar_index=bar.index, direction='bear', source='pivot_extension'
+                        )
 
         # Extend bear leg pivots on new lows (only if origin not breached #208, #345)
         for leg in self.state.active_legs:
@@ -356,11 +359,14 @@ class LegDetector:
                     leg.last_modified_bar = bar.index
                     # Recalculate impulse when pivot extends (#236)
                     leg.impulse = _calculate_impulse(leg.range, leg.origin_index, leg.pivot_index)
-                    # Update pending bull origin to this pivot (#338)
+                    # Update pending bull origin to this pivot (#338, #395)
                     # This ensures bull legs form at bear pivots where R0 will match
-                    self.state.pending_origins['bull'] = PendingOrigin(
-                        price=bar_low, bar_index=bar.index, direction='bull', source='pivot_extension'
-                    )
+                    # Only update if new price is lower (better for bull legs)
+                    existing_bull = self.state.pending_origins.get('bull')
+                    if existing_bull is None or bar_low < existing_bull.price:
+                        self.state.pending_origins['bull'] = PendingOrigin(
+                            price=bar_low, bar_index=bar.index, direction='bull', source='pivot_extension'
+                        )
 
     def _find_origin_counter_trend_range(self, direction: str, origin_price: Decimal) -> Optional[float]:
         """

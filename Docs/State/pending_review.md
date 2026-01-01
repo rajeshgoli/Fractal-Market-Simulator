@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-31
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - #394 — DAG cleanup: Remove SwingNode, swing_id, formed; formation now Reference Layer concern
+- #395 — Fix pivot extension unconditionally overwriting pending origin (preserve best candidate)
 
 ---
 
