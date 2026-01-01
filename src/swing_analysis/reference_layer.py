@@ -264,6 +264,22 @@ class ReferenceLayer:
         # Track which leg_ids have been added to range distribution (to avoid duplicates)
         self._seen_leg_ids: Set[str] = set()
 
+    def copy_state_from(self, other: 'ReferenceLayer') -> None:
+        """
+        Copy accumulated state from another ReferenceLayer instance.
+
+        Used when recreating the reference layer with new config to preserve
+        the warmup progress and formed leg tracking. Without this, switching
+        views that trigger config sync would reset the warmup count.
+
+        Args:
+            other: The ReferenceLayer to copy state from.
+        """
+        self._range_distribution = other._range_distribution.copy()
+        self._formed_refs = other._formed_refs.copy()
+        self._tracked_for_crossing = other._tracked_for_crossing.copy()
+        self._seen_leg_ids = other._seen_leg_ids.copy()
+
     @property
     def is_cold_start(self) -> bool:
         """
