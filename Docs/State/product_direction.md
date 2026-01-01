@@ -1,86 +1,74 @@
 # Product Direction
 
-**Last Updated:** December 31, 2025
+**Last Updated:** January 1, 2026
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Add observability to Reference Layer before building Structure Panel (P3).**
+**Complete P3/P4 frontend work (#419).**
 
 ---
 
-## Current Phase: Reference Observation (#400)
+## Current Phase: P3/P4 Frontend Completion
 
-Reference Layer P1 (backend + Levels at Play UI) and P2 (Fib Level Interaction) complete. Before building P3 (Structure Panel + Confluence), adding observability to understand filtering behavior.
+Reference Layer backend is complete. Frontend gaps identified and filed as #419.
 
-**Epic:** #400 Reference Observation Mode
-- #401 Backend: Filter Status API
-- #402 Frontend: Observation UI
+**Active epic:** #419 (2 sub-issues: #420, #421)
 
-**Spec:** `Docs/Working/reference_observation_spec.md`
+| Sub-Issue | Scope | Status |
+|-----------|-------|--------|
+| #420 | Structure Panel + Telemetry Events | Pending |
+| #421 | Confluence Zones + Track Button | Pending |
 
-**Key features:**
-- "Show Filtered" toggle in left nav (Levels at Play view)
-- Filtered legs highlighted, valid refs muted when toggle on
-- Filter stats panel (counts by reason, pass rate)
-- Explanation panel shows why each leg was filtered
+**What's missing:**
+- Structure Panel UI (touched/active/current sections)
+- Confluence zones on chart (thicker bands)
+- Telemetry recent events section
+- Track button on legs
 
 ---
 
-## Completed: Reference Layer Phase 2 (Dec 31, 2025)
+## Completed: Reference Layer Backend (Jan 1, 2026)
 
-**Status:** Complete. Fib Level Interaction (5 issues, #388-#393).
+**Status:** Complete. P3+P4 backend implemented, frontend partial.
+
+| Phase | Backend | Frontend |
+|-------|---------|----------|
+| P1: Core + Levels at Play | Complete | Complete |
+| P2: Fib Level Interaction | Complete | Complete |
+| P3: Structure Panel + Confluence | Complete | **Partial** |
+| P4: Level Crossing | Complete | **Partial** |
+
+Backend APIs exist but aren't wired to UI:
+- `/api/reference/structure` — Not called
+- `/api/reference/confluence` — Not called
+- `/api/reference/telemetry` — Events section missing
+
+---
+
+## Completed: Reference Observation + Cleanup (Jan 1, 2026)
+
+**Status:** Complete. Observation mode + architectural cleanup (15 issues, #400-#414).
 
 | Component | Status |
 |-----------|--------|
-| get_active_levels() backend | Complete |
-| Hover preview UI | Complete |
-| Click-to-stick | Complete |
-| Color-coding by source | Complete |
-| Sticky state persistence | Complete |
-
----
-
-## Completed: Reference Layer Phase 1 (Dec 31, 2025)
-
-**Status:** Complete. Backend + Levels at Play UI (27 issues, #361-#387).
-
-| Component | Status |
-|-----------|--------|
-| ReferenceConfig | Complete |
-| ReferenceSwing/ReferenceState | Complete |
-| Scale classification (S/M/L/XL) | Complete |
-| Location computation | Complete |
-| Formation tracking | Complete |
-| Fatal breach detection | Complete |
-| Salience scoring | Complete |
-| Levels at Play view | Complete |
-
----
-
-## Completed: L1-L7 Validation (Dec 25, 2025)
-
-**Status:** Complete. All 7 reference swings detected correctly.
-
-Config used: `origin_time_threshold=0.02`, `origin_range_threshold=0.02`, `max_turns_per_pivot_raw=10`
-
-| Label | Expected | Found | Status |
-|-------|----------|-------|--------|
-| **L1** | origin=6166, pivot=4832 | origin=6166.50, pivot=4832.00 | BREACHED |
-| **L2** | origin=5837, pivot=4832 | origin=5837.25, pivot=4832.00 | BREACHED |
-| **L3** | origin=6955, pivot=6524 | origin=6953.75, pivot=6525.00 | **intact** |
-| **L4** | origin=6896, pivot=6524 | origin=6909.50, pivot=6525.00 | BREACHED |
-| **L5** | origin=6790, pivot=6524 | origin=6801.50, pivot=6525.00 | BREACHED |
-| **L6** | origin=6929, pivot=6771 | origin=6928.75, pivot=6771.50 | BREACHED |
-| **L7** | origin=6882, pivot=6770 | origin=6892.00, pivot=6771.50 | BREACHED |
+| Filter status API (FilterReason, FilteredLeg) | Complete |
+| Show Filtered toggle + explanation panel | Complete |
+| UX inversion (filtered highlighted, valid faded) | Complete |
+| Lazy DAG init (removed CalibrationPhase) | Complete |
+| API namespace restructure (/dag/*, /reference/*) | Complete |
+| Cache consolidation (single cache.py) | Complete |
+| Dead code removal (replay mode, SWING_* events) | Complete |
+| View renamed: DAG View → Structural Legs | Complete |
 
 ---
 
 ## Completed: Previous Phases
 
 - #361-#387 Reference Layer Phase 1 — Complete
+- #388-#393 Reference Layer Phase 2 (Fib Interaction) — Complete
 - #347-#349 Turn ratio UX, inner structure removal, frontend cleanup — Complete
 - #324 Self-contained playback — Complete
 - #250 Hierarchy exploration mode — Complete
@@ -98,27 +86,26 @@ Config used: `origin_time_threshold=0.02`, `origin_range_threshold=0.02`, `max_t
 | <5s for 10K bars | Done (#158) |
 | 100K window loads in frontend | Done (#158) |
 | Valid swings (L1-L7) detected | Done (Dec 25) |
-| Sibling swings with same pivot detected | Done (Dec 25) |
-| Parent-child relationships correct | Done (#158) |
-| Visual validation of DAG behavior | Done (#167) |
-| Multi-timeframe chart view | Done (#186) |
-| Reference Layer filters valid references | **Done** (#361-#387) |
-| Reference Layer observability | Pending (#400) |
+| Reference Layer filters valid references | Done (#361-#387) |
+| Reference Layer observability | Done (#400-#414) |
+| Structure Panel shows level touches | **Pending** (#420) |
+| Confluence zones render on chart | **Pending** (#421) |
 
 ---
 
 ## Roadmap
 
-1. ✅ **P2: Fib Level Interaction** — Complete (#388-#393)
-2. ⏳ **Reference Observation** (#400) — Current
-3. **P3: Structure Panel + Confluence** — Level analysis
-4. **P4: Level Crossing Tracking** — Opt-in crossing events
+1. ✅ **P1: Reference Layer Core** — Complete
+2. ✅ **P2: Fib Level Interaction** — Complete
+3. ⚠️ **P3: Structure Panel + Confluence** — Backend done, frontend pending (#419)
+4. ⚠️ **P4: Level Crossing** — Backend done, frontend pending (#419)
+5. ⏳ **Next:** Complete #419, then outcome tracking / rule discovery
 
 ---
 
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- Reference Observation epic complete
+- #419 epic complete
 - Unexpected behavior observed during testing
-- Ready to start P2 (Fib Level Display)
+- Direction uncertainty requiring user values
