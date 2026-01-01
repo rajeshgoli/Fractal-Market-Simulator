@@ -95,6 +95,14 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   }>>(new Map());
   // Filtered leg label positions (Issue #400)
   const [filteredLabelPositions, setFilteredLabelPositions] = useState<Map<string, { x: number; y: number; leg: FilteredLeg }>>(new Map());
+  // Filtered leg line positions for hit testing
+  const [filteredLinePositions, setFilteredLinePositions] = useState<Map<string, {
+    originX: number; originY: number;
+    pivotX: number; pivotY: number;
+    leg: FilteredLeg
+  }>>(new Map());
+  // Hovered filtered leg
+  const [hoveredFilteredLegId, setHoveredFilteredLegId] = useState<string | null>(null);
 
   // Hover state
   const [hoveredLegId, setHoveredLegId] = useState<string | null>(null);
@@ -234,7 +242,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   }, [chart, series, getVisibleTimeRange, computeFibLevels]);
 
   // Create line series for a reference
-  const createRefLine = useCallback((ref: ReferenceSwing, isFading: boolean): ISeriesApi<'Line'> | null => {
+  const createRefLine = useCallback((ref: ReferenceSwing, isFading: boolean, fadeForFilter: boolean = false): ISeriesApi<'Line'> | null => {
     if (!chart || !series) return null;
 
     // Direction determines color
@@ -242,7 +250,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     // Bear reference (bull leg) = red (price went up, looking to go short)
     const color = ref.direction === 'bear' ? '#22c55e' : '#ef4444';
     const lineWidth = SCALE_LINE_WIDTH[ref.scale] || (2 as LineWidth);
-    const opacity = isFading ? 0.3 : 0.8;
+    // When showFiltered is on, fade valid legs heavily so filtered legs stand out
+    const opacity = fadeForFilter ? 0.08 : (isFading ? 0.3 : 0.8);
 
     // Get timestamps for origin and pivot
     const originTime = getTimestampForIndex(ref.origin_index);
@@ -289,14 +298,15 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     }
   }, [chart, series, getTimestampForIndex]);
 
-  // Create line series for a filtered leg (dashed, semi-transparent)
+  // Create line series for a filtered leg (highlighted for inspection)
   const createFilteredLegLine = useCallback((leg: FilteredLeg): ISeriesApi<'Line'> | null => {
     if (!chart || !series) return null;
 
-    // Use a muted gray color for filtered legs
-    const color = '#6b7280';
-    const lineWidth = 1 as LineWidth;
-    const opacity = 0.4;
+    // Use direction-based color like valid legs, but dashed to indicate filtered
+    // Bull reference (bear leg) = green, Bear reference (bull leg) = red
+    const color = leg.direction === 'bear' ? '#22c55e' : '#ef4444';
+    const lineWidth = SCALE_LINE_WIDTH[leg.scale] || (2 as LineWidth);
+    const opacity = 0.85;
 
     // Get timestamps for origin and pivot
     const originTime = getTimestampForIndex(leg.origin_index);
@@ -318,8 +328,11 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       });
 
       // Apply opacity via color
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
       lineSeries.applyOptions({
-        color: `rgba(107, 114, 128, ${opacity})`,
+        color: `rgba(${r}, ${g}, ${b}, ${opacity})`,
       });
 
       // Set data: line from origin to pivot
@@ -381,24 +394,35 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   const updateFilteredLabelPositions = useCallback(() => {
     if (!chart || !series || bars.length === 0 || !showFiltered) {
       setFilteredLabelPositions(new Map());
+      setFilteredLinePositions(new Map());
       return;
     }
 
-    const positions = new Map<string, { x: number; y: number; leg: FilteredLeg }>();
+    const labelPositions = new Map<string, { x: number; y: number; leg: FilteredLeg }>();
+    const linePositions = new Map<string, {
+      originX: number; originY: number;
+      pivotX: number; pivotY: number;
+      leg: FilteredLeg
+    }>();
 
     for (const leg of filteredLegs) {
+      const originTime = getTimestampForIndex(leg.origin_index);
       const pivotTime = getTimestampForIndex(leg.pivot_index);
-      if (pivotTime === null) continue;
+      if (originTime === null || pivotTime === null) continue;
 
+      const originX = chart.timeScale().timeToCoordinate(originTime as Time);
+      const originY = series.priceToCoordinate(leg.origin_price);
       const pivotX = chart.timeScale().timeToCoordinate(pivotTime as Time);
       const pivotY = series.priceToCoordinate(leg.pivot_price);
 
-      if (pivotX !== null && pivotY !== null) {
-        positions.set(leg.leg_id, { x: pivotX, y: pivotY, leg });
+      if (originX !== null && originY !== null && pivotX !== null && pivotY !== null) {
+        labelPositions.set(leg.leg_id, { x: pivotX, y: pivotY, leg });
+        linePositions.set(leg.leg_id, { originX, originY, pivotX, pivotY, leg });
       }
     }
 
-    setFilteredLabelPositions(positions);
+    setFilteredLabelPositions(labelPositions);
+    setFilteredLinePositions(linePositions);
   }, [chart, series, filteredLegs, bars, showFiltered, getTimestampForIndex]);
 
   // Update fib levels for hovered and sticky legs
@@ -438,9 +462,10 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       clearLineSeries();
 
       // Create line series for each reference
+      // When showFiltered is on, fade valid legs so filtered legs stand out
       for (const ref of references) {
         const isFading = fadingRefs.has(ref.leg_id);
-        const lineSeries = createRefLine(ref, isFading);
+        const lineSeries = createRefLine(ref, isFading, showFiltered);
         if (lineSeries) {
           lineSeriesRef.current.set(ref.leg_id, lineSeries);
         }
@@ -515,9 +540,18 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     }
   }, [onLegClick]);
 
+  // Handle filtered leg hover
+  const handleFilteredLegMouseEnter = useCallback((legId: string) => {
+    setHoveredFilteredLegId(legId);
+  }, []);
+
+  const handleFilteredLegMouseLeave = useCallback(() => {
+    setHoveredFilteredLegId(null);
+  }, []);
+
   // Get chart container for label positioning
   const chartContainer = chart?.chartElement()?.closest('.chart-container');
-  if (!chartContainer || (labelPositions.size === 0 && legLinePositions.size === 0 && filteredLabelPositions.size === 0)) {
+  if (!chartContainer || (labelPositions.size === 0 && legLinePositions.size === 0 && filteredLabelPositions.size === 0 && filteredLinePositions.size === 0)) {
     return null;
   }
 
@@ -527,8 +561,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       className="absolute inset-0"
       style={{ width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}
     >
-      {/* Invisible hit-test lines for leg interaction (#411) */}
-      {Array.from(legLinePositions.entries()).map(([legId, { originX, originY, pivotX, pivotY }]) => {
+      {/* Invisible hit-test lines for leg interaction (#411) - disabled when showFiltered is on */}
+      {!showFiltered && Array.from(legLinePositions.entries()).map(([legId, { originX, originY, pivotX, pivotY }]) => {
         const isHovered = hoveredLegId === legId;
         const isSticky = stickyLegIds.has(legId);
         return (
@@ -548,8 +582,43 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         );
       })}
 
-      {/* Scale/location badges (display only, no pointer events) */}
-      {Array.from(labelPositions.entries()).map(([legId, { x, y, ref }]) => {
+      {/* Hit-test lines for filtered legs (interactive when showFiltered is on) */}
+      {showFiltered && Array.from(filteredLinePositions.entries()).map(([legId, { originX, originY, pivotX, pivotY, leg }]) => {
+        const isHovered = hoveredFilteredLegId === legId;
+        const color = leg.direction === 'bear' ? '#22c55e' : '#ef4444';
+        return (
+          <g key={`filtered_hitline_${legId}`}>
+            {/* Visible highlight line when hovered */}
+            {isHovered && (
+              <line
+                x1={originX}
+                y1={originY}
+                x2={pivotX}
+                y2={pivotY}
+                stroke={color}
+                strokeWidth={4}
+                strokeOpacity={0.6}
+                style={{ pointerEvents: 'none' }}
+              />
+            )}
+            {/* Invisible hit-test line */}
+            <line
+              x1={originX}
+              y1={originY}
+              x2={pivotX}
+              y2={pivotY}
+              stroke="transparent"
+              strokeWidth={12}
+              style={{ pointerEvents: 'all', cursor: 'pointer' }}
+              onMouseEnter={() => handleFilteredLegMouseEnter(legId)}
+              onMouseLeave={handleFilteredLegMouseLeave}
+            />
+          </g>
+        );
+      })}
+
+      {/* Scale/location badges (display only, no pointer events) - hidden when showFiltered is on */}
+      {!showFiltered && Array.from(labelPositions.entries()).map(([legId, { x, y, ref }]) => {
         const scaleBadge = SCALE_BADGE_COLORS[ref.scale] || SCALE_BADGE_COLORS['S'];
         const color = ref.direction === 'bear' ? '#22c55e' : '#ef4444';
         const isSticky = stickyLegIds.has(legId);
@@ -619,8 +688,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         );
       })}
 
-      {/* Fib level labels */}
-      {(hoveredLegId || stickyLegIds.size > 0) && (() => {
+      {/* Fib level labels - hidden when showFiltered is on */}
+      {!showFiltered && (hoveredLegId || stickyLegIds.size > 0) && (() => {
         const refsToLabel = references.filter(ref =>
           ref.leg_id === hoveredLegId || stickyLegIds.has(ref.leg_id)
         );
@@ -668,12 +737,16 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       {/* Filtered leg badges (Issue #400) */}
       {showFiltered && Array.from(filteredLabelPositions.entries()).map(([legId, { x, y, leg }]) => {
         const filterBadge = FILTER_REASON_COLORS[leg.filter_reason] || FILTER_REASON_COLORS['cold_start'];
+        const isHovered = hoveredFilteredLegId === legId;
+        const directionColor = leg.direction === 'bear' ? '#22c55e' : '#ef4444';
 
         return (
           <g
             key={`filtered_${legId}`}
             transform={`translate(${x + 8}, ${y})`}
-            style={{ pointerEvents: 'all' }}
+            style={{ pointerEvents: 'all', cursor: 'pointer' }}
+            onMouseEnter={() => handleFilteredLegMouseEnter(legId)}
+            onMouseLeave={handleFilteredLegMouseLeave}
           >
             {/* Filter reason badge */}
             <rect
@@ -683,7 +756,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
               height={16}
               rx={3}
               fill={filterBadge.bg}
-              opacity={0.8}
+              stroke={isHovered ? '#ffffff' : 'none'}
+              strokeWidth={isHovered ? 1.5 : 0}
             />
             <text
               x={24}
@@ -704,19 +778,48 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
               width={18}
               height={16}
               rx={3}
-              fill="rgba(75, 85, 99, 0.6)"
+              fill={isHovered ? 'rgba(75, 85, 99, 0.9)' : 'rgba(75, 85, 99, 0.6)'}
+              stroke={isHovered ? directionColor : 'none'}
+              strokeWidth={isHovered ? 1 : 0}
             />
             <text
               x={61}
               y={2}
               textAnchor="middle"
-              fill="#9ca3af"
+              fill={isHovered ? directionColor : '#9ca3af'}
               fontSize={9}
               fontWeight="500"
               fontFamily="system-ui, sans-serif"
             >
               {leg.scale}
             </text>
+
+            {/* Location indicator (only on hover) */}
+            {isHovered && (
+              <>
+                <rect
+                  x={74}
+                  y={-10}
+                  width={32}
+                  height={16}
+                  rx={3}
+                  fill="rgba(30, 41, 59, 0.9)"
+                  stroke={directionColor}
+                  strokeWidth={1}
+                />
+                <text
+                  x={90}
+                  y={2}
+                  textAnchor="middle"
+                  fill={directionColor}
+                  fontSize={9}
+                  fontWeight="500"
+                  fontFamily="system-ui, sans-serif"
+                >
+                  {leg.location.toFixed(2)}
+                </text>
+              </>
+            )}
           </g>
         );
       })}
