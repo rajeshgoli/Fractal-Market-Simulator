@@ -83,42 +83,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     chartPrefs.referenceConfig ?? DEFAULT_REFERENCE_CONFIG
   );
 
-  // Reference Config update handler (Issue #425)
-  const handleReferenceConfigUpdate = useCallback(async (newConfig: ReferenceConfig) => {
-    try {
-      // Send to backend API
-      const updatedConfig = await updateReferenceConfig(newConfig);
-      // Update local state
-      setReferenceConfig(updatedConfig);
-      // Persist to localStorage
-      chartPrefs.setReferenceConfig(updatedConfig);
-      // Refresh reference state to reflect new salience weights
-      if (calibrationBarCount > 0) {
-        fetchReferenceState(currentPlaybackPosition);
-      }
-    } catch (err) {
-      console.error('Failed to update reference config:', err);
-    }
-  }, [chartPrefs.setReferenceConfig, calibrationBarCount, currentPlaybackPosition, fetchReferenceState]);
-
-  // Load reference config from backend on mount (Issue #425)
-  useEffect(() => {
-    const loadReferenceConfig = async () => {
-      try {
-        const config = await fetchReferenceConfig();
-        setReferenceConfig(config);
-        // Update localStorage if different from saved
-        if (JSON.stringify(config) !== JSON.stringify(chartPrefs.referenceConfig)) {
-          chartPrefs.setReferenceConfig(config);
-        }
-      } catch (err) {
-        console.error('Failed to load reference config:', err);
-        // Fall back to localStorage or defaults
-      }
-    };
-    loadReferenceConfig();
-  }, []);
-
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
   const chart2Ref = useRef<IChartApi | null>(null);
@@ -206,6 +170,42 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       fetchReferenceState(currentPlaybackPosition);
     }
   }, [currentPlaybackPosition, calibrationBarCount, fetchReferenceState]);
+
+  // Reference Config update handler (Issue #425)
+  const handleReferenceConfigUpdate = useCallback(async (newConfig: ReferenceConfig) => {
+    try {
+      // Send to backend API
+      const updatedConfig = await updateReferenceConfig(newConfig);
+      // Update local state
+      setReferenceConfig(updatedConfig);
+      // Persist to localStorage
+      chartPrefs.setReferenceConfig(updatedConfig);
+      // Refresh reference state to reflect new salience weights
+      if (calibrationBarCount > 0) {
+        fetchReferenceState(currentPlaybackPosition);
+      }
+    } catch (err) {
+      console.error('Failed to update reference config:', err);
+    }
+  }, [chartPrefs.setReferenceConfig, calibrationBarCount, currentPlaybackPosition, fetchReferenceState]);
+
+  // Load reference config from backend on mount (Issue #425)
+  useEffect(() => {
+    const loadReferenceConfig = async () => {
+      try {
+        const config = await fetchReferenceConfig();
+        setReferenceConfig(config);
+        // Update localStorage if different from saved
+        if (JSON.stringify(config) !== JSON.stringify(chartPrefs.referenceConfig)) {
+          chartPrefs.setReferenceConfig(config);
+        }
+      } catch (err) {
+        console.error('Failed to load reference config:', err);
+        // Fall back to localStorage or defaults
+      }
+    };
+    loadReferenceConfig();
+  }, []);
 
   // Compute a "live" aggregated bar from source bars for incremental display
   const computeLiveBar = useCallback((
@@ -777,7 +777,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         <ReferenceSidebar
           referenceConfig={referenceConfig}
           onReferenceConfigUpdate={handleReferenceConfigUpdate}
-          structureData={structureData}
+          structureData={structureData ?? undefined}
           references={referenceState?.references ?? []}
           trackedLegIds={stickyLegIds}
           onToggleTrack={toggleStickyLeg}
