@@ -121,7 +121,9 @@ All ES, NQ, YM, and DAX files in `test_data/` are now symlinks to `~/Documents/b
 ### API Details
 
 - **Credentials:** `~/.databento_credentials` (not in git)
-- **Dataset:** `GLBX.MDP3` (CME Globex)
+- **Datasets:**
+  - `GLBX.MDP3` (CME Globex) — ES, NQ, YM
+  - `XEUR.EOBI` (Eurex) — DAX (uses parent symbol `FDAX.FUT`)
 
 To load credentials in Python:
 ```python
@@ -137,20 +139,36 @@ def load_databento_key():
 
 ### Cost Summary (Jan 1, 2026)
 
+**Gap Fill (one-time):**
+
 | Item | Cost |
 |------|------|
-| ES 1m (7 contracts, Aug 2024 → Jan 2026) | $2.48 |
-| NQ 1m (7 contracts, Aug 2024 → Jan 2026) | $2.37 |
-| ES 1d (7 contracts) | $0.01 |
-| NQ 1d (7 contracts) | $0.01 |
-| Verification samples | ~$0.10 |
-| **Total spent** | **~$5.00** |
-| **Remaining credit** | **~$120** |
+| ES 1m + 1d (7 contracts, Aug 2024 → Dec 2025) | ~$2.50 |
+| NQ 1m + 1d (7 contracts, Aug 2024 → Dec 2025) | ~$2.40 |
+| YM 1m + 1d (7 contracts, Aug 2024 → Dec 2025) | ~$2.00 |
+| DAX 1m + 1d (Mar 2025 → Dec 2025, continuous) | ~$6.00 |
+| Testing & debugging (symbol format trials, etc.) | ~$5.00 |
+| **Total spent** | **$17.98** |
+| **Remaining credit** | **~$107** |
+
+**Daily Refresh Costs:**
+
+| Symbol | Daily | Annual |
+|--------|-------|--------|
+| ES | $0.005 | $1.83 |
+| NQ | $0.005 | $1.83 |
+| YM | $0.005 | $1.72 |
+| DAX | $0.024 | $8.76 |
+| **Total** | **$0.039/day** | **~$14/year** |
+
+Note: DAX (Eurex) costs ~5x more than CME symbols per bar.
 
 ### Contracts Used
 
 ES: ESU4, ESZ4, ESH5, ESM5, ESU5, ESZ5, ESH6
 NQ: NQU4, NQZ4, NQH5, NQM5, NQU5, NQZ5, NQH6
+YM: YMU4, YMZ4, YMH5, YMM5, YMU5, YMZ5, YMH6
+DAX: FDAX.FUT (continuous, auto-rolls)
 
 Rollover dates (approx 1 week before 3rd Friday expiration):
 - U4: Sep 13, 2024
