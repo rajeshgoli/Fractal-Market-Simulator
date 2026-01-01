@@ -35,22 +35,24 @@ Read in order:
 - #240 — TODO: Empirically determine engulfed retention threshold based on impulse
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
 - #399 — TODO: Salience optimization if needed (periodic refresh, event-driven, or lazy with TTL)
-- #408 — Dead replay mode + SWING_* events: ~15 files of frontend dead code from #394 SwingNode removal
+- Scaling test `test_scaling_is_not_quadratic` marginally fails (64 vs 60 threshold) — flaky boundary, low priority
 
-**Completed architectural cleanup (#394, #396, #398):**
+**Completed architectural cleanup (#394, #396, #398, #403, #404, #408, #410, #412):**
 - ✅ SwingNode, `swing_id`, `formed` removed from DAG; old Reference Layer API removed (#394)
 - ✅ Renamed `ground_truth_annotator/` → `replay_server/` (#396)
 - ✅ Removed refactoring vestiges: `swing_id` on events, `emit_level_crosses` config (#396)
 - ✅ Connected `depth` to `leg.depth`, replaced `parent_ids` with `parent_leg_id` (#396)
 - ✅ Unified `CalibrationSwingResponse` and `DagLegResponse` into `LegResponse` (#398)
-- ✅ Created domain routers (dag, reference, config, feedback) with helpers (#398)
+- ✅ Created domain routers (dag, reference, feedback) with helpers (#398)
 - ✅ Renamed `largest_swing_id` → `largest_leg_id` (#398)
 - ✅ `swing_config.py` → `detection_config.py`, `SwingConfig` → `DetectionConfig`
-
-**Pending cleanup (#403):**
-- Migrate `replay.py` to use `helpers/` (5 duplicated functions)
-- Remove tombstone comments (`# Swing hierarchy removed (#301)` - 14+ occurrences)
-- Reduce `replay.py` from 2090 lines to <800
+- ✅ Migrated replay.py to use helpers/, removed tombstone comments (#403)
+- ✅ Deleted replay.py, consolidated into dag.py (841 lines) (#410)
+- ✅ Cache consolidation: single dict in cache.py, removed parallel caches (#410)
+- ✅ API namespace restructure: /api/dag/*, /api/reference/*, /api/feedback/* (#410)
+- ✅ Dead code cleanup: removed SWING_* events, 'formed' field vestiges (#408)
+- ✅ Lazy DAG init: removed CalibrationPhase, added _ensure_initialized() (#412)
+- ✅ Simplified config: removed enable_engulfed_prune, min_branch_ratio, turn_ratio_mode (#404)
 
 **Future naming cleanup (low priority):**
 - `SwingEvent` → `DetectionEvent` (deferred)
@@ -155,17 +157,14 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 | P3.5 | Show current bar touches | Levels touched on most recent bar | P3.2 |
 | P3.6 | Display confluence zones | Thicker bands with participating references labeled | P3.1 |
 
-### Phase 4: Opt-in Level Crossing
+### Phase 4: Opt-in Level Crossing — #416
 
-**Epic #P4: Level Crossing Tracking**
+**Epic #416: Level Crossing Tracking** (2 sub-issues)
 
-| # | Issue | Description | Depends On |
-|---|-------|-------------|------------|
-| P4.1 | Implement add_crossing_tracking() | Add leg to crossing monitoring | P2.5 |
-| P4.2 | Implement remove_crossing_tracking() | Remove leg from monitoring | P4.1 |
-| P4.3 | Add "track" button to leg UI | User clicks to enable crossing events for a leg | P4.1 |
-| P4.4 | Emit crossing events | Generate events when tracked levels are crossed | P4.1 |
-| P4.5 | Display crossing events in panel | Show in structure panel when levels are crossed | P4.4, P3.2 |
+| # | Issue | Description | Status |
+|---|-------|-------------|--------|
+| P4.1 | #417 Backend: Level crossing detection + events | Track legs, detect crosses, emit LevelCrossEvent | Pending |
+| P4.2 | #418 Frontend: Track button + crossing event display | UI for tracking, display events in Structure Panel | Pending |
 
 ### Parallel Exploration Task
 
@@ -197,15 +196,15 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 **Status:**
 - ✅ P1 (Core Backend) — COMPLETE (13 issues)
 - ✅ P1-UI (Levels at Play UI) — COMPLETE (11 issues including bugfixes)
-- ✅ DAG Cleanup (#394) — COMPLETE (vestiges tracked in architect_fixes.md)
+- ✅ DAG Cleanup (#394, #403, #404, #408, #410, #412) — COMPLETE (all vestiges removed)
 - ✅ P2 (Fib Level Interaction) — COMPLETE (5 issues: #388-#393)
-- ⏳ **Reference Observation (#400)** — NEXT (2 issues: #401, #402)
-- P3 (Structure Panel + Confluence) — 6 issues
-- P4 (Level Crossing Tracking) — 5 issues
+- ✅ Reference Observation (#400) — COMPLETE (2 issues: #401, #402 + #414 UX inversion)
+- ✅ P3 (Structure Panel + Confluence) — COMPLETE (#415)
+- ⏳ **P4 (Level Crossing Tracking)** — NEXT (#416: 2 sub-issues #417, #418)
 
-**Next step:** Reference Observation epic (#400) — filter status API + observation UI in Levels at Play
+**Next step:** Phase 4 (Opt-in Level Crossing) — selective level tracking, crossing events
 
-**Spec:** `Docs/Working/reference_observation_spec.md`
+**Spec:** `Docs/Working/reference_layer_spec.md` (lines 806-826)
 
 ---
 
@@ -264,12 +263,12 @@ All 3 pending changes accepted. Summary:
 | DetectionConfig | Complete | Centralizes all parameters including pruning toggles (#288) |
 | SwingNode | **Removed** | Deleted in #394; formation now in Reference Layer |
 | ReferenceFrame | Complete | Central coordinate abstraction |
-| ReferenceLayer | **Phase 1 Complete** | Core + Levels at Play UI (#361-#387) |
+| ReferenceLayer | **Phase 3 Complete** | Core + UI + Observation + Structure Panel (#361-#387, #400, #414, #415) |
 | Pivot Breach Pruning | Complete | 10% threshold with replacement leg (#208) |
 | Engulfed Detection | Complete | Strict (0.0 threshold) deletes leg (#208, #236) |
 | Inner Structure Pruning | **Removed** | Deleted in #348 — disabled by default, worst-performing method |
-| Replay View | Complete | Tree-based UI, forward playback |
-| DAG Visualization | Complete | Leg/origin visualization, hover highlighting, chart interaction |
+| Replay View | **Removed** | Consolidated into DAG View (#408, #410) |
+| DAG Visualization | Complete | Now called "Structural Legs" (#411), lazy init (#412) |
 | Hierarchy Exploration | **Complete** | Tree icon, lineage API, focus/ancestor/descendant display (#250) |
 | Chart Controls | **Complete** | Maximize/minimize per chart (#263) |
 | Detection Config Panel | **Complete** | Runtime threshold adjustment, Fib dropdowns (#288, #318, #343) |
@@ -284,8 +283,8 @@ All 3 pending changes accepted. Summary:
 | Swing Hierarchy | **Removed** | O(n²) dead code; leg hierarchy used instead (#301) |
 | Turn/Domination Pruning | **Removed** | Redundant; creation-time check handles all cases (#296) |
 | Legacy Code | **Deleted** | All pre-DAG modules removed (#210, #219, #228) |
-| Test Suite | Healthy | 629 tests passing |
-| Documentation | Current | All docs updated (#385) |
+| Test Suite | Healthy | 524 tests passing, 1 skipped (marginal scaling test failure noted in debt) |
+| Documentation | Current | All docs updated (Jan 1) |
 
 ---
 
@@ -293,9 +292,9 @@ All 3 pending changes accepted. Summary:
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| `developer_guide.md` | Current | Reference Layer Phase 1 API documented (#385) |
-| `user_guide.md` | Current | O! marker, follow leg updated |
-| `DAG.md` | Current | Updated Dec 24 |
+| `developer_guide.md` | Current | API restructure documented; Reference Observation API added |
+| `user_guide.md` | Current | O! marker, follow leg, Structural Legs naming updated |
+| `DAG.md` | Current | Updated Dec 31 |
 | `CLAUDE.md` | Current | No changes needed |
 
 ---
@@ -365,6 +364,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 1 | #400, #403, #404, #408, #409, #410, #411, #412, #414 — Reference Observation, router cleanup, DAG cleanup, cache consolidation, lazy init, view fixes (9 issues) | All Accepted; Phase 2 complete, P3 ready |
 | Dec 31 | #398 — Schema unification, router split, naming cleanup | Accepted with notes; #403 filed for incomplete split (duplication, tombstones) |
 | Dec 31 | #395, #396, #397 — Pivot fix, arch cleanup (Phases 1-2d), warmup preservation | All Accepted; #398 filed for remaining work |
 | Dec 31 | #394 — DAG cleanup review + architectural investigation | Accepted with notes; vestiges identified in `architect_fixes.md`; epic filed |

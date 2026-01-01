@@ -52,10 +52,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     crossingEvents,
     trackError,
     clearTrackError,
-    // P3/P4 frontend (Issues #420, #421)
+    // P3/P4 frontend (Issue #420)
     structureData,
     isStructureLoading,
-    confluenceData,
   } = useReferenceState();
 
   // Core state (#412: simplified from CalibrationData)
@@ -627,7 +626,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 onLegClick={toggleStickyLeg}
                 filteredLegs={referenceState?.filtered_legs ?? []}
                 showFiltered={showFiltered}
-                confluenceZones={confluenceData?.zones ?? []}
               />
             }
             chart2Overlay={
@@ -641,7 +639,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 onLegClick={toggleStickyLeg}
                 filteredLegs={referenceState?.filtered_legs ?? []}
                 showFiltered={showFiltered}
-                confluenceZones={confluenceData?.zones ?? []}
               />
             }
           />

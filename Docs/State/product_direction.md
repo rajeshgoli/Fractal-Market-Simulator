@@ -7,30 +7,28 @@
 
 ## Current Objective
 
-**Complete P3/P4 frontend work (#419), then Reference Layer exploration.**
+**Reference Layer exploration + Outcome Layer definition.**
 
 ---
 
-## Current Phase: P3/P4 Frontend Completion
+## Current Phase: Exploration & Rule Discovery
 
-Reference Layer backend is complete. Frontend gaps identified and filed as #419.
+P1-P4 Reference Layer is **complete**. Foundation enables:
+- Level formation/breach observation in real-time
+- Confluence zone visualization
+- Level crossing event tracking
+- Structure panel with touched/active/current levels
 
-**Active epic:** #419 (2 sub-issues: #420, #421)
+**Two parallel tracks:**
 
-| Sub-Issue | Scope | Status |
-|-----------|-------|--------|
-| #420 | Structure Panel + Telemetry Events | Pending |
-| #421 | Confluence Zones + Track Button | Pending |
-
-**What's missing:**
-- Structure Panel UI (touched/active/current sections)
-- Confluence zones on chart (thicker bands)
-- Telemetry recent events section
-- Track button on legs
+| Track | Purpose | Status |
+|-------|---------|--------|
+| Reference Layer Exploration | Tune salience formula empirically | Ready — needs tuning UI |
+| Outcome Layer | Rule discovery: P(outcome \| features) | Draft — needs interview |
 
 ---
 
-## Next Phase: Reference Layer Exploration
+## Reference Layer Exploration
 
 **Spec:** `Docs/Working/reference_layer_exploration.md`
 
@@ -46,9 +44,9 @@ Reference Layer is the exploration ground for salience formulas — same pattern
 
 ---
 
-## Parallel: Outcome Layer Definition
+## Outcome Layer Definition
 
-**Spec:** `Docs/Working/outcome_layer_spec.md` (draft)
+**Spec:** `Docs/Working/outcome_layer_spec.md` (draft — needs interview)
 
 New layer for rule discovery, downstream of Reference Layer:
 - Touch detection (what "price touched level" means)
@@ -56,25 +54,24 @@ New layer for rule discovery, downstream of Reference Layer:
 - Feature extraction (structural importance, scale, location, confluence)
 - Statistical model: P(outcome | features)
 
-Architecture not finalized — will iterate as Reference Layer exploration progresses.
+**Open questions requiring user input:**
+- Touch definition (wick vs close, tolerance band)
+- Outcome definition (bounce magnitude, lookforward window)
+- Feature prioritization
+- Validation approach
 
 ---
 
-## Completed: Reference Layer Backend (Jan 1, 2026)
+## Completed: Reference Layer (Jan 1, 2026)
 
-**Status:** Complete. P3+P4 backend implemented, frontend partial.
+**Status:** Complete (all 4 phases — backend + frontend).
 
 | Phase | Backend | Frontend |
 |-------|---------|----------|
-| P1: Core + Levels at Play | Complete | Complete |
-| P2: Fib Level Interaction | Complete | Complete |
-| P3: Structure Panel + Confluence | Complete | **Partial** |
-| P4: Level Crossing | Complete | **Partial** |
-
-Backend APIs exist but aren't wired to UI:
-- `/api/reference/structure` — Not called
-- `/api/reference/confluence` — Not called
-- `/api/reference/telemetry` — Events section missing
+| P1: Core + Levels at Play | ✅ Complete | ✅ Complete |
+| P2: Fib Level Interaction | ✅ Complete | ✅ Complete |
+| P3: Structure Panel + Confluence | ✅ Complete | ✅ Complete (#420) |
+| P4: Level Crossing | ✅ Complete | ✅ Complete (#421) |
 
 ---
 

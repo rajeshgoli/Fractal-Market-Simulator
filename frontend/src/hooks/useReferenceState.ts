@@ -2,11 +2,9 @@ import { useState, useCallback, useRef } from 'react';
 import {
   fetchReferenceState as fetchReferenceStateApi,
   fetchStructurePanel,
-  fetchConfluenceZones,
   ReferenceStateResponseExtended,
   LevelCrossEvent,
   StructurePanelResponse,
-  ConfluenceZonesResponse,
   trackLegForCrossing,
   untrackLegForCrossing,
 } from '../lib/api';
@@ -28,9 +26,6 @@ interface UseReferenceStateReturn {
   // Structure panel (Issue #420)
   structureData: StructurePanelResponse | null;
   isStructureLoading: boolean;
-  // Confluence zones (Issue #421)
-  confluenceData: ConfluenceZonesResponse | null;
-  isConfluenceLoading: boolean;
 }
 
 export function useReferenceState(): UseReferenceStateReturn {
@@ -44,9 +39,6 @@ export function useReferenceState(): UseReferenceStateReturn {
   // Structure panel state (Issue #420)
   const [structureData, setStructureData] = useState<StructurePanelResponse | null>(null);
   const [isStructureLoading, setIsStructureLoading] = useState(false);
-  // Confluence zones state (Issue #421)
-  const [confluenceData, setConfluenceData] = useState<ConfluenceZonesResponse | null>(null);
-  const [isConfluenceLoading, setIsConfluenceLoading] = useState(false);
 
   // Track previous reference IDs for fade-out detection
   const prevRefIdsRef = useRef<Set<string>>(new Set());
@@ -57,15 +49,13 @@ export function useReferenceState(): UseReferenceStateReturn {
   const fetchReferenceState = useCallback(async (barIndex: number) => {
     setIsLoading(true);
     setIsStructureLoading(true);
-    setIsConfluenceLoading(true);
     setError(null);
 
     try {
       // Fetch all data in parallel for performance
-      const [state, structure, confluence] = await Promise.all([
+      const [state, structure] = await Promise.all([
         fetchReferenceStateApi(barIndex),
         fetchStructurePanel(barIndex).catch(() => null),
-        fetchConfluenceZones(barIndex).catch(() => null),
       ]);
 
       // Detect removed references for fade-out animation
@@ -105,13 +95,11 @@ export function useReferenceState(): UseReferenceStateReturn {
 
       setReferenceState(state);
       setStructureData(structure);
-      setConfluenceData(confluence);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch reference state');
     } finally {
       setIsLoading(false);
       setIsStructureLoading(false);
-      setIsConfluenceLoading(false);
     }
   }, []);
 
@@ -171,8 +159,5 @@ export function useReferenceState(): UseReferenceStateReturn {
     // Structure panel (Issue #420)
     structureData,
     isStructureLoading,
-    // Confluence zones (Issue #421)
-    confluenceData,
-    isConfluenceLoading,
   };
 }
