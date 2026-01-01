@@ -595,11 +595,11 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         onToggleSidebar={() => {}}
         currentTimestamp={currentTimestamp}
         sourceBarCount={sourceBars.length}
-        calibrationStatus={
+        initStatus={
           calibrationPhase === CalibrationPhase.CALIBRATING
-            ? 'calibrating'
+            ? 'initializing'
             : calibrationPhase === CalibrationPhase.CALIBRATED
-            ? 'calibrated'
+            ? 'initialized'
             : calibrationPhase === CalibrationPhase.PLAYING
             ? 'playing'
             : undefined

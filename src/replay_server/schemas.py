@@ -271,22 +271,17 @@ class FeedbackAttachmentLifecycleEvent(BaseModel):
     explanation: str
 
 
-class FeedbackDirectionConfig(BaseModel):
-    """Per-direction config in feedback snapshot (#345, #394: formation_fib removed)."""
-    engulfed_breach_threshold: float
-
-
 class FeedbackDetectionConfig(BaseModel):
     """Detection config captured in feedback snapshot.
 
-    Records the full detection config at time of observation for reproducibility.
+    Records the symmetric detection config at time of observation for reproducibility.
+    #404: Config is now symmetric - engulfed_breach_threshold is global, not per-direction.
     """
-    bull: FeedbackDirectionConfig
-    bear: FeedbackDirectionConfig
     stale_extension_threshold: float
     origin_range_threshold: float
     origin_time_threshold: float
     max_turns: int  # Max legs to keep at each pivot by heft (#404)
+    engulfed_breach_threshold: float  # Symmetric engulfed threshold (#404)
 
 
 class PlaybackFeedbackSnapshot(BaseModel):

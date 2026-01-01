@@ -6,7 +6,7 @@ interface HeaderProps {
   onToggleSidebar: () => void;
   currentTimestamp?: string;
   sourceBarCount: number;
-  calibrationStatus?: 'calibrating' | 'calibrated' | 'playing';
+  initStatus?: 'initializing' | 'initialized' | 'playing';
   dataFileName?: string;
   onOpenSettings?: () => void;
   currentView?: ViewMode;
@@ -17,7 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSidebar,
   currentTimestamp,
   sourceBarCount,
-  calibrationStatus,
+  initStatus,
   dataFileName,
   onOpenSettings,
   currentView = 'dag',
@@ -111,18 +111,18 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Calibration Status Badge */}
-        {calibrationStatus && (
+        {/* Status Badge */}
+        {initStatus && (
           <div className={`px-2 py-0.5 rounded text-xs font-medium ${
-            calibrationStatus === 'calibrating'
+            initStatus === 'initializing'
               ? 'bg-trading-orange/20 text-trading-orange'
-              : calibrationStatus === 'calibrated'
+              : initStatus === 'initialized'
               ? 'bg-trading-bull/20 text-trading-bull'
               : 'bg-trading-blue/20 text-trading-blue'
           }`}>
-            {calibrationStatus === 'calibrating' && 'Calibrating...'}
-            {calibrationStatus === 'calibrated' && 'Calibrated'}
-            {calibrationStatus === 'playing' && 'Playing'}
+            {initStatus === 'initializing' && 'Initializing...'}
+            {initStatus === 'initialized' && 'Initialized'}
+            {initStatus === 'playing' && 'Playing'}
           </div>
         )}
       </div>

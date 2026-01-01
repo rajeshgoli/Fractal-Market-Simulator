@@ -866,11 +866,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
         onToggleSidebar={() => state.setIsSidebarOpen(!state.isSidebarOpen)}
         currentTimestamp={currentTimestamp}
         sourceBarCount={forwardPlayback.currentPosition + 1}
-        calibrationStatus={
+        initStatus={
           state.calibrationPhase === CalibrationPhase.CALIBRATING
-            ? 'calibrating'
+            ? 'initializing'
             : state.calibrationPhase === CalibrationPhase.CALIBRATED
-            ? 'calibrated'
+            ? 'initialized'
             : state.calibrationPhase === CalibrationPhase.PLAYING
             ? 'playing'
             : undefined
