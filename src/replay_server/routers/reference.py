@@ -117,6 +117,13 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
             direction_imbalance=None,
             is_warming_up=True,
             warmup_progress=[0, 50],
+            filtered_legs=[],
+            filter_stats=FilterStatsResponse(
+                total_legs=0,
+                valid_count=0,
+                pass_rate=0.0,
+                by_reason={'not_formed': 0, 'pivot_breached': 0, 'origin_breached': 0, 'completed': 0, 'cold_start': 0},
+            ),
         )
 
     if not cache.is_initialized():
@@ -128,6 +135,13 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
             direction_imbalance=None,
             is_warming_up=True,
             warmup_progress=[0, 50],
+            filtered_legs=[],
+            filter_stats=FilterStatsResponse(
+                total_legs=0,
+                valid_count=0,
+                pass_rate=0.0,
+                by_reason={'not_formed': 0, 'pivot_breached': 0, 'origin_breached': 0, 'completed': 0, 'cold_start': 0},
+            ),
         )
 
     # Get or create reference layer
@@ -153,6 +167,13 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
             direction_imbalance=None,
             is_warming_up=True,
             warmup_progress=[0, 50],
+            filtered_legs=[],
+            filter_stats=FilterStatsResponse(
+                total_legs=0,
+                valid_count=0,
+                pass_rate=0.0,
+                by_reason={'not_formed': 0, 'pivot_breached': 0, 'origin_breached': 0, 'completed': 0, 'cold_start': 0},
+            ),
         )
 
     # Get active legs from detector
