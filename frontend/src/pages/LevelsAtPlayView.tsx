@@ -6,6 +6,7 @@ import { ResizeHandle } from '../components/ResizeHandle';
 import { ReferenceTelemetryPanel } from '../components/ReferenceTelemetryPanel';
 import { ReferenceLegOverlay } from '../components/ReferenceLegOverlay';
 import { SettingsPanel } from '../components/SettingsPanel';
+import { StructurePanel } from '../components/StructurePanel';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { useChartPreferences } from '../hooks/useChartPreferences';
 import { useSessionSettings } from '../hooks/useSessionSettings';
@@ -51,6 +52,10 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     crossingEvents,
     trackError,
     clearTrackError,
+    // P3/P4 frontend (Issues #420, #421)
+    structureData,
+    isStructureLoading,
+    confluenceData,
   } = useReferenceState();
 
   // Core state (#412: simplified from CalibrationData)
@@ -622,6 +627,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 onLegClick={toggleStickyLeg}
                 filteredLegs={referenceState?.filtered_legs ?? []}
                 showFiltered={showFiltered}
+                confluenceZones={confluenceData?.zones ?? []}
               />
             }
             chart2Overlay={
@@ -635,6 +641,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 onLegClick={toggleStickyLeg}
                 filteredLegs={referenceState?.filtered_legs ?? []}
                 showFiltered={showFiltered}
+                confluenceZones={confluenceData?.zones ?? []}
               />
             }
           />
@@ -697,16 +704,29 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
           <ResizeHandle onResize={handlePanelResize} />
 
-          <div className="shrink-0" style={{ height: chartPrefs.explanationPanelHeight }}>
-            <ReferenceTelemetryPanel
-              referenceState={referenceState}
-              showFiltered={showFiltered}
-              onToggleShowFiltered={() => setShowFiltered(prev => !prev)}
-              crossingEvents={crossingEvents}
-              trackError={trackError}
-              onClearTrackError={clearTrackError}
-              trackedCount={stickyLegIds.size}
-            />
+          <div className="shrink-0 flex gap-2" style={{ height: chartPrefs.explanationPanelHeight }}>
+            {/* Structure Panel (Issue #420) */}
+            <div className="w-64 shrink-0">
+              <StructurePanel
+                structureData={structureData}
+                references={referenceState?.references ?? []}
+                trackedLegIds={stickyLegIds}
+                onToggleTrack={toggleStickyLeg}
+                isLoading={isStructureLoading}
+              />
+            </div>
+            {/* Telemetry Panel */}
+            <div className="flex-1">
+              <ReferenceTelemetryPanel
+                referenceState={referenceState}
+                showFiltered={showFiltered}
+                onToggleShowFiltered={() => setShowFiltered(prev => !prev)}
+                crossingEvents={crossingEvents}
+                trackError={trackError}
+                onClearTrackError={clearTrackError}
+                trackedCount={stickyLegIds.size}
+              />
+            </div>
           </div>
         </main>
 

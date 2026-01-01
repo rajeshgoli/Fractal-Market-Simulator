@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import type { IChartApi, ISeriesApi, Time, LineData, LineWidth } from 'lightweight-charts';
-import { LineSeries, LineStyle } from 'lightweight-charts';
-import { ReferenceSwing, FilteredLeg, FilterReason } from '../lib/api';
+import { LineSeries, LineStyle, AreaSeries } from 'lightweight-charts';
+import { ReferenceSwing, FilteredLeg, FilterReason, ConfluenceZone } from '../lib/api';
 import { BarData } from '../types';
 
 interface ReferenceLegOverlayProps {
@@ -16,6 +16,8 @@ interface ReferenceLegOverlayProps {
   // Reference Observation mode (Issue #400)
   filteredLegs?: FilteredLeg[];
   showFiltered?: boolean;
+  // Confluence zones (Issue #421)
+  confluenceZones?: ConfluenceZone[];
 }
 
 // Scale to line width mapping
@@ -77,6 +79,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   onLegClick,
   filteredLegs = [],
   showFiltered = false,
+  confluenceZones = [],
 }) => {
   // Track created line series so we can remove them on update
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -84,6 +87,9 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   // Fib level series (separate from leg lines)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fibSeriesRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
+  // Confluence zone series (Issue #421)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const confluenceSeriesRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
 
   // Label positions state (for rendering scale/location badges)
   const [labelPositions, setLabelPositions] = useState<Map<string, { x: number; y: number; ref: ReferenceSwing }>>(new Map());
@@ -103,6 +109,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   }>>(new Map());
   // Hovered filtered leg
   const [hoveredFilteredLegId, setHoveredFilteredLegId] = useState<string | null>(null);
+  // Confluence zone label positions (Issue #421)
+  const [confluenceLabelPositions, setConfluenceLabelPositions] = useState<Map<string, { x: number; y: number; zone: ConfluenceZone }>>(new Map());
 
   // Hover state
   const [hoveredLegId, setHoveredLegId] = useState<string | null>(null);
@@ -172,6 +180,120 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     }
     fibSeriesRef.current.clear();
   }, [chart]);
+
+  // Clear all confluence zone series (Issue #421)
+  const clearConfluenceSeries = useCallback(() => {
+    if (!chart) return;
+
+    for (const [, confluenceSeries] of confluenceSeriesRef.current) {
+      try {
+        chart.removeSeries(confluenceSeries);
+      } catch {
+        // Series may already be removed
+      }
+    }
+    confluenceSeriesRef.current.clear();
+  }, [chart]);
+
+  // Create confluence zone as a horizontal band (Issue #421)
+  const createConfluenceZoneBand = useCallback((zone: ConfluenceZone, index: number): void => {
+    if (!chart || !series) return;
+
+    const timeRange = getVisibleTimeRange();
+    if (!timeRange) return;
+
+    const key = `confluence_${index}_${zone.center_price.toFixed(2)}`;
+    if (confluenceSeriesRef.current.has(key)) return;
+
+    try {
+      // Use two line series to create a band effect
+      // Top line
+      const topSeries = chart.addSeries(LineSeries, {
+        color: 'rgba(251, 191, 36, 0.6)',  // Amber for confluence
+        lineWidth: 2 as LineWidth,
+        lineStyle: LineStyle.Solid,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        autoscaleInfoProvider: () => null,
+      });
+
+      const topData: LineData<Time>[] = [
+        { time: timeRange.from as Time, value: zone.max_price },
+        { time: timeRange.to as Time, value: zone.max_price },
+      ];
+      topSeries.setData(topData);
+      confluenceSeriesRef.current.set(`${key}_top`, topSeries);
+
+      // Bottom line
+      const bottomSeries = chart.addSeries(LineSeries, {
+        color: 'rgba(251, 191, 36, 0.6)',  // Amber for confluence
+        lineWidth: 2 as LineWidth,
+        lineStyle: LineStyle.Solid,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        autoscaleInfoProvider: () => null,
+      });
+
+      const bottomData: LineData<Time>[] = [
+        { time: timeRange.from as Time, value: zone.min_price },
+        { time: timeRange.to as Time, value: zone.min_price },
+      ];
+      bottomSeries.setData(bottomData);
+      confluenceSeriesRef.current.set(`${key}_bottom`, bottomSeries);
+
+      // Center line (thicker, more visible)
+      const centerSeries = chart.addSeries(LineSeries, {
+        color: 'rgba(251, 191, 36, 0.8)',  // Brighter amber
+        lineWidth: 3 as LineWidth,
+        lineStyle: LineStyle.Solid,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        autoscaleInfoProvider: () => null,
+      });
+
+      const centerData: LineData<Time>[] = [
+        { time: timeRange.from as Time, value: zone.center_price },
+        { time: timeRange.to as Time, value: zone.center_price },
+      ];
+      centerSeries.setData(centerData);
+      confluenceSeriesRef.current.set(`${key}_center`, centerSeries);
+    } catch (error) {
+      console.error('Failed to create confluence zone:', error);
+    }
+  }, [chart, series, getVisibleTimeRange]);
+
+  // Update confluence zone label positions
+  const updateConfluenceLabelPositions = useCallback(() => {
+    if (!chart || !series || bars.length === 0 || confluenceZones.length === 0) {
+      setConfluenceLabelPositions(new Map());
+      return;
+    }
+
+    const positions = new Map<string, { x: number; y: number; zone: ConfluenceZone }>();
+
+    // Position labels at the right edge of the visible range
+    const visibleRange = chart.timeScale().getVisibleLogicalRange();
+    if (!visibleRange) return;
+
+    const rightIdx = Math.min(bars.length - 1, Math.ceil(visibleRange.to));
+    const rightTime = bars[rightIdx]?.timestamp;
+    if (!rightTime) return;
+
+    const x = chart.timeScale().timeToCoordinate(rightTime as Time);
+    if (x === null) return;
+
+    confluenceZones.forEach((zone, idx) => {
+      const y = series.priceToCoordinate(zone.center_price);
+      if (y !== null) {
+        positions.set(`confluence_${idx}`, { x: x - 10, y, zone });
+      }
+    });
+
+    setConfluenceLabelPositions(positions);
+  }, [chart, series, bars, confluenceZones]);
 
   // Compute fib levels for a reference
   const computeFibLevels = useCallback((ref: ReferenceSwing): { ratio: number; price: number }[] => {
@@ -454,12 +576,14 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     if (!chart || !series || bars.length === 0) {
       clearLineSeries();
       clearFibSeries();
+      clearConfluenceSeries();
       return;
     }
 
     try {
       // Clear existing lines
       clearLineSeries();
+      clearConfluenceSeries();
 
       // Create line series for each reference
       // When showFiltered is on, fade valid legs so filtered legs stand out
@@ -481,9 +605,17 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         }
       }
 
+      // Create confluence zone bands (Issue #421)
+      if (!showFiltered && confluenceZones.length > 0) {
+        confluenceZones.forEach((zone, idx) => {
+          createConfluenceZoneBand(zone, idx);
+        });
+      }
+
       // Update label positions
       updateLabelPositions();
       updateFilteredLabelPositions();
+      updateConfluenceLabelPositions();
 
       // Update fib levels
       updateFibLevels();
@@ -495,11 +627,12 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       try {
         clearLineSeries();
         clearFibSeries();
+        clearConfluenceSeries();
       } catch {
         // Ignore disposal errors during cleanup
       }
     };
-  }, [chart, series, references, fadingRefs, bars, clearLineSeries, clearFibSeries, createRefLine, updateLabelPositions, updateFibLevels, showFiltered, filteredLegs, createFilteredLegLine, updateFilteredLabelPositions]);
+  }, [chart, series, references, fadingRefs, bars, clearLineSeries, clearFibSeries, clearConfluenceSeries, createRefLine, updateLabelPositions, updateFibLevels, showFiltered, filteredLegs, createFilteredLegLine, updateFilteredLabelPositions, confluenceZones, createConfluenceZoneBand, updateConfluenceLabelPositions]);
 
   // Update fib levels when hover or sticky state changes
   useEffect(() => {
@@ -513,6 +646,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     const handleRangeChange = () => {
       updateLabelPositions();
       updateFilteredLabelPositions();
+      updateConfluenceLabelPositions();
       updateFibLevels();
     };
 
@@ -521,7 +655,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
     };
-  }, [chart, updateLabelPositions, updateFilteredLabelPositions, updateFibLevels]);
+  }, [chart, updateLabelPositions, updateFilteredLabelPositions, updateConfluenceLabelPositions, updateFibLevels]);
 
   // Handle mouse enter on label
   const handleLabelMouseEnter = useCallback((legId: string) => {
@@ -551,7 +685,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
   // Get chart container for label positioning
   const chartContainer = chart?.chartElement()?.closest('.chart-container');
-  if (!chartContainer || (labelPositions.size === 0 && legLinePositions.size === 0 && filteredLabelPositions.size === 0 && filteredLinePositions.size === 0)) {
+  if (!chartContainer || (labelPositions.size === 0 && legLinePositions.size === 0 && filteredLabelPositions.size === 0 && filteredLinePositions.size === 0 && confluenceLabelPositions.size === 0)) {
     return null;
   }
 
@@ -820,6 +954,51 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
                 </text>
               </>
             )}
+          </g>
+        );
+      })}
+
+      {/* Confluence zone labels (Issue #421) */}
+      {!showFiltered && Array.from(confluenceLabelPositions.entries()).map(([key, { x, y, zone }]) => {
+        // Build label showing participating references
+        const refLabels = zone.levels.slice(0, 3).map(l => `${l.scale} ${l.direction === 'bull' ? '▲' : '▼'}`).join(' + ');
+        const moreCount = zone.levels.length > 3 ? ` +${zone.levels.length - 3}` : '';
+
+        return (
+          <g key={key} transform={`translate(${x - 80}, ${y})`}>
+            {/* Confluence badge */}
+            <rect
+              x={0}
+              y={-10}
+              width={80}
+              height={20}
+              rx={4}
+              fill="rgba(251, 191, 36, 0.9)"
+              stroke="rgba(251, 191, 36, 1)"
+              strokeWidth={1}
+            />
+            <text
+              x={40}
+              y={-1}
+              textAnchor="middle"
+              fill="#000000"
+              fontSize={8}
+              fontWeight="600"
+              fontFamily="system-ui, sans-serif"
+            >
+              CONFLUENCE
+            </text>
+            <text
+              x={40}
+              y={7}
+              textAnchor="middle"
+              fill="#000000"
+              fontSize={7}
+              fontWeight="500"
+              fontFamily="system-ui, sans-serif"
+            >
+              {zone.reference_count} refs
+            </text>
           </g>
         );
       })}

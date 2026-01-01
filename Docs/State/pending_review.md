@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2026-01-01
 
@@ -10,6 +10,8 @@
 
 1. **#415** — Reference Layer P3: Structure Panel + Confluence Zones backend + Telemetry updates
 2. **#416** — Reference Layer P4: Opt-in Level Crossing Detection (backend #417, frontend #418)
+3. **#420** — P3/P4 Frontend: Structure Panel component + Telemetry Events section
+4. **#421** — P3/P4 Frontend: Confluence Zones chart rendering + Track button
 
 ---
 
