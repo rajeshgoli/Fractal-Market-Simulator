@@ -854,6 +854,9 @@ async def advance_replay(request: ReplayAdvanceRequest):
             # Process bar
             events = detector.process_bar(bar)
 
+            # Track formation for reference layer warmup (#397)
+            ref_layer.track_formation(detector.state.active_legs, bar)
+
             # Capture lifecycle events during replay
             csv_index = s.window_offset + bar.index
             ts_iso = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
@@ -927,6 +930,12 @@ async def advance_replay(request: ReplayAdvanceRequest):
 
         # Process bar with detector (DAG events)
         events = detector.process_bar(bar)
+
+        # Track formation for reference layer warmup (#397)
+        # Without this, reference layer only sees legs when update() is called,
+        # missing legs that formed and got pruned while in DAG view
+        if ref_layer is not None:
+            ref_layer.track_formation(detector.state.active_legs, bar)
 
         # Add bar to response
         new_bars.append(ReplayBarResponse(
@@ -1090,6 +1099,9 @@ async def reverse_replay(request: ReplayReverseRequest):
 
         # Process bar
         events = detector.process_bar(bar)
+
+        # Track formation for reference layer warmup (#397)
+        ref_layer.track_formation(detector.state.active_legs, bar)
 
         # Capture lifecycle events during replay (#299)
         # This ensures Follow Leg feature works correctly after step-back

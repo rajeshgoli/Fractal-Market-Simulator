@@ -280,6 +280,27 @@ class ReferenceLayer:
         self._tracked_for_crossing = other._tracked_for_crossing.copy()
         self._seen_leg_ids = other._seen_leg_ids.copy()
 
+    def track_formation(self, legs: List[Leg], bar: Bar) -> None:
+        """
+        Lightweight formation tracking for per-bar updates during DAG advances.
+
+        This method checks formation status for all legs and updates the range
+        distribution without computing the full ReferenceState. Call this on
+        every bar during playback to ensure formation tracking stays current.
+
+        After #394, formation tracking moved from DAG layer to Reference layer.
+        Without per-bar tracking, the reference layer only sees legs when
+        update() is called (in Levels at Play view), missing many legs that
+        formed and got pruned while in DAG view.
+
+        Args:
+            legs: Active legs from DAG.
+            bar: Current bar with OHLC.
+        """
+        current_price = Decimal(str(bar.close))
+        for leg in legs:
+            self._is_formed_for_reference(leg, current_price)
+
     @property
     def is_cold_start(self) -> bool:
         """

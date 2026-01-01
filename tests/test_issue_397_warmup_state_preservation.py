@@ -5,16 +5,41 @@ The bug was that switching from Levels at Play to DAG view triggered
 a detection config sync, which created a new ReferenceLayer and reset
 the _range_distribution (warmup progress).
 
-The fix adds copy_state_from() method to ReferenceLayer and uses it
-in the config update endpoint to preserve accumulated state.
+The fix adds:
+1. copy_state_from() method to preserve state across config updates
+2. track_formation() method for per-bar formation tracking during advances
 """
 
 from decimal import Decimal
+from dataclasses import dataclass
 
 import pytest
 
 from src.swing_analysis.reference_layer import ReferenceLayer
 from src.swing_analysis.reference_config import ReferenceConfig
+
+
+@dataclass
+class MockBar:
+    """Mock bar for testing."""
+    index: int
+    timestamp: float
+    open: float
+    high: float
+    low: float
+    close: float
+
+
+@dataclass
+class MockLeg:
+    """Mock leg for testing."""
+    leg_id: str
+    direction: str
+    origin_price: Decimal
+    pivot_price: Decimal
+    range: Decimal
+    depth: int = 0
+    status: str = "active"
 
 
 class TestCopyStateFrom:
@@ -139,3 +164,140 @@ class TestWarmupStatePreservation:
         assert new_layer.is_cold_start is False
         assert new_layer.cold_start_progress == (55, 50)
         assert len(new_layer._formed_refs) == 55
+
+
+class TestTrackFormation:
+    """Tests for ReferenceLayer.track_formation() method."""
+
+    def test_track_formation_adds_formed_legs_to_distribution(self):
+        """track_formation should add formed legs to range distribution."""
+        ref_layer = ReferenceLayer()
+
+        # Create a bear leg (high to low) - price at 38.2% retracement = formed
+        # Origin = 110, Pivot = 100, Range = 10
+        # Price at 103.82 = 38.2% from pivot toward origin = formed
+        leg = MockLeg(
+            leg_id="leg_1",
+            direction="bear",
+            origin_price=Decimal("110"),
+            pivot_price=Decimal("100"),
+            range=Decimal("10"),
+        )
+
+        # Bar with close at 104 (40% retracement, should form)
+        bar = MockBar(
+            index=0,
+            timestamp=1000.0,
+            open=102.0,
+            high=105.0,
+            low=101.0,
+            close=104.0,
+        )
+
+        assert len(ref_layer._range_distribution) == 0
+        assert "leg_1" not in ref_layer._formed_refs
+
+        ref_layer.track_formation([leg], bar)
+
+        # Leg should be formed and added to distribution
+        assert "leg_1" in ref_layer._formed_refs
+        assert len(ref_layer._range_distribution) == 1
+        assert ref_layer._range_distribution[0] == Decimal("10")
+
+    def test_track_formation_ignores_unformed_legs(self):
+        """track_formation should not add legs that haven't formed yet."""
+        ref_layer = ReferenceLayer()
+
+        # Create a bear leg - price NOT at 38.2% retracement yet
+        leg = MockLeg(
+            leg_id="leg_1",
+            direction="bear",
+            origin_price=Decimal("110"),
+            pivot_price=Decimal("100"),
+            range=Decimal("10"),
+        )
+
+        # Bar with close at 101 (10% retracement, not formed yet)
+        bar = MockBar(
+            index=0,
+            timestamp=1000.0,
+            open=100.0,
+            high=102.0,
+            low=100.0,
+            close=101.0,
+        )
+
+        ref_layer.track_formation([leg], bar)
+
+        # Leg should NOT be formed
+        assert "leg_1" not in ref_layer._formed_refs
+        assert len(ref_layer._range_distribution) == 0
+
+    def test_track_formation_doesnt_duplicate_legs(self):
+        """track_formation should not add same leg twice to distribution."""
+        ref_layer = ReferenceLayer()
+
+        leg = MockLeg(
+            leg_id="leg_1",
+            direction="bear",
+            origin_price=Decimal("110"),
+            pivot_price=Decimal("100"),
+            range=Decimal("10"),
+        )
+
+        bar = MockBar(
+            index=0,
+            timestamp=1000.0,
+            open=102.0,
+            high=105.0,
+            low=101.0,
+            close=104.0,
+        )
+
+        # Track twice
+        ref_layer.track_formation([leg], bar)
+        ref_layer.track_formation([leg], bar)
+
+        # Should only be added once
+        assert len(ref_layer._range_distribution) == 1
+
+    def test_track_formation_tracks_multiple_legs(self):
+        """track_formation should track multiple legs in one call."""
+        ref_layer = ReferenceLayer()
+
+        # Bear leg: origin=110 (high), pivot=100 (low)
+        # For formation, price must move from pivot toward origin by 38.2%
+        # Price at 104 = 40% from pivot(100) toward origin(110) = formed
+        leg1 = MockLeg(
+            leg_id="leg_1",
+            direction="bear",
+            origin_price=Decimal("110"),
+            pivot_price=Decimal("100"),
+            range=Decimal("10"),
+        )
+        # Bull leg: origin=100 (low), pivot=110 (high)
+        # For formation, price must move from pivot toward origin by 38.2%
+        # Price at 104 = 60% from pivot(110) toward origin(100) = formed
+        leg2 = MockLeg(
+            leg_id="leg_2",
+            direction="bull",
+            origin_price=Decimal("100"),
+            pivot_price=Decimal("110"),
+            range=Decimal("10"),
+        )
+
+        # Bar at 104 - both legs should form
+        bar = MockBar(
+            index=0,
+            timestamp=1000.0,
+            open=103.0,
+            high=105.0,
+            low=103.0,
+            close=104.0,
+        )
+
+        ref_layer.track_formation([leg1, leg2], bar)
+
+        assert "leg_1" in ref_layer._formed_refs
+        assert "leg_2" in ref_layer._formed_refs
+        assert len(ref_layer._range_distribution) == 2
