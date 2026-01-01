@@ -38,7 +38,7 @@ Currently, the Levels at Play view only shows valid references. There's no visib
 Follow the existing Levels at Play UX pattern:
 - **Toggle** in left nav: "Show Filtered" checkbox (default off), persisted to localStorage
 - **Leg list**: When toggle on, filtered legs appear alongside valid refs
-- **Styling**: Filtered legs muted (low opacity), valid refs full opacity
+- **Styling**: Filtered legs highlighted (full opacity), valid refs muted (fade to background)
 - **Filter badges**: Each filtered leg shows reason badge (e.g., "NOT FORMED", "PIVOT BREACHED")
 - **Stats section**: Collapsible panel in left sidebar lower area
 - **Explanation panel**: Clicking filtered leg shows filter reason with details
@@ -48,14 +48,14 @@ Follow the existing Levels at Play UX pattern:
 ```
 ┌─────────────────────────────────────────────┐
 │  BULL REFERENCES                            │
-│  ├─ L1 (L) loc:0.42 sal:0.78               │  ← Valid (full opacity)
-│  ├─ L3 (M) loc:0.65 sal:0.54               │  ← Valid
-│  ├─ L5 (S) [NOT FORMED]                    │  ← Filtered (muted + badge)
-│  └─ L7 (M) [ORIGIN BREACHED]               │  ← Filtered (muted + badge)
+│  ├─ L1 (L) loc:0.42 sal:0.78               │  ← Valid (muted)
+│  ├─ L3 (M) loc:0.65 sal:0.54               │  ← Valid (muted)
+│  ├─ L5 (S) [NOT FORMED]                    │  ← Filtered (highlighted + badge)
+│  └─ L7 (M) [ORIGIN BREACHED]               │  ← Filtered (highlighted + badge)
 │                                             │
 │  BEAR REFERENCES                            │
-│  ├─ L2 (XL) loc:0.31 sal:0.82              │  ← Valid
-│  └─ L4 (L) [PIVOT BREACHED]                │  ← Filtered (muted + badge)
+│  ├─ L2 (XL) loc:0.31 sal:0.82              │  ← Valid (muted)
+│  └─ L4 (L) [PIVOT BREACHED]                │  ← Filtered (highlighted + badge)
 └─────────────────────────────────────────────┘
 ```
 
@@ -175,15 +175,15 @@ Add collapsible "Filter Stats" section to existing telemetry panel:
 
 When "Show Filtered" toggle is on:
 - Filtered legs appear in bull/bear sections
-- Filtered legs have muted opacity (0.4) and filter reason badge
-- Valid refs remain full opacity
+- Filtered legs highlighted (full opacity) with filter reason badge
+- Valid refs muted (0.4 opacity) — fade to background
 - Clicking filtered leg populates explanation panel with filter details
 
 ### ReferenceLegOverlay Updates
 
 When "Show Filtered" toggle is on:
-- Filtered legs render on chart with muted styling
-- Valid refs render at full opacity (inverse of DAG Observation proposal)
+- Filtered legs render on chart at full opacity (highlighted)
+- Valid refs render muted (fade to background)
 
 ---
 
