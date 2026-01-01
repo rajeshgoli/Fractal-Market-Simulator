@@ -730,11 +730,11 @@ class LegDetector:
                 self.state.active_legs.append(new_leg)
                 # #357: Mark that we've created a bull leg
                 self.state._has_created_bull_leg = True
-                # Prune counter-legs at origin by heft ranking (#404)
-                heft_events = self._pruner.prune_by_heft(
+                # Limit legs at pivot to max_turns (#404)
+                max_legs_events = self._pruner.prune_by_max_legs(
                     self.state, new_leg, bar, timestamp
                 )
-                events.extend(heft_events)
+                events.extend(max_legs_events)
                 # Update parent's segment impulse when child forms (#307)
                 if parent_leg_id:
                     parent = self._find_leg_by_id(parent_leg_id)
@@ -840,11 +840,11 @@ class LegDetector:
                 self.state.active_legs.append(new_bear_leg)
                 # #357: Mark that we've created a bear leg
                 self.state._has_created_bear_leg = True
-                # Prune counter-legs at origin by heft ranking (#404)
-                heft_events = self._pruner.prune_by_heft(
+                # Limit legs at pivot to max_turns (#404)
+                max_legs_events = self._pruner.prune_by_max_legs(
                     self.state, new_bear_leg, bar, timestamp
                 )
-                events.extend(heft_events)
+                events.extend(max_legs_events)
                 # Update parent's segment impulse when child forms (#307)
                 if parent_leg_id:
                     parent = self._find_leg_by_id(parent_leg_id)
@@ -939,11 +939,11 @@ class LegDetector:
                     self.state.active_legs.append(new_bear_leg)
                     # #357: Mark that we've created a bear leg
                     self.state._has_created_bear_leg = True
-                    # Prune counter-legs at origin by heft ranking (#404)
-                    heft_events = self._pruner.prune_by_heft(
+                    # Limit legs at pivot to max_turns (#404)
+                    max_legs_events = self._pruner.prune_by_max_legs(
                         self.state, new_bear_leg, bar, timestamp
                     )
-                    events.extend(heft_events)
+                    events.extend(max_legs_events)
                     # Update parent's segment impulse when child forms (#307)
                     if parent_leg_id:
                         parent = self._find_leg_by_id(parent_leg_id)
@@ -1004,11 +1004,11 @@ class LegDetector:
                     self.state.active_legs.append(new_bull_leg)
                     # #357: Mark that we've created a bull leg
                     self.state._has_created_bull_leg = True
-                    # Prune counter-legs at origin by heft ranking (#404)
-                    heft_events = self._pruner.prune_by_heft(
+                    # Limit legs at pivot to max_turns (#404)
+                    max_legs_events = self._pruner.prune_by_max_legs(
                         self.state, new_bull_leg, bar, timestamp
                     )
-                    events.extend(heft_events)
+                    events.extend(max_legs_events)
                     # Update parent's segment impulse when child forms (#307)
                     if parent_leg_id:
                         parent = self._find_leg_by_id(parent_leg_id)

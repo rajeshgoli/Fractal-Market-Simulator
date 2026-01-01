@@ -1,8 +1,6 @@
 /**
  * Leg statistics calculation utilities.
  * Shared logic for computing leg breakdown from events and active legs.
- *
- * #404: Simplified stats - removed CTR and Formed, renamed Turn to Heft
  */
 
 import { LegEvent, ActiveLeg } from '../types';
@@ -10,13 +8,12 @@ import { DagLeg } from '../lib/api';
 
 /**
  * Statistics breakdown for legs.
- * #404: Removed minCtr (counter-trend ratio) and formed counts.
  */
 export interface LegStats {
   engulfed: number;       // Engulfed prune count
   staleExtension: number; // Stale/extension prune count
   proximity: number;      // Proximity prune count
-  heft: number;           // Heft-based prune count (was turnRatio)
+  maxLegs: number;        // Max legs at pivot prune count
 }
 
 /**
@@ -36,7 +33,7 @@ export function calculateLegStats(
     engulfed: 0,
     staleExtension: 0,
     proximity: 0,
-    heft: 0,
+    maxLegs: 0,
   };
 
   // Count from events
@@ -49,9 +46,8 @@ export function calculateLegStats(
         stats.staleExtension++;
       } else if (reason.includes('proximity')) {
         stats.proximity++;
-      } else if (reason.includes('heft') || reason.includes('turn_ratio')) {
-        // Both new 'heft' reason and legacy 'turn_ratio' reasons map to heft
-        stats.heft++;
+      } else if (reason.includes('max_legs') || reason.includes('heft') || reason.includes('turn_ratio')) {
+        stats.maxLegs++;
       }
     }
   }

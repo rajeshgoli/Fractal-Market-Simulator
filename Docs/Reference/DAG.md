@@ -897,12 +897,12 @@ All thresholds are configurable. Defaults shown:
 
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
-| `formation_fib` | 0.236 | Retracement % to confirm swing |
-| `engulfed_breach_threshold` | 0.0 | Combined breach % for engulfed deletion - per direction (#236, #404) |
+| `formation_fib` | 0.236 | Retracement % to confirm swing (Reference Layer) |
+| `engulfed_breach_threshold` | 0.236 | Combined breach % for engulfed deletion - per direction (#236, #404). Set to 1.0 to disable. |
 | `origin_range_prune_threshold` | 0.02 | Range similarity % for origin-proximity consolidation (#294) |
 | `origin_time_prune_threshold` | 0.02 | Time proximity % for origin-proximity consolidation (#294) |
 | `proximity_prune_strategy` | 'oldest' | Strategy for selecting survivor: 'oldest' or 'counter_trend' (#319) |
-| `max_turns` | 10 | Max legs per pivot by raw counter-heft (#404) |
+| `max_turns` | 10 | Max legs per pivot, scored by counter-trend range (#404) |
 | `stale_extension_threshold` | 3.0 | Prune breached child legs at 3x range (root legs preserved) |
 
 **Note (#345):** Origin breach is detected at 0% (any touch of origin). The old `invalidation_threshold` parameter has been removed. Leg status is now only `'active'` or `'stale'`, with `max_origin_breach` tracking structural invalidation.
@@ -938,8 +938,8 @@ for bar in bars:
 The Detection Config Panel in the sidebar provides sliders for adjusting thresholds:
 - Stale Extension threshold (1.0-5.0) — Prune extended legs
 - Origin Proximity % threshold (0.0-0.10) — Consolidate similar origins
-- Turn Ranking (0-20) — Max legs per pivot by heft (#404)
-- Bull/Bear Engulfed Threshold (0.0-0.30) — Per-direction engulfed pruning
+- Max Legs (0-20) — Limit legs per pivot, scored by counter-trend range (#404)
+- Bull/Bear Engulfed Threshold (0.0-1.0) — Per-direction engulfed pruning (1.0 = disabled)
 
 Changes trigger automatic re-calibration via `PUT /api/replay/config`.
 
@@ -951,13 +951,13 @@ The following parameters were removed in issue #404 to simplify the DAG configur
 |-----------|-------------|-----------|
 | `enable_engulfed_prune` | `engulfed_breach_threshold >= 1.0` | Boolean toggle replaced by continuous threshold. Set threshold to 1.0 or higher to disable engulfed pruning. |
 | `min_branch_ratio` | *(removed)* | Origin domination by branch ratio was experimental with no clear behavioral impact. |
-| `min_turn_ratio` | `max_turns` | Threshold mode for turn ratio pruning removed. Only top-k by raw counter-heft is supported. |
-| `max_turns_per_pivot` | `max_turns` | Top-k by ratio mode removed. Only raw counter-heft mode retained. |
+| `min_turn_ratio` | `max_turns` | Threshold mode for turn ratio pruning removed. Only top-k by counter-trend range is supported. |
+| `max_turns_per_pivot` | `max_turns` | Top-k by ratio mode removed. Only counter-trend range scoring retained. |
 | `max_turns_per_pivot_raw` | `max_turns` | Renamed for clarity. Behavior unchanged. |
 
 **Migration notes:**
 - If you were using `enable_engulfed_prune = false`, set `engulfed_breach_threshold = 1.0` instead.
-- If you were using `min_turn_ratio > 0`, switch to `max_turns` (top-k by heft).
+- If you were using `min_turn_ratio > 0`, switch to `max_turns` (top-k by counter-trend range).
 - If you were using `max_turns_per_pivot > 0`, switch to `max_turns`.
 - `min_branch_ratio` has no replacement; this filtering is no longer available.
 
@@ -1302,15 +1302,14 @@ Current defaults are symmetric. If asymmetric behavior isn't needed, simplify to
 
 | Threshold | Value | Purpose |
 |-----------|-------|---------|
-| Formation Fibonacci | 0.236 | Retracement to confirm swing |
-| Invalidation Threshold | 0.382 | Origin breach to invalidate |
-| Pivot Breach Threshold | 0.10 | Pivot extension to replace |
 | Origin Range Prune | 0.02 | Range similarity for origin-proximity pruning (#294) |
 | Origin Time Prune | 0.02 | Time proximity for origin-proximity pruning (#294) |
-| Max Turns | 10 | Top-k by raw counter-heft at each pivot (#404) |
-| Engulfed Breach Threshold | 0.0 | Combined breach % for engulfed deletion (per direction) |
-| Big Swing Threshold | 0.10 | Top 10% by range = "big" |
+| Max Legs | 10 | Limit legs per pivot, scored by counter-trend range (#404) |
+| Engulfed Breach Threshold | 0.236 | Combined breach % for engulfed deletion (per direction). 1.0 = disabled. |
 | Stale Extension | 3.0 | Prune invalidated child legs at 3x range |
+| Big Swing Threshold | 0.10 | Top 10% by range = "big" (Reference Layer) |
+
+Note: Formation Fibonacci (0.236) and Invalidation Threshold (0.382) are Reference Layer concepts, not DAG layer. See Reference Layer documentation.
 
 ---
 

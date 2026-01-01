@@ -55,10 +55,10 @@ const ENGULFED_SLIDER: SliderConfig = {
   key: 'engulfed_breach_threshold',
   label: 'Engulfed',
   min: 0.0,
-  max: 0.30,
+  max: 1.0,
   step: 0.01,
   description: 'Threshold for engulfed pruning',
-  tooltip: 'Prune legs breached on both sides when combined breach exceeds this %. 0 = any breach triggers prune. 1.0 = disabled.',
+  tooltip: 'Prune legs breached on both sides when combined breach exceeds this %. 0 = most aggressive (any breach prunes). 1.0 (100%) = disabled (no engulfed pruning).',
   displayAsPercent: true,
   colorMode: 'restrictive-right',
 };

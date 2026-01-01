@@ -38,9 +38,9 @@ class TestConfigParameters:
     """Test that config parameters are properly defined."""
 
     def test_engulfed_breach_threshold_default(self):
-        """engulfed_breach_threshold should default to 0.0 (strict deletion per #236)."""
+        """engulfed_breach_threshold should default to 0.236 (#404)."""
         config = DirectionConfig()
-        assert config.engulfed_breach_threshold == 0.0
+        assert config.engulfed_breach_threshold == 0.236
 
     def test_custom_engulfed_breach_threshold(self):
         """DirectionConfig should accept custom engulfed_breach_threshold."""
@@ -51,8 +51,8 @@ class TestConfigParameters:
         """DetectionConfig should include engulfed threshold parameters in DirectionConfig."""
         config = DetectionConfig.default()
 
-        assert config.bull.engulfed_breach_threshold == 0.0  # Strict deletion per #236
-        assert config.bear.engulfed_breach_threshold == 0.0  # Strict deletion per #236
+        assert config.bull.engulfed_breach_threshold == 0.236  # Default threshold (#404)
+        assert config.bear.engulfed_breach_threshold == 0.236  # Default threshold (#404)
 
 
 class TestPivotExtension:
@@ -241,7 +241,9 @@ class TestEngulfedLegDetection:
         Note: prune_engulfed_legs runs at START of process_bar, so the engulfed
         prune happens on the bar AFTER both breaches are set.
         """
-        detector = HierarchicalDetector()
+        # Use threshold=0.0 for strict engulfed behavior (any combined breach prunes)
+        config = DetectionConfig.default().with_bull(engulfed_breach_threshold=0.0).with_bear(engulfed_breach_threshold=0.0)
+        detector = HierarchicalDetector(config=config)
 
         # Create a formed bear leg with range=30
         bar0 = make_bar(0, 4445.0, 4450.0, 4440.0, 4448.0)

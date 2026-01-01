@@ -373,7 +373,7 @@ export interface DetectionConfig {
   stale_extension_threshold: number;  // 3x extension prune (default: 3.0)
   origin_range_threshold: number;  // Origin proximity range threshold (#294)
   origin_time_threshold: number;  // Origin proximity time threshold (#294)
-  max_turns: number;  // Max legs per pivot by heft (#404, default: 10)
+  max_turns: number;  // Max legs per pivot (default: 10)
 }
 
 /**
@@ -381,10 +381,10 @@ export interface DetectionConfig {
  */
 export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   bull: {
-    engulfed_breach_threshold: 0.0,
+    engulfed_breach_threshold: 0.236,
   },
   bear: {
-    engulfed_breach_threshold: 0.0,
+    engulfed_breach_threshold: 0.236,
   },
   stale_extension_threshold: 3.0,
   origin_range_threshold: 0.02,

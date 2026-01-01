@@ -103,8 +103,8 @@ export const MarketStructurePanel: React.FC<MarketStructurePanelProps> = ({
                 <span className="text-app-text font-medium">{legStats.proximity}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-app-muted">Heft</span>
-                <span className="text-app-text font-medium">{legStats.heft}</span>
+                <span className="text-app-muted">Max Legs</span>
+                <span className="text-app-text font-medium">{legStats.maxLegs}</span>
               </div>
             </div>
           </div>

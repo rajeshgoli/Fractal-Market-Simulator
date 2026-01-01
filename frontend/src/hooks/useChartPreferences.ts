@@ -17,11 +17,7 @@ function mergeDetectionConfig(saved: Partial<DetectionConfig> | null): Detection
     stale_extension_threshold: saved.stale_extension_threshold ?? DEFAULT_DETECTION_CONFIG.stale_extension_threshold,
     origin_range_threshold: saved.origin_range_threshold ?? DEFAULT_DETECTION_CONFIG.origin_range_threshold,
     origin_time_threshold: saved.origin_time_threshold ?? DEFAULT_DETECTION_CONFIG.origin_time_threshold,
-    min_branch_ratio: saved.min_branch_ratio ?? DEFAULT_DETECTION_CONFIG.min_branch_ratio,
-    min_turn_ratio: saved.min_turn_ratio ?? DEFAULT_DETECTION_CONFIG.min_turn_ratio,
-    max_turns_per_pivot: saved.max_turns_per_pivot ?? DEFAULT_DETECTION_CONFIG.max_turns_per_pivot,
-    max_turns_per_pivot_raw: saved.max_turns_per_pivot_raw ?? DEFAULT_DETECTION_CONFIG.max_turns_per_pivot_raw,
-    enable_engulfed_prune: saved.enable_engulfed_prune ?? DEFAULT_DETECTION_CONFIG.enable_engulfed_prune,
+    max_turns: saved.max_turns ?? DEFAULT_DETECTION_CONFIG.max_turns,
   };
 }
 

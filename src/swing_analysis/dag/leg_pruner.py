@@ -565,7 +565,7 @@ class LegPruner:
             if leg.parent_leg_id == pruned_leg.leg_id:
                 leg.parent_leg_id = pruned_leg.parent_leg_id  # Could be None (root)
 
-    def prune_by_heft(
+    def prune_by_max_legs(
         self,
         state: DetectorState,
         new_leg: Leg,
@@ -573,17 +573,18 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Prune counter-legs at the new leg's origin by heft ranking (#404).
+        Limit legs at each pivot to max_turns (#404).
 
-        Keeps only the top max_turns highest _max_counter_leg_range legs at each pivot.
-        This is the simplified version of the old three-mode turn ratio system.
+        Keeps only the top max_turns legs at each pivot, scored by counter-trend
+        range (_max_counter_leg_range). This is the simplified version of the
+        old three-mode turn ratio system.
 
         **Exemption**: The largest leg (by range) at the shared pivot is always
         exempt from pruning. This is because the largest leg represents primary
-        structure — it may have lower heft but is the most significant level.
+        structure.
 
         When a new leg forms at origin O, for each counter-leg whose pivot == O:
-        - Score by raw _max_counter_leg_range (counter-heft)
+        - Score by _max_counter_leg_range (counter-trend distance)
         - Keep top max_turns, prune the rest
 
         Args:
@@ -593,7 +594,7 @@ class LegPruner:
             timestamp: Timestamp for events
 
         Returns:
-            List of LegPrunedEvent for pruned counter-legs with reason="heft"
+            List of LegPrunedEvent for pruned counter-legs with reason="max_legs"
         """
         events: List[LegPrunedEvent] = []
         max_turns = self.config.max_turns
@@ -625,7 +626,7 @@ class LegPruner:
 
         pruned_leg_ids: Set[str] = set()
 
-        # Score by raw counter-leg range (heft)
+        # Score by counter-trend range
         scored_legs: List[Tuple[Leg, float]] = []
         for counter_leg in pruneable_legs:
             if counter_leg.range == 0:
@@ -640,15 +641,15 @@ class LegPruner:
             # Not enough legs to prune
             return events
 
-        # Sort by heft descending (highest range = most significant)
+        # Sort by counter-trend range descending (highest = most significant)
         scored_legs.sort(key=lambda x: -x[1])
 
         # Keep top k, prune the rest
         legs_to_prune = scored_legs[max_turns:]
 
-        for counter_leg, heft in legs_to_prune:
+        for counter_leg, ctr_range in legs_to_prune:
             # Don't prune legacy legs (inf score)
-            if heft == float('inf'):
+            if ctr_range == float('inf'):
                 continue
 
             counter_leg.status = 'pruned'
@@ -657,9 +658,9 @@ class LegPruner:
                 bar_index=bar.index,
                 timestamp=timestamp,
                 leg_id=counter_leg.leg_id,
-                reason="heft",
+                reason="max_legs",
                 explanation=(
-                    f"Heft {heft:.2f} not in top-{max_turns} "
+                    f"Counter-trend range {ctr_range:.2f} not in top-{max_turns} "
                     f"(leg_range={float(counter_leg.range):.2f})"
                 ),
             ))

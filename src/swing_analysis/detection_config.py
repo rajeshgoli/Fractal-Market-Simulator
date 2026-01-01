@@ -34,8 +34,8 @@ class DirectionConfig:
         child_swing_tolerance: Invalidation tolerance for children of big
             swings as fraction of range. Default 0.10.
         engulfed_breach_threshold: Combined breach fraction (origin + pivot)
-            that marks a leg as engulfed and deletes it. Default 0.0 (strict
-            deletion while collecting impulse data for threshold tuning) (#236).
+            that marks a leg as engulfed and deletes it. Default 0.236 (#236, #404).
+            Set to 1.0 to disable engulfed pruning.
     """
     formation_fib: float = 0.236
     self_separation: float = 0.10
@@ -43,7 +43,7 @@ class DirectionConfig:
     big_swing_price_tolerance: float = 0.15
     big_swing_close_tolerance: float = 0.10
     child_swing_tolerance: float = 0.10
-    engulfed_breach_threshold: float = 0.0  # Strict: any engulfed leg is deleted (#236)
+    engulfed_breach_threshold: float = 0.236  # Default threshold for engulfed pruning (#236, #404)
 
 
 @dataclass(frozen=True)

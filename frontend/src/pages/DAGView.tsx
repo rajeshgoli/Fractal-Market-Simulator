@@ -721,7 +721,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
         state.setDagState(initialDagState);
 
         try {
-          // If we have saved preferences, push them to server to override defaults (#358, #404)
+          // If we have saved preferences, push them to server to override defaults (#358)
           if (chartPrefs.detectionConfig) {
             const savedConfig = chartPrefs.detectionConfig;
             const pushedConfig = await updateDetectionConfig({

@@ -940,27 +940,9 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
             origin_time_prune_threshold=request.origin_time_threshold,
         )
 
-    # Apply min branch ratio for origin domination (#337)
-    if request.min_branch_ratio is not None:
-        new_config = new_config.with_min_branch_ratio(request.min_branch_ratio)
-
-    # Apply min turn ratio for sibling pruning (#341)
-    if request.min_turn_ratio is not None:
-        new_config = new_config.with_min_turn_ratio(request.min_turn_ratio)
-
-    # Apply max turns per pivot for top-k mode (#342)
-    if request.max_turns_per_pivot is not None:
-        new_config = new_config.with_max_turns_per_pivot(request.max_turns_per_pivot)
-
-    # Apply max turns per pivot raw for raw counter-heft mode (#355)
-    if request.max_turns_per_pivot_raw is not None:
-        new_config = new_config.with_max_turns_per_pivot_raw(request.max_turns_per_pivot_raw)
-
-    # Apply pruning algorithm toggles
-    if request.enable_engulfed_prune is not None:
-        new_config = new_config.with_prune_toggles(
-            enable_engulfed_prune=request.enable_engulfed_prune,
-        )
+    # Apply max turns (#404)
+    if request.max_turns is not None:
+        new_config = new_config.with_max_turns(request.max_turns)
 
     # Update detector config (keeps current state, applies to future bars)
     detector.update_config(new_config)
@@ -977,7 +959,7 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         f"{len([leg for leg in detector.state.active_legs if leg.status == 'active'])} active legs"
     )
 
-    # Build response with current config values (#345: invalidation_threshold removed, #394: formation_fib removed)
+    # Build response with current config values (#404: simplified to max_turns)
     return SwingConfigResponse(
         bull=DirectionConfigResponse(
             engulfed_breach_threshold=new_config.bull.engulfed_breach_threshold,
@@ -988,11 +970,7 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         stale_extension_threshold=new_config.stale_extension_threshold,
         origin_range_threshold=new_config.origin_range_prune_threshold,
         origin_time_threshold=new_config.origin_time_prune_threshold,
-        min_branch_ratio=new_config.min_branch_ratio,
-        min_turn_ratio=new_config.min_turn_ratio,
-        max_turns_per_pivot=new_config.max_turns_per_pivot,
-        max_turns_per_pivot_raw=new_config.max_turns_per_pivot_raw,
-        enable_engulfed_prune=new_config.enable_engulfed_prune,
+        max_turns=new_config.max_turns,
     )
 
 
@@ -1016,7 +994,7 @@ async def get_detection_config():
     else:
         config = DetectionConfig.default()
 
-    # #345: invalidation_threshold removed, #394: formation_fib removed
+    # #404: simplified config
     return SwingConfigResponse(
         bull=DirectionConfigResponse(
             engulfed_breach_threshold=config.bull.engulfed_breach_threshold,
@@ -1027,11 +1005,7 @@ async def get_detection_config():
         stale_extension_threshold=config.stale_extension_threshold,
         origin_range_threshold=config.origin_range_prune_threshold,
         origin_time_threshold=config.origin_time_prune_threshold,
-        min_branch_ratio=config.min_branch_ratio,
-        min_turn_ratio=config.min_turn_ratio,
-        max_turns_per_pivot=config.max_turns_per_pivot,
-        max_turns_per_pivot_raw=config.max_turns_per_pivot_raw,
-        enable_engulfed_prune=config.enable_engulfed_prune,
+        max_turns=config.max_turns,
     )
 
 
