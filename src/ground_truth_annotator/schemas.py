@@ -264,8 +264,7 @@ class FeedbackAttachmentLifecycleEvent(BaseModel):
 
 
 class FeedbackDirectionConfig(BaseModel):
-    """Per-direction config in feedback snapshot (#345)."""
-    formation_fib: float
+    """Per-direction config in feedback snapshot (#345, #394: formation_fib removed)."""
     engulfed_breach_threshold: float
 
 
@@ -510,18 +509,16 @@ class FollowedLegsEventsResponse(BaseModel):
 
 
 class DirectionConfigRequest(BaseModel):
-    """Per-direction detection configuration parameters (#345).
+    """Per-direction detection configuration parameters (#345, #394: formation_fib removed).
 
     These control swing detection thresholds for bull or bear directions.
     All values are floats representing Fibonacci ratios (0.0 - 1.0+).
     """
-    formation_fib: Optional[float] = None  # Formation threshold (default: 0.236)
     engulfed_breach_threshold: Optional[float] = None  # Engulfed threshold (default: 0.0)
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "formation_fib": 0.236,
                 "engulfed_breach_threshold": 0.0,
             }
         }
@@ -551,11 +548,9 @@ class SwingConfigUpdateRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "bull": {
-                    "formation_fib": 0.236,
                     "engulfed_breach_threshold": 0.0
                 },
                 "bear": {
-                    "formation_fib": 0.236,
                     "engulfed_breach_threshold": 0.0
                 },
                 "stale_extension_threshold": 3.0,
@@ -572,8 +567,7 @@ class SwingConfigUpdateRequest(BaseModel):
 
 
 class DirectionConfigResponse(BaseModel):
-    """Per-direction configuration values in response (#345)."""
-    formation_fib: float
+    """Per-direction configuration values in response (#345, #394: formation_fib removed)."""
     engulfed_breach_threshold: float
 
 
@@ -598,11 +592,9 @@ class SwingConfigResponse(BaseModel):
         json_schema_extra={
             "example": {
                 "bull": {
-                    "formation_fib": 0.236,
                     "engulfed_breach_threshold": 0.0
                 },
                 "bear": {
-                    "formation_fib": 0.236,
                     "engulfed_breach_threshold": 0.0
                 },
                 "stale_extension_threshold": 3.0,

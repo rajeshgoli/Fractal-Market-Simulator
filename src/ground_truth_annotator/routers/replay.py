@@ -1629,7 +1629,7 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     Example:
         PUT /api/replay/config
         {
-            "bull": {"formation_fib": 0.5},
+            "bull": {"engulfed_breach_threshold": 0.1},
             "stale_extension_threshold": 2.0
         }
     """
@@ -1649,17 +1649,13 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     # Start with current config (preserve existing settings)
     new_config = detector.config
 
-    # Apply bull direction updates (#345: invalidation_threshold removed)
+    # Apply bull direction updates (#345: invalidation_threshold removed, #394: formation_fib removed)
     if request.bull:
-        if request.bull.formation_fib is not None:
-            new_config = new_config.with_bull(formation_fib=request.bull.formation_fib)
         if request.bull.engulfed_breach_threshold is not None:
             new_config = new_config.with_bull(engulfed_breach_threshold=request.bull.engulfed_breach_threshold)
 
-    # Apply bear direction updates (#345: invalidation_threshold removed)
+    # Apply bear direction updates (#345: invalidation_threshold removed, #394: formation_fib removed)
     if request.bear:
-        if request.bear.formation_fib is not None:
-            new_config = new_config.with_bear(formation_fib=request.bear.formation_fib)
         if request.bear.engulfed_breach_threshold is not None:
             new_config = new_config.with_bear(engulfed_breach_threshold=request.bear.engulfed_breach_threshold)
 
@@ -1706,14 +1702,12 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         f"{len([leg for leg in detector.state.active_legs if leg.status == 'active'])} active legs"
     )
 
-    # Build response with current config values (#345: invalidation_threshold removed)
+    # Build response with current config values (#345: invalidation_threshold removed, #394: formation_fib removed)
     return SwingConfigResponse(
         bull=DirectionConfigResponse(
-            formation_fib=new_config.bull.formation_fib,
             engulfed_breach_threshold=new_config.bull.engulfed_breach_threshold,
         ),
         bear=DirectionConfigResponse(
-            formation_fib=new_config.bear.formation_fib,
             engulfed_breach_threshold=new_config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=new_config.stale_extension_threshold,
@@ -1747,14 +1741,12 @@ async def get_detection_config():
     else:
         config = SwingConfig.default()
 
-    # #345: invalidation_threshold removed
+    # #345: invalidation_threshold removed, #394: formation_fib removed
     return SwingConfigResponse(
         bull=DirectionConfigResponse(
-            formation_fib=config.bull.formation_fib,
             engulfed_breach_threshold=config.bull.engulfed_breach_threshold,
         ),
         bear=DirectionConfigResponse(
-            formation_fib=config.bear.formation_fib,
             engulfed_breach_threshold=config.bear.engulfed_breach_threshold,
         ),
         stale_extension_threshold=config.stale_extension_threshold,
