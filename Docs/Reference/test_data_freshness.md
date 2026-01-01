@@ -137,21 +137,7 @@ def load_databento_key():
     raise ValueError("Key not found")
 ```
 
-### Cost Summary (Jan 1, 2026)
-
-**Gap Fill (one-time):**
-
-| Item | Cost |
-|------|------|
-| ES 1m + 1d (7 contracts, Aug 2024 → Dec 2025) | ~$2.50 |
-| NQ 1m + 1d (7 contracts, Aug 2024 → Dec 2025) | ~$2.40 |
-| YM 1m + 1d (7 contracts, Aug 2024 → Dec 2025) | ~$2.00 |
-| DAX 1m + 1d (Mar 2025 → Dec 2025, continuous) | ~$6.00 |
-| Testing & debugging (symbol format trials, etc.) | ~$5.00 |
-| **Total spent** | **$17.98** |
-| **Remaining credit** | **~$107** |
-
-**Daily Refresh Costs:**
+### Daily Refresh Costs
 
 | Symbol | Daily | Annual |
 |--------|-------|--------|
@@ -193,51 +179,49 @@ Databento provides: `ohlcv-1m`, `ohlcv-1h`, `ohlcv-1d`
 
 `scripts/daily_data_refresh.py`
 
+### Setup (New Users)
+
+1. **Get Databento API key:** Sign up at [databento.com](https://databento.com)
+
+2. **Create credentials file:**
+   ```bash
+   echo "DATABENTO_API_KEY=your_key_here" > ~/.databento_credentials
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   cd /path/to/fractal-market-simulator
+   source venv/bin/activate
+   pip install databento pandas
+   ```
+
 ### Usage
 
 ```bash
-# Refresh all symbols (ES, NQ)
+# Activate virtual environment first
+source venv/bin/activate
+
+# Refresh all symbols (ES, NQ, YM, DAX)
 python scripts/daily_data_refresh.py
 
 # Refresh specific symbols
-python scripts/daily_data_refresh.py ES
+python scripts/daily_data_refresh.py ES NQ
 
-# Dry run (show what would be done)
+# Dry run (show what would be fetched)
 python scripts/daily_data_refresh.py --dry-run
 
-# Refresh specific date
-python scripts/daily_data_refresh.py --date 2025-12-30
-```
-
-### Cron Setup (Recommended)
-
-Run daily at 6am ET (after market close + data availability):
-
-```bash
-# Edit crontab
-crontab -e
-
-# Add this line:
-0 6 * * * cd /Users/rajesh/Desktop/fractal-market-simulator && venv/bin/python scripts/daily_data_refresh.py >> logs/data_refresh.log 2>&1
-```
-
-Create logs directory:
-```bash
-mkdir -p logs
+# Fetch up to specific date
+python scripts/daily_data_refresh.py --to 2026-01-15
 ```
 
 ### What the Script Does
 
-1. Determines yesterday's date (or specified date)
-2. Identifies front-month contract for each symbol
-3. Fetches 1m and 1d data from Databento
-4. Converts to backtest format (ET timezone, semicolon-delimited)
+1. Detects last date in each symbol's CSV file
+2. Fetches missing data from Databento (1m and 1d)
+3. Handles contract rollovers (CME) or continuous futures (Eurex)
+4. Converts to backtest format (semicolon-delimited, local timezone)
 5. Appends to existing files in `~/Documents/backtest-data/`
 6. Regenerates aggregated timeframes (5m, 15m, 30m, 1h, 4h, 1w, 1mo)
-
-### Cost
-
-~$0.01/day for ES + NQ = ~$3.50/year
 
 ### Manual Alternative (TradingView Export)
 
