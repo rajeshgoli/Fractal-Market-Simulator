@@ -18,6 +18,7 @@ function mergeDetectionConfig(saved: Partial<DetectionConfig> | null): Detection
     origin_range_threshold: saved.origin_range_threshold ?? DEFAULT_DETECTION_CONFIG.origin_range_threshold,
     origin_time_threshold: saved.origin_time_threshold ?? DEFAULT_DETECTION_CONFIG.origin_time_threshold,
     max_turns: saved.max_turns ?? DEFAULT_DETECTION_CONFIG.max_turns,
+    engulfed_breach_threshold: saved.engulfed_breach_threshold ?? DEFAULT_DETECTION_CONFIG.engulfed_breach_threshold,
   };
 }
 

@@ -359,13 +359,12 @@ export function getAggregationMinutes(scale: AggregationScale): number {
  * #394: formation_fib removed - formation now handled by Reference Layer at runtime
  */
 export interface DirectionConfig {
-  engulfed_breach_threshold: number;  // Engulfed threshold (default: 0.0)
+  // No per-direction pruning config currently - reserved for future use
 }
 
 /**
  * Full detection configuration for swing detection.
- * #404: Simplified - removed min_branch_ratio, min_turn_ratio, max_turns_per_pivot,
- *       max_turns_per_pivot_raw, enable_engulfed_prune. Added max_turns.
+ * #404: Simplified - symmetric engulfed threshold, max_turns for pivot limiting.
  */
 export interface DetectionConfig {
   bull: DirectionConfig;
@@ -374,20 +373,18 @@ export interface DetectionConfig {
   origin_range_threshold: number;  // Origin proximity range threshold (#294)
   origin_time_threshold: number;  // Origin proximity time threshold (#294)
   max_turns: number;  // Max legs per pivot (default: 10)
+  engulfed_breach_threshold: number;  // Symmetric engulfed threshold (default: 0.236)
 }
 
 /**
  * Default detection configuration values.
  */
 export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
-  bull: {
-    engulfed_breach_threshold: 0.236,
-  },
-  bear: {
-    engulfed_breach_threshold: 0.236,
-  },
+  bull: {},
+  bear: {},
   stale_extension_threshold: 3.0,
   origin_range_threshold: 0.02,
   origin_time_threshold: 0.02,
   max_turns: 10,
+  engulfed_breach_threshold: 0.236,
 };

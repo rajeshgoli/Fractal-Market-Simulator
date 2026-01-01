@@ -507,9 +507,8 @@ class LegPruner:
 
             # Engulfed: both origin AND pivot have been breached
             if leg.max_pivot_breach is not None and leg.max_origin_breach is not None:
-                # Get direction-specific threshold
-                dir_config = self.config.bull if leg.direction == 'bull' else self.config.bear
-                threshold = dir_config.engulfed_breach_threshold
+                # Use symmetric threshold (#404)
+                threshold = self.config.engulfed_breach_threshold
 
                 # Threshold >= 1.0 effectively disables pruning
                 if threshold >= 1.0:

@@ -38,21 +38,21 @@ class TestConfigParameters:
     """Test that config parameters are properly defined."""
 
     def test_engulfed_breach_threshold_default(self):
-        """engulfed_breach_threshold should default to 0.236 (#404)."""
-        config = DirectionConfig()
+        """engulfed_breach_threshold should default to 0.236 (#404: symmetric config)."""
+        config = DetectionConfig.default()
         assert config.engulfed_breach_threshold == 0.236
 
     def test_custom_engulfed_breach_threshold(self):
-        """DirectionConfig should accept custom engulfed_breach_threshold."""
-        config = DirectionConfig(engulfed_breach_threshold=0.25)
+        """DetectionConfig should accept custom engulfed_breach_threshold via with_engulfed (#404)."""
+        config = DetectionConfig.default().with_engulfed(0.25)
         assert config.engulfed_breach_threshold == 0.25
 
     def test_swing_config_includes_engulfed_params(self):
-        """DetectionConfig should include engulfed threshold parameters in DirectionConfig."""
+        """DetectionConfig should include symmetric engulfed threshold (#404)."""
         config = DetectionConfig.default()
 
-        assert config.bull.engulfed_breach_threshold == 0.236  # Default threshold (#404)
-        assert config.bear.engulfed_breach_threshold == 0.236  # Default threshold (#404)
+        # #404: engulfed_breach_threshold is now at DetectionConfig level (symmetric)
+        assert config.engulfed_breach_threshold == 0.236  # Default threshold
 
 
 class TestPivotExtension:
@@ -242,7 +242,8 @@ class TestEngulfedLegDetection:
         prune happens on the bar AFTER both breaches are set.
         """
         # Use threshold=0.0 for strict engulfed behavior (any combined breach prunes)
-        config = DetectionConfig.default().with_bull(engulfed_breach_threshold=0.0).with_bear(engulfed_breach_threshold=0.0)
+        # #404: engulfed_breach_threshold is now symmetric
+        config = DetectionConfig.default().with_engulfed(0.0)
         detector = HierarchicalDetector(config=config)
 
         # Create a formed bear leg with range=30

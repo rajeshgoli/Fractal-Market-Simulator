@@ -530,65 +530,49 @@ class DirectionConfigRequest(BaseModel):
 class SwingConfigUpdateRequest(BaseModel):
     """Request to update swing detection configuration.
 
-    Allows updating bull/bear direction configs and global thresholds.
+    All thresholds are symmetric (apply to both bull and bear).
     Only provided fields are updated; omitted fields keep their defaults.
     """
-    bull: Optional[DirectionConfigRequest] = None
-    bear: Optional[DirectionConfigRequest] = None
-    # Global thresholds
+    # Global thresholds (#404: symmetric config)
     stale_extension_threshold: Optional[float] = None  # 3x extension prune (default: 3.0)
     origin_range_threshold: Optional[float] = None  # Origin proximity range threshold (#294)
     origin_time_threshold: Optional[float] = None  # Origin proximity time threshold (#294)
-    max_turns: Optional[int] = None  # Max legs per pivot by heft (#404)
+    max_turns: Optional[int] = None  # Max legs per pivot (#404)
+    engulfed_breach_threshold: Optional[float] = None  # Symmetric engulfed threshold (#404)
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "bull": {
-                    "engulfed_breach_threshold": 0.0
-                },
-                "bear": {
-                    "engulfed_breach_threshold": 0.0
-                },
                 "stale_extension_threshold": 3.0,
-                "origin_range_threshold": 0.05,
-                "origin_time_threshold": 0.10,
-                "max_turns": 10
+                "origin_range_threshold": 0.02,
+                "origin_time_threshold": 0.02,
+                "max_turns": 10,
+                "engulfed_breach_threshold": 0.236
             }
         }
     )
-
-
-class DirectionConfigResponse(BaseModel):
-    """Per-direction configuration values in response (#345, #394: formation_fib removed)."""
-    engulfed_breach_threshold: float
 
 
 class SwingConfigResponse(BaseModel):
     """Response with current swing detection configuration.
 
     Returns all current values after an update, or the current defaults.
+    #404: Symmetric config - engulfed threshold applies to both directions.
     """
-    bull: DirectionConfigResponse
-    bear: DirectionConfigResponse
     stale_extension_threshold: float
     origin_range_threshold: float  # Origin proximity range threshold (#294)
     origin_time_threshold: float  # Origin proximity time threshold (#294)
-    max_turns: int  # Max legs per pivot by heft (#404)
+    max_turns: int  # Max legs per pivot (#404)
+    engulfed_breach_threshold: float  # Symmetric engulfed threshold (#404)
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "bull": {
-                    "engulfed_breach_threshold": 0.0
-                },
-                "bear": {
-                    "engulfed_breach_threshold": 0.0
-                },
                 "stale_extension_threshold": 3.0,
-                "origin_range_threshold": 0.05,
-                "origin_time_threshold": 0.10,
-                "max_turns": 10
+                "origin_range_threshold": 0.02,
+                "origin_time_threshold": 0.02,
+                "max_turns": 10,
+                "engulfed_breach_threshold": 0.236
             }
         }
     )

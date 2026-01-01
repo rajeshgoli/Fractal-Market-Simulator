@@ -725,16 +725,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
           if (chartPrefs.detectionConfig) {
             const savedConfig = chartPrefs.detectionConfig;
             const pushedConfig = await updateDetectionConfig({
-              bull: {
-                engulfed_breach_threshold: savedConfig.bull.engulfed_breach_threshold,
-              },
-              bear: {
-                engulfed_breach_threshold: savedConfig.bear.engulfed_breach_threshold,
-              },
               stale_extension_threshold: savedConfig.stale_extension_threshold,
               origin_range_threshold: savedConfig.origin_range_threshold,
               origin_time_threshold: savedConfig.origin_time_threshold,
               max_turns: savedConfig.max_turns,
+              engulfed_breach_threshold: savedConfig.engulfed_breach_threshold,
             });
             state.setDetectionConfigFromServer(pushedConfig);
           } else {

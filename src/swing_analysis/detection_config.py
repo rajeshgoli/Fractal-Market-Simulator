@@ -33,9 +33,6 @@ class DirectionConfig:
             as fraction of range (close-based). Default 0.10 per Rule 2.2.
         child_swing_tolerance: Invalidation tolerance for children of big
             swings as fraction of range. Default 0.10.
-        engulfed_breach_threshold: Combined breach fraction (origin + pivot)
-            that marks a leg as engulfed and deletes it. Default 0.236 (#236, #404).
-            Set to 1.0 to disable engulfed pruning.
     """
     formation_fib: float = 0.236
     self_separation: float = 0.10
@@ -43,7 +40,6 @@ class DirectionConfig:
     big_swing_price_tolerance: float = 0.15
     big_swing_close_tolerance: float = 0.10
     child_swing_tolerance: float = 0.10
-    engulfed_breach_threshold: float = 0.236  # Default threshold for engulfed pruning (#236, #404)
 
 
 @dataclass(frozen=True)
@@ -73,6 +69,10 @@ class DetectionConfig:
         max_turns: Maximum legs to keep at each pivot by raw counter-heft (#404).
             Replaces the old three-mode system (min_turn_ratio, max_turns_per_pivot,
             max_turns_per_pivot_raw). Set to 0 to disable. Default: 10.
+        engulfed_breach_threshold: Symmetric threshold for engulfed pruning (#404).
+            Retain engulfed legs until combined breach exceeds this fraction of range.
+            0 = immediate prune (most aggressive). 1 = never prune (disabled).
+            Default: 0.236 (first fib level).
 
     Example:
         >>> config = DetectionConfig.default()
@@ -87,6 +87,8 @@ class DetectionConfig:
     # #404: max_turns replaces min_turn_ratio + max_turns_per_pivot + max_turns_per_pivot_raw
     max_turns: int = 10
     stale_extension_threshold: float = 3.0
+    # #404: symmetric engulfed threshold (applies to both directions)
+    engulfed_breach_threshold: float = 0.236
 
     @classmethod
     def default(cls) -> "DetectionConfig":
@@ -115,6 +117,7 @@ class DetectionConfig:
             proximity_prune_strategy=self.proximity_prune_strategy,
             max_turns=self.max_turns,
             stale_extension_threshold=self.stale_extension_threshold,
+            engulfed_breach_threshold=self.engulfed_breach_threshold,
         )
 
     def with_bear(self, **kwargs: Any) -> "DetectionConfig":
@@ -133,6 +136,7 @@ class DetectionConfig:
             proximity_prune_strategy=self.proximity_prune_strategy,
             max_turns=self.max_turns,
             stale_extension_threshold=self.stale_extension_threshold,
+            engulfed_breach_threshold=self.engulfed_breach_threshold,
         )
 
     def with_origin_prune(
@@ -177,6 +181,7 @@ class DetectionConfig:
             ),
             max_turns=self.max_turns,
             stale_extension_threshold=self.stale_extension_threshold,
+            engulfed_breach_threshold=self.engulfed_breach_threshold,
         )
 
     def with_stale_extension(self, stale_extension_threshold: float) -> "DetectionConfig":
@@ -198,6 +203,7 @@ class DetectionConfig:
             proximity_prune_strategy=self.proximity_prune_strategy,
             max_turns=self.max_turns,
             stale_extension_threshold=stale_extension_threshold,
+            engulfed_breach_threshold=self.engulfed_breach_threshold,
         )
 
     def with_max_turns(self, max_turns: int) -> "DetectionConfig":
@@ -218,4 +224,28 @@ class DetectionConfig:
             proximity_prune_strategy=self.proximity_prune_strategy,
             max_turns=max_turns,
             stale_extension_threshold=self.stale_extension_threshold,
+            engulfed_breach_threshold=self.engulfed_breach_threshold,
+        )
+
+    def with_engulfed(self, engulfed_breach_threshold: float) -> "DetectionConfig":
+        """
+        Create a new config with modified engulfed threshold (#404).
+
+        Since DetectionConfig is frozen, this creates a new instance.
+
+        Args:
+            engulfed_breach_threshold: Threshold for engulfed pruning.
+                0 = immediate prune (most aggressive).
+                0.236 = default (first fib level).
+                1 = never prune (disabled).
+        """
+        return DetectionConfig(
+            bull=self.bull,
+            bear=self.bear,
+            origin_range_prune_threshold=self.origin_range_prune_threshold,
+            origin_time_prune_threshold=self.origin_time_prune_threshold,
+            proximity_prune_strategy=self.proximity_prune_strategy,
+            max_turns=self.max_turns,
+            stale_extension_threshold=self.stale_extension_threshold,
+            engulfed_breach_threshold=engulfed_breach_threshold,
         )

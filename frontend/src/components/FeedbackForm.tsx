@@ -206,16 +206,11 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
       if (detectionConfig) {
         snapshot.detection_config = {
-          bull: {
-            engulfed_breach_threshold: detectionConfig.bull.engulfed_breach_threshold,
-          },
-          bear: {
-            engulfed_breach_threshold: detectionConfig.bear.engulfed_breach_threshold,
-          },
           stale_extension_threshold: detectionConfig.stale_extension_threshold,
           origin_range_threshold: detectionConfig.origin_range_threshold,
           origin_time_threshold: detectionConfig.origin_time_threshold,
           max_turns: detectionConfig.max_turns,
+          engulfed_breach_threshold: detectionConfig.engulfed_breach_threshold,
         };
       }
 

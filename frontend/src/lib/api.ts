@@ -283,20 +283,13 @@ export interface PlaybackFeedbackEventContext {
   detection_bar_index?: number;
 }
 
-// Per-direction config in feedback snapshot
-// #394: formation_fib removed - formation now handled by Reference Layer at runtime
-export interface FeedbackDirectionConfig {
-  engulfed_breach_threshold: number;
-}
-
-// Detection config captured in feedback snapshot (#320, #404 simplified)
+// Detection config captured in feedback snapshot (#320, #404 simplified - symmetric config)
 export interface FeedbackDetectionConfig {
-  bull: FeedbackDirectionConfig;
-  bear: FeedbackDirectionConfig;
   stale_extension_threshold: number;
   origin_range_threshold: number;
   origin_time_threshold: number;
-  max_turns: number;  // Max legs per pivot by heft (#404)
+  max_turns: number;  // Max legs per pivot (#404)
+  engulfed_breach_threshold: number;  // Symmetric engulfed threshold (#404)
 }
 
 // Rich context snapshot for always-on feedback
@@ -504,20 +497,14 @@ export async function fetchFollowedLegsEvents(
 /**
  * Request to update detection configuration.
  * Only provided fields are updated; omitted fields keep defaults.
- * #404: Simplified - removed min_branch_ratio, min_turn_ratio, max_turns_per_pivot,
- *       max_turns_per_pivot_raw, enable_engulfed_prune. Added max_turns.
+ * #404: All thresholds are symmetric (apply to both bull and bear).
  */
 export interface DetectionConfigUpdateRequest {
-  bull?: {
-    engulfed_breach_threshold?: number;
-  };
-  bear?: {
-    engulfed_breach_threshold?: number;
-  };
   stale_extension_threshold?: number;
   origin_range_threshold?: number;  // Origin proximity range threshold (#294)
   origin_time_threshold?: number;  // Origin proximity time threshold (#294)
-  max_turns?: number;  // Max legs per pivot by heft (#404)
+  max_turns?: number;  // Max legs per pivot (#404)
+  engulfed_breach_threshold?: number;  // Symmetric engulfed threshold (#404)
 }
 
 /**
