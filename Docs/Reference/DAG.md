@@ -1328,7 +1328,8 @@ The DAG layer emits events for state changes:
 | `LegCreatedEvent` | New leg from pending origin |
 | `LegPrunedEvent` | Leg removed by pruning |
 | `LegInvalidatedEvent` | Origin breach beyond threshold |
-| `LevelCrossEvent` | Price crossed Fibonacci level |
+| `OriginBreachedEvent` | Origin price level breached |
+| `PivotBreachedEvent` | Pivot breached beyond threshold |
 
 **Note:** `SwingFormedEvent` and `SwingInvalidatedEvent` have been removed (#394). Formation is now handled by the Reference Layer at runtime.
 
