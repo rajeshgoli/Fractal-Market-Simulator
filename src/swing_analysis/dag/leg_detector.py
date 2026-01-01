@@ -1266,17 +1266,23 @@ class LegDetector:
         Once a leg stops being live, its impulsiveness is frozen and not updated.
 
         Impulsiveness is the percentile rank (0-100) of the leg's raw impulse
-        against all formed legs in the population.
+        against all active legs' impulses (#394: no longer uses formed_leg_impulses).
         """
+        # Build sorted impulse population from all active legs with non-zero impulse
+        all_impulses = sorted(
+            leg.impulse for leg in self.state.active_legs
+            if leg.impulse > 0
+        )
+
         for leg in self.state.active_legs:
             # Only update live legs (origin never breached)
             if leg.max_origin_breach is not None:
                 continue
 
-            # Calculate impulsiveness as percentile rank
+            # Calculate impulsiveness as percentile rank against active legs
             leg.impulsiveness = _calculate_impulsiveness(
                 leg.impulse,
-                self.state.formed_leg_impulses
+                all_impulses
             )
 
     def _update_leg_moments_and_spikiness(self, bar: 'Bar') -> None:
