@@ -16,7 +16,8 @@ Markets exhibit fractal structure: large moves are composed of smaller moves fol
 ## Table of Contents
 
 1. [Market Structure View](#market-structure-view) - Watch the DAG build incrementally
-2. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
+2. [Levels at Play View](#levels-at-play-view) - Observe reference levels during replay
+3. [Keyboard Shortcuts Reference](#keyboard-shortcuts-reference)
 
 ---
 
@@ -350,6 +351,73 @@ The Recent Events panel (Column 4) displays leg lifecycle events and supports cl
 - **Lifecycle tracking**: Follow specific legs to understand their complete lifecycle with visual event markers
 - **Event investigation**: Click recent events to see details and chart markers for specific lifecycle events
 
+
+---
+
+## Levels at Play View
+
+Levels at Play View provides a reference-focused interface for observing how structural levels interact with live price action. Unlike Market Structure View which focuses on leg formation, this view shows which levels are most significant ("at play") during real-time replay.
+
+### Quick Start
+
+1. Start the replay server as normal
+2. Use the view switcher in the header to select "Levels at Play"
+3. Playback works the same as Market Structure View
+
+### Reference Sidebar
+
+The Reference Sidebar on the left side contains panels for configuring and observing the reference layer. Toggle it using the hamburger menu (≡) in the header.
+
+#### Reference Config Panel
+
+The Reference Config panel lets you tune salience weights to control which levels are emphasized during playback. Changes are batched locally until you click Apply.
+
+**Base Weights (L/XL):** Controls how large references (L and XL scale) are scored
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| Range | 0.0-1.0 | Higher values emphasize references with larger price ranges |
+| Impulse | 0.0-1.0 | Higher values emphasize references formed by impulsive moves |
+| Recency | 0.0-1.0 | Higher values emphasize more recently formed references |
+
+**Base Weights (S/M):** Controls how small references (S and M scale) are scored. Same parameters as above.
+
+**Formation Threshold:** The Fibonacci level at which a leg becomes a valid reference.
+- Default: 0.382 (38.2% retracement)
+- Lower values = more references (earlier formation)
+- Higher values = fewer references (stricter formation)
+
+**Apply button:** Click to send batched changes to the backend. Changes take effect immediately and are persisted to localStorage for future sessions.
+
+**Reset to Defaults:** Click the rotate icon (↻) next to the panel header or the button at the bottom of the sidebar to reset all weights to their default values.
+
+#### Structure Panel
+
+Shows the hierarchical structure of currently active references, organized by scale. Click on any reference to toggle tracking—tracked references persist visually on the chart.
+
+#### Reference Stats Panel
+
+Displays aggregate statistics about active references:
+- Count by scale (XL, L, M, S)
+- Direction breakdown (Bull vs Bear)
+- Direction imbalance indicator
+- Total reference count
+
+### Sidebar Toggle
+
+- Click the hamburger menu (≡) in the header to toggle the sidebar
+- Sidebar state (open/closed) is remembered in localStorage
+- Sidebar width: 256px (w-64) when open
+- Smooth transition animation when toggling
+
+### Differences from Market Structure View
+
+| Feature | Market Structure View | Levels at Play View |
+|---------|----------------------|---------------------|
+| Focus | Leg formation & lifecycle | Reference significance |
+| Sidebar | Detection Config, Linger Events | Reference Config, Structure, Stats |
+| Overlay | Diagonal leg lines | Reference level zones |
+| Use case | Algorithm debugging | Level interaction observation |
 
 ---
 

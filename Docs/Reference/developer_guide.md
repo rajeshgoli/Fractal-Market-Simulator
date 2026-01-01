@@ -819,19 +819,20 @@ cd frontend && npm run build  # Output: frontend/dist/
 | Component | Purpose |
 |-----------|---------|
 | `DAGView.tsx` | Main DAG visualization page |
-| `LevelsAtPlayView.tsx` | Reference Layer visualization page (#374) |
+| `LevelsAtPlayView.tsx` | Reference Layer visualization page (#374, #426) |
 | `ChartArea.tsx` | Two stacked lightweight-charts |
 | `LegOverlay.tsx` | Leg visualization (includes tree icon hover) |
 | `ReferenceLegOverlay.tsx` | Reference visualization with scale/direction/location (#377-#379) |
 | `HierarchyModeOverlay.tsx` | Hierarchy exploration mode (exit button, connection lines, status) |
 | `PlaybackControls.tsx` | Play/pause/step transport |
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |
-| `ReferenceTelemetryPanel.tsx` | Reference counts and direction imbalance (#382) |
+| `ReferenceSidebar.tsx` | Collapsible sidebar for Levels at Play view (#424, #426) |
+| `ReferenceConfigPanel.tsx` | Salience weight sliders + Apply button (#425) |
 | `Sidebar.tsx` | Event filters, feedback input, attachment display |
 | `useForwardPlayback.ts` | Forward-only playback (step back via backend API) |
 | `useHierarchyMode.ts` | Hierarchy exploration state management (#250) |
 | `useReferenceState.ts` | Reference Layer state with fade-out transitions (#381) |
-| `useChartPreferences.ts` | Settings persistence to localStorage |
+| `useChartPreferences.ts` | Settings persistence to localStorage (incl. sidebar state #426) |
 | `useDAGViewState.ts` | DAG view consolidated state management |
 
 **Frontend Architecture Notes:**
@@ -843,15 +844,17 @@ cd frontend && npm run build  # Output: frontend/dist/
   - `renderNextBar`: Buffer-based for smooth continuous playback
   - `advanceBar`: Direct API call for manual stepping (step forward, jump to event)
 
-**Settings Persistence (#347, #358):**
+**Settings Persistence (#347, #358, #425, #426):**
 
 `useChartPreferences` persists user settings to localStorage, including:
 - Chart aggregation scales, zoom levels, maximized state
 - Speed multiplier and aggregation
 - Linger enabled/event states
 - Detection config (full `DetectionConfig` object)
+- Reference config (salience weights + formation threshold) (#425)
+- Levels at Play sidebar open/closed state (#426)
 
-Schema evolution is handled via `mergeDetectionConfig()`, which deep-merges saved config with `DEFAULT_DETECTION_CONFIG` to ensure new fields (like `min_turn_ratio`, `max_turns_per_pivot`) have defaults when loading older saved configs.
+Schema evolution is handled via `mergeDetectionConfig()` and `mergeReferenceConfig()`, which deep-merge saved config with defaults to ensure new fields have defaults when loading older saved configs.
 
 **Server sync on startup (#358):**
 

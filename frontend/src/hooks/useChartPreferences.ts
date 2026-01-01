@@ -58,6 +58,8 @@ interface ChartPreferences {
   dagLingerEvents: LingerEventStates; // DAG mode linger toggles
   // Reference config (salience weights) - Issue #425
   referenceConfig: ReferenceConfig | null; // null = use server defaults
+  // Sidebar open/closed state - Issue #426
+  levelsAtPlaySidebarOpen: boolean;
 }
 
 const DEFAULT_PREFERENCES: ChartPreferences = {
@@ -73,6 +75,7 @@ const DEFAULT_PREFERENCES: ChartPreferences = {
   lingerEnabled: true,
   dagLingerEvents: {},
   referenceConfig: null, // null = use server defaults (#425)
+  levelsAtPlaySidebarOpen: true, // Sidebar open by default (#426)
 };
 
 function loadPreferences(): ChartPreferences {
@@ -116,6 +119,7 @@ interface UseChartPreferencesReturn {
   lingerEnabled: boolean;
   dagLingerEvents: LingerEventStates;
   referenceConfig: ReferenceConfig | null;
+  levelsAtPlaySidebarOpen: boolean;
   setChart1Aggregation: (value: AggregationScale) => void;
   setChart2Aggregation: (value: AggregationScale) => void;
   setSpeedMultiplier: (value: number) => void;
@@ -128,6 +132,7 @@ interface UseChartPreferencesReturn {
   setLingerEnabled: (value: boolean) => void;
   setDagLingerEvents: (value: LingerEventStates) => void;
   setReferenceConfig: (value: ReferenceConfig | null) => void;
+  setLevelsAtPlaySidebarOpen: (value: boolean) => void;
 }
 
 export function useChartPreferences(): UseChartPreferencesReturn {
@@ -208,6 +213,10 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setPreferences(prev => ({ ...prev, referenceConfig: value }));
   }, []);
 
+  const setLevelsAtPlaySidebarOpen = useCallback((value: boolean) => {
+    setPreferences(prev => ({ ...prev, levelsAtPlaySidebarOpen: value }));
+  }, []);
+
   return {
     chart1Aggregation: preferences.chart1Aggregation,
     chart2Aggregation: preferences.chart2Aggregation,
@@ -221,6 +230,7 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     lingerEnabled: preferences.lingerEnabled,
     dagLingerEvents: preferences.dagLingerEvents,
     referenceConfig: preferences.referenceConfig,
+    levelsAtPlaySidebarOpen: preferences.levelsAtPlaySidebarOpen,
     setChart1Aggregation,
     setChart2Aggregation,
     setSpeedMultiplier,
@@ -233,5 +243,6 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setLingerEnabled,
     setDagLingerEvents,
     setReferenceConfig,
+    setLevelsAtPlaySidebarOpen,
   };
 }

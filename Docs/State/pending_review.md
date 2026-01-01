@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2026-01-01
 
@@ -14,6 +14,7 @@
 4. **#421** — P3/P4 Frontend: Track button (confluence zones removed due to visual clutter)
 5. **#423, #424** — ReferenceConfig API endpoints + ReferenceSidebar component
 6. **#425** — ReferenceConfigPanel component with salience weight sliders + localStorage persistence
+7. **#426, #427** — ReferenceSidebar integration into LevelsAtPlayView + documentation updates
 
 ---
 

@@ -2,11 +2,8 @@ import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react'
 import { Header } from '../components/Header';
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
-import { ResizeHandle } from '../components/ResizeHandle';
-import { ReferenceTelemetryPanel } from '../components/ReferenceTelemetryPanel';
 import { ReferenceLegOverlay } from '../components/ReferenceLegOverlay';
 import { SettingsPanel } from '../components/SettingsPanel';
-import { StructurePanel } from '../components/StructurePanel';
 import { ReferenceSidebar } from '../components/ReferenceSidebar';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { useChartPreferences } from '../hooks/useChartPreferences';
@@ -54,12 +51,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     fadingRefs,
     stickyLegIds,
     toggleStickyLeg,
-    crossingEvents,
-    trackError,
-    clearTrackError,
     // P3/P4 frontend (Issue #420)
     structureData,
-    isStructureLoading,
   } = useReferenceState();
 
   // Core state (#412: simplified from CalibrationData)
@@ -76,7 +69,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [sessionInfo, setSessionInfo] = useState<{ windowOffset: number; totalSourceBars: number } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProcessingTill, setIsProcessingTill] = useState(false);
-  const [showFiltered, setShowFiltered] = useState(false);  // Reference Observation mode
+  // Reference Observation mode - currently always off since toggle was in ReferenceTelemetryPanel
+  // Can be re-enabled when UI toggle is added to sidebar
+  const showFiltered = false;
 
   // Reference Config state (Issue #425)
   const [referenceConfig, setReferenceConfig] = useState<ReferenceConfig>(
@@ -591,13 +586,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     loadData();
   }, [sessionSettings.isLoaded]);
 
-  // Handle panel resize
-  const handlePanelResize = useCallback((deltaY: number) => {
-    chartPrefs.setExplanationPanelHeight(
-      Math.max(100, Math.min(600, chartPrefs.explanationPanelHeight + deltaY))
-    );
-  }, [chartPrefs.explanationPanelHeight, chartPrefs.setExplanationPanelHeight]);
-
   // Get current timestamp for header
   const currentTimestamp = sourceBars[currentPlaybackPosition]?.timestamp
     ? new Date(sourceBars[currentPlaybackPosition].timestamp * 1000).toISOString()
@@ -633,7 +621,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   return (
     <div className="flex flex-col h-screen w-full bg-app-bg text-app-text font-sans overflow-hidden">
       <Header
-        onToggleSidebar={() => {}}
+        onToggleSidebar={() => chartPrefs.setLevelsAtPlaySidebarOpen(!chartPrefs.levelsAtPlaySidebarOpen)}
         currentTimestamp={currentTimestamp}
         sourceBarCount={forwardPlayback.currentPosition + 1}
         initStatus={isPlaying ? 'playing' : 'initialized'}
@@ -644,6 +632,35 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       />
 
       <div className="flex-1 flex min-h-0">
+        {/* Reference Sidebar - Left side with toggle (Issue #426) */}
+        <div className={`${chartPrefs.levelsAtPlaySidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden shrink-0`}>
+          <ReferenceSidebar
+            referenceConfig={referenceConfig}
+            onReferenceConfigUpdate={handleReferenceConfigUpdate}
+            structureData={structureData ?? undefined}
+            references={referenceState?.references ?? []}
+            trackedLegIds={stickyLegIds}
+            onToggleTrack={toggleStickyLeg}
+            telemetryData={referenceState ? {
+              counts_by_scale: {
+                S: referenceState.by_scale.S.length,
+                M: referenceState.by_scale.M.length,
+                L: referenceState.by_scale.L.length,
+                XL: referenceState.by_scale.XL.length,
+              },
+              total_count: referenceState.references.length,
+              bull_count: referenceState.by_direction.bull.length,
+              bear_count: referenceState.by_direction.bear.length,
+              direction_imbalance: referenceState.direction_imbalance,
+              imbalance_ratio: null,
+              biggest_reference: null,
+              most_impulsive: null,
+            } : undefined}
+            onResetDefaults={() => handleReferenceConfigUpdate(DEFAULT_REFERENCE_CONFIG)}
+            className="w-64 h-full"
+          />
+        </div>
+
         <main className="flex-1 flex flex-col min-w-0">
           <ChartArea
             chart1Data={visibleChart1Bars}
@@ -744,61 +761,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               isProcessingTill={isProcessingTill}
             />
           </div>
-
-          <ResizeHandle onResize={handlePanelResize} />
-
-          <div className="shrink-0 flex gap-2" style={{ height: chartPrefs.explanationPanelHeight }}>
-            {/* Structure Panel (Issue #420) */}
-            <div className="w-64 shrink-0">
-              <StructurePanel
-                structureData={structureData}
-                references={referenceState?.references ?? []}
-                trackedLegIds={stickyLegIds}
-                onToggleTrack={toggleStickyLeg}
-                isLoading={isStructureLoading}
-              />
-            </div>
-            {/* Telemetry Panel */}
-            <div className="flex-1">
-              <ReferenceTelemetryPanel
-                referenceState={referenceState}
-                showFiltered={showFiltered}
-                onToggleShowFiltered={() => setShowFiltered(prev => !prev)}
-                crossingEvents={crossingEvents}
-                trackError={trackError}
-                onClearTrackError={clearTrackError}
-                trackedCount={stickyLegIds.size}
-              />
-            </div>
-          </div>
         </main>
-
-        {/* Reference Config Sidebar (Issue #425) */}
-        <ReferenceSidebar
-          referenceConfig={referenceConfig}
-          onReferenceConfigUpdate={handleReferenceConfigUpdate}
-          structureData={structureData ?? undefined}
-          references={referenceState?.references ?? []}
-          trackedLegIds={stickyLegIds}
-          onToggleTrack={toggleStickyLeg}
-          telemetryData={referenceState ? {
-            counts_by_scale: {
-              S: referenceState.by_scale.S.length,
-              M: referenceState.by_scale.M.length,
-              L: referenceState.by_scale.L.length,
-              XL: referenceState.by_scale.XL.length,
-            },
-            total_count: referenceState.references.length,
-            bull_count: referenceState.by_direction.bull.length,
-            bear_count: referenceState.by_direction.bear.length,
-            direction_imbalance: referenceState.direction_imbalance,
-            imbalance_ratio: null,
-            biggest_reference: null,
-            most_impulsive: null,
-          } : undefined}
-          onResetDefaults={() => handleReferenceConfigUpdate(DEFAULT_REFERENCE_CONFIG)}
-          className="w-64 shrink-0"
-        />
 
         <SettingsPanel
           isOpen={isSettingsOpen}
