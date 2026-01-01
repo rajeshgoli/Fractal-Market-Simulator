@@ -867,9 +867,6 @@ async def advance_replay(request: ReplayAdvanceRequest):
             # Process bar
             events = detector.process_bar(bar)
 
-            # Update Reference layer state
-            ref_layer.update(detector.state.active_legs, bar)
-
             # Capture lifecycle events during replay
             csv_index = s.window_offset + bar.index
             ts_iso = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
@@ -941,13 +938,8 @@ async def advance_replay(request: ReplayAdvanceRequest):
     for idx in range(start_idx, end_idx):
         bar = s.source_bars[idx]
 
-        # 1. Process bar with detector (DAG events)
+        # Process bar with detector (DAG events)
         events = detector.process_bar(bar)
-
-        # 2. Update Reference layer state (#394 - SwingNode removed)
-        # Reference layer now uses update() API to compute formed legs
-        if ref_layer is not None:
-            ref_layer.update(detector.state.active_legs, bar)
 
         # Add bar to response
         new_bars.append(ReplayBarResponse(
@@ -1111,9 +1103,6 @@ async def reverse_replay(request: ReplayReverseRequest):
 
         # Process bar
         events = detector.process_bar(bar)
-
-        # Update Reference layer state
-        ref_layer.update(detector.state.active_legs, bar)
 
         # Capture lifecycle events during replay (#299)
         # This ensures Follow Leg feature works correctly after step-back
