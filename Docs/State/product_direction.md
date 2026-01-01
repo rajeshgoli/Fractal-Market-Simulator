@@ -30,17 +30,22 @@ P1-P4 Reference Layer is **complete**. Foundation enables:
 
 ## Reference Layer Exploration
 
+**Epic:** #422 (Levels at Play Sidebar + Reference Exploration)
 **Spec:** `Docs/Working/reference_layer_exploration.md`
 
 Reference Layer is the exploration ground for salience formulas — same pattern as DAG layer with pruning algorithms. Wire up multiple approaches, tune empirically, see what works.
 
-**Exploration areas:**
-- Salience weights (range/impulse/recency per scale)
-- Formation thresholds and breach tolerances
-- Structural importance: `counter_leg_range × leg_range`
-- Other formulas TBD through experimentation
+**Scope:**
+- Left sidebar for Levels at Play (mirrors DAG View pattern)
+- Reference Config panel (salience weights, SI mode, etc.)
+- Feedback integration
+- Cross-window calibration workflow
 
-**Enabler:** Reference Layer tuning UI (expose ReferenceConfig like DetectionConfig)
+**Salience components:**
+- Base weights (range/impulse/recency per scale)
+- Structural importance: `origin_counter_trend_range × leg.range`
+- Depth score: `1/(1+depth)`
+- Time-at-level, touch count, confluence bonus
 
 ---
 

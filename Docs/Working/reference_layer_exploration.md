@@ -14,7 +14,7 @@ Reference Layer is the exploration ground for salience formulas — same pattern
 
 **Validation approach:** Visual only for now. Outcome Layer required for quantitative validation.
 
-**Dependency:** Implement after #419 (P3/P4 frontend completion).
+**Epic:** #422 (Levels at Play Sidebar + Reference Exploration)
 
 ---
 
@@ -245,6 +245,42 @@ Polymath interview with user to clarify spec. Key findings:
 5. Apply button preferred over instant feedback
 6. No presets needed yet — pure exploration mode
 7. This work should follow #419 completion
+
+---
+
+## Interaction Model: Cross-Window Calibration
+
+**Goal:** Find salience weights that surface "known-good" levels across multiple historical windows.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              CROSS-WINDOW CALIBRATION                    │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  Window 1 (e.g., 2024 ES rally)                         │
+│  ├─ Load data                                           │
+│  ├─ "I know the 6150 and 5800 levels mattered here"     │
+│  ├─ Tune weights until those rank high                  │
+│  └─ Note weight settings                                │
+│                                                          │
+│  Window 2 (e.g., 2023 consolidation)                    │
+│  ├─ Load data                                           │
+│  ├─ "Different regime — 4500-4600 range was key"        │
+│  ├─ Check: do those levels rank high with same weights? │
+│  └─ Adjust if needed                                    │
+│                                                          │
+│  Window 3 (e.g., 2022 selloff)                          │
+│  └─ Repeat...                                           │
+│                                                          │
+│  ✓ Weights generalize → trust on new data               │
+│  ✗ Weights don't generalize → regime-specific formulas? │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Validation signal:** User's domain expertise. They know which levels "should" be important from prior TradingView analysis or trading memory.
+
+**Learning outcome:** If weights don't generalize across regimes, that's valuable information — may need regime-specific formulas, which informs Outcome Layer design.
 
 ---
 
