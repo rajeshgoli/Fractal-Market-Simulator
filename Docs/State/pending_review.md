@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-31
 
@@ -8,7 +8,6 @@
 
 ## Pending Changes
 
-- #394 — DAG cleanup: Remove SwingNode, swing_id, formed; formation now Reference Layer concern
 - #395 — Fix pivot extension unconditionally overwriting pending origin (preserve best candidate)
 
 ---
@@ -17,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 31 | #394 — DAG cleanup review + architectural investigation | Accepted with notes; vestiges identified in `architect_fixes.md`; epic filed |
 | Dec 31 | #371-#387 — Reference Layer Phase 1 UI + bugfixes (17 issues) | All Accepted; Phase 1 complete; spec updated to Rev 6 |
 | Dec 31 | #355-#358, #361-#370, #383, #384 — Turn ratio modes, Reference Layer Phase 1 backend, config defaults (11 changes) | All Accepted; Ref Layer P1 backend complete; doc update needed for developer_guide.md |
 | Dec 25 | #347-#349 — Turn ratio UX, inner structure removal, frontend cleanup (3 changes) | All Accepted; dead feature deleted, docs current |

@@ -33,14 +33,20 @@ Read in order:
 **Known debt:**
 - #240 — TODO: Empirically determine engulfed retention threshold based on impulse
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
-- **Zombie leg bug** — `formed` gates pivot breach tracking, creating immortal legs (see `Docs/Working/formed_analysis.md`)
 
-**Pending cleanup (per reference_layer_spec.md Rev 6):**
-- Remove `SwingNode` class — redundant 1:1 wrapper around Leg geometry
-- Remove `swing_id` from Leg — single-leg identifier, not linkage concept
-- Remove `formed` from Leg — trading concept belongs in Reference Layer
-- Remove old Reference Layer API (`get_reference_swings`, `check_invalidation`, etc.) — replaced by `update()`
-- Migrate `replay.py` and `calibrate.py` to use `update()` API exclusively
+**Completed cleanup (#394):**
+- ✅ SwingNode class deleted
+- ✅ `swing_id` removed from Leg
+- ✅ `formed` removed from Leg (formation now Reference Layer concern)
+- ✅ Old Reference Layer API removed
+- ✅ `replay.py` and `calibrate.py` migrated to `update()` API
+
+**Pending architectural fixes (see `Docs/Working/architect_fixes.md`):**
+- Rename `ground_truth_annotator/` → `replay_server/` (misleading module name)
+- Remove refactoring vestiges: `swing_id` on events, `emit_level_crosses` config, tombstone comments
+- Unify `CalibrationSwingResponse` and `DagLegResponse` into single `LegResponse` schema
+- Connect `depth` field to `leg.depth` (currently hardcoded to 0)
+- Replace `parent_ids: List[str]` with `parent_leg_id: Optional[str]`
 
 ---
 
@@ -159,27 +165,22 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 |---|-------|-------------|------------|
 | EXP.1 | Analyze depth vs scale correlation | Compute correlation, identify disagreement cases | P1.1, P1.5 |
 
-### DAG Cleanup Epic (Pre-P2) — #394
+### DAG Cleanup Epic (Pre-P2) — #394 ✅ COMPLETE
 
-**Rationale:** The `formed_analysis.md` investigation revealed that `formed`, `SwingNode`, and `swing_id` are architectural mistakes that leaked trading concepts into the DAG layer. This creates bugs (zombie legs) and duplicates logic with Reference Layer.
+**Status:** Completed Dec 31, 2025. Core cleanup done, but vestiges remain (see `Docs/Working/architect_fixes.md`).
 
-**Epic: Remove SwingNode/swing_id/formed from DAG** — [#394](https://github.com/rajeshgoli/Fractal-Market-Simulator/issues/394)
+**What was done:**
+- SwingNode class deleted
+- `swing_id` and `formed` removed from Leg
+- Formation moved to Reference Layer (runtime computation)
+- Old Reference Layer API removed
+- Zombie leg bug fixed
 
-| # | Task | Description | Files |
-|---|------|-------------|-------|
-| C.1 | Delete SwingNode class | Remove redundant wrapper | `swing_node.py` (delete) |
-| C.2 | Remove swing_id from Leg | Delete field and make_swing_id() | `dag/leg.py` |
-| C.3 | Remove formed from Leg | Delete field, fix gates | `dag/leg.py`, `dag/leg_detector.py`, `dag/leg_pruner.py` |
-| C.4 | Remove active_swings from state | Delete SwingNode tracking | `dag/state.py` |
-| C.5 | Delete old Reference Layer API | Remove SwingNode-based methods | `reference_layer.py` |
-| C.6 | Migrate replay.py | Use update() API exclusively | `routers/replay.py` |
-| C.7 | Migrate calibrate.py | Use update() API exclusively | `dag/calibrate.py` |
-| C.8 | Update API schemas | Remove formed from LegInfo | `schemas.py` |
-| C.9 | Update frontend | Remove formed display | `types.ts`, components |
-| C.10 | Update events | Remove swing events, clean leg events | `events.py` |
-| C.11 | Fix tests | Update all affected tests | `tests/` |
-
-**Zombie bug fix:** C.3 fixes the zombie leg bug by removing `formed` gate from pivot breach tracking.
+**What remains (tracked in architect_fixes.md):**
+- `swing_id` vestiges on SwingEvent base class (always "")
+- `emit_level_crosses` dead config
+- Tombstone comments throughout router
+- Schema unification needed
 
 ---
 
@@ -188,13 +189,14 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 **Status:**
 - ✅ P1 (Core Backend) — COMPLETE (13 issues)
 - ✅ P1-UI (Levels at Play UI) — COMPLETE (11 issues including bugfixes)
-- ⏳ **DAG Cleanup** — NEXT (11 tasks, fixes zombie bug)
-- P2 (Fib Levels) — After cleanup (5 issues)
+- ✅ DAG Cleanup (#394) — COMPLETE (vestiges tracked in architect_fixes.md)
+- ⏳ **Architectural Fixes** — NEXT (see `Docs/Working/architect_fixes.md`)
+- P2 (Fib Levels) — After arch fixes (5 issues)
 - P3 + P4 (Structure Panel + Crossing) — 11 issues
 
-**Next step:** DAG Cleanup Epic — Remove SwingNode/swing_id/formed (fixes zombie leg bug, aligns with spec Rev 6)
+**Next step:** Architectural fixes epic — module rename, schema unification, dead code removal
 
-**Remaining: 27 tasks across cleanup + 3 phases**
+**Remaining: 16 issues across arch fixes + 3 phases**
 
 ---
 
@@ -251,7 +253,7 @@ All 3 pending changes accepted. Summary:
 | Leg Origin Updates | **Fixed** | Origins update on price extensions (#188) |
 | Origin Breach | **Simplified** | No 'invalidated' status, breach at 0% (#345) |
 | SwingConfig | Complete | Centralizes all parameters including pruning toggles (#288) |
-| SwingNode | **Pending Removal** | Redundant wrapper; see formed_analysis.md |
+| SwingNode | **Removed** | Deleted in #394; formation now in Reference Layer |
 | ReferenceFrame | Complete | Central coordinate abstraction |
 | ReferenceLayer | **Phase 1 Complete** | Core + Levels at Play UI (#361-#387) |
 | Pivot Breach Pruning | Complete | 10% threshold with replacement leg (#208) |
@@ -339,6 +341,7 @@ All 3 pending changes accepted. Summary:
 6. **Magic Numbers** — New thresholds need: what it represents, why this value
 7. **Core Decisions** — Aligned with list above?
 8. **Known Debt** — Add new debt, remove resolved debt
+9. **No Tombstones** — Flag "# Removed in #XXX" comments, hardcoded stub values, dead config options
 
 ### Outcomes
 
@@ -353,6 +356,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 31 | #394 — DAG cleanup review + architectural investigation | Accepted with notes; vestiges identified in `architect_fixes.md`; epic filed |
 | Dec 31 | #371-#387 — Reference Layer Phase 1 UI + bugfixes (17 issues) | All Accepted; Phase 1 complete; spec updated to Rev 6 |
 | Dec 31 | #355-#358, #361-#370, #383, #384 — Turn ratio modes, Reference Layer Phase 1 backend (11 changes) | All Accepted; Ref Layer P1 backend complete; developer_guide.md update needed |
 | Dec 25 | #347-#349 — Turn ratio UX, inner structure removal, frontend cleanup (3 changes) | All Accepted; dead feature deleted, docs current |

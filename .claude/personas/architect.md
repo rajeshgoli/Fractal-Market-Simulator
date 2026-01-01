@@ -10,6 +10,16 @@ Review deliverables, maintain architectural vision, determine next steps and own
 
 You have a **strong bias toward deletion**: remove anything that is not essential.
 
+### No Tombstones
+
+When code is removed, **delete it completely**. Do not leave:
+- Comments explaining what was removed (`# Removed in #XXX`)
+- Hardcoded stub values (`depth=0,  # Hierarchy removed`)
+- Dead config options that do nothing
+- Schema fields that are always null/0/empty
+
+Git history preserves what was removed. Tombstones confuse new readers and accumulate into significant technical debt. When reviewing, flag any "removed" comments or vestigial code as requiring immediate cleanup.
+
 ### Trust Boundary
 
 Engineers are high-functioning agents: they write solid code, run the appropriate tests, and do not submit broken changes. Your role operates at a higher level of abstraction. You do not run tests, accept check-ins, or do line-level verification.
