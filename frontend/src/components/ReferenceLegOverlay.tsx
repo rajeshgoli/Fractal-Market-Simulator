@@ -99,27 +99,6 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     return null;
   }, [bars]);
 
-  // Get price range visible on chart
-  const getVisiblePriceRange = useCallback((): { min: number; max: number } | null => {
-    if (!chart || bars.length === 0) return null;
-    const visibleRange = chart.timeScale().getVisibleLogicalRange();
-    if (!visibleRange) return null;
-
-    const startIdx = Math.max(0, Math.floor(visibleRange.from));
-    const endIdx = Math.min(bars.length - 1, Math.ceil(visibleRange.to));
-
-    let min = Infinity;
-    let max = -Infinity;
-    for (let i = startIdx; i <= endIdx; i++) {
-      if (bars[i]) {
-        min = Math.min(min, bars[i].low);
-        max = Math.max(max, bars[i].high);
-      }
-    }
-
-    return min < max ? { min, max } : null;
-  }, [chart, bars]);
-
   // Get chart visible time range for fib lines
   const getVisibleTimeRange = useCallback((): { from: number; to: number } | null => {
     if (!chart || bars.length === 0) return null;
@@ -167,7 +146,6 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   const computeFibLevels = useCallback((ref: ReferenceSwing): { ratio: number; price: number }[] => {
     const pivot = ref.pivot_price;
     const origin = ref.origin_price;
-    const range = Math.abs(origin - pivot);
 
     // For bull reference (bear leg): pivot is LOW, origin is HIGH
     // For bear reference (bull leg): pivot is HIGH, origin is LOW
