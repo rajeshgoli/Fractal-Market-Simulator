@@ -13,7 +13,6 @@ import { useReferenceState } from '../hooks/useReferenceState';
 import {
   fetchBars,
   fetchSession,
-  fetchCalibration,
   restartSession,
   advanceReplay,
 } from '../lib/api';
@@ -21,7 +20,6 @@ import { formatReplayBarsData } from '../utils/barDataUtils';
 import {
   BarData,
   AggregationScale,
-  CalibrationPhase,
   PlaybackState,
   parseResolutionToMinutes,
   getAggregationLabel,
@@ -49,7 +47,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   // Core state
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [calibrationPhase, setCalibrationPhase] = useState<CalibrationPhase>(CalibrationPhase.NOT_STARTED);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [calibrationData, setCalibrationData] = useState<any>(null);
   const [calibrationBars, setCalibrationBars] = useState<BarData[]>([]);
   const [sourceBars, setSourceBars] = useState<BarData[]>([]);
@@ -137,20 +135,20 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
   // Get current playback position
   const currentPlaybackPosition = useMemo(() => {
-    if (calibrationPhase === CalibrationPhase.PLAYING) {
+    if (isPlaying) {
       return forwardPlayback.currentPosition;
-    } else if (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) {
+    } else if (calibrationData) {
       return calibrationData.calibration_bar_count - 1;
     }
     return 0;
-  }, [calibrationPhase, forwardPlayback.currentPosition, calibrationData]);
+  }, [isPlaying, forwardPlayback.currentPosition, calibrationData]);
 
   // Fetch reference state when playback position changes
   useEffect(() => {
-    if (calibrationPhase === CalibrationPhase.CALIBRATED || calibrationPhase === CalibrationPhase.PLAYING) {
+    if (calibrationData) {
       fetchReferenceState(currentPlaybackPosition);
     }
-  }, [currentPlaybackPosition, calibrationPhase, fetchReferenceState]);
+  }, [currentPlaybackPosition, calibrationData, fetchReferenceState]);
 
   // Compute a "live" aggregated bar from source bars for incremental display
   const computeLiveBar = useCallback((
@@ -177,7 +175,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
   // Filter chart bars to only show candles up to current playback position
   const visibleChart1Bars = useMemo(() => {
-    if (calibrationPhase !== CalibrationPhase.PLAYING) {
+    if (!isPlaying) {
       return chart1Bars;
     }
     const result: BarData[] = [];
@@ -190,10 +188,10 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       }
     }
     return result;
-  }, [chart1Bars, currentPlaybackPosition, calibrationPhase, computeLiveBar]);
+  }, [chart1Bars, currentPlaybackPosition, isPlaying, computeLiveBar]);
 
   const visibleChart2Bars = useMemo(() => {
-    if (calibrationPhase !== CalibrationPhase.PLAYING) {
+    if (!isPlaying) {
       return chart2Bars;
     }
     const result: BarData[] = [];
@@ -206,7 +204,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       }
     }
     return result;
-  }, [chart2Bars, currentPlaybackPosition, calibrationPhase, computeLiveBar]);
+  }, [chart2Bars, currentPlaybackPosition, isPlaying, computeLiveBar]);
 
   // Chart ready handlers
   const handleChart1Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
@@ -220,21 +218,21 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   }, []);
 
   const handleStartPlayback = useCallback(() => {
-    if (calibrationPhase === CalibrationPhase.CALIBRATED) {
-      setCalibrationPhase(CalibrationPhase.PLAYING);
+    if (!isPlaying) {
+      setIsPlaying(true);
       forwardPlayback.play();
     }
-  }, [calibrationPhase, forwardPlayback]);
+  }, [isPlaying, forwardPlayback]);
 
   const handleStepForward = useCallback(() => {
-    if (calibrationPhase === CalibrationPhase.CALIBRATED) {
-      setCalibrationPhase(CalibrationPhase.PLAYING);
+    if (!isPlaying) {
+      setIsPlaying(true);
     }
     forwardPlayback.stepForward();
-  }, [calibrationPhase, forwardPlayback]);
+  }, [isPlaying, forwardPlayback]);
 
   const handleProcessTill = useCallback(async (_targetTimestamp: number, barCount: number) => {
-    if (calibrationPhase === CalibrationPhase.PLAYING && forwardPlayback.playbackState === PlaybackState.PLAYING) {
+    if (isPlaying && forwardPlayback.playbackState === PlaybackState.PLAYING) {
       throw new Error('Stop playback first');
     }
     if (barCount <= 0) {
@@ -243,8 +241,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
     setIsProcessingTill(true);
     try {
-      if (calibrationPhase === CalibrationPhase.CALIBRATED) {
-        setCalibrationPhase(CalibrationPhase.PLAYING);
+      if (!isPlaying) {
+        setIsPlaying(true);
       }
 
       const response = await advanceReplay(
@@ -278,7 +276,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       setIsProcessingTill(false);
     }
   }, [
-    calibrationPhase,
+    isPlaying,
     forwardPlayback,
     currentPlaybackPosition,
     chartPrefs.chart1Aggregation,
@@ -382,16 +380,16 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     syncChartsToPositionRef.current = syncChartsToPosition;
   }, [syncChartsToPosition]);
 
-  // Scroll charts when entering CALIBRATED phase
+  // Scroll charts when data is first loaded (before playing)
   useEffect(() => {
-    if (calibrationPhase === CalibrationPhase.CALIBRATED && calibrationData) {
+    if (!isPlaying && calibrationData) {
       const timeout = setTimeout(() => {
         const calibrationEndIndex = calibrationData.calibration_bar_count - 1;
         syncChartsToPositionRef.current(calibrationEndIndex);
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [calibrationPhase, calibrationData]);
+  }, [isPlaying, calibrationData]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -401,21 +399,18 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         return;
       }
 
-      if (calibrationPhase === CalibrationPhase.CALIBRATED) {
-        if (e.key === ' ' || e.key === 'Enter') {
-          e.preventDefault();
+      // Space/Enter to start or toggle playback
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        if (!isPlaying) {
           handleStartPlayback();
+        } else {
+          forwardPlayback.togglePlayPause();
         }
         return;
       }
 
-      if (calibrationPhase === CalibrationPhase.PLAYING) {
-        if (e.key === ' ') {
-          e.preventDefault();
-          forwardPlayback.togglePlayPause();
-          return;
-        }
-
+      if (isPlaying) {
         if (e.key === '[') {
           e.preventDefault();
           forwardPlayback.stepBack();
@@ -434,7 +429,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [calibrationPhase, handleStartPlayback, forwardPlayback]);
+  }, [isPlaying, handleStartPlayback, forwardPlayback]);
 
   // Load initial data
   useEffect(() => {
@@ -515,10 +510,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
           // Sync forward playback with backend position
           forwardPlayback.syncToPosition(session.current_bar_index!, [], 0, []);
         } else {
-          // No existing state - initialize fresh
-          setCalibrationPhase(CalibrationPhase.CALIBRATING);
-          const calibration = await fetchCalibration(0);
-          setCalibrationData(calibration);
+          // No existing state - backend will auto-init on first /dag/state call (#412)
+          setCalibrationData({ calibration_bar_count: 0 } as any);
         }
 
         setSourceBars([]);
@@ -531,12 +524,11 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         setChart1Bars(bars1);
         setChart2Bars(bars2);
 
-        // If we had existing state, go straight to PLAYING phase
+        // If we had existing state, go straight to PLAYING mode (#412)
         if (hasExistingState) {
-          setCalibrationPhase(CalibrationPhase.PLAYING);
-        } else {
-          setCalibrationPhase(CalibrationPhase.CALIBRATED);
+          setIsPlaying(true);
         }
+        // Otherwise isPlaying stays false (ready to play)
 
         setSessionInfo(prev => prev ? {
           ...prev,
@@ -595,15 +587,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         onToggleSidebar={() => {}}
         currentTimestamp={currentTimestamp}
         sourceBarCount={sourceBars.length}
-        initStatus={
-          calibrationPhase === CalibrationPhase.CALIBRATING
-            ? 'initializing'
-            : calibrationPhase === CalibrationPhase.CALIBRATED
-            ? 'initialized'
-            : calibrationPhase === CalibrationPhase.PLAYING
-            ? 'playing'
-            : undefined
-        }
+        initStatus={isPlaying ? 'playing' : 'initialized'}
         dataFileName={dataFileName}
         onOpenSettings={() => setIsSettingsOpen(true)}
         currentView="levels-at-play"
@@ -659,12 +643,12 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
           <div className="shrink-0 z-10">
             <PlaybackControls
               playbackState={
-                calibrationPhase === CalibrationPhase.PLAYING
+                isPlaying
                   ? forwardPlayback.playbackState
                   : PlaybackState.STOPPED
               }
               onPlayPause={
-                calibrationPhase === CalibrationPhase.CALIBRATED
+                !isPlaying
                   ? handleStartPlayback
                   : forwardPlayback.togglePlayPause
               }

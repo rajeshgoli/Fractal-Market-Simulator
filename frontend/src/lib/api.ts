@@ -1,4 +1,4 @@
-import { BarData, AggregationScale, CalibrationData, CalibrationSwing, DetectionConfig } from '../types';
+import { BarData, AggregationScale, CalibrationSwing, DetectionConfig } from '../types';
 
 const API_BASE = '/api';
 
@@ -100,20 +100,6 @@ export async function fetchBars(scale?: AggregationScale): Promise<BarData[]> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch bars: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-export async function fetchCalibration(_barCount: number = 10000): Promise<CalibrationData> {
-  // Note: _barCount is ignored - init always starts with empty detector (#410)
-  const response = await fetch(`${API_BASE}/dag/init`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to initialize: ${response.statusText}`);
   }
   return response.json();
 }

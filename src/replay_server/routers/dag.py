@@ -56,6 +56,51 @@ router = APIRouter(tags=["dag"])
 
 
 # ============================================================================
+# Lazy Initialization Helper (#412)
+# ============================================================================
+
+
+def _ensure_initialized() -> None:
+    """
+    Ensure detector is initialized, creating a fresh one if needed.
+
+    This enables lazy initialization - endpoints that need a detector
+    can call this instead of requiring explicit /api/dag/init first.
+    """
+    from ..api import get_state
+
+    cache = get_replay_cache()
+
+    if cache.get("detector") is not None:
+        return  # Already initialized
+
+    s = get_state()
+
+    logger.info("Lazy-initializing detector for DAG mode")
+
+    config = DetectionConfig.default()
+    ref_layer = ReferenceLayer(config)
+    detector = LegDetector(config)
+
+    # Initialize cache for incremental advance
+    cache["detector"] = detector
+    cache["last_bar_index"] = -1
+    cache["calibration_bar_count"] = 0
+    cache["calibration_events"] = []
+    cache["scale_thresholds"] = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
+    cache["reference_layer"] = ref_layer
+    cache["source_resolution"] = s.resolution_minutes
+    cache["lifecycle_events"] = []
+
+    # Update app state
+    s.playback_index = -1
+    s.calibration_bar_count = 0
+    s.hierarchical_detector = detector
+
+    logger.info("Lazy init complete: detector ready for incremental advance")
+
+
+# ============================================================================
 # Init Endpoint (formerly /api/replay/calibrate)
 # ============================================================================
 
@@ -119,6 +164,66 @@ async def init_dag():
 
 
 # ============================================================================
+# Reset Endpoint (#412)
+# ============================================================================
+
+
+@router.post("/api/dag/reset", response_model=CalibrationResponseHierarchical)
+async def reset_dag():
+    """
+    Reset detector state, starting fresh.
+
+    Clears all existing state and creates a new empty detector.
+    Use this when you want to restart detection from bar 0.
+    """
+    from ..api import get_state
+
+    cache = get_replay_cache()
+    s = get_state()
+
+    logger.info("Resetting detector for DAG mode")
+
+    config = DetectionConfig.default()
+    ref_layer = ReferenceLayer(config)
+    detector = LegDetector(config)
+
+    # Reset cache to initial state
+    cache["detector"] = detector
+    cache["last_bar_index"] = -1
+    cache["calibration_bar_count"] = 0
+    cache["calibration_events"] = []
+    cache["scale_thresholds"] = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
+    cache["reference_layer"] = ref_layer
+    cache["source_resolution"] = s.resolution_minutes
+    cache["lifecycle_events"] = []
+
+    # Update app state
+    s.playback_index = -1
+    s.calibration_bar_count = 0
+    s.hierarchical_detector = detector
+
+    # Return empty calibration response
+    empty_tree_stats = TreeStatistics(
+        root_swings=0, root_bull=0, root_bear=0, total_nodes=0,
+        max_depth=0, avg_children=0.0,
+        defended_by_depth={"1": 0, "2": 0, "3": 0, "deeper": 0},
+        largest_range=0.0, largest_leg_id=None, median_range=0.0,
+        smallest_range=0.0,
+        roots_have_children=True, siblings_detected=False, no_orphaned_nodes=True,
+    )
+    empty_swings_by_depth = SwingsByDepth()
+
+    logger.info("DAG mode: detector reset, ready for incremental advance")
+    return CalibrationResponseHierarchical(
+        calibration_bar_count=0,
+        current_price=s.source_bars[0].open if s.source_bars else 0.0,
+        tree_stats=empty_tree_stats,
+        swings_by_depth=empty_swings_by_depth,
+        active_swings_by_depth=empty_swings_by_depth,
+    )
+
+
+# ============================================================================
 # Advance Endpoint (formerly /api/replay/advance)
 # ============================================================================
 
@@ -135,13 +240,9 @@ async def advance_dag(request: ReplayAdvanceRequest):
     cache = get_replay_cache()
     s = get_state()
 
-    # Get or initialize detector
-    detector = cache.get("detector")
-    if detector is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Must initialize before advancing. Call /api/dag/init first."
-        )
+    # Lazy init: auto-initialize detector if not present (#412)
+    _ensure_initialized()
+    detector = cache["detector"]
 
     # Handle from_index resync (#310): if FE is behind BE, replay to sync
     from_index = request.from_index
@@ -349,12 +450,8 @@ async def reverse_dag(request: ReplayReverseRequest):
     cache = get_replay_cache()
     s = get_state()
 
-    # Validate we have a detector
-    if cache.get("detector") is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Must initialize before reversing. Call /api/dag/init first."
-        )
+    # Lazy init: auto-initialize detector if not present (#412)
+    _ensure_initialized()
 
     # Validate bar index
     current_idx = request.current_bar_index
@@ -485,11 +582,8 @@ async def get_dag_state():
 
     cache = get_replay_cache()
 
-    if not is_initialized():
-        raise HTTPException(
-            status_code=400,
-            detail="Must initialize first. Call /api/dag/init."
-        )
+    # Lazy init: auto-initialize detector if not present (#412)
+    _ensure_initialized()
 
     s = get_state()
     window_offset = s.window_offset
@@ -557,11 +651,8 @@ async def get_leg_lineage(leg_id: str):
     """
     cache = get_replay_cache()
 
-    if not is_initialized():
-        raise HTTPException(
-            status_code=400,
-            detail="Must initialize first. Call /api/dag/init."
-        )
+    # Lazy init: auto-initialize detector if not present (#412)
+    _ensure_initialized()
 
     detector = cache["detector"]
     state = detector.state
@@ -711,11 +802,8 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     """
     cache = get_replay_cache()
 
-    if not is_initialized():
-        raise HTTPException(
-            status_code=400,
-            detail="Must initialize before updating config. Call /api/dag/init first."
-        )
+    # Lazy init: auto-initialize detector if not present (#412)
+    _ensure_initialized()
 
     detector = cache["detector"]
 

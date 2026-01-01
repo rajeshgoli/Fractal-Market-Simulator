@@ -146,14 +146,6 @@ export interface CalibrationData {
   active_swings_by_depth: SwingsByDepth;
 }
 
-// Calibration phase states
-export enum CalibrationPhase {
-  NOT_STARTED = 'NOT_STARTED',
-  CALIBRATING = 'CALIBRATING',
-  CALIBRATED = 'CALIBRATED',
-  PLAYING = 'PLAYING',
-}
-
 // ============================================================================
 // Swing Display Configuration (Active Swing Count)
 // ============================================================================

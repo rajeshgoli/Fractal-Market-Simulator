@@ -967,22 +967,35 @@ python -m src.replay_server.main --data test.csv --port 8001
 The replay view backend (`src/replay_server/`) uses LegDetector for incremental swing detection with Reference layer filtering:
 
 ```python
+# Lazy Initialization (#412)
+# Most endpoints auto-initialize detector if not present.
+# Frontend no longer needs to call /init explicitly.
+
 # Init: POST /api/dag/init (#410)
-# Initializes detector with empty state, ready for incremental bar processing
-# Returns empty calibration response (no bars processed)
+# Explicitly initializes detector with empty state.
+# Returns empty calibration response (no bars processed).
+# Note: Usually not needed - /advance, /state, /reverse auto-init.
+
+# Reset: POST /api/dag/reset (#412)
+# Clears all state and creates a fresh detector.
+# Use when you want to restart detection from bar 0.
+# Returns empty calibration response.
 
 # Advance: POST /api/dag/advance
 # {calibration_bar_count, current_bar_index, advance_by}
 # Processes bars using detector.process_bar() and returns events
+# Auto-initializes detector if not present (#412)
 
 # Reverse: POST /api/dag/reverse
 # {current_bar_index, include_aggregated_bars?, include_dag_state?}
 # Resets detector and replays from bar 0 to current_bar_index - 1
 # Returns same response format as /advance (ReplayAdvanceResponse)
 # Used for backward navigation in playback
+# Auto-initializes detector if not present (#412)
 
 # DAG State: GET /api/dag/state
-# Returns internal leg-level state for DAG visualization:
+# Returns internal leg-level state for DAG visualization.
+# Auto-initializes detector if not present (#412).
 # - active_legs: currently tracked legs (pre-formation candidates)
 #   - includes parent_leg_id and swing_id for hierarchy (#250)
 # - pending_origins: potential origins awaiting confirmation for each direction
