@@ -33,21 +33,30 @@ SYMBOLS = {
         "dataset": "GLBX.MDP3",
         "contract_prefix": "ES",
         "dir": "es",
+        "tz": "America/New_York",
     },
     "NQ": {
         "dataset": "GLBX.MDP3",
         "contract_prefix": "NQ",
         "dir": "nq",
+        "tz": "America/New_York",
     },
     "YM": {
         "dataset": "GLBX.MDP3",
         "contract_prefix": "YM",
         "dir": "ym",
+        "tz": "America/New_York",
+    },
+    "DAX": {
+        "dataset": "XEUR.EOBI",
+        "parent_symbol": "FDAX.FUT",  # Uses continuous futures
+        "dir": "dax",
+        "tz": "Europe/Berlin",
+        "csv_1m": "dax-1m-from-mar25.csv",  # Separate file for 1m
     },
     # Not available on Databento:
     # - SPX: Cash index (use ES futures)
     # - VIX: Cboe futures not on Databento
-    # - DAX: Eurex data only from Mar 2025
 }
 
 
@@ -128,9 +137,15 @@ def fetch_range_data(
 ) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Fetch 1m and 1d data for a date range, handling contract rollovers."""
 
-    contracts = get_contracts_for_range(config["contract_prefix"], start_date, end_date)
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = (end_date + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Check if this symbol uses parent symbol (continuous futures)
+    if "parent_symbol" in config:
+        return fetch_parent_symbol_data(client, config, start_str, end_str, dry_run)
+
+    # Standard contract-based fetch for CME futures
+    contracts = get_contracts_for_range(config["contract_prefix"], start_date, end_date)
 
     print(f"    Contracts: {', '.join(contracts)}")
     print(f"    Range: {start_str} to {end_date.strftime('%Y-%m-%d')}")
@@ -212,6 +227,65 @@ def fetch_range_data(
     return df_1m, df_1d
 
 
+def fetch_parent_symbol_data(
+    client: db.Historical,
+    config: dict,
+    start_str: str,
+    end_str: str,
+    dry_run: bool = False,
+) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
+    """Fetch data using parent symbol (continuous futures like FDAX.FUT)."""
+
+    parent = config["parent_symbol"]
+    print(f"    Symbol: {parent} (continuous)")
+    print(f"    Range: {start_str} to {end_str}")
+
+    if dry_run:
+        return None, None
+
+    df_1m = None
+    df_1d = None
+
+    # Fetch 1m data
+    try:
+        data_1m = client.timeseries.get_range(
+            dataset=config["dataset"],
+            symbols=[parent],
+            stype_in="parent",
+            schema="ohlcv-1m",
+            start=start_str,
+            end=end_str,
+        )
+        df = data_1m.to_df().reset_index()
+        # Filter out spread contracts
+        df = df[~df["symbol"].str.contains("SPD", na=False)]
+        df = df.sort_values("ts_event").drop_duplicates(subset="ts_event", keep="first")
+        df_1m = df
+        print(f"    1m: {len(df_1m)} bars")
+    except Exception as e:
+        print(f"    1m: Error - {e}")
+
+    # Fetch 1d data
+    try:
+        data_1d = client.timeseries.get_range(
+            dataset=config["dataset"],
+            symbols=[parent],
+            stype_in="parent",
+            schema="ohlcv-1d",
+            start=start_str,
+            end=end_str,
+        )
+        df = data_1d.to_df().reset_index()
+        df = df[~df["symbol"].str.contains("SPD", na=False)]
+        df = df.sort_values("ts_event").drop_duplicates(subset="ts_event", keep="first")
+        df_1d = df
+        print(f"    1d: {len(df_1d)} bars")
+    except Exception as e:
+        print(f"    1d: Error - {e}")
+
+    return df_1m, df_1d
+
+
 def convert_to_backtest_format(df: pd.DataFrame, tz: str = "America/New_York") -> pd.DataFrame:
     """Convert Databento DataFrame to backtest format."""
     df = df.copy()
@@ -280,6 +354,43 @@ def regenerate_aggregates(symbol_dir: Path, symbol: str):
         print(f"    Error: {e}")
 
 
+def regenerate_dax_aggregates(symbol_dir: Path):
+    """Regenerate only 1w and 1mo for DAX (from 1d, since 1m is partial)."""
+
+    def load_csv(path: Path) -> pd.DataFrame:
+        df = pd.read_csv(
+            path, sep=";", header=None,
+            names=["date", "time", "open", "high", "low", "close", "volume"]
+        )
+        df["datetime"] = pd.to_datetime(
+            df["date"] + " " + df["time"], format="mixed", dayfirst=True
+        )
+        df.set_index("datetime", inplace=True)
+        return df
+
+    def save_csv(df: pd.DataFrame, path: Path):
+        df = df.reset_index()
+        df["date"] = df["datetime"].dt.strftime("%d/%m/%Y")
+        df["time"] = df["datetime"].dt.strftime("%H:%M:%S")
+        df[["date", "time", "open", "high", "low", "close", "volume"]].to_csv(
+            path, sep=";", header=False, index=False
+        )
+
+    def aggregate(df: pd.DataFrame, tf: str) -> pd.DataFrame:
+        return df.resample(tf).agg({
+            "open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"
+        }).dropna()
+
+    print(f"  Regenerating DAX aggregates (1w, 1mo from 1d)...")
+    try:
+        df_1d = load_csv(symbol_dir / "dax-1d.csv")
+        save_csv(aggregate(df_1d, "W-FRI"), symbol_dir / "dax-1w.csv")
+        save_csv(aggregate(df_1d, "MS"), symbol_dir / "dax-1mo.csv")
+        print(f"    Done (1w, 1mo)")
+    except Exception as e:
+        print(f"    Error: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Catch up market data from last available date to yesterday"
@@ -322,7 +433,11 @@ def main():
     for symbol in symbols_to_process:
         config = SYMBOLS[symbol]
         symbol_dir = BACKTEST_DATA / config["dir"]
-        csv_1m = symbol_dir / f"{config['dir']}-1m.csv"
+        tz = config.get("tz", "America/New_York")
+
+        # Determine 1m file path (DAX uses custom name)
+        csv_1m_name = config.get("csv_1m", f"{config['dir']}-1m.csv")
+        csv_1m = symbol_dir / csv_1m_name
 
         print(f"{symbol}:")
 
@@ -353,19 +468,22 @@ def main():
 
         # Append data
         if df_1m is not None and len(df_1m) > 0:
-            df_1m_fmt = convert_to_backtest_format(df_1m)
+            df_1m_fmt = convert_to_backtest_format(df_1m, tz=tz)
             rows = append_to_file(df_1m_fmt, csv_1m)
-            print(f"  Appended {rows} rows to {config['dir']}-1m.csv")
+            print(f"  Appended {rows} rows to {csv_1m_name}")
 
         csv_1d = symbol_dir / f"{config['dir']}-1d.csv"
         if df_1d is not None and len(df_1d) > 0:
-            df_1d_fmt = convert_to_backtest_format(df_1d)
+            df_1d_fmt = convert_to_backtest_format(df_1d, tz=tz)
             rows = append_to_file(df_1d_fmt, csv_1d)
             print(f"  Appended {rows} rows to {config['dir']}-1d.csv")
 
-        # Regenerate aggregates
-        if not args.no_aggregate:
+        # Regenerate aggregates (skip for DAX since 1m file is partial)
+        if not args.no_aggregate and "csv_1m" not in config:
             regenerate_aggregates(symbol_dir, config["dir"])
+        elif "csv_1m" in config:
+            # For DAX, only regenerate 1w and 1mo from 1d
+            regenerate_dax_aggregates(symbol_dir)
 
         print()
 

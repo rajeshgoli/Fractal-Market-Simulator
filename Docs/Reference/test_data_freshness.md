@@ -60,9 +60,26 @@ Gap fill for ES, NQ, and YM completed on January 1, 2026 using Databento API. Da
 | 1w | ~900 | Apr 2007 → Dec 2025 | Aggregated from 1d |
 | 1mo | ~210 | Apr 2007 → Dec 2025 | Aggregated from 1d |
 
+### DAX (German DAX Index Futures)
+
+| Timeframe | Range | Source |
+|-----------|-------|--------|
+| 1m | Mar 2025 → Dec 2025 | Databento (XEUR.EOBI) — file: dax-1m-from-mar25.csv |
+| 5m | 2000 → Aug 2024 | Original (gap after) |
+| 10m | Aug 2024 → Dec 2025 | TradingView export |
+| 15m | 2000 → Aug 2024 | Original (gap after) |
+| 30m | 2000 → Dec 2025 | Continuous (original + 10m aggregation) |
+| 1h | 2000 → Dec 2025 | Continuous |
+| 4h | 2000 → Dec 2025 | Continuous |
+| 1d | 1990 → Dec 2025 | Continuous (original + Databento) |
+| 1w | 1990 → Dec 2025 | Aggregated from 1d |
+| 1mo | 1990 → Dec 2025 | Aggregated from 1d |
+
+**Note:** DAX has a gap in sub-30m data from Aug 2024 to Mar 2025. If gap fill needed later, only this 7-month window at 1m is required.
+
 ### Symlinks in test_data/
 
-All ES, NQ, and YM files in `test_data/` are now symlinks to `~/Documents/backtest-data/`.
+All ES, NQ, YM, and DAX files in `test_data/` are now symlinks to `~/Documents/backtest-data/`.
 
 ### Symbol Status
 
@@ -73,7 +90,7 @@ All ES, NQ, and YM files in `test_data/` are now symlinks to `~/Documents/backte
 | 3 | YM | ✅ Complete | Databento |
 | 4 | SPX | ❌ N/A | Cash index — use ES futures |
 | 5 | VIX | ❌ N/A | Cboe futures not on Databento |
-| 6 | DAX | ⚠️ Gap | Eurex data only from Mar 2025; needs TradingView gap fill |
+| 6 | DAX | ✅ Complete | Databento (XEUR.EOBI) from Mar 2025; TV 10m fill for Aug 24-Mar 25 |
 
 ---
 
