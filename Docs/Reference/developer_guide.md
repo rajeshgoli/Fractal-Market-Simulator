@@ -24,9 +24,9 @@ src/
 │   └── ohlc_loader.py              # CSV loading (TradingView + semicolon formats)
 ├── swing_analysis/
 │   ├── types.py                    # Bar dataclass
-│   ├── swing_config.py             # SwingConfig, DirectionConfig
+│   ├── detection_config.py             # DetectionConfig, DirectionConfig
 │   ├── swing_node.py               # SwingNode hierarchical structure
-│   ├── events.py                   # SwingEvent types
+│   ├── events.py                   # DetectionEvent types
 │   ├── dag/                        # DAG-based leg detection (modularized)
 │   │   ├── __init__.py             # Re-exports: LegDetector, calibrate, etc.
 │   │   ├── leg_detector.py         # LegDetector (main class, formerly HierarchicalDetector)
@@ -77,7 +77,7 @@ scripts/                            # Dev utilities
 │                           SWING ANALYSIS                                     │
 │                                                                              │
 │   dag/leg_detector.py ──────────────────────────────────────────────────┐   │
-│   └── LegDetector.process_bar() ───────────► SwingNode + SwingEvent     │   │
+│   └── LegDetector.process_bar() ───────────► SwingNode + DetectionEvent     │   │
 │   dag/calibrate.py                                                      │   │
 │   └── calibrate() ─────────────────────────► (detector, events)         │   │
 │            │                                                             │   │
@@ -279,7 +279,7 @@ from src.swing_analysis.dag import (
     PendingOrigin,
     LegPruner,
 )
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 
 # Option 1: Calibrate from DataFrame (most common)
 import pandas as pd
@@ -299,13 +299,13 @@ detector, events = calibrate(bars, progress_callback=on_progress)
 
 # Option 4: Calibrate with Reference layer for tolerance-based invalidation
 from src.swing_analysis.reference_layer import ReferenceLayer
-config = SwingConfig.default()
+config = DetectionConfig.default()
 ref_layer = ReferenceLayer(config)
 detector, events = calibrate(bars, config, ref_layer=ref_layer)
 # Events now include Reference layer invalidation/completion events
 
 # Option 5: Process bars incrementally
-config = SwingConfig.default()
+config = DetectionConfig.default()
 detector = LegDetector(config)
 for bar in bars:
     events = detector.process_bar(bar)
@@ -323,7 +323,7 @@ restored_state = DetectorState.from_dict(state_dict)
 detector2 = LegDetector.from_state(restored_state, config)
 
 # Update config and reset state (Issue #288)
-new_config = SwingConfig.default().with_bull(formation_fib=0.5)
+new_config = DetectionConfig.default().with_bull(formation_fib=0.5)
 detector.update_config(new_config)  # Resets internal state, re-run calibration
 ```
 
@@ -382,7 +382,7 @@ During strong trends, the DAG creates many parallel legs with different origins 
 
 After turn pruning, legs close together in origin (time, range) space are consolidated within pivot groups.
 
-**Two strategies available** (configured via `SwingConfig.proximity_prune_strategy`):
+**Two strategies available** (configured via `DetectionConfig.proximity_prune_strategy`):
 
 | Strategy | Description | Complexity |
 |----------|-------------|------------|
@@ -401,9 +401,9 @@ Algorithm (both strategies):
 5. Emit `LegPrunedEvent` with `reason="origin_proximity_prune"` for discarded legs
 
 Configuration:
-- `SwingConfig.origin_range_prune_threshold` (default: 0.0 = disabled)
-- `SwingConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
-- `SwingConfig.proximity_prune_strategy` (default: `'oldest'`)
+- `DetectionConfig.origin_range_prune_threshold` (default: 0.0 = disabled)
+- `DetectionConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
+- `DetectionConfig.proximity_prune_strategy` (default: `'oldest'`)
 
 **Branch ratio origin domination (#337):**
 
@@ -422,7 +422,7 @@ This scales naturally through the hierarchy:
 
 **Why this works:** At a strong pivot (countering a large rally/drop), child legs need significant counter-trend to be considered valid. At a weak pivot, smaller counter-trends are acceptable. This captures the fractal nature of market structure.
 
-Configuration: `SwingConfig.min_branch_ratio` (default: 0.0 = disabled)
+Configuration: `DetectionConfig.min_branch_ratio` (default: 0.0 = disabled)
 
 **Turn ratio pruning (#341, #342, #344, #357):**
 
@@ -460,8 +460,8 @@ Top-k mode:
 When a new leg forms at origin O, counter-legs with pivot == O are checked.
 
 Configuration:
-- `SwingConfig.min_turn_ratio` (default: 0.0 = disabled)
-- `SwingConfig.max_turns_per_pivot` (default: 0 = disabled, max: 20)
+- `DetectionConfig.min_turn_ratio` (default: 0.0 = disabled)
+- `DetectionConfig.max_turns_per_pivot` (default: 0 = disabled, max: 20)
 
 If both are 0, turn ratio pruning is disabled. If `min_turn_ratio > 0`, threshold mode is used (ignoring `max_turns_per_pivot`).
 
@@ -493,9 +493,9 @@ Breached legs (where origin has been touched) remain visible in the DAG until pr
 - **Extension prune:** At N× extension beyond origin, breached child legs are pruned via `_check_extension_prune()`
 
 Configuration:
-- `SwingConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
-- `SwingConfig.emit_level_crosses`: Enable/disable LevelCrossEvent emission (default: False for performance)
-- `SwingConfig.enable_engulfed_prune`: Toggle engulfed pruning algorithm
+- `DetectionConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
+- `DetectionConfig.emit_level_crosses`: Enable/disable LevelCrossEvent emission (default: False for performance)
+- `DetectionConfig.enable_engulfed_prune`: Toggle engulfed pruning algorithm
 
 **Note (#345):** The `invalidation_threshold` config has been removed. Origin breach is now detected at 0% (any touch). Use `max_origin_breach is not None` to check if a leg's origin has been breached.
 
@@ -555,7 +555,7 @@ for bar in bars:
 
 #### ReferenceConfig
 
-Separate from SwingConfig — different lifecycle, UI-tunable independently.
+Separate from DetectionConfig — different lifecycle, UI-tunable independently.
 
 ```python
 from src.swing_analysis.reference_config import ReferenceConfig
@@ -902,7 +902,7 @@ python -m pytest tests/ --cov=src --cov-report=html
 | `test_calibration.py` | Calibrate functions, DataFrame helpers, performance |
 | `test_discretizer.py` | Event generation, side-channels |
 | `test_reference_frame.py` | ReferenceFrame coordinate system |
-| `test_swing_config.py` | SwingConfig dataclass |
+| `test_detection_config.py` | DetectionConfig dataclass |
 | `test_swing_node.py` | SwingNode hierarchical structure |
 | `test_swing_events.py` | Event types |
 

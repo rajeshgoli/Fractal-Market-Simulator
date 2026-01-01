@@ -1,7 +1,7 @@
 """
-Swing Detection Configuration
+Detection Configuration
 
-Centralized configuration for all swing detection parameters.
+Centralized configuration for all detection parameters.
 Extracts magic numbers from the codebase into a single config.
 
 See Docs/Reference/valid_swings.md for the canonical rules these parameters implement.
@@ -16,7 +16,7 @@ class DirectionConfig:
     """
     Parameters for one direction (bull or bear).
 
-    These parameters control swing detection and invalidation behavior
+    These parameters control detection and invalidation behavior
     for a single direction. Bull and bear can have different configs
     if asymmetric behavior is desired.
 
@@ -47,15 +47,15 @@ class DirectionConfig:
 
 
 @dataclass(frozen=True)
-class SwingConfig:
+class DetectionConfig:
     """
-    All configurable parameters for swing detection.
+    All configurable parameters for leg detection.
 
-    This config centralizes all magic numbers used in swing detection.
+    This config centralizes all magic numbers used in detection.
 
     Attributes:
-        bull: Configuration for bull swing detection.
-        bear: Configuration for bear swing detection.
+        bull: Configuration for bull leg detection.
+        bear: Configuration for bear leg detection.
         origin_range_prune_threshold: Threshold for origin-proximity consolidation by range (#294).
             Legs with similar ranges (relative difference < threshold) formed at similar
             times are consolidated. Set to 0 to disable.
@@ -74,7 +74,7 @@ class SwingConfig:
             origin and pivot sides.
 
     Example:
-        >>> config = SwingConfig.default()
+        >>> config = DetectionConfig.default()
         >>> config.bull.formation_fib
         0.287
     """
@@ -96,25 +96,25 @@ class SwingConfig:
     enable_engulfed_prune: bool = True
 
     @classmethod
-    def default(cls) -> "SwingConfig":
+    def default(cls) -> "DetectionConfig":
         """Create a config with default values."""
         return cls()
 
-    def with_bull(self, **kwargs: Any) -> "SwingConfig":
+    def with_bull(self, **kwargs: Any) -> "DetectionConfig":
         """
         Create a new config with modified bull parameters.
 
-        Since SwingConfig is frozen, this creates a new instance.
+        Since DetectionConfig is frozen, this creates a new instance.
 
         Example:
-            >>> config = SwingConfig.default()
+            >>> config = DetectionConfig.default()
             >>> custom = config.with_bull(formation_fib=0.382)
             >>> custom.bull.formation_fib
             0.382
         """
         bull_dict = asdict(self.bull)
         bull_dict.update(kwargs)
-        return SwingConfig(
+        return DetectionConfig(
             bull=DirectionConfig(**bull_dict),
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
@@ -128,15 +128,15 @@ class SwingConfig:
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
-    def with_bear(self, **kwargs: Any) -> "SwingConfig":
+    def with_bear(self, **kwargs: Any) -> "DetectionConfig":
         """
         Create a new config with modified bear parameters.
 
-        Since SwingConfig is frozen, this creates a new instance.
+        Since DetectionConfig is frozen, this creates a new instance.
         """
         bear_dict = asdict(self.bear)
         bear_dict.update(kwargs)
-        return SwingConfig(
+        return DetectionConfig(
             bull=self.bull,
             bear=DirectionConfig(**bear_dict),
             origin_range_prune_threshold=self.origin_range_prune_threshold,
@@ -155,11 +155,11 @@ class SwingConfig:
         origin_range_prune_threshold: float = None,
         origin_time_prune_threshold: float = None,
         proximity_prune_strategy: str = None,
-    ) -> "SwingConfig":
+    ) -> "DetectionConfig":
         """
         Create a new config with modified origin-proximity prune thresholds (#294, #319).
 
-        Since SwingConfig is frozen, this creates a new instance.
+        Since DetectionConfig is frozen, this creates a new instance.
 
         Args:
             origin_range_prune_threshold: Range threshold for consolidation.
@@ -172,7 +172,7 @@ class SwingConfig:
                 'oldest': Keep oldest leg (legacy behavior).
                 'counter_trend': Keep leg with highest counter-trend range (default).
         """
-        return SwingConfig(
+        return DetectionConfig(
             bull=self.bull,
             bear=self.bear,
             origin_range_prune_threshold=(
@@ -198,18 +198,18 @@ class SwingConfig:
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
-    def with_stale_extension(self, stale_extension_threshold: float) -> "SwingConfig":
+    def with_stale_extension(self, stale_extension_threshold: float) -> "DetectionConfig":
         """
         Create a new config with modified stale extension threshold (#203, #261).
 
-        Since SwingConfig is frozen, this creates a new instance.
+        Since DetectionConfig is frozen, this creates a new instance.
 
         Args:
             stale_extension_threshold: Multiplier for removing invalidated child legs.
                 3.0 means invalidated legs with a parent are pruned at 3x extension
                 beyond origin. Root legs (no parent) are never pruned by this rule.
         """
-        return SwingConfig(
+        return DetectionConfig(
             bull=self.bull,
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
@@ -226,17 +226,17 @@ class SwingConfig:
     def with_prune_toggles(
         self,
         enable_engulfed_prune: bool = None,
-    ) -> "SwingConfig":
+    ) -> "DetectionConfig":
         """
         Create a new config with modified pruning algorithm toggles.
 
-        Since SwingConfig is frozen, this creates a new instance.
+        Since DetectionConfig is frozen, this creates a new instance.
         Only provided parameters are modified; others keep their current values.
 
         Args:
             enable_engulfed_prune: Enable/disable engulfed leg deletion.
         """
-        return SwingConfig(
+        return DetectionConfig(
             bull=self.bull,
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
@@ -250,11 +250,11 @@ class SwingConfig:
             enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
         )
 
-    def with_min_branch_ratio(self, min_branch_ratio: float) -> "SwingConfig":
+    def with_min_branch_ratio(self, min_branch_ratio: float) -> "DetectionConfig":
         """
         Create a new config with modified min branch ratio threshold (#337).
 
-        Since SwingConfig is frozen, this creates a new instance.
+        Since DetectionConfig is frozen, this creates a new instance.
 
         Args:
             min_branch_ratio: Minimum ratio of child's counter-trend to parent's.
@@ -262,7 +262,7 @@ class SwingConfig:
                 0.1 means child's counter-trend must be at least 10% of parent's.
                 0.0 disables branch ratio domination.
         """
-        return SwingConfig(
+        return DetectionConfig(
             bull=self.bull,
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
@@ -276,11 +276,11 @@ class SwingConfig:
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
-    def with_min_turn_ratio(self, min_turn_ratio: float) -> "SwingConfig":
+    def with_min_turn_ratio(self, min_turn_ratio: float) -> "DetectionConfig":
         """
         Create a new config with modified min turn ratio threshold (#341).
 
-        Since SwingConfig is frozen, this creates a new instance.
+        Since DetectionConfig is frozen, this creates a new instance.
 
         Args:
             min_turn_ratio: Minimum turn ratio for sibling pruning at shared pivots.
@@ -289,7 +289,7 @@ class SwingConfig:
                 0.5 means legs cannot extend more than 2x their counter-trend.
                 0.0 disables turn ratio pruning.
         """
-        return SwingConfig(
+        return DetectionConfig(
             bull=self.bull,
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
@@ -303,18 +303,18 @@ class SwingConfig:
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
-    def with_max_turns_per_pivot(self, max_turns_per_pivot: int) -> "SwingConfig":
+    def with_max_turns_per_pivot(self, max_turns_per_pivot: int) -> "DetectionConfig":
         """
         Create a new config with modified max turns per pivot (#342).
 
-        Since SwingConfig is frozen, this creates a new instance.
+        Since DetectionConfig is frozen, this creates a new instance.
 
         Args:
             max_turns_per_pivot: Maximum number of legs to keep at each pivot
                 in top-k mode. Only active when min_turn_ratio == 0.
                 0 disables top-k mode (uses threshold mode if min_turn_ratio > 0).
         """
-        return SwingConfig(
+        return DetectionConfig(
             bull=self.bull,
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,
@@ -328,11 +328,11 @@ class SwingConfig:
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
-    def with_max_turns_per_pivot_raw(self, max_turns_per_pivot_raw: int) -> "SwingConfig":
+    def with_max_turns_per_pivot_raw(self, max_turns_per_pivot_raw: int) -> "DetectionConfig":
         """
         Create a new config with modified max turns per pivot (raw mode) (#355).
 
-        Since SwingConfig is frozen, this creates a new instance.
+        Since DetectionConfig is frozen, this creates a new instance.
 
         Args:
             max_turns_per_pivot_raw: Maximum number of legs to keep at each pivot
@@ -341,7 +341,7 @@ class SwingConfig:
                 Sorts by raw _max_counter_leg_range instead of ratio.
                 0 disables raw counter-heft mode.
         """
-        return SwingConfig(
+        return DetectionConfig(
             bull=self.bull,
             bear=self.bear,
             origin_range_prune_threshold=self.origin_range_prune_threshold,

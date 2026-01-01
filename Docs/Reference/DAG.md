@@ -930,13 +930,13 @@ The detector supports **runtime configuration updates** via `LegDetector.update_
 
 ```python
 from src.swing_analysis.dag import LegDetector
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 
 # Create detector with defaults
 detector = LegDetector()
 
 # Later, update config (resets state)
-new_config = SwingConfig.default().with_bull(formation_fib=0.5)
+new_config = DetectionConfig.default().with_bull(formation_fib=0.5)
 detector.update_config(new_config)
 
 # Must re-calibrate after config change

@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from data.ohlc_loader import load_ohlc_window
 from swing_analysis.types import Bar
-from swing_analysis.swing_config import SwingConfig
+from swing_analysis.detection_config import DetectionConfig
 from swing_analysis.dag.leg_detector import LegDetector
 from swing_analysis.dag.leg import Leg
 
@@ -119,7 +119,7 @@ def investigate(
         bars.append(bar)
 
     # Create detector
-    config = SwingConfig()
+    config = DetectionConfig()
     detector = LegDetector(config)
 
     # Tracking variables

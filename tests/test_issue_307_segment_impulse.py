@@ -18,7 +18,7 @@ from src.swing_analysis.dag.leg_detector import (
     _calculate_segment_impulse,
     _update_segment_impulse_for_new_child,
 )
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.types import Bar
 
 
@@ -321,7 +321,7 @@ class TestIntegrationWithLegDetector:
 
     def test_child_leg_updates_parent_segment_impulse(self):
         """When a child leg forms, parent should get segment impulse."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create a downtrend that establishes a bear parent leg

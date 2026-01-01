@@ -4,7 +4,7 @@ Reference Layer Configuration
 Configuration for the Reference Layer — a thin filter over DAG's active legs
 that determines which legs qualify as valid trading references and their salience.
 
-Separate from SwingConfig because:
+Separate from DetectionConfig because:
 - Reference Layer is an independent consumer of DAG output
 - Different lifecycle (can be changed without affecting detection)
 - UI tunable parameters distinct from detection parameters

@@ -12,7 +12,7 @@ import pytest
 from decimal import Decimal
 
 from src.swing_analysis.dag import LegDetector, DetectorState, Leg
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.types import Bar
 
 
@@ -60,7 +60,7 @@ class TestComputeDepthForLeg:
 
     def test_root_leg_depth_is_zero(self):
         """Leg with no parent should have depth 0."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         depth = detector._compute_depth_for_leg(None)
@@ -68,7 +68,7 @@ class TestComputeDepthForLeg:
 
     def test_child_of_root_has_depth_one(self):
         """Leg whose parent has depth 0 should have depth 1."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create a root leg (depth 0)
@@ -88,7 +88,7 @@ class TestComputeDepthForLeg:
 
     def test_grandchild_has_depth_two(self):
         """Leg whose parent has depth 1 should have depth 2."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create parent with depth 1
@@ -108,7 +108,7 @@ class TestComputeDepthForLeg:
 
     def test_depth_with_missing_parent_returns_zero(self):
         """If parent leg_id not found, depth should be 0."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Try to compute depth for nonexistent parent
@@ -121,7 +121,7 @@ class TestDepthIntegration:
 
     def test_root_leg_created_with_depth_zero(self):
         """First leg created should have depth 0."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         bars = [
@@ -142,7 +142,7 @@ class TestDepthIntegration:
 
     def test_child_leg_has_depth_one(self):
         """Child leg should have depth = parent.depth + 1."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Manually set up parent-child scenario
@@ -234,7 +234,7 @@ class TestDepthHierarchyChain:
 
     def test_depth_chain_three_levels(self):
         """Test depth correctly increments through 3-level hierarchy."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create L1 (root, depth 0)

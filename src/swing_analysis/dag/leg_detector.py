@@ -28,10 +28,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Dict, Tuple, Optional, TYPE_CHECKING
 
-from ..swing_config import SwingConfig
+from ..detection_config import DetectionConfig
 from ..types import Bar
 from ..events import (
-    SwingEvent,
+    DetectionEvent,
     LegCreatedEvent,
     LegPrunedEvent,
     OriginBreachedEvent,
@@ -241,7 +241,7 @@ class LegDetector:
     4. DAG hierarchy - Swings can have multiple parents for structural context
 
     Example:
-        >>> config = SwingConfig.default()
+        >>> config = DetectionConfig.default()
         >>> detector = LegDetector(config)
         >>> for bar in bars:
         ...     events = detector.process_bar(bar)
@@ -252,15 +252,15 @@ class LegDetector:
         >>> detector2 = LegDetector.from_state(state, config)
     """
 
-    def __init__(self, config: SwingConfig = None):
+    def __init__(self, config: DetectionConfig = None):
         """
         Initialize detector with configuration.
 
         Args:
-            config: SwingConfig with detection parameters.
-                   If None, uses SwingConfig.default().
+            config: DetectionConfig with detection parameters.
+                   If None, uses DetectionConfig.default().
         """
-        self.config = config or SwingConfig.default()
+        self.config = config or DetectionConfig.default()
         self.state = DetectorState()
         self._pruner = LegPruner(self.config)
 
@@ -411,7 +411,7 @@ class LegDetector:
         bar_high: Decimal,
         bar_low: Decimal,
         timestamp: datetime
-    ) -> Tuple[List[SwingEvent], List[Leg]]:
+    ) -> Tuple[List[DetectionEvent], List[Leg]]:
         """
         Update breach tracking for all active legs (#208, #345).
 
@@ -440,7 +440,7 @@ class LegDetector:
             Tuple of (events, newly_breached_legs) where events include
             OriginBreachedEvent and PivotBreachedEvent.
         """
-        events: List[SwingEvent] = []
+        events: List[DetectionEvent] = []
         newly_breached_legs: List[Leg] = []
 
         for leg in self.state.active_legs:
@@ -528,7 +528,7 @@ class LegDetector:
 
         return events, newly_breached_legs
 
-    def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[SwingEvent]:
+    def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[DetectionEvent]:
         """
         Update DAG state with new bar using streaming leg tracking.
 
@@ -541,9 +541,9 @@ class LegDetector:
             timestamp: Timestamp for events
 
         Returns:
-            List of SwingEvent for any events generated
+            List of DetectionEvent for any events generated
         """
-        events: List[SwingEvent] = []
+        events: List[DetectionEvent] = []
         bar_high = Decimal(str(bar.high))
         bar_low = Decimal(str(bar.low))
         bar_close = Decimal(str(bar.close))
@@ -667,7 +667,7 @@ class LegDetector:
         self, bar: Bar, timestamp: datetime,
         bar_high: Decimal, bar_low: Decimal, bar_close: Decimal,
         prev_high: Decimal, prev_low: Decimal
-    ) -> List[SwingEvent]:
+    ) -> List[DetectionEvent]:
         """
         Process Type 2-Bull bar (HH, HL - trending up).
 
@@ -676,7 +676,7 @@ class LegDetector:
 
         Also extends any existing bull legs (tracking upward movement).
         """
-        events: List[SwingEvent] = []
+        events: List[DetectionEvent] = []
 
         # Apply origin-proximity pruning for bear legs (#294)
         proximity_prune_events = self._pruner.apply_origin_proximity_prune(self.state, 'bear', bar, timestamp)
@@ -782,7 +782,7 @@ class LegDetector:
         self, bar: Bar, timestamp: datetime,
         bar_high: Decimal, bar_low: Decimal, bar_close: Decimal,
         prev_high: Decimal, prev_low: Decimal
-    ) -> List[SwingEvent]:
+    ) -> List[DetectionEvent]:
         """
         Process Type 2-Bear bar (LH, LL - trending down).
 
@@ -794,7 +794,7 @@ class LegDetector:
 
         See issue #195 for details on the temporal order bug this fixes.
         """
-        events: List[SwingEvent] = []
+        events: List[DetectionEvent] = []
 
         # Apply origin-proximity pruning for bull legs (#294)
         proximity_prune_events = self._pruner.apply_origin_proximity_prune(self.state, 'bull', bar, timestamp)
@@ -897,7 +897,7 @@ class LegDetector:
     def _process_type1(
         self, bar: Bar, timestamp: datetime,
         bar_high: Decimal, bar_low: Decimal, bar_close: Decimal
-    ) -> List[SwingEvent]:
+    ) -> List[DetectionEvent]:
         """
         Process Type 1 bar (inside bar - LH, HL) or bars with equal H/L.
 
@@ -907,7 +907,7 @@ class LegDetector:
 
         We should create legs from pending origins if they haven't been consumed yet.
         """
-        events: List[SwingEvent] = []
+        events: List[DetectionEvent] = []
         prev_bar = self.state.prev_bar
         if prev_bar:
             pending_bear = self.state.pending_origins.get('bear')  # High origin (for bear legs)
@@ -1091,14 +1091,14 @@ class LegDetector:
         self, bar: Bar, timestamp: datetime,
         bar_high: Decimal, bar_low: Decimal, bar_close: Decimal,
         prev_high: Decimal, prev_low: Decimal
-    ) -> List[SwingEvent]:
+    ) -> List[DetectionEvent]:
         """
         Process Type 3 bar (outside bar - HH, LL).
 
         High volatility decision point. Both directions extended.
         Keep both branches until decisive resolution.
         """
-        events: List[SwingEvent] = []
+        events: List[DetectionEvent] = []
 
         # Update pending origins only if more extreme AND not worse than active leg origins (#200)
         # Bull origin: only update if this low is lower (tracking swing lows for bull legs)
@@ -1217,7 +1217,7 @@ class LegDetector:
                     return False  # Active bear leg has higher/equal origin
         return True
 
-    def process_bar(self, bar: Bar) -> List[SwingEvent]:
+    def process_bar(self, bar: Bar) -> List[DetectionEvent]:
         """
         Process a single bar. Returns events generated.
 
@@ -1234,9 +1234,9 @@ class LegDetector:
             bar: The bar to process (Bar dataclass from types.py)
 
         Returns:
-            List of SwingEvent subclasses generated by this bar.
+            List of DetectionEvent subclasses generated by this bar.
         """
-        events: List[SwingEvent] = []
+        events: List[DetectionEvent] = []
         self.state.last_bar_index = bar.index
 
         # Create timestamp from bar
@@ -1517,14 +1517,14 @@ class LegDetector:
 
     @classmethod
     def from_state(
-        cls, state: DetectorState, config: SwingConfig = None
+        cls, state: DetectorState, config: DetectionConfig = None
     ) -> "LegDetector":
         """
         Restore from serialized state.
 
         Args:
             state: DetectorState to restore from.
-            config: SwingConfig to use (defaults to default config).
+            config: DetectionConfig to use (defaults to default config).
 
         Returns:
             LegDetector initialized with the given state.
@@ -1533,7 +1533,7 @@ class LegDetector:
         detector.state = state
         return detector
 
-    def update_config(self, config: SwingConfig) -> None:
+    def update_config(self, config: DetectionConfig) -> None:
         """
         Update the detector's configuration.
 
@@ -1541,12 +1541,12 @@ class LegDetector:
         The new config applies to future bar processing only.
 
         Args:
-            config: New SwingConfig to use.
+            config: New DetectionConfig to use.
 
         Example:
             >>> detector = LegDetector()
             >>> # Change formation threshold
-            >>> new_config = SwingConfig.default().with_bull(formation_fib=0.382)
+            >>> new_config = DetectionConfig.default().with_bull(formation_fib=0.382)
             >>> detector.update_config(new_config)
             >>> # Future bars use new config, existing legs preserved
         """

@@ -16,7 +16,7 @@ from typing import List
 from src.swing_analysis.dag.leg import Leg
 from src.swing_analysis.dag.leg_pruner import LegPruner
 from src.swing_analysis.dag.state import DetectorState
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.types import Bar
 
 
@@ -119,7 +119,7 @@ class TestEdgeCases:
 
     def test_empty_active_legs_no_crash(self):
         """Empty active_legs should return empty list."""
-        config = SwingConfig.default().with_origin_prune(0.05, 0.10)
+        config = DetectionConfig.default().with_origin_prune(0.05, 0.10)
         pruner = LegPruner(config)
         state = DetectorState()
         state.active_legs = []
@@ -131,7 +131,7 @@ class TestEdgeCases:
 
     def test_single_leg_no_prune(self):
         """Single leg in pivot group should not be pruned."""
-        config = SwingConfig.default().with_origin_prune(0.05, 0.10)
+        config = DetectionConfig.default().with_origin_prune(0.05, 0.10)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -146,7 +146,7 @@ class TestEdgeCases:
 
     def test_threshold_zero_disables_pruning(self):
         """Zero threshold should disable pruning entirely."""
-        config = SwingConfig.default().with_origin_prune(0.0, 0.10)
+        config = DetectionConfig.default().with_origin_prune(0.0, 0.10)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -163,7 +163,7 @@ class TestEdgeCases:
 
     def test_threshold_near_one_degrades_gracefully(self):
         """Threshold near 1.0 should work without crashing."""
-        config = SwingConfig.default().with_origin_prune(0.99, 0.99)
+        config = DetectionConfig.default().with_origin_prune(0.99, 0.99)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -179,7 +179,7 @@ class TestEdgeCases:
 
     def test_different_pivot_groups_independent(self):
         """Legs with different pivots should not affect each other."""
-        config = SwingConfig.default().with_origin_prune(0.50, 0.50)
+        config = DetectionConfig.default().with_origin_prune(0.50, 0.50)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -197,7 +197,7 @@ class TestEdgeCases:
 
     def test_same_pivot_different_direction_independent(self):
         """Bull and bear legs should be processed independently."""
-        config = SwingConfig.default().with_origin_prune(0.50, 0.50)
+        config = DetectionConfig.default().with_origin_prune(0.50, 0.50)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -257,7 +257,7 @@ class TestPerformanceScaling:
         which is acceptable since N (legs per pivot group) is typically small.
         """
         # Use 'oldest' strategy for O(N log N) optimization test
-        config = SwingConfig.default().with_origin_prune(0.10, 0.10, 'oldest')
+        config = DetectionConfig.default().with_origin_prune(0.10, 0.10, 'oldest')
         pruner = LegPruner(config)
 
         times = {}
@@ -286,7 +286,7 @@ class TestPerformanceScaling:
 
         for threshold_pct in [1, 10]:
             threshold = threshold_pct / 100
-            config = SwingConfig.default().with_origin_prune(threshold, threshold)
+            config = DetectionConfig.default().with_origin_prune(threshold, threshold)
             pruner = LegPruner(config)
 
             state = DetectorState()
@@ -308,7 +308,7 @@ class TestPruningCorrectness:
 
     def test_closer_leg_pruned_by_older(self):
         """Newer leg close in time/range should be pruned by older."""
-        config = SwingConfig.default().with_origin_prune(0.50, 0.50)
+        config = DetectionConfig.default().with_origin_prune(0.50, 0.50)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -328,7 +328,7 @@ class TestPruningCorrectness:
 
     def test_far_apart_legs_not_pruned(self):
         """Legs far apart in time should not be pruned."""
-        config = SwingConfig.default().with_origin_prune(0.05, 0.05)  # Tight threshold
+        config = DetectionConfig.default().with_origin_prune(0.05, 0.05)  # Tight threshold
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -347,7 +347,7 @@ class TestPruningCorrectness:
 
     def test_different_range_legs_not_pruned(self):
         """Legs with very different ranges should not be pruned."""
-        config = SwingConfig.default().with_origin_prune(0.50, 0.05)  # Tight range threshold
+        config = DetectionConfig.default().with_origin_prune(0.50, 0.05)  # Tight range threshold
         pruner = LegPruner(config)
         state = DetectorState()
 

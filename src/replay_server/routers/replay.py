@@ -24,9 +24,9 @@ from ...swing_analysis.dag import (
     calibrate,
 )
 from ...swing_analysis.dag.leg import Leg
-from ...swing_analysis.swing_config import SwingConfig
+from ...swing_analysis.detection_config import DetectionConfig
 from ...swing_analysis.events import (
-    SwingEvent,
+    DetectionEvent,
     LegCreatedEvent,
     LegPrunedEvent,
     OriginBreachedEvent,
@@ -201,15 +201,15 @@ def _leg_to_calibration_response(
 
 
 def _event_to_response(
-    event: SwingEvent,
+    event: DetectionEvent,
     leg: Optional[Leg] = None,
     scale_thresholds: Optional[Dict[str, float]] = None,
 ) -> ReplayEventResponse:
     """
-    Convert SwingEvent to ReplayEventResponse.
+    Convert DetectionEvent to ReplayEventResponse.
 
     Args:
-        event: SwingEvent from LegDetector.
+        event: DetectionEvent from LegDetector.
         leg: Optional Leg for context.
         scale_thresholds: Optional thresholds for scale assignment.
 
@@ -273,7 +273,7 @@ def _event_to_response(
 
 
 def _format_trigger_explanation(
-    event: SwingEvent,
+    event: DetectionEvent,
     leg: Optional[Leg],
 ) -> str:
     """
@@ -328,13 +328,13 @@ def _format_trigger_explanation(
 
 
 def _event_to_lifecycle_event(
-    event: SwingEvent,
+    event: DetectionEvent,
     bar_index: int,
     csv_index: int,
     timestamp: str,
 ) -> Optional[LifecycleEvent]:
     """
-    Convert a SwingEvent to a LifecycleEvent for Follow Leg tracking.
+    Convert a DetectionEvent to a LifecycleEvent for Follow Leg tracking.
 
     Only converts relevant leg lifecycle events. Returns None for events
     that aren't tracked.
@@ -694,7 +694,7 @@ async def calibrate_replay(
     # DAG mode: Allow bar_count=0 for incremental build from scratch (#179)
     if actual_bar_count == 0:
         logger.info("DAG mode: initializing detector with 0 bars for incremental build")
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         ref_layer = ReferenceLayer(config)
         detector = LegDetector(config)
 
@@ -743,7 +743,7 @@ async def calibrate_replay(
 
     # Run calibration using LegDetector
     calibration_bars = s.source_bars[:actual_bar_count]
-    config = SwingConfig.default()
+    config = DetectionConfig.default()
     ref_layer = ReferenceLayer(config)
     detector, events = calibrate(calibration_bars, config)
 
@@ -1739,7 +1739,7 @@ async def get_detection_config():
     if detector is not None:
         config = detector.config
     else:
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
 
     # #345: invalidation_threshold removed, #394: formation_fib removed
     return SwingConfigResponse(

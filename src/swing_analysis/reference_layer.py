@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import List, Optional, Dict, Tuple, Set
 
-from .swing_config import SwingConfig
+from .detection_config import DetectionConfig
 from .reference_frame import ReferenceFrame
 from .reference_config import ReferenceConfig
 from .types import Bar
@@ -222,7 +222,7 @@ class ReferenceLayer:
         >>> legs = detector.state.active_legs
         >>>
         >>> # Apply reference layer filters
-        >>> config = SwingConfig.default()
+        >>> config = DetectionConfig.default()
         >>> ref_layer = ReferenceLayer(config)
         >>>
         >>> # Update on each bar
@@ -240,18 +240,18 @@ class ReferenceLayer:
 
     def __init__(
         self,
-        config: SwingConfig = None,
+        config: DetectionConfig = None,
         reference_config: ReferenceConfig = None,
     ):
         """
         Initialize the Reference layer.
 
         Args:
-            config: SwingConfig with thresholds. If None, uses defaults.
+            config: DetectionConfig with thresholds. If None, uses defaults.
             reference_config: ReferenceConfig for scale classification and
                 salience computation. If None, uses defaults.
         """
-        self.config = config or SwingConfig.default()
+        self.config = config or DetectionConfig.default()
         self.reference_config = reference_config or ReferenceConfig.default()
         # Range distribution for scale classification (sorted for O(log n) percentile)
         # All-time distribution; DAG pruning handles recency per spec

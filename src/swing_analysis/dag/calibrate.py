@@ -9,9 +9,9 @@ from typing import List, Tuple, Optional, Callable, TYPE_CHECKING
 
 import pandas as pd
 
-from ..swing_config import SwingConfig
+from ..detection_config import DetectionConfig
 from ..types import Bar
-from ..events import SwingEvent
+from ..events import DetectionEvent
 
 if TYPE_CHECKING:
     from .leg_detector import LegDetector
@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 
 def calibrate(
     bars: List[Bar],
-    config: SwingConfig = None,
+    config: DetectionConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
-) -> Tuple["LegDetector", List[SwingEvent]]:
+) -> Tuple["LegDetector", List[DetectionEvent]]:
     """
     Run detection on historical bars.
 
@@ -30,7 +30,7 @@ def calibrate(
 
     Args:
         bars: Historical bars to process.
-        config: Detection configuration (defaults to SwingConfig.default()).
+        config: Detection configuration (defaults to DetectionConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
 
     Returns:
@@ -51,10 +51,10 @@ def calibrate(
     # Import here to avoid circular import
     from .leg_detector import LegDetector
 
-    config = config or SwingConfig.default()
+    config = config or DetectionConfig.default()
 
     detector = LegDetector(config)
-    all_events: List[SwingEvent] = []
+    all_events: List[DetectionEvent] = []
     total = len(bars)
 
     for i, bar in enumerate(bars):
@@ -131,9 +131,9 @@ def dataframe_to_bars(df: pd.DataFrame) -> List[Bar]:
 
 def calibrate_from_dataframe(
     df: pd.DataFrame,
-    config: SwingConfig = None,
+    config: DetectionConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
-) -> Tuple["LegDetector", List[SwingEvent]]:
+) -> Tuple["LegDetector", List[DetectionEvent]]:
     """
     Convenience wrapper for DataFrame input.
 
@@ -141,7 +141,7 @@ def calibrate_from_dataframe(
 
     Args:
         df: DataFrame with OHLC columns (open, high, low, close).
-        config: Detection configuration (defaults to SwingConfig.default()).
+        config: Detection configuration (defaults to DetectionConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
 
     Returns:

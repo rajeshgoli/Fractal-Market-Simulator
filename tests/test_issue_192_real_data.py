@@ -17,7 +17,7 @@ from src.swing_analysis.dag import (
     calibrate,
     dataframe_to_bars,
 )
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.data.ohlc_loader import load_ohlc_window
 
 
@@ -56,7 +56,7 @@ class TestIssue192RealData:
         bars = dataframe_to_bars(df)
 
         # Process bars up to bar 45
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector, events = calibrate(bars[:46], config)
 
         # Check all active legs for price/index consistency
@@ -131,7 +131,7 @@ class TestIssue192RealData:
         df, gaps = load_ohlc_window(str(test_data_path), window_offset, num_bars)
         bars = dataframe_to_bars(df)
 
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         for bar_idx, bar in enumerate(bars[:46]):

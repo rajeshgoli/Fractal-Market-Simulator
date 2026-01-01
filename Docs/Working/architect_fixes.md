@@ -182,15 +182,15 @@ Multiple refactoring issues left vestiges in the codebase:
 #### 4a. `swing_id` vestiges (#394)
 
 **Should remove:**
-- `SwingEvent.swing_id` field in `events.py` (always `""`)
+- `DetectionEvent.swing_id` field in `events.py` (always `""`)
 - 15+ `swing_id=""` args in `leg_detector.py` and `leg_pruner.py`
 - `ReplayEventResponse.swing_id`, `DagLegResponse.swing_id` in schemas
 
 #### 4b. `LevelCrossEvent` vestiges (#394)
 
 **Should remove:**
-- `emit_level_crosses: bool = False` in `swing_config.py` (never used)
-- `with_level_crosses()` method in `swing_config.py`
+- `emit_level_crosses: bool = False` in `detection_config.py` (never used)
+- `with_level_crosses()` method in `detection_config.py`
 - `level`, `previous_level` fields in `ReplayEventResponse` ("For LEVEL_CROSS")
 - `LEVEL_CROSS` in event type comments
 - Comments like `# LevelCrossEvent removed (#394)`
@@ -275,7 +275,7 @@ swing_id=None,  # Swing ID removed (#394)
 | `routers/replay.py` | 20+ tombstone comments, hardcoded hierarchy values |
 | `schemas.py` | Dead: `swing_id`, `parent_ids`, `recently_invalidated`, `level`. Disconnected: `depth` (see #4d) |
 | `events.py` | `swing_id` on base class |
-| `swing_config.py` | `emit_level_crosses` config that does nothing |
+| `detection_config.py` | `emit_level_crosses` config that does nothing |
 
 ---
 

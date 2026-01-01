@@ -16,7 +16,7 @@ from src.swing_analysis.dag import (
     calibrate_from_dataframe,
     dataframe_to_bars,
 )
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 
 from conftest import make_bar
 
@@ -36,7 +36,7 @@ class TestCalibrateFunction:
     def test_calibrate_same_as_manual_loop(self):
         """calibrate() produces same results as manual process_bar loop."""
         bars = [make_bar(i, 100.0 + i % 10, 105.0 + i % 10, 95.0 + i % 10, 102.0 + i % 10) for i in range(50)]
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
 
         # Calibrate
         detector1, events1 = calibrate(bars, config)
@@ -199,7 +199,7 @@ class TestCalibrateFromDataframe:
             "low": [95.0 + i for i in range(20)],
             "close": [102.0 + i for i in range(20)],
         })
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
 
         # Using calibrate_from_dataframe
         detector1, events1 = calibrate_from_dataframe(df, config)

@@ -9,7 +9,7 @@ import pytest
 from decimal import Decimal
 
 from src.swing_analysis.dag import HierarchicalDetector, Leg
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 
 from conftest import make_bar
 
@@ -21,7 +21,7 @@ class TestStaleExtensionPruneOnlyChildren:
 
     def test_config_default_is_3x(self):
         """Default stale_extension_threshold should be 3.0."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         assert config.stale_extension_threshold == 3.0
 
     def test_root_leg_not_pruned_at_3x_extension(self):
@@ -30,7 +30,7 @@ class TestStaleExtensionPruneOnlyChildren:
 
         Root legs are preserved as historical anchors.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Create initial bars
@@ -75,7 +75,7 @@ class TestStaleExtensionPruneOnlyChildren:
 
         Child legs are cleaned up as price moves away.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Create initial bars
@@ -118,7 +118,7 @@ class TestStaleExtensionPruneOnlyChildren:
         """
         Invalidated root bear leg (no parent) is NOT pruned at 3x extension.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Create initial bars
@@ -157,7 +157,7 @@ class TestStaleExtensionPruneOnlyChildren:
         """
         Invalidated child bear leg (has parent) IS pruned at 3x extension.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Create initial bars
@@ -196,7 +196,7 @@ class TestStaleExtensionPruneOnlyChildren:
         """
         Invalidated child leg is NOT pruned before reaching 3x extension.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Create initial bars

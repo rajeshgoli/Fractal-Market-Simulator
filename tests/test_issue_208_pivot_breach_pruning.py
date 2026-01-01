@@ -17,7 +17,7 @@ from datetime import datetime
 from src.swing_analysis.dag import HierarchicalDetector, Leg
 from src.swing_analysis.dag.leg_pruner import LegPruner
 from src.swing_analysis.dag.state import DetectorState
-from src.swing_analysis.swing_config import SwingConfig, DirectionConfig
+from src.swing_analysis.detection_config import DetectionConfig, DirectionConfig
 from src.swing_analysis.types import Bar
 from src.swing_analysis.events import LegPrunedEvent
 
@@ -48,8 +48,8 @@ class TestConfigParameters:
         assert config.engulfed_breach_threshold == 0.25
 
     def test_swing_config_includes_engulfed_params(self):
-        """SwingConfig should include engulfed threshold parameters in DirectionConfig."""
-        config = SwingConfig.default()
+        """DetectionConfig should include engulfed threshold parameters in DirectionConfig."""
+        config = DetectionConfig.default()
 
         assert config.bull.engulfed_breach_threshold == 0.0  # Strict deletion per #236
         assert config.bear.engulfed_breach_threshold == 0.0  # Strict deletion per #236

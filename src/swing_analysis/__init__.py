@@ -19,7 +19,7 @@ from .dag import (
     BarType,
     LegPruner,
 )
-from .swing_config import SwingConfig
+from .detection_config import DetectionConfig
 
 # Reference layer (post-DAG filtering)
 from .reference_layer import (

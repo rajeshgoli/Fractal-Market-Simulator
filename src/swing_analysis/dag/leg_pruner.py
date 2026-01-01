@@ -12,7 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Dict, Set, Optional, Tuple, TYPE_CHECKING
 
-from ..swing_config import SwingConfig
+from ..detection_config import DetectionConfig
 from ..types import Bar
 from ..events import LegPrunedEvent
 from .leg import Leg
@@ -30,12 +30,12 @@ class LegPruner:
     making the pruning logic reusable and testable.
     """
 
-    def __init__(self, config: SwingConfig):
+    def __init__(self, config: DetectionConfig):
         """
         Initialize with configuration.
 
         Args:
-            config: SwingConfig with pruning parameters.
+            config: DetectionConfig with pruning parameters.
         """
         self.config = config
 

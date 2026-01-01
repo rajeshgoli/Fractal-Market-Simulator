@@ -12,7 +12,7 @@ Read in order:
 - Single incremental algorithm (LegDetector.process_bar())
 - Fibonacci-based structural analysis (0.382 formation/invalidation)
 - Resolution-agnostic (1m to 1mo)
-- SwingConfig centralizes all detection parameters
+- DetectionConfig centralizes all detection parameters
 - Calibration-first playback for causal evaluation
 - Backend-controlled data boundary for replay (single source of truth)
 - **DAG/Reference separation:** Structural tracking vs semantic filtering
@@ -55,9 +55,9 @@ Read in order:
 - Fix docstring in leg_detector.py (references removed `swing_id`)
 
 **Future naming cleanup (low priority):**
-- `swing_config.py` → `detection_config.py` (configures detection algorithm, not swings)
-- `SwingConfig` → `DetectionConfig` (class rename to match)
-- `SwingEvent` → `DetectionEvent` (no swing events remain post-#394)
+- `detection_config.py` → `detection_config.py` (configures detection algorithm, not swings)
+- `DetectionConfig` → `DetectionConfig` (class rename to match)
+- `DetectionEvent` → `DetectionEvent` (no swing events remain post-#394)
 - Keep `src/swing_analysis/` — valid domain term for users
 
 ---
@@ -86,7 +86,7 @@ Phase 1 is fully complete (backend + frontend, 27 issues #361-#387):
 ### Design Decisions (Implemented)
 
 1. **Leg.depth** — Computed at leg creation, stored as field (O(1) lookup)
-2. **ReferenceConfig** — Separate from SwingConfig; different lifecycle
+2. **ReferenceConfig** — Separate from DetectionConfig; different lifecycle
 3. **Formation tracking** — Reference Layer maintains `_formed_refs: Set[str]` (once formed, stays formed until fatally breached)
 4. **Cold start** — Exclude refs until 50+ formed legs
 5. **Range distribution** — All-time; DAG pruning handles recency
@@ -189,7 +189,7 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 - Zombie leg bug fixed
 
 **What remains (tracked in architect_fixes.md):**
-- `swing_id` vestiges on SwingEvent base class (always "")
+- `swing_id` vestiges on DetectionEvent base class (always "")
 - `emit_level_crosses` dead config
 - Tombstone comments throughout router
 - Schema unification needed
@@ -264,7 +264,7 @@ All 3 pending changes accepted. Summary:
 | Temporal Causality | **Fixed** | Strict inter-bar ordering (#189) |
 | Leg Origin Updates | **Fixed** | Origins update on price extensions (#188) |
 | Origin Breach | **Simplified** | No 'invalidated' status, breach at 0% (#345) |
-| SwingConfig | Complete | Centralizes all parameters including pruning toggles (#288) |
+| DetectionConfig | Complete | Centralizes all parameters including pruning toggles (#288) |
 | SwingNode | **Removed** | Deleted in #394; formation now in Reference Layer |
 | ReferenceFrame | Complete | Central coordinate abstraction |
 | ReferenceLayer | **Phase 1 Complete** | Core + Levels at Play UI (#361-#387) |
@@ -317,7 +317,7 @@ All 3 pending changes accepted. Summary:
 - **Strict inter-bar causality:** Legs require pivots from different bars (#189)
 - **Fractal compression:** Recursive pruning creates detail near active zone, sparse further back
 - **Modular design:** dag/ subdirectory with clear separation of concerns (#206)
-- **Configurable thresholds:** All pruning/breach thresholds centralized in SwingConfig
+- **Configurable thresholds:** All pruning/breach thresholds centralized in DetectionConfig
 - **Strong deletion bias:** Actively remove unused code to maintain codebase clarity
 - **Runtime configurability:** Detection parameters adjustable without restart (#288)
 - **Data-driven simplification:** Remove code when profiling shows it's unnecessary (#296)

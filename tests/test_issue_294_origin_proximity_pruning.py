@@ -9,7 +9,7 @@ import pytest
 from datetime import datetime
 from decimal import Decimal
 
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.dag.leg import Leg
 from src.swing_analysis.dag.state import DetectorState
 from src.swing_analysis.dag.leg_pruner import LegPruner
@@ -53,7 +53,7 @@ class TestOriginProximityPruningConfig:
 
     def test_with_origin_prune_updates_both(self):
         """with_origin_prune should update both thresholds."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.05,
             origin_time_prune_threshold=0.10,
         )
@@ -62,7 +62,7 @@ class TestOriginProximityPruningConfig:
 
     def test_with_origin_prune_partial_update(self):
         """with_origin_prune should update only provided threshold, preserving others."""
-        original = SwingConfig.default()
+        original = DetectionConfig.default()
         original_time = original.origin_time_prune_threshold
 
         config = original.with_origin_prune(
@@ -83,7 +83,7 @@ class TestOriginProximityPruningDisabled:
 
     def test_no_pruning_when_both_thresholds_zero(self):
         """No pruning should occur when both thresholds are 0."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.0,
             origin_time_prune_threshold=0.0,
         )
@@ -104,7 +104,7 @@ class TestOriginProximityPruningDisabled:
 
     def test_no_pruning_when_range_threshold_zero(self):
         """No proximity pruning when range threshold is 0."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.0,
             origin_time_prune_threshold=0.50,
         )
@@ -123,7 +123,7 @@ class TestOriginProximityPruningDisabled:
 
     def test_no_pruning_when_time_threshold_zero(self):
         """No proximity pruning when time threshold is 0."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.0,
         )
@@ -146,7 +146,7 @@ class TestOriginProximityPruningLogic:
 
     def test_prunes_newer_leg_when_both_conditions_met(self):
         """Prune newer leg when both time and range ratios are below thresholds."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.20,  # 20% range difference
             origin_time_prune_threshold=0.50,   # 50% time difference
         )
@@ -176,7 +176,7 @@ class TestOriginProximityPruningLogic:
 
     def test_no_prune_when_time_ratio_exceeds_threshold(self):
         """Keep both legs when time ratio exceeds threshold."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.20,
             origin_time_prune_threshold=0.10,  # Very tight threshold
         )
@@ -202,7 +202,7 @@ class TestOriginProximityPruningLogic:
 
     def test_no_prune_when_range_ratio_exceeds_threshold(self):
         """Keep both legs when range ratio exceeds threshold."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.05,  # Very tight threshold
             origin_time_prune_threshold=0.50,
         )
@@ -232,7 +232,7 @@ class TestOriginProximityPivotGrouping:
         Scenario from issue: newer leg has larger range but different pivot.
         This is valid market structure (found better pivot), not a bug.
         """
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
         )
@@ -258,7 +258,7 @@ class TestOriginProximityPivotGrouping:
 
     def test_prunes_within_same_pivot_group(self):
         """Legs sharing the same pivot should be compared and pruned if close."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.30,  # 30% range difference
             origin_time_prune_threshold=0.50,   # 50% time difference
         )
@@ -288,7 +288,7 @@ class TestOriginProximityPivotGrouping:
 
     def test_multiple_pivot_groups_prune_independently(self):
         """Each pivot group should be pruned independently."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.30,
             origin_time_prune_threshold=0.50,
         )
@@ -318,7 +318,7 @@ class TestOriginProximityPivotGrouping:
 
     def test_different_pivot_index_same_price_are_separate_groups(self):
         """Legs with same pivot price but different pivot index are in separate groups."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
         )
@@ -345,7 +345,7 @@ class TestOriginProximityMultipleLegs:
 
     def test_prunes_multiple_newer_legs(self):
         """Should prune multiple newer legs within same pivot group when conditions are met."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.30,
             origin_time_prune_threshold=0.50,
         )
@@ -373,7 +373,7 @@ class TestOriginProximityMultipleLegs:
 
     def test_keeps_legs_with_different_time_separation(self):
         """Should keep legs that are far apart in time."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.30,
             origin_time_prune_threshold=0.10,  # Tight time threshold
         )

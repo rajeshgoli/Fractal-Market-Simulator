@@ -10,7 +10,7 @@ import pytest
 from datetime import datetime
 from decimal import Decimal
 
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.dag.leg import Leg
 from src.swing_analysis.dag.state import DetectorState
 from src.swing_analysis.dag.leg_pruner import LegPruner
@@ -78,12 +78,12 @@ class TestProximityPruneStrategyConfig:
 
     def test_default_strategy_is_oldest(self):
         """Default strategy should be 'oldest'."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         assert config.proximity_prune_strategy == 'oldest'
 
     def test_with_origin_prune_accepts_strategy(self):
         """with_origin_prune should accept proximity_prune_strategy."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.05,
             origin_time_prune_threshold=0.10,
             proximity_prune_strategy='oldest',
@@ -94,14 +94,14 @@ class TestProximityPruneStrategyConfig:
 
     def test_with_origin_prune_preserves_strategy_when_not_specified(self):
         """with_origin_prune should preserve strategy when not specified."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.05,
         )
         assert config.proximity_prune_strategy == 'oldest'
 
     def test_strategy_preserved_across_with_methods(self):
         """Strategy should be preserved across all with_* methods."""
-        base = SwingConfig.default().with_origin_prune(
+        base = DetectionConfig.default().with_origin_prune(
             proximity_prune_strategy='oldest'
         )
 
@@ -127,7 +127,7 @@ class TestCounterTrendScoring:
 
     def test_counter_trend_keeps_highest_scorer(self):
         """Leg with highest counter-trend range should survive."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='counter_trend',
@@ -164,7 +164,7 @@ class TestCounterTrendScoring:
 
     def test_fallback_to_leg_range_when_no_parent(self):
         """When parent is unavailable, use leg's own range as fallback."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='counter_trend',
@@ -191,7 +191,7 @@ class TestCounterTrendScoring:
 
     def test_fallback_when_parent_has_no_segment_data(self):
         """When parent exists but has no segment data, use leg's own range."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='counter_trend',
@@ -220,7 +220,7 @@ class TestCounterTrendScoring:
 
     def test_tie_breaker_keeps_oldest(self):
         """When scores are equal, oldest leg wins (tie-breaker)."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='counter_trend',
@@ -253,7 +253,7 @@ class TestProximityClusterBuilding:
 
     def test_single_leg_returns_single_cluster(self):
         """Single leg should return a single cluster containing it."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
         )
@@ -270,7 +270,7 @@ class TestProximityClusterBuilding:
 
     def test_two_close_legs_same_cluster(self):
         """Two legs within proximity should be in same cluster."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
         )
@@ -288,7 +288,7 @@ class TestProximityClusterBuilding:
 
     def test_two_far_legs_separate_clusters(self):
         """Two legs outside proximity should be in separate clusters."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.05,  # tight threshold
             origin_time_prune_threshold=0.50,
         )
@@ -307,7 +307,7 @@ class TestProximityClusterBuilding:
 
     def test_three_legs_two_close_one_far(self):
         """Three legs with two close and one far should form two clusters."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.20,
             origin_time_prune_threshold=0.50,
         )
@@ -335,7 +335,7 @@ class TestOldestWinsStrategy:
 
     def test_oldest_keeps_older_leg(self):
         """Legacy 'oldest' strategy should keep the older leg."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='oldest',
@@ -389,7 +389,7 @@ class TestCounterTrendVsOldest:
         # range_ratio = 1/10 = 0.10 < 0.30 threshold -> should prune
 
         # Test with 'oldest' strategy
-        config_oldest = SwingConfig.default().with_origin_prune(
+        config_oldest = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.30,
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='oldest',
@@ -419,7 +419,7 @@ class TestCounterTrendVsOldest:
         assert prox_oldest[0].leg_id == leg2_copy.leg_id
 
         # Test with 'counter_trend' strategy
-        config_ct = SwingConfig.default().with_origin_prune(
+        config_ct = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.30,
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='counter_trend',
@@ -461,7 +461,7 @@ class TestCounterTrendVsOldest:
         # range_ratio = 1/10 = 0.10 < 0.30
 
         # Test with 'oldest' strategy
-        config_oldest = SwingConfig.default().with_origin_prune(
+        config_oldest = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.30,
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='oldest',
@@ -490,7 +490,7 @@ class TestCounterTrendVsOldest:
         assert prox_oldest[0].leg_id == leg2_copy.leg_id
 
         # Test with 'counter_trend' strategy
-        config_ct = SwingConfig.default().with_origin_prune(
+        config_ct = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.30,
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='counter_trend',
@@ -523,7 +523,7 @@ class TestMultipleClustersPruning:
 
     def test_multiple_clusters_prune_independently(self):
         """Each cluster should select its own winner independently."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.20,  # wide enough for similar ranges
             origin_time_prune_threshold=0.50,
             proximity_prune_strategy='counter_trend',
@@ -567,7 +567,7 @@ class TestEdgeCases:
 
     def test_empty_legs_no_crash(self):
         """Empty legs list should not crash."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
         )
@@ -582,7 +582,7 @@ class TestEdgeCases:
 
     def test_single_leg_not_pruned(self):
         """Single leg should not be pruned."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
         )
@@ -600,7 +600,7 @@ class TestEdgeCases:
 
     def test_different_pivots_not_compared(self):
         """Legs with different pivots should not be compared."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
         )
@@ -622,7 +622,7 @@ class TestEdgeCases:
 
     def test_zero_range_legs_handled(self):
         """Legs with zero range should not cause division by zero."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.50,
             origin_time_prune_threshold=0.50,
         )

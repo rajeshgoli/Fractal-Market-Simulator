@@ -12,7 +12,7 @@ import pytest
 from datetime import datetime
 from decimal import Decimal
 
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.dag.leg import Leg
 from src.swing_analysis.dag.leg_detector import LegDetector
 from src.swing_analysis.types import Bar
@@ -43,7 +43,7 @@ class TestBranchRatioDomination:
 
     def test_root_legs_always_created(self):
         """Root legs (no parent) are always created regardless of branch ratio."""
-        config = SwingConfig.default().with_min_branch_ratio(0.5)  # High threshold
+        config = DetectionConfig.default().with_min_branch_ratio(0.5)  # High threshold
         detector = LegDetector(config)
 
         # Bar sequence: establish first bull leg (root)
@@ -68,7 +68,7 @@ class TestBranchRatioDomination:
         This is a unit test for the domination check logic itself.
         Full integration testing would require more complex bar sequences.
         """
-        config = SwingConfig.default().with_min_branch_ratio(0.1)
+        config = DetectionConfig.default().with_min_branch_ratio(0.1)
         detector = LegDetector(config)
 
         # Manually set up state to test the domination check
@@ -124,7 +124,7 @@ class TestBranchRatioDomination:
         If the counter-trend at the child's origin is >= min_ratio * parent's counter-trend,
         the child should be created.
         """
-        config = SwingConfig.default().with_min_branch_ratio(0.1)
+        config = DetectionConfig.default().with_min_branch_ratio(0.1)
         detector = LegDetector(config)
 
         # Scenario where child has sufficient counter-trend:
@@ -152,7 +152,7 @@ class TestBranchRatioDomination:
 
     def test_branch_ratio_disabled_when_zero(self):
         """When min_branch_ratio=0, the domination check always returns False."""
-        config = SwingConfig.default().with_min_branch_ratio(0.0)
+        config = DetectionConfig.default().with_min_branch_ratio(0.0)
         detector = LegDetector(config)
 
         # Manually set up state - same as blocking test
@@ -202,7 +202,7 @@ class TestBranchRatioDomination:
         If parent has no counter-trend at its origin (R1 is None),
         children are allowed regardless of their counter-trend.
         """
-        config = SwingConfig.default().with_min_branch_ratio(0.1)
+        config = DetectionConfig.default().with_min_branch_ratio(0.1)
         detector = LegDetector(config)
 
         # First bar establishes a low (fresh extreme, no counter-trend)
@@ -234,7 +234,7 @@ class TestBranchRatioRecursiveScaling:
         - Child needs >= 10% of 100 = 10
         - Grandchild needs >= 10% of 10 = 1
         """
-        config = SwingConfig.default().with_min_branch_ratio(0.1)
+        config = DetectionConfig.default().with_min_branch_ratio(0.1)
         detector = LegDetector(config)
 
         # This is a conceptual test - the actual scaling happens automatically
@@ -250,12 +250,12 @@ class TestBranchRatioConfig:
 
     def test_config_default_is_disabled(self):
         """Default config has branch ratio disabled (0.0)."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         assert config.min_branch_ratio == 0.0
 
     def test_with_min_branch_ratio_creates_new_config(self):
         """with_min_branch_ratio creates a new config with the value."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         new_config = config.with_min_branch_ratio(0.15)
 
         assert new_config.min_branch_ratio == 0.15

@@ -12,7 +12,7 @@ from src.swing_analysis.dag import (
     DetectorState,
     calibrate,
 )
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 
 from conftest import make_bar
 
@@ -67,11 +67,11 @@ class TestHierarchicalDetectorInitialization:
         """Detector initializes with default config."""
         detector = HierarchicalDetector()
         assert detector.config is not None
-        assert detector.config == SwingConfig.default()
+        assert detector.config == DetectionConfig.default()
 
     def test_custom_config(self):
         """Detector accepts custom config (#294)."""
-        config = SwingConfig.default().with_origin_prune(
+        config = DetectionConfig.default().with_origin_prune(
             origin_range_prune_threshold=0.10,
             origin_time_prune_threshold=0.20,
         )
@@ -116,7 +116,7 @@ class TestNoLookahead:
 
     def test_bar_index_only_accesses_past(self):
         """Verify that process_bar only uses data from current and past bars."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Process bars sequentially
@@ -140,7 +140,7 @@ class TestStateRestore:
     def test_detector_from_state(self):
         """Detector can be restored from state and continue processing."""
         bars = [make_bar(i, 100.0 + i % 10, 105.0 + i % 10, 95.0 + i % 10, 102.0 + i % 10) for i in range(50)]
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
 
         # Process first half
         detector1 = HierarchicalDetector(config)

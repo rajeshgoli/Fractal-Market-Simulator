@@ -16,7 +16,7 @@ from datetime import datetime
 
 from src.swing_analysis.dag import LegDetector, DetectorState, Leg
 from src.swing_analysis.dag.leg_pruner import LegPruner
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.types import Bar
 
 
@@ -37,7 +37,7 @@ class TestFindParentForLeg:
 
     def test_root_leg_bull_no_eligible_parent(self):
         """New leg with lowest origin in direction → parent_leg_id = None."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create first bull leg - should be root (no parent)
@@ -56,7 +56,7 @@ class TestFindParentForLeg:
 
     def test_root_leg_bear_no_eligible_parent(self):
         """New leg with highest origin in direction → parent_leg_id = None."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create first bear leg - should be root (no parent)
@@ -75,7 +75,7 @@ class TestFindParentForLeg:
 
     def test_bull_leg_finds_parent_with_lower_origin(self):
         """Bull leg with higher origin should have parent with lower origin."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Manually create a parent bull leg
@@ -96,7 +96,7 @@ class TestFindParentForLeg:
 
     def test_bear_leg_finds_parent_with_higher_origin(self):
         """Bear leg with lower origin should have parent with higher origin."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Manually create a parent bear leg
@@ -117,7 +117,7 @@ class TestFindParentForLeg:
 
     def test_price_tie_selects_latest_origin_index(self):
         """When multiple legs have same origin price, select latest origin_index."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create two legs at same origin price but different times
@@ -146,7 +146,7 @@ class TestFindParentForLeg:
 
     def test_breach_filtering_excludes_origin_breached_legs(self):
         """Legs with origin_breached=True cannot be parents."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create a breached leg (should be excluded)
@@ -177,7 +177,7 @@ class TestFindParentForLeg:
 
     def test_breach_filtering_returns_none_if_all_breached(self):
         """If all potential parents are breached, return None."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create only breached legs
@@ -201,7 +201,7 @@ class TestReparentChildren:
 
     def test_reparent_to_grandparent(self):
         """When L5 is pruned, L6.parent should become L4."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -247,7 +247,7 @@ class TestReparentChildren:
 
     def test_reparent_to_none_when_root_pruned(self):
         """When root L4 is pruned, L5.parent becomes None."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -280,7 +280,7 @@ class TestReparentChildren:
 
     def test_cascade_prune_reparents_correctly(self):
         """When L4 and L5 both pruned, L6 ends up as root."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -330,7 +330,7 @@ class TestSiblingScenario:
 
     def test_siblings_share_same_parent(self):
         """Two legs at same origin price (different times) share the same parent."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create grandparent leg
@@ -374,7 +374,7 @@ class TestSiblingScenario:
 
     def test_legs_at_same_price_are_not_parents_of_each_other(self):
         """Legs at same origin price level are NOT parents of each other."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create first leg at price 90
@@ -400,7 +400,7 @@ class TestIntegration:
 
     def test_hierarchy_through_multiple_bars(self):
         """Test hierarchy builds correctly through multiple bars."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create ascending bull structure: L1 (90) -> L2 (95) -> L3 (98)
@@ -436,7 +436,7 @@ class TestIntegration:
 
     def test_bear_hierarchy_through_multiple_bars(self):
         """Test bear hierarchy builds correctly through multiple bars."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create descending bear structure
@@ -475,7 +475,7 @@ class TestEdgeCases:
 
     def test_out_of_order_creation(self):
         """L2's parent reflects state at creation time, L3's parent unchanged."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create L1 first
@@ -522,7 +522,7 @@ class TestEdgeCases:
 
     def test_only_active_legs_are_eligible_parents(self):
         """Breached legs (max_origin_breach is not None) cannot be parents."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create breached leg (origin has been breached)
@@ -545,7 +545,7 @@ class TestEdgeCases:
 
     def test_only_earlier_legs_are_eligible_parents(self):
         """Only legs with earlier origin_index can be parents."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create leg with later origin_index

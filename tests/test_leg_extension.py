@@ -12,7 +12,7 @@ from src.swing_analysis.dag import (
     Leg,
     PendingOrigin,
 )
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.events import LegCreatedEvent
 
 from conftest import make_bar
@@ -40,7 +40,7 @@ class TestLegOriginExtension:
         When bar has higher high but equal low, it's classified as Type 1
         (inside bar), but bull leg pivots should still extend.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Set up initial state with prev_bar
@@ -88,7 +88,7 @@ class TestLegOriginExtension:
         When bar has equal high but lower low, it's classified as Type 1
         (inside bar), but bear leg pivots should still extend.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Set up initial state with prev_bar
@@ -126,7 +126,7 @@ class TestLegOriginExtension:
 
     def test_bull_leg_pivot_extended_on_type2_bull(self):
         """Bull leg pivots extend on Type 2-Bull bars (HH+HL). Fixed for #197."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         bar0 = make_bar(0, 100.0, 105.0, 95.0, 103.0)
@@ -159,7 +159,7 @@ class TestLegOriginExtension:
 
     def test_bear_leg_pivot_extended_on_type2_bear(self):
         """Bear leg pivots extend on Type 2-Bear bars (LH+LL). Fixed for #197."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         bar0 = make_bar(0, 100.0, 110.0, 95.0, 100.0)
@@ -192,7 +192,7 @@ class TestLegOriginExtension:
 
     def test_both_legs_pivot_extend_on_type3(self):
         """Both bull and bear leg pivots extend on Type 3 bars (HH+LL). Fixed for #197."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         bar0 = make_bar(0, 100.0, 105.0, 95.0, 100.0)
@@ -237,7 +237,7 @@ class TestLegOriginExtension:
 
     def test_pivot_not_extended_if_not_new_extreme(self):
         """Pivot should not change if bar doesn't make new extreme. Fixed for #197."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         bar0 = make_bar(0, 100.0, 115.0, 85.0, 100.0)
@@ -283,7 +283,7 @@ class TestSameBarLegPrevention:
         have the same bar_index. When the next bar is Type 1 (inside bar),
         the old <= comparison would create legs with pivot_index == origin_index.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Bar 0: Initial bar
@@ -313,7 +313,7 @@ class TestSameBarLegPrevention:
 
         This ensures the fix doesn't prevent legitimate leg creation.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Bar 0: Initial bar with high
@@ -381,7 +381,7 @@ class TestLegCreationCleansUpState:
         However, subsequent bar processing may set a NEW pending origin, so we check
         that the pending origin (if any) is different from the one used for the leg.
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Create a sequence that forms a bear leg from a pending bear origin

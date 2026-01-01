@@ -16,7 +16,7 @@ import pytest
 from src.swing_analysis.dag.leg_detector import LegDetector
 from src.swing_analysis.dag.leg import Leg
 from src.swing_analysis.dag.state import DetectorState
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.types import Bar
 
 
@@ -55,7 +55,7 @@ class TestBootstrapFlagsSetting:
 
     def test_bull_leg_creation_sets_bull_bootstrap(self):
         """Creating a bull leg should set _has_created_bull_leg = True."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Process bars to create a bull leg (TYPE_2_BULL pattern)
@@ -74,7 +74,7 @@ class TestBootstrapFlagsSetting:
 
     def test_bear_leg_creation_sets_bear_bootstrap(self):
         """Creating a bear leg should set _has_created_bear_leg = True."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Process bars to create a bear leg (TYPE_2_BEAR pattern)
@@ -97,7 +97,7 @@ class TestBootstrapExemption:
 
     def test_first_bull_leg_has_none_counter_trend(self):
         """The first bull leg should have _max_counter_leg_range = None (bootstrap exempt)."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create a bull leg when no bear legs exist yet
@@ -120,7 +120,7 @@ class TestBootstrapExemption:
 
     def test_first_bear_leg_has_none_counter_trend(self):
         """The first bear leg should have _max_counter_leg_range = None (bootstrap exempt)."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Create a bear leg when no bull legs exist yet
@@ -147,7 +147,7 @@ class TestZeroCounterTrendAfterBootstrap:
 
     def test_bull_leg_after_bear_bootstrap_gets_zero(self):
         """Bull leg created after bear leg exists but with no matching pivot gets 0.0."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # First create a bear leg to bootstrap bear direction
@@ -269,7 +269,7 @@ class TestIntegrationScenario:
         - The bull leg should have _max_counter_leg_range = 0.0 (not None)
         - This makes it the most prunable (lowest turn_ratio)
         """
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = LegDetector(config)
 
         # Phase 1: Create some bear legs

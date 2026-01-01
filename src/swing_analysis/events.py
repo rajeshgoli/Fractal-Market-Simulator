@@ -1,8 +1,8 @@
 """
-Swing Detection Events
+Detection Events
 
-Defines event types emitted by the hierarchical swing detector.
-Each event captures a significant state change in the swing lifecycle.
+Defines event types emitted by the hierarchical detector.
+Each event captures a significant state change in the leg lifecycle.
 
 See Docs/Working/swing_detection_rewrite_spec.md for design rationale.
 """
@@ -14,11 +14,11 @@ from typing import List, Literal, Optional
 
 
 @dataclass
-class SwingEvent:
+class DetectionEvent:
     """
-    Base event from swing detector.
+    Base event from detector.
 
-    All swing events share these common fields for identification and timing.
+    All detection events share these common fields for identification and timing.
 
     Attributes:
         event_type: Discriminator for event type routing/filtering.
@@ -32,7 +32,7 @@ class SwingEvent:
 
 
 @dataclass
-class LegCreatedEvent(SwingEvent):
+class LegCreatedEvent(DetectionEvent):
     """
     Emitted when a new candidate leg is formed.
 
@@ -76,7 +76,7 @@ class LegCreatedEvent(SwingEvent):
 
 
 @dataclass
-class LegPrunedEvent(SwingEvent):
+class LegPrunedEvent(DetectionEvent):
     """
     Emitted when a leg is removed due to staleness or pruning rules.
 
@@ -112,7 +112,7 @@ class LegPrunedEvent(SwingEvent):
 
 
 @dataclass
-class LegInvalidatedEvent(SwingEvent):
+class LegInvalidatedEvent(DetectionEvent):
     """
     Emitted when a leg falls below 0.382 threshold (decisive invalidation).
 
@@ -145,7 +145,7 @@ class LegInvalidatedEvent(SwingEvent):
 
 
 @dataclass
-class OriginBreachedEvent(SwingEvent):
+class OriginBreachedEvent(DetectionEvent):
     """
     Emitted when a leg's origin is first breached (price crosses origin).
 
@@ -182,7 +182,7 @@ class OriginBreachedEvent(SwingEvent):
 
 
 @dataclass
-class PivotBreachedEvent(SwingEvent):
+class PivotBreachedEvent(DetectionEvent):
     """
     Emitted when a formed leg's pivot is first breached (price crosses pivot).
 

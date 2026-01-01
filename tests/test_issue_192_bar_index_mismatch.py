@@ -17,7 +17,7 @@ from src.swing_analysis.dag import (
     calibrate,
     Leg,
 )
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.types import Bar
 
 
@@ -102,7 +102,7 @@ class TestLegBarIndexConsistency:
             make_bar(15, 4431.0, 4435.0, 4430.0, 4434.0),
         ])
 
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector, events = calibrate(bars, config)
 
         # Check all active legs for price/index consistency
@@ -171,7 +171,7 @@ class TestLegBarIndexConsistency:
             make_bar(12, 4431.0, 4435.0, 4430.0, 4434.0),
         ]
 
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector, events = calibrate(bars, config)
 
         # Same checks as above
@@ -212,7 +212,7 @@ class TestLegBarIndexConsistency:
             make_bar(5, 110.0, 112.0, 109.0, 111.0),
         ]
 
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector, events = calibrate(bars, config)
 
         # Check that bull legs have consistent origin price/index
@@ -241,7 +241,7 @@ class TestLegBarIndexConsistency:
             make_bar(5, 110.0, 112.0, 109.0, 111.0),
         ]
 
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector, events = calibrate(bars, config)
 
         # Check that bull legs have consistent pivot price/index
@@ -276,7 +276,7 @@ class TestPivotExtension:
             make_bar(4, 90.0, 95.0, 89.0, 94.0),      # Some retracement
         ]
 
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector, events = calibrate(bars, config)
 
         # Find active, non-breached bull legs and check their pivot matches the lowest point
@@ -307,7 +307,7 @@ class TestPivotExtension:
             make_bar(4, 112.0, 113.0, 108.0, 110.0),  # Some retracement
         ]
 
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector, events = calibrate(bars, config)
 
         # Find active, non-breached bear legs and check their pivot matches the highest point
@@ -338,7 +338,7 @@ class TestPivotExtension:
             make_bar(5, 116.0, 117.0, 112.0, 114.0),  # Retracement
         ]
 
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector, events = calibrate(bars, config)
 
         for leg in detector.state.active_legs:
@@ -366,7 +366,7 @@ class TestPendingOriginConsistency:
             make_bar(2, 105.0, 106.0, 99.0, 103.0),  # Type 1 (inside)
         ]
 
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         for bar in bars:

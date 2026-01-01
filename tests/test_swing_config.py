@@ -1,5 +1,5 @@
 """
-Tests for SwingConfig dataclass.
+Tests for DetectionConfig dataclass.
 
 Verifies:
 - Default values match documented magic numbers from valid_swings.md
@@ -9,7 +9,7 @@ Verifies:
 
 import pytest
 
-from src.swing_analysis.swing_config import DirectionConfig, SwingConfig
+from src.swing_analysis.detection_config import DirectionConfig, DetectionConfig
 
 
 class TestDirectionConfig:
@@ -80,56 +80,56 @@ class TestDirectionConfig:
         {config: "test"}
 
 
-class TestSwingConfig:
-    """Tests for SwingConfig dataclass."""
+class TestDetectionConfig:
+    """Tests for DetectionConfig dataclass."""
 
     def test_default_factory(self):
-        """SwingConfig.default() should create config with default values."""
-        config = SwingConfig.default()
+        """DetectionConfig.default() should create config with default values."""
+        config = DetectionConfig.default()
 
         assert isinstance(config.bull, DirectionConfig)
         assert isinstance(config.bear, DirectionConfig)
 
     def test_default_constructor(self):
-        """SwingConfig() should create same as default()."""
-        config1 = SwingConfig()
-        config2 = SwingConfig.default()
+        """DetectionConfig() should create same as default()."""
+        config1 = DetectionConfig()
+        config2 = DetectionConfig.default()
 
         assert config1 == config2
 
     def test_bull_bear_independent(self):
         """Bull and bear configs should be independent instances."""
-        config = SwingConfig()
+        config = DetectionConfig()
 
         # They should have same values but be separate instances
         assert config.bull == config.bear
         # This is expected since both use defaults
 
     def test_custom_bull_bear(self):
-        """SwingConfig should accept custom bull and bear configs."""
+        """DetectionConfig should accept custom bull and bear configs."""
         bull_config = DirectionConfig(formation_fib=0.382)
         bear_config = DirectionConfig(formation_fib=0.236)
 
-        config = SwingConfig(bull=bull_config, bear=bear_config)
+        config = DetectionConfig(bull=bull_config, bear=bear_config)
 
         assert config.bull.formation_fib == 0.382
         assert config.bear.formation_fib == 0.236
 
     def test_immutability(self):
-        """SwingConfig should be immutable (frozen=True)."""
-        config = SwingConfig()
+        """DetectionConfig should be immutable (frozen=True)."""
+        config = DetectionConfig()
 
         with pytest.raises(AttributeError):
             config.origin_range_prune_threshold = 0.1  # type: ignore
 
 
 
-class TestSwingConfigBuilders:
-    """Tests for SwingConfig builder methods."""
+class TestDetectionConfigBuilders:
+    """Tests for DetectionConfig builder methods."""
 
     def test_with_bull(self):
         """with_bull should create new config with modified bull params."""
-        original = SwingConfig.default()
+        original = DetectionConfig.default()
         modified = original.with_bull(formation_fib=0.382)
 
         # Original unchanged
@@ -144,7 +144,7 @@ class TestSwingConfigBuilders:
 
     def test_with_bear(self):
         """with_bear should create new config with modified bear params."""
-        original = SwingConfig.default()
+        original = DetectionConfig.default()
         modified = original.with_bear(big_swing_threshold=0.05)
 
         # Original unchanged
@@ -159,7 +159,7 @@ class TestSwingConfigBuilders:
 
     def test_with_origin_prune(self):
         """with_origin_prune should create new config with modified thresholds (#294)."""
-        original = SwingConfig.default()
+        original = DetectionConfig.default()
         original_range = original.origin_range_prune_threshold
         original_time = original.origin_time_prune_threshold
 
@@ -182,7 +182,7 @@ class TestSwingConfigBuilders:
 
     def test_with_stale_extension(self):
         """with_stale_extension should create new config with modified threshold."""
-        original = SwingConfig.default()
+        original = DetectionConfig.default()
         modified = original.with_stale_extension(5.0)
 
         # Original unchanged
@@ -194,7 +194,7 @@ class TestSwingConfigBuilders:
     def test_chained_builders(self):
         """Builder methods should be chainable."""
         config = (
-            SwingConfig.default()
+            DetectionConfig.default()
             .with_bull(formation_fib=0.382)
             .with_bear(formation_fib=0.236)
             .with_origin_prune(origin_range_prune_threshold=0.10, origin_time_prune_threshold=0.20)
@@ -206,40 +206,40 @@ class TestSwingConfigBuilders:
         assert config.origin_time_prune_threshold == 0.20
 
 
-class TestSwingConfigEquality:
-    """Tests for SwingConfig equality."""
+class TestDetectionConfigEquality:
+    """Tests for DetectionConfig equality."""
 
     def test_equal_configs(self):
         """Two configs with same values should be equal."""
-        config1 = SwingConfig.default()
-        config2 = SwingConfig.default()
+        config1 = DetectionConfig.default()
+        config2 = DetectionConfig.default()
 
         assert config1 == config2
 
     def test_unequal_bull(self):
         """Configs with different bull params should not be equal."""
-        config1 = SwingConfig.default()
+        config1 = DetectionConfig.default()
         config2 = config1.with_bull(formation_fib=0.5)
 
         assert config1 != config2
 
     def test_unequal_bear(self):
         """Configs with different bear params should not be equal."""
-        config1 = SwingConfig.default()
+        config1 = DetectionConfig.default()
         config2 = config1.with_bear(formation_fib=0.5)
 
         assert config1 != config2
 
     def test_unequal_origin_prune(self):
         """Configs with different origin_prune should not be equal (#294)."""
-        config1 = SwingConfig.default()
+        config1 = DetectionConfig.default()
         config2 = config1.with_origin_prune(origin_range_prune_threshold=0.10)
 
         assert config1 != config2
 
     def test_hashable(self):
-        """SwingConfig should be hashable."""
-        config = SwingConfig.default()
+        """DetectionConfig should be hashable."""
+        config = DetectionConfig.default()
         # Should not raise
         hash(config)
         {config: "test"}

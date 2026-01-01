@@ -18,7 +18,7 @@ from datetime import datetime
 from src.swing_analysis.dag import HierarchicalDetector, Leg
 from src.swing_analysis.dag.leg_pruner import LegPruner
 from src.swing_analysis.dag.state import DetectorState
-from src.swing_analysis.swing_config import SwingConfig
+from src.swing_analysis.detection_config import DetectionConfig
 
 from conftest import make_bar
 
@@ -28,12 +28,12 @@ class TestTurnRatioConfig:
 
     def test_config_default_is_zero(self):
         """Default min_turn_ratio should be 0.0 (disabled)."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         assert config.min_turn_ratio == 0.0
 
     def test_with_min_turn_ratio(self):
         """with_min_turn_ratio creates new config with updated value."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         new_config = config.with_min_turn_ratio(0.5)
 
         # Original unchanged
@@ -48,7 +48,7 @@ class TestTurnRatioConfig:
 
     def test_config_serialization(self):
         """min_turn_ratio should serialize properly through with_* methods."""
-        config = SwingConfig.default().with_min_turn_ratio(0.3)
+        config = DetectionConfig.default().with_min_turn_ratio(0.3)
 
         # Test that it persists through other with_ methods
         config2 = config.with_bull(formation_fib=0.5)
@@ -63,12 +63,12 @@ class TestMaxTurnsPerPivotConfig:
 
     def test_config_default_is_zero(self):
         """Default max_turns_per_pivot should be 0 (disabled)."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         assert config.max_turns_per_pivot == 0
 
     def test_with_max_turns_per_pivot(self):
         """with_max_turns_per_pivot creates new config with updated value."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         new_config = config.with_max_turns_per_pivot(3)
 
         # Original unchanged
@@ -83,7 +83,7 @@ class TestMaxTurnsPerPivotConfig:
 
     def test_config_serialization(self):
         """max_turns_per_pivot should serialize properly through with_* methods."""
-        config = SwingConfig.default().with_max_turns_per_pivot(5)
+        config = DetectionConfig.default().with_max_turns_per_pivot(5)
 
         # Test that it persists through other with_ methods
         config2 = config.with_bull(formation_fib=0.5)
@@ -95,7 +95,7 @@ class TestMaxTurnsPerPivotConfig:
     def test_mutual_exclusivity_modes(self):
         """Mode selection should be based on which value is set."""
         # Both zero = disabled
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         assert config.min_turn_ratio == 0.0
         assert config.max_turns_per_pivot == 0
 
@@ -197,7 +197,7 @@ class TestPruneByTurnRatio:
 
     def test_no_pruning_when_disabled(self):
         """No pruning when min_turn_ratio is 0.0 (disabled)."""
-        config = SwingConfig.default()  # min_turn_ratio = 0.0
+        config = DetectionConfig.default()  # min_turn_ratio = 0.0
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -235,7 +235,7 @@ class TestPruneByTurnRatio:
 
     def test_counter_leg_pruned_when_below_threshold(self):
         """Counter-leg is pruned when turn_ratio < min_turn_ratio (but not if it's largest)."""
-        config = SwingConfig.default().with_min_turn_ratio(0.5)
+        config = DetectionConfig.default().with_min_turn_ratio(0.5)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -290,7 +290,7 @@ class TestPruneByTurnRatio:
 
     def test_counter_leg_preserved_when_above_threshold(self):
         """Counter-leg is preserved when turn_ratio >= min_turn_ratio."""
-        config = SwingConfig.default().with_min_turn_ratio(0.3)
+        config = DetectionConfig.default().with_min_turn_ratio(0.3)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -328,7 +328,7 @@ class TestPruneByTurnRatio:
 
     def test_only_counter_legs_at_origin_checked(self):
         """Only counter-legs with pivot == new_leg.origin are checked."""
-        config = SwingConfig.default().with_min_turn_ratio(0.5)
+        config = DetectionConfig.default().with_min_turn_ratio(0.5)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -394,7 +394,7 @@ class TestPruneByTurnRatio:
 
     def test_same_direction_legs_not_checked(self):
         """Same-direction legs are not considered counter-legs."""
-        config = SwingConfig.default().with_min_turn_ratio(0.5)
+        config = DetectionConfig.default().with_min_turn_ratio(0.5)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -431,7 +431,7 @@ class TestPruneByTurnRatio:
 
     def test_legacy_legs_without_max_counter_not_pruned(self):
         """Legs without _max_counter_leg_range (legacy) are skipped."""
-        config = SwingConfig.default().with_min_turn_ratio(0.5)
+        config = DetectionConfig.default().with_min_turn_ratio(0.5)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -472,7 +472,7 @@ class TestTurnRatioIntegration:
 
     def test_max_counter_leg_range_set_at_creation(self):
         """_max_counter_leg_range is set when legs are created and counter-legs exist."""
-        config = SwingConfig.default()
+        config = DetectionConfig.default()
         detector = HierarchicalDetector(config)
 
         # Create scenario where counter-legs exist at an origin
@@ -506,7 +506,7 @@ class TestTurnRatioIntegration:
     def test_turn_ratio_pruning_triggers_on_new_leg_creation(self):
         """Turn ratio pruning happens when new legs form at shared pivots."""
         # Use a high min_turn_ratio to trigger pruning
-        config = SwingConfig.default().with_min_turn_ratio(0.9)
+        config = DetectionConfig.default().with_min_turn_ratio(0.9)
         detector = HierarchicalDetector(config)
 
         # Create scenario where bear leg forms, extends far, then bull leg forms at its pivot
@@ -537,7 +537,7 @@ class TestTurnRatioEdgeCases:
 
     def test_zero_range_counter_leg_not_pruned(self):
         """Counter-legs with zero range are skipped (avoid division by zero)."""
-        config = SwingConfig.default().with_min_turn_ratio(0.5)
+        config = DetectionConfig.default().with_min_turn_ratio(0.5)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -574,7 +574,7 @@ class TestTurnRatioEdgeCases:
 
     def test_inactive_counter_legs_not_checked(self):
         """Only active counter-legs are checked for pruning."""
-        config = SwingConfig.default().with_min_turn_ratio(0.5)
+        config = DetectionConfig.default().with_min_turn_ratio(0.5)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -612,7 +612,7 @@ class TestTurnRatioEdgeCases:
 
     def test_threshold_boundary_exact_match(self):
         """Counter-leg at exactly threshold ratio is NOT pruned (>= threshold passes)."""
-        config = SwingConfig.default().with_min_turn_ratio(0.5)
+        config = DetectionConfig.default().with_min_turn_ratio(0.5)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -649,7 +649,7 @@ class TestTurnRatioEdgeCases:
 
     def test_multiple_counter_legs_selective_pruning(self):
         """Multiple counter-legs at same pivot: largest exempt, then low-ratio ones pruned."""
-        config = SwingConfig.default().with_min_turn_ratio(0.4)
+        config = DetectionConfig.default().with_min_turn_ratio(0.4)
         pruner = LegPruner(config)
         state = DetectorState()
 
@@ -723,7 +723,7 @@ class TestTopKModePruning:
 
     def test_no_pruning_when_disabled(self):
         """No pruning when both min_turn_ratio and max_turns_per_pivot are 0."""
-        config = SwingConfig.default()  # Both 0
+        config = DetectionConfig.default()  # Both 0
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -760,7 +760,7 @@ class TestTopKModePruning:
 
     def test_topk_mode_keeps_only_k_legs(self):
         """Top-k mode keeps only the k highest-ratio legs (excluding exempt largest)."""
-        config = SwingConfig.default().with_max_turns_per_pivot(2)
+        config = DetectionConfig.default().with_max_turns_per_pivot(2)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -855,7 +855,7 @@ class TestTopKModePruning:
 
     def test_topk_mode_no_pruning_when_fewer_than_k_legs(self):
         """Top-k mode doesn't prune if there are k or fewer legs."""
-        config = SwingConfig.default().with_max_turns_per_pivot(5)
+        config = DetectionConfig.default().with_max_turns_per_pivot(5)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -893,7 +893,7 @@ class TestTopKModePruning:
     def test_threshold_mode_takes_priority_over_topk(self):
         """When min_turn_ratio > 0, threshold mode is used, ignoring max_turns_per_pivot."""
         # Set both - threshold mode should take priority
-        config = SwingConfig.default().with_min_turn_ratio(0.3).with_max_turns_per_pivot(1)
+        config = DetectionConfig.default().with_min_turn_ratio(0.3).with_max_turns_per_pivot(1)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -957,7 +957,7 @@ class TestTopKModePruning:
 
     def test_topk_mode_preserves_legacy_legs(self):
         """Legacy legs without _max_counter_leg_range are not pruned in top-k mode."""
-        config = SwingConfig.default().with_max_turns_per_pivot(1)
+        config = DetectionConfig.default().with_max_turns_per_pivot(1)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1032,7 +1032,7 @@ class TestLargestLegExemption:
 
     def test_largest_leg_exempt_in_threshold_mode(self):
         """Largest leg is not pruned even if below threshold."""
-        config = SwingConfig.default().with_min_turn_ratio(0.5)
+        config = DetectionConfig.default().with_min_turn_ratio(0.5)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1102,7 +1102,7 @@ class TestLargestLegExemption:
 
     def test_largest_leg_exempt_in_topk_mode(self):
         """Largest leg is not counted toward k limit in top-k mode."""
-        config = SwingConfig.default().with_max_turns_per_pivot(2)
+        config = DetectionConfig.default().with_max_turns_per_pivot(2)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1187,7 +1187,7 @@ class TestLargestLegExemption:
 
     def test_single_leg_not_pruned(self):
         """With only 1 counter-leg (which is also largest), nothing to prune."""
-        config = SwingConfig.default().with_min_turn_ratio(0.9)
+        config = DetectionConfig.default().with_min_turn_ratio(0.9)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1223,7 +1223,7 @@ class TestLargestLegExemption:
 
     def test_topk_with_k_equals_pruneable_count(self):
         """When k equals number of pruneable legs (excluding largest), no pruning."""
-        config = SwingConfig.default().with_max_turns_per_pivot(2)
+        config = DetectionConfig.default().with_max_turns_per_pivot(2)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1290,7 +1290,7 @@ class TestLargestLegExemption:
         D: range=50 → ratio=0.40 ✗ pruned
         E: range=60 → ratio=0.17 ✓ EXEMPT (largest)
         """
-        config = SwingConfig.default().with_max_turns_per_pivot(3)
+        config = DetectionConfig.default().with_max_turns_per_pivot(3)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1381,7 +1381,7 @@ class TestMaxTurnsPerPivotRawConfig:
 
     def test_with_max_turns_per_pivot_raw(self):
         """with_max_turns_per_pivot_raw creates new config with updated value."""
-        original = SwingConfig.default()
+        original = DetectionConfig.default()
         original_value = original.max_turns_per_pivot_raw
         new_config = original.with_max_turns_per_pivot_raw(3)
 
@@ -1398,7 +1398,7 @@ class TestMaxTurnsPerPivotRawConfig:
 
     def test_config_serialization(self):
         """max_turns_per_pivot_raw should serialize properly through with_* methods."""
-        config = SwingConfig.default().with_max_turns_per_pivot_raw(5)
+        config = DetectionConfig.default().with_max_turns_per_pivot_raw(5)
 
         # Test that it persists through other with_ methods
         config2 = config.with_bull(formation_fib=0.5)
@@ -1413,7 +1413,7 @@ class TestMaxTurnsPerPivotRawConfig:
     def test_mutual_exclusivity_three_modes(self):
         """Mode selection should be based on priority: threshold > top-k > raw."""
         # Start from default (max_turns_per_pivot_raw=10), explicitly disable for this test
-        config = SwingConfig.default().with_max_turns_per_pivot_raw(0)
+        config = DetectionConfig.default().with_max_turns_per_pivot_raw(0)
         assert config.min_turn_ratio == 0.0
         assert config.max_turns_per_pivot == 0
         assert config.max_turns_per_pivot_raw == 0
@@ -1445,7 +1445,7 @@ class TestRawCounterHeftModePruning:
 
     def test_no_pruning_when_all_disabled(self):
         """No pruning when all three modes are disabled."""
-        config = SwingConfig.default().with_max_turns_per_pivot_raw(0)  # Explicitly disable
+        config = DetectionConfig.default().with_max_turns_per_pivot_raw(0)  # Explicitly disable
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1482,7 +1482,7 @@ class TestRawCounterHeftModePruning:
 
     def test_raw_mode_keeps_only_k_highest_counter_heft(self):
         """Raw mode keeps only the k highest _max_counter_leg_range legs."""
-        config = SwingConfig.default().with_max_turns_per_pivot_raw(2)
+        config = DetectionConfig.default().with_max_turns_per_pivot_raw(2)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1577,7 +1577,7 @@ class TestRawCounterHeftModePruning:
 
     def test_raw_mode_no_pruning_when_fewer_than_k_legs(self):
         """Raw mode doesn't prune if there are k or fewer legs."""
-        config = SwingConfig.default().with_max_turns_per_pivot_raw(5)
+        config = DetectionConfig.default().with_max_turns_per_pivot_raw(5)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1615,7 +1615,7 @@ class TestRawCounterHeftModePruning:
     def test_threshold_mode_takes_priority_over_raw(self):
         """When min_turn_ratio > 0, threshold mode is used, ignoring raw mode."""
         # Set threshold and raw - threshold mode should take priority
-        config = SwingConfig.default().with_min_turn_ratio(0.3).with_max_turns_per_pivot_raw(1)
+        config = DetectionConfig.default().with_min_turn_ratio(0.3).with_max_turns_per_pivot_raw(1)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1680,7 +1680,7 @@ class TestRawCounterHeftModePruning:
     def test_topk_mode_takes_priority_over_raw(self):
         """When max_turns_per_pivot > 0, top-k mode is used, ignoring raw mode."""
         # Set both top-k and raw - top-k should take priority
-        config = SwingConfig.default().with_max_turns_per_pivot(1).with_max_turns_per_pivot_raw(10)
+        config = DetectionConfig.default().with_max_turns_per_pivot(1).with_max_turns_per_pivot_raw(10)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1743,7 +1743,7 @@ class TestRawCounterHeftModePruning:
 
     def test_raw_mode_preserves_legacy_legs(self):
         """Legacy legs without _max_counter_leg_range are not pruned in raw mode."""
-        config = SwingConfig.default().with_max_turns_per_pivot_raw(1)
+        config = DetectionConfig.default().with_max_turns_per_pivot_raw(1)
         pruner = LegPruner(config)
         state = self.create_test_state()
 
@@ -1872,12 +1872,12 @@ class TestRawCounterHeftModePruning:
         bar = make_bar(7, 100.0, 106.0, 99.0, 105.0)
 
         # Top-k mode with k=1: keeps highest ratio (small_high_ratio with ratio=5.0)
-        config_topk = SwingConfig.default().with_max_turns_per_pivot(1)
+        config_topk = DetectionConfig.default().with_max_turns_per_pivot(1)
         pruner_topk = LegPruner(config_topk)
         events_topk = pruner_topk.prune_by_turn_ratio(state_topk, new_leg, bar, datetime.now())
 
         # Raw mode with k=1: keeps highest counter-heft (small_high_ratio with counter=50)
-        config_raw = SwingConfig.default().with_max_turns_per_pivot_raw(1)
+        config_raw = DetectionConfig.default().with_max_turns_per_pivot_raw(1)
         pruner_raw = LegPruner(config_raw)
         events_raw = pruner_raw.prune_by_turn_ratio(state_raw, new_leg, bar, datetime.now())
 
@@ -1899,7 +1899,7 @@ class TestRawCounterHeftModePruning:
         Top-k (k=1) ranking by ratio: A(1.50) > B(0.80) > C(0.25) → keeps A, prunes B,C
         Raw (k=1) ranking by counter: B(40) > A(30) > C(20) → keeps B, prunes A,C
         """
-        config_raw = SwingConfig.default().with_max_turns_per_pivot_raw(1)
+        config_raw = DetectionConfig.default().with_max_turns_per_pivot_raw(1)
         pruner = LegPruner(config_raw)
         state = self.create_test_state()
 
