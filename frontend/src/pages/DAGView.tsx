@@ -726,11 +726,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
             const savedConfig = chartPrefs.detectionConfig;
             const pushedConfig = await updateDetectionConfig({
               bull: {
-                formation_fib: savedConfig.bull.formation_fib,
                 engulfed_breach_threshold: savedConfig.bull.engulfed_breach_threshold,
               },
               bear: {
-                formation_fib: savedConfig.bear.formation_fib,
                 engulfed_breach_threshold: savedConfig.bear.engulfed_breach_threshold,
               },
               stale_extension_threshold: savedConfig.stale_extension_threshold,

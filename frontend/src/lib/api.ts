@@ -283,8 +283,8 @@ export interface PlaybackFeedbackEventContext {
 }
 
 // Per-direction config in feedback snapshot
+// #394: formation_fib removed - formation now handled by Reference Layer at runtime
 export interface FeedbackDirectionConfig {
-  formation_fib: number;
   engulfed_breach_threshold: number;
 }
 
@@ -506,14 +506,13 @@ export async function fetchFollowedLegsEvents(
 /**
  * Request to update detection configuration.
  * Only provided fields are updated; omitted fields keep defaults.
+ * #394: formation_fib removed - formation now handled by Reference Layer at runtime
  */
 export interface DetectionConfigUpdateRequest {
   bull?: {
-    formation_fib?: number;
     engulfed_breach_threshold?: number;
   };
   bear?: {
-    formation_fib?: number;
     engulfed_breach_threshold?: number;
   };
   stale_extension_threshold?: number;

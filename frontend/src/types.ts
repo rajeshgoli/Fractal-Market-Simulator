@@ -342,9 +342,9 @@ export function getAggregationMinutes(scale: AggregationScale): number {
 /**
  * Per-direction detection configuration.
  * #345: invalidation_threshold removed - using origin breach as structural gate
+ * #394: formation_fib removed - formation now handled by Reference Layer at runtime
  */
 export interface DirectionConfig {
-  formation_fib: number;       // Formation threshold (default: 0.236)
   engulfed_breach_threshold: number;  // Engulfed threshold (default: 0.0)
 }
 
@@ -370,11 +370,9 @@ export interface DetectionConfig {
  */
 export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   bull: {
-    formation_fib: 0.236,
     engulfed_breach_threshold: 0.0,
   },
   bear: {
-    formation_fib: 0.236,
     engulfed_breach_threshold: 0.0,
   },
   stale_extension_threshold: 3.0,

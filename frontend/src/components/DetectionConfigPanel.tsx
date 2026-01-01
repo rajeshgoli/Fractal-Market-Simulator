@@ -38,18 +38,6 @@ const PRUNE_TOGGLES: ToggleConfig[] = [
   { key: 'enable_engulfed_prune', label: 'Engulfed', description: 'Delete legs breached on both origin and pivot sides' },
 ];
 
-// Fibonacci level options for Formation and Invalidation thresholds
-const FIB_LEVEL_OPTIONS = [
-  { value: 0.10, label: '10%' },
-  { value: 0.236, label: '23.6%' },
-  { value: 0.382, label: '38.2%' },
-  { value: 0.50, label: '50%' },
-  { value: 0.618, label: '61.8%' },
-  { value: 0.764, label: '76.4%' },
-  { value: 0.90, label: '90%' },
-  { value: 1.00, label: '100%' },
-];
-
 interface DetectionConfigPanelProps {
   config: DetectionConfig;
   onConfigUpdate: (config: DetectionConfig) => void;
@@ -94,9 +82,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
   // Compute hasChanges by comparing FE state (localConfig) with BE state (config prop)
   const hasChanges = useMemo(() => {
     return (
-      localConfig.bull.formation_fib !== config.bull.formation_fib ||
       localConfig.bull.engulfed_breach_threshold !== config.bull.engulfed_breach_threshold ||
-      localConfig.bear.formation_fib !== config.bear.formation_fib ||
       localConfig.bear.engulfed_breach_threshold !== config.bear.engulfed_breach_threshold ||
       localConfig.stale_extension_threshold !== config.stale_extension_threshold ||
       localConfig.origin_range_threshold !== config.origin_range_threshold ||
@@ -163,13 +149,12 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
 
     try {
       // Build request with all current values
+      // Note: formation_fib removed (#394) - formation now handled by Reference Layer at runtime
       const request: DetectionConfigUpdateRequest = {
         bull: {
-          formation_fib: localConfig.bull.formation_fib,
           engulfed_breach_threshold: localConfig.bull.engulfed_breach_threshold,
         },
         bear: {
-          formation_fib: localConfig.bear.formation_fib,
           engulfed_breach_threshold: localConfig.bear.engulfed_breach_threshold,
         },
         stale_extension_threshold: localConfig.stale_extension_threshold,
@@ -306,28 +291,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
     );
   };
 
-  const renderFibSelect = (
-    direction: 'bull' | 'bear',
-    key: 'formation_fib' | 'engulfed_breach_threshold'
-  ) => {
-    const value = localConfig[direction][key];
-    const colorClass = direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear';
-    const borderClass = direction === 'bull' ? 'focus:border-trading-bull' : 'focus:border-trading-bear';
-
-    return (
-      <select
-        value={value}
-        onChange={(e) => handleSliderChange(direction, key, parseFloat(e.target.value))}
-        className={`w-16 px-1 py-0.5 text-center text-xs font-mono bg-app-bg border border-app-border rounded ${colorClass} ${borderClass} focus:outline-none cursor-pointer`}
-        disabled={isUpdating}
-      >
-        {FIB_LEVEL_OPTIONS.map(opt => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-    );
-  };
-
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Header - hidden when parent provides collapsible container (#310) */}
@@ -436,29 +399,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         <span className="text-xs font-medium text-app-text">Pruning Algorithms</span>
         <div className="pl-4 space-y-2">
           {PRUNE_TOGGLES.map(toggle => renderToggle(toggle))}
-        </div>
-      </div>
-
-      {/* Thresholds - Compact 2x2 Grid for Formation/Invalidation */}
-      <div className="space-y-2">
-        <span className="text-xs font-medium text-app-text">Thresholds</span>
-        {/* Header row with direction labels */}
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
-          <span></span>
-          <span className="flex items-center gap-1 justify-center w-16">
-            <span className="w-1.5 h-1.5 rounded-full bg-trading-bull" />
-            <span className="text-app-muted">Bull</span>
-          </span>
-          <span className="flex items-center gap-1 justify-center w-16">
-            <span className="w-1.5 h-1.5 rounded-full bg-trading-bear" />
-            <span className="text-app-muted">Bear</span>
-          </span>
-        </div>
-        {/* Formation row */}
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs pl-4">
-          <span className="text-app-muted" title="Retracement required to form leg">Formation</span>
-          {renderFibSelect('bull', 'formation_fib')}
-          {renderFibSelect('bear', 'formation_fib')}
         </div>
       </div>
 
