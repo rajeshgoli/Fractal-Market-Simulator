@@ -1,18 +1,10 @@
-# Test Data Freshness Plan
+# Test Data Freshness
 
-**Status:** Phase 1 Complete
-**Created:** January 1, 2026
-**Owner:** Product
+Backtest data for ES, NQ, YM, and DAX is kept fresh via automated Databento API pulls. This document covers data locations, formats, and the refresh workflow.
 
 ---
 
-## Executive Summary
-
-Gap fill for ES, NQ, and YM completed on January 1, 2026 using Databento API. Data now extends from April 2007 to December 31, 2025 for all three symbols. Automated refresh script handles ongoing updates.
-
----
-
-## Current Data State (Post Gap Fill)
+## Data Coverage
 
 ### Authoritative Location
 
@@ -149,21 +141,13 @@ def load_databento_key():
 
 Note: DAX (Eurex) costs ~5x more than CME symbols per bar.
 
-### Contracts Used
+### Contract Naming
 
-ES: ESU4, ESZ4, ESH5, ESM5, ESU5, ESZ5, ESH6
-NQ: NQU4, NQZ4, NQH5, NQM5, NQU5, NQZ5, NQH6
-YM: YMU4, YMZ4, YMH5, YMM5, YMU5, YMZ5, YMH6
-DAX: FDAX.FUT (continuous, auto-rolls)
+CME futures use quarterly expiration codes: H=Mar, M=Jun, U=Sep, Z=Dec
 
-Rollover dates (approx 1 week before 3rd Friday expiration):
-- U4: Sep 13, 2024
-- Z4: Dec 13, 2024
-- H5: Mar 14, 2025
-- M5: Jun 13, 2025
-- U5: Sep 12, 2025
-- Z5: Dec 12, 2025
-- H6: Mar 13, 2026
+Example: `ESH6` = E-mini S&P 500, March 2026 expiry
+
+The script auto-detects the front-month contract and handles rollovers (~1 week before 3rd Friday expiration).
 
 ### Available Schemas
 
@@ -268,22 +252,6 @@ if __name__ == '__main__':
 
 ---
 
-## Phase 2: Remaining Symbols
-
-### SPX, YM, VIX, DAX
-
-When ready, repeat the Databento gap fill process:
-
-1. Estimate cost: `client.metadata.get_cost(...)`
-2. Pull contracts for Aug 2024 → present
-3. Create continuous series with rollovers
-4. Append to existing files
-5. Regenerate aggregated timeframes
-
-Estimated cost: ~$2-3 per symbol for 1m + 1d data.
-
----
-
 ## Findings & Lessons Learned
 
 ### 1. Daily Bars Need Session Semantics
@@ -322,64 +290,3 @@ Using symlinks from `test_data/` to `~/Documents/backtest-data/` saves disk spac
 - [TradingView Export Guide](https://www.tradingview.com/support/solutions/43000537255-how-to-export-chart-data/)
 - [FirstRate Data ES](https://firstratedata.com/i/futures/ES)
 
----
-
-## Appendix: Q&A Log
-
-### Q: Do you have an Interactive Brokers account?
-**A:** No. Using Databento for gap fill instead.
-
-### Q: Is 30m granularity sufficient for ongoing updates?
-**A:** No, want 1m. Weekly TradingView 1m export works (~7K bars fits in single export).
-
-### Q: Should we regenerate all timeframes from 1m?
-**A:** Yes for intraday (5m, 15m, 30m, 1h, 4h). No for 1d — must pull separately due to session close semantics.
-
-### Q: Why can't I do TradingView export for gap fill?
-**A:** 17 months at 1m = ~500,000 bars. TradingView shows max ~10-20K bars per export. Would require 25-50 separate exports scrolling back each time. Not practical. But weekly 1m export (~7K bars) works fine for ongoing freshness.
-
-### Q: Why would it take 1 hour to export 6 charts?
-**A:** It wouldn't! Revised estimate: ~2 min per symbol = ~15 min total for all 6.
-
-### Q: Can you do the Databento work if I sign up?
-**A:** Yes. Just needed API key and user ID. Executed the full gap fill in this session.
-
-### Q: 1D data can't be aggregated — pull from Databento?
-**A:** Correct. 1D uses session close (4pm CT), not midnight. Pulled 1D separately. Cost: $0.02 total for ES + NQ.
-
-### Q: Can 4h, 1w, 1mo be aggregated?
-**A:** Yes. Verified by comparing my aggregation against Databento samples. 4h from 1h, 1w/1mo from 1d.
-
-### Q: Keep ~/Documents/backtest-data/ authoritative and symlink test_data?
-**A:** Done. All test_data/ files are now symlinks to backtest-data/.
-
-### Q: Priority order for symbols?
-**A:** ES, NQ, SPX, YM, VIX, DAX. Others (FTSE, Nifty, etc.) low priority.
-
----
-
-## Execution Log
-
-### January 1, 2026
-
-**Gap Fill Execution:**
-
-1. Created Databento account, obtained API key
-2. Installed `databento` Python package
-3. Estimated costs: ES $2.48, NQ $2.37, 1D $0.02
-4. Pulled ES 1m data (7 contracts: ESU4-ESH6) → 497,713 bars continuous
-5. Pulled NQ 1m data (7 contracts: NQU4-NQH6) → 497,765 bars continuous
-6. Applied rollover logic, converted to ET timezone
-7. Trimmed to start after original data ends (Aug 5, 2024 00:01:00)
-8. Appended to original files in ~/Documents/backtest-data/
-9. Regenerated 5m, 15m, 30m, 1h from 1m for both ES and NQ
-10. Pulled 1D data separately (session bars), appended to originals
-11. Regenerated 4h from 1h, 1w and 1mo from 1d
-12. Created symlinks from test_data/ to backtest-data/
-13. Cleaned up temp files
-
-**Final State:**
-- ES: 6.5M 1m bars, ends Dec 31, 2025 @ 6893.75
-- NQ: 6.1M 1m bars, ends Dec 31, 2025 @ 25434.75
-- All timeframes regenerated and current
-- ~$5 of $125 Databento credit used
