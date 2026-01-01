@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2025-12-31
 
@@ -11,6 +11,7 @@
 - #403 — Router cleanup: removed duplicate helper functions from replay.py, updated to use helpers/ imports
 - #404 — DAG cleanup epic: simplified config (removed enable_engulfed_prune, min_branch_ratio, turn_ratio_mode; added max_turns), symmetric engulfed_breach_threshold, discrete Fib slider, rebuilt DetectionConfigPanel with tooltips, dynamic column layout, Followed Legs panel as last column
 - #408 — Dead code cleanup: removed replay mode infrastructure, SWING_* events, 'formed' field vestiges, fixed follow leg state machine ('forming'/'formed' → 'active')
+- #409 — View switch state restoration: added /api/dag/events endpoint to return cached lifecycle events, DAGView fetches events on mount when returning to existing session, header shows currentPlaybackPosition+1 for accurate bar count
 
 ---
 

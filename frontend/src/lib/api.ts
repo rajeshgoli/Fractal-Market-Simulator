@@ -463,6 +463,7 @@ export async function fetchLegLineage(legId: string): Promise<LegLineageResponse
 // Types for Follow Leg feature (Issue #267)
 export interface LifecycleEvent {
   leg_id: string;
+  direction?: 'bull' | 'bear' | null;  // May be null for events without direction info
   event_type: 'created' | 'origin_breached' | 'pivot_breached' | 'engulfed' | 'pruned' | 'invalidated';
   bar_index: number;
   csv_index: number;
@@ -485,6 +486,19 @@ export async function fetchFollowedLegsEvents(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(errorData.detail || `Failed to fetch followed legs events: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Fetch all lifecycle events from the current session.
+ * Used to restore frontend state when switching views.
+ */
+export async function fetchAllLifecycleEvents(): Promise<FollowedLegsEventsResponse> {
+  const response = await fetch(`${API_BASE}/dag/events`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch lifecycle events: ${response.statusText}`);
   }
   return response.json();
 }

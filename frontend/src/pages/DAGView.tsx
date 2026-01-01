@@ -26,6 +26,9 @@ import {
   updateDetectionConfig,
   restartSession,
   advanceReplay,
+  fetchAllLifecycleEvents,
+  ReplayEvent,
+  LifecycleEvent,
 } from '../lib/api';
 import { formatReplayBarsData } from '../utils/barDataUtils';
 import { LINGER_DURATION_MS } from '../constants';
@@ -698,8 +701,31 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
           state.setCalibrationData({
             calibration_bar_count: session.current_bar_index! + 1,
           } as any);
-          // Sync forward playback with backend position
-          forwardPlayback.syncToPosition(session.current_bar_index!, [], 0, []);
+
+          // Fetch lifecycle events from backend to restore stats (#409)
+          const lifecycleResponse = await fetchAllLifecycleEvents();
+          const restoredEvents: ReplayEvent[] = lifecycleResponse.events.map((e: LifecycleEvent) => {
+            // Map lifecycle event_type to ReplayEvent type
+            const typeMap: Record<string, ReplayEvent['type']> = {
+              'created': 'LEG_CREATED',
+              'origin_breached': 'ORIGIN_BREACHED',
+              'pivot_breached': 'LEG_INVALIDATED',
+              'engulfed': 'LEG_PRUNED',
+              'pruned': 'LEG_PRUNED',
+              'invalidated': 'LEG_INVALIDATED',
+            };
+            return {
+              type: typeMap[e.event_type] || 'LEG_CREATED',
+              bar_index: e.bar_index,
+              scale: '',  // Not available from lifecycle events
+              direction: e.direction || 'bull',  // Default to bull if not available
+              leg_id: e.leg_id,
+              trigger_explanation: e.explanation,
+            };
+          });
+
+          // Sync forward playback with backend position and restored events
+          forwardPlayback.syncToPosition(session.current_bar_index!, [], 0, restoredEvents);
         } else {
           // No existing state - initialize fresh
           state.setCalibrationPhase(CalibrationPhase.CALIBRATING);
@@ -839,7 +865,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
       <Header
         onToggleSidebar={() => state.setIsSidebarOpen(!state.isSidebarOpen)}
         currentTimestamp={currentTimestamp}
-        sourceBarCount={state.sourceBars.length}
+        sourceBarCount={forwardPlayback.currentPosition + 1}
         calibrationStatus={
           state.calibrationPhase === CalibrationPhase.CALIBRATING
             ? 'calibrating'

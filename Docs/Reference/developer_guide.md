@@ -958,6 +958,12 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # - descendants: All legs whose ancestry includes this leg
 # - depth: How deep this leg is (0 = root)
 
+# Lifecycle Events: GET /api/dag/events (#409)
+# Returns all cached lifecycle events from the current session.
+# Used to restore frontend state when switching views (DAG View -> Reference View -> back).
+# - events: Array of LifecycleEvent objects with leg_id, direction, event_type,
+#   bar_index, csv_index, timestamp, explanation
+
 # Detection Config: GET /api/replay/config
 # Returns current detection configuration:
 # - bull/bear: Per-direction thresholds (formation_fib, engulfed_breach_threshold)

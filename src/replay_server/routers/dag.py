@@ -7,6 +7,7 @@ and leg lifecycle event tracking.
 Endpoints:
 - GET /api/dag/state - Get current DAG internal state
 - GET /api/dag/lineage/{leg_id} - Get leg lineage (ancestors/descendants)
+- GET /api/dag/events - Get all lifecycle events (for view switch restoration)
 - GET /api/followed-legs/events - Get lifecycle events for followed legs
 """
 
@@ -177,6 +178,29 @@ async def get_leg_lineage(leg_id: str):
         descendants=descendants,
         depth=depth,
     )
+
+
+@router.get("/api/dag/events", response_model=FollowedLegsEventsResponse)
+async def get_all_lifecycle_events():
+    """
+    Get all lifecycle events from the current session.
+
+    Returns all cached lifecycle events. Used to restore frontend state
+    when switching views (DAG View -> Reference View -> DAG View).
+
+    The backend is authoritative for lifecycle events; this endpoint allows
+    the frontend to resync after remounting without losing event history.
+
+    Returns:
+        FollowedLegsEventsResponse with all lifecycle events.
+    """
+    cache = get_cache()
+
+    if not cache.is_initialized():
+        return FollowedLegsEventsResponse(events=[])
+
+    # Return all lifecycle events (already in LifecycleEvent format)
+    return FollowedLegsEventsResponse(events=cache.lifecycle_events)
 
 
 @router.get("/api/followed-legs/events", response_model=FollowedLegsEventsResponse)

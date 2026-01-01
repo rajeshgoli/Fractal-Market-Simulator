@@ -486,6 +486,7 @@ class LifecycleEvent(BaseModel):
     Tracks significant state changes for legs being followed by the user.
     """
     leg_id: str
+    direction: Optional[str] = None  # bull or bear (may be None for legacy events)
     event_type: str  # formed, origin_breached, pivot_breached, engulfed, pruned, invalidated
     bar_index: int
     csv_index: int

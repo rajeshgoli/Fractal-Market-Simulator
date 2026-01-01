@@ -255,6 +255,7 @@ def event_to_lifecycle_event(
     if isinstance(event, LegCreatedEvent):
         return LifecycleEvent(
             leg_id=event.leg_id,
+            direction=event.direction,
             event_type="created",
             bar_index=bar_index,
             csv_index=csv_index,
