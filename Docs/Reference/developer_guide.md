@@ -1068,6 +1068,17 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # Get pending level crossing events (cleared after retrieval)
 # Returns: {events: LevelCrossEvent[], tracked_count: int}
 # LevelCrossEvent: {leg_id, direction, level_crossed, cross_direction, bar_index, timestamp}
+
+# Get Reference Config: GET /api/reference/config (#423)
+# Returns current salience weights and formation threshold
+# Returns: {big_range_weight, big_impulse_weight, big_recency_weight,
+#           small_range_weight, small_impulse_weight, small_recency_weight,
+#           formation_fib_threshold}
+
+# Update Reference Config: POST /api/reference/config (#423)
+# Accepts partial updates, returns full updated config
+# Request: any subset of config fields (e.g., {big_range_weight: 0.6})
+# Response: full ReferenceConfig with all values
 ```
 
 **Reference Layer Integration:**
