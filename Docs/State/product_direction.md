@@ -7,7 +7,7 @@
 
 ## Current Objective
 
-**Complete P3/P4 frontend work (#419).**
+**Complete P3/P4 frontend work (#419), then Reference Layer exploration.**
 
 ---
 
@@ -30,6 +30,36 @@ Reference Layer backend is complete. Frontend gaps identified and filed as #419.
 
 ---
 
+## Next Phase: Reference Layer Exploration
+
+**Spec:** `Docs/Working/reference_layer_exploration.md`
+
+Reference Layer is the exploration ground for salience formulas — same pattern as DAG layer with pruning algorithms. Wire up multiple approaches, tune empirically, see what works.
+
+**Exploration areas:**
+- Salience weights (range/impulse/recency per scale)
+- Formation thresholds and breach tolerances
+- Structural importance: `counter_leg_range × leg_range`
+- Other formulas TBD through experimentation
+
+**Enabler:** Reference Layer tuning UI (expose ReferenceConfig like DetectionConfig)
+
+---
+
+## Parallel: Outcome Layer Definition
+
+**Spec:** `Docs/Working/outcome_layer_spec.md` (draft)
+
+New layer for rule discovery, downstream of Reference Layer:
+- Touch detection (what "price touched level" means)
+- Outcome labeling (bounce vs breakout vs continuation)
+- Feature extraction (structural importance, scale, location, confluence)
+- Statistical model: P(outcome | features)
+
+Architecture not finalized — will iterate as Reference Layer exploration progresses.
+
+---
+
 ## Completed: Reference Layer Backend (Jan 1, 2026)
 
 **Status:** Complete. P3+P4 backend implemented, frontend partial.
@@ -48,25 +78,9 @@ Backend APIs exist but aren't wired to UI:
 
 ---
 
-## Completed: Reference Observation + Cleanup (Jan 1, 2026)
-
-**Status:** Complete. Observation mode + architectural cleanup (15 issues, #400-#414).
-
-| Component | Status |
-|-----------|--------|
-| Filter status API (FilterReason, FilteredLeg) | Complete |
-| Show Filtered toggle + explanation panel | Complete |
-| UX inversion (filtered highlighted, valid faded) | Complete |
-| Lazy DAG init (removed CalibrationPhase) | Complete |
-| API namespace restructure (/dag/*, /reference/*) | Complete |
-| Cache consolidation (single cache.py) | Complete |
-| Dead code removal (replay mode, SWING_* events) | Complete |
-| View renamed: DAG View → Structural Legs | Complete |
-
----
-
 ## Completed: Previous Phases
 
+- #400-#414 Reference Observation + Cleanup — Complete
 - #361-#387 Reference Layer Phase 1 — Complete
 - #388-#393 Reference Layer Phase 2 (Fib Interaction) — Complete
 - #347-#349 Turn ratio UX, inner structure removal, frontend cleanup — Complete
@@ -90,6 +104,10 @@ Backend APIs exist but aren't wired to UI:
 | Reference Layer observability | Done (#400-#414) |
 | Structure Panel shows level touches | **Pending** (#420) |
 | Confluence zones render on chart | **Pending** (#421) |
+| Reference Layer tuning UI | **Pending** |
+| Salience formula validated empirically | **Pending** |
+| Outcome Layer touch detection | **Future** |
+| Rule discovery statistics | **Future** |
 
 ---
 
@@ -99,7 +117,8 @@ Backend APIs exist but aren't wired to UI:
 2. ✅ **P2: Fib Level Interaction** — Complete
 3. ⚠️ **P3: Structure Panel + Confluence** — Backend done, frontend pending (#419)
 4. ⚠️ **P4: Level Crossing** — Backend done, frontend pending (#419)
-5. ⏳ **Next:** Complete #419, then outcome tracking / rule discovery
+5. ⏳ **Reference Layer Exploration** — Tuning UI + salience formula experiments
+6. ⏳ **Outcome Layer** — Rule discovery (parallel with #5)
 
 ---
 
@@ -107,5 +126,6 @@ Backend APIs exist but aren't wired to UI:
 
 **Invoke Product when:**
 - #419 epic complete
-- Unexpected behavior observed during testing
+- Reference Layer tuning reveals unexpected behavior
+- Outcome Layer definition needs user input
 - Direction uncertainty requiring user values
