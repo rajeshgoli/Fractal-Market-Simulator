@@ -633,6 +633,49 @@ Based on range percentile within all-time distribution:
 | S, M | 0% (default) | 0% |
 | L, XL | 15% | 10% |
 
+#### Reference Observation Mode (#400)
+
+For debugging why legs are filtered, use `get_all_with_status()`:
+
+```python
+from src.swing_analysis.reference_layer import (
+    ReferenceLayer, FilterReason, FilteredLeg
+)
+
+# Get ALL legs with their filter status
+statuses: List[FilteredLeg] = ref_layer.get_all_with_status(legs, bar)
+
+for status in statuses:
+    if status.reason != FilterReason.VALID:
+        print(f"{status.leg.leg_id}: {status.reason.value}")
+        print(f"  Scale: {status.scale}, Location: {status.location:.2f}")
+        if status.threshold:
+            print(f"  Violated threshold: {status.threshold:.2f}")
+```
+
+**FilterReason enum values:**
+| Value | Meaning |
+|-------|---------|
+| `VALID` | Passed all filters |
+| `COLD_START` | Not enough swings for scale classification |
+| `NOT_FORMED` | Price hasn't reached 38.2% formation |
+| `PIVOT_BREACHED` | Location < 0 (past defended pivot) |
+| `COMPLETED` | Location > 2 (past 2× target) |
+| `ORIGIN_BREACHED` | Scale-dependent tolerance exceeded |
+
+**FilteredLeg fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `leg` | `Leg` | The underlying DAG Leg |
+| `reason` | `FilterReason` | Why filtered (or VALID) |
+| `scale` | `str` | 'S', 'M', 'L', or 'XL' |
+| `location` | `float` | Price position 0-2 (capped) |
+| `threshold` | `Optional[float]` | Violated threshold value |
+
+**API extension:** `/api/reference-state` includes:
+- `filtered_legs`: Array of non-valid legs with reasons
+- `filter_stats`: `{total_legs, valid_count, pass_rate, by_reason}`
+
 #### Salience Computation
 
 Ranks references by relevance. Scale-dependent weights:
