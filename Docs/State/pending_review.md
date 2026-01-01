@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2025-12-31
 
@@ -8,9 +8,7 @@
 
 ## Pending Changes
 
-- #395 — Fix pivot extension unconditionally overwriting pending origin (preserve best candidate)
-- #397 — Preserve warmup state when switching between DAG and Levels at Play views
-- #396 — Architectural cleanup epic (Phase 1-2d complete)
+(none)
 
 ---
 
@@ -18,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Dec 31 | #395, #396, #397 — Pivot fix, arch cleanup (Phases 1-2d), warmup preservation | All Accepted; new epic for schema/router work |
 | Dec 31 | #394 — DAG cleanup review + architectural investigation | Accepted with notes; vestiges identified in `architect_fixes.md`; epic filed |
 | Dec 31 | #371-#387 — Reference Layer Phase 1 UI + bugfixes (17 issues) | All Accepted; Phase 1 complete; spec updated to Rev 6 |
 | Dec 31 | #355-#358, #361-#370, #383, #384 — Turn ratio modes, Reference Layer Phase 1 backend, config defaults (11 changes) | All Accepted; Ref Layer P1 backend complete; doc update needed for developer_guide.md |

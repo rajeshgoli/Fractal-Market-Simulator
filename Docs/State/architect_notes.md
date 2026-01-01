@@ -41,12 +41,18 @@ Read in order:
 - ✅ Old Reference Layer API removed
 - ✅ `replay.py` and `calibrate.py` migrated to `update()` API
 
-**Pending architectural fixes (see `Docs/Working/architect_fixes.md`):**
-- ✅ Renamed `ground_truth_annotator/` → `replay_server/` (module name now reflects purpose)
+**Completed architectural fixes (#396 Phases 1-2d):**
+- ✅ Renamed `ground_truth_annotator/` → `replay_server/`
 - ✅ Removed refactoring vestiges: `swing_id` on events, `emit_level_crosses` config
-- ✅ Connected `depth` field to `leg.depth` (was hardcoded to 0)
+- ✅ Connected `depth` field to `leg.depth`
 - ✅ Replaced `parent_ids: List[str]` with `parent_leg_id: Optional[str]`
-- Unify `CalibrationSwingResponse` and `DagLegResponse` into single `LegResponse` schema (deferred - larger change)
+
+**Remaining architectural cleanup (tracked in new epic):**
+- Unify `CalibrationSwingResponse` and `DagLegResponse` into single `LegResponse` schema
+- Split `routers/replay.py` (2074 lines) into domain routers
+- Remove remaining tombstone comments (`# Swing hierarchy removed (#301)` in replay.py)
+- Rename `largest_swing_id` → `largest_leg_id` in TreeStatistics
+- Fix docstring in leg_detector.py (references removed `swing_id`)
 
 **Future naming cleanup (low priority):**
 - `swing_config.py` → `detection_config.py` (configures detection algorithm, not swings)
@@ -362,6 +368,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Dec 31 | #395, #396, #397 — Pivot fix, arch cleanup (Phases 1-2d), warmup preservation | All Accepted; new epic for remaining schema/router work |
 | Dec 31 | #394 — DAG cleanup review + architectural investigation | Accepted with notes; vestiges identified in `architect_fixes.md`; epic filed |
 | Dec 31 | #371-#387 — Reference Layer Phase 1 UI + bugfixes (17 issues) | All Accepted; Phase 1 complete; spec updated to Rev 6 |
 | Dec 31 | #355-#358, #361-#370, #383, #384 — Turn ratio modes, Reference Layer Phase 1 backend (11 changes) | All Accepted; Ref Layer P1 backend complete; developer_guide.md update needed |
