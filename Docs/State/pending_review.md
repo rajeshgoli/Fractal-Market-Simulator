@@ -9,7 +9,11 @@
 ## Pending Changes
 
 - #403 — Router cleanup: removed duplicate helper functions from replay.py, updated to use helpers/ imports
-- #404 — DAG cleanup epic: simplified config (removed enable_engulfed_prune, min_branch_ratio, turn_ratio_mode; added max_turns), rebuilt DetectionConfigPanel with tooltips, dynamic column layout
+- #404 — DAG cleanup epic: simplified config (removed enable_engulfed_prune, min_branch_ratio, turn_ratio_mode; added max_turns), symmetric engulfed_breach_threshold, discrete Fib slider, rebuilt DetectionConfigPanel with tooltips, dynamic column layout, Followed Legs panel as last column
+
+## Filed from Architect Investigation
+
+- #408 — Dead replay mode + SWING_* event cleanup (discovered from #394 vestige investigation)
 
 ---
 

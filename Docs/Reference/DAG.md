@@ -898,7 +898,7 @@ All thresholds are configurable. Defaults shown:
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
 | `formation_fib` | 0.236 | Retracement % to confirm swing (Reference Layer) |
-| `engulfed_breach_threshold` | 0.236 | Combined breach % for engulfed deletion - per direction (#236, #404). Set to 1.0 to disable. |
+| `engulfed_breach_threshold` | 0.236 | Combined breach % for engulfed deletion - symmetric (#236, #404). Set to 1.0 to disable. |
 | `origin_range_prune_threshold` | 0.02 | Range similarity % for origin-proximity consolidation (#294) |
 | `origin_time_prune_threshold` | 0.02 | Time proximity % for origin-proximity consolidation (#294) |
 | `proximity_prune_strategy` | 'oldest' | Strategy for selecting survivor: 'oldest' or 'counter_trend' (#319) |
@@ -907,7 +907,7 @@ All thresholds are configurable. Defaults shown:
 
 **Note (#345):** Origin breach is detected at 0% (any touch of origin). The old `invalidation_threshold` parameter has been removed. Leg status is now only `'active'` or `'stale'`, with `max_origin_breach` tracking structural invalidation.
 
-Bull and bear can have different configs for asymmetric markets.
+Most thresholds are symmetric (apply to both bull and bear). The `engulfed_breach_threshold` was simplified to a single value in #404.
 
 ### Dynamic Configuration (Issue #288)
 
