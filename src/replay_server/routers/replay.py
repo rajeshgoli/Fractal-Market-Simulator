@@ -63,10 +63,9 @@ from ..schemas import (
     # Follow Leg models (Issue #267)
     LifecycleEvent,
     FollowedLegsEventsResponse,
-    # Detection config models (Issue #288)
+    # Detection config models (Issue #288, #404: symmetric config)
     SwingConfigUpdateRequest,
     SwingConfigResponse,
-    DirectionConfigResponse,
 )
 
 from .helpers import (

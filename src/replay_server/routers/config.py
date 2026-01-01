@@ -17,7 +17,6 @@ from ...swing_analysis.reference_layer import ReferenceLayer
 from ..schemas import (
     SwingConfigUpdateRequest,
     SwingConfigResponse,
-    DirectionConfigResponse,
 )
 from .cache import get_cache
 
@@ -44,17 +43,13 @@ async def get_detection_config():
     else:
         config = DetectionConfig.default()
 
+    # #404: Symmetric config - engulfed threshold at DetectionConfig level
     return SwingConfigResponse(
-        bull=DirectionConfigResponse(
-            engulfed_breach_threshold=config.bull.engulfed_breach_threshold,
-        ),
-        bear=DirectionConfigResponse(
-            engulfed_breach_threshold=config.bear.engulfed_breach_threshold,
-        ),
         stale_extension_threshold=config.stale_extension_threshold,
         origin_range_threshold=config.origin_range_prune_threshold,
         origin_time_threshold=config.origin_time_prune_threshold,
         max_turns=config.max_turns,
+        engulfed_breach_threshold=config.engulfed_breach_threshold,
     )
 
 
@@ -89,17 +84,7 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     # Start with current config (preserve existing settings)
     new_config = detector.config
 
-    # Apply bull direction updates
-    if request.bull:
-        if request.bull.engulfed_breach_threshold is not None:
-            new_config = new_config.with_bull(engulfed_breach_threshold=request.bull.engulfed_breach_threshold)
-
-    # Apply bear direction updates
-    if request.bear:
-        if request.bear.engulfed_breach_threshold is not None:
-            new_config = new_config.with_bear(engulfed_breach_threshold=request.bear.engulfed_breach_threshold)
-
-    # Apply global threshold updates
+    # Apply global threshold updates (#404: all symmetric)
     if request.stale_extension_threshold is not None:
         new_config = new_config.with_stale_extension(request.stale_extension_threshold)
     if request.origin_range_threshold is not None or request.origin_time_threshold is not None:
@@ -107,10 +92,10 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
             origin_range_prune_threshold=request.origin_range_threshold,
             origin_time_prune_threshold=request.origin_time_threshold,
         )
-
-    # Apply max turns for heft ranking (#404)
     if request.max_turns is not None:
         new_config = new_config.with_max_turns(request.max_turns)
+    if request.engulfed_breach_threshold is not None:
+        new_config = new_config.with_engulfed(request.engulfed_breach_threshold)
 
     # Update detector config (keeps current state, applies to future bars)
     detector.update_config(new_config)
@@ -127,16 +112,11 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
         f"{len([leg for leg in detector.state.active_legs if leg.status == 'active'])} active legs"
     )
 
-    # Build response with current config values
+    # Build response with current config values (#404: symmetric)
     return SwingConfigResponse(
-        bull=DirectionConfigResponse(
-            engulfed_breach_threshold=new_config.bull.engulfed_breach_threshold,
-        ),
-        bear=DirectionConfigResponse(
-            engulfed_breach_threshold=new_config.bear.engulfed_breach_threshold,
-        ),
         stale_extension_threshold=new_config.stale_extension_threshold,
         origin_range_threshold=new_config.origin_range_prune_threshold,
         origin_time_threshold=new_config.origin_time_prune_threshold,
         max_turns=new_config.max_turns,
+        engulfed_breach_threshold=new_config.engulfed_breach_threshold,
     )
