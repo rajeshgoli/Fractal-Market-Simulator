@@ -367,17 +367,8 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
           </div>
         </div>
 
-        {/* Column 3: Followed Legs (#267) - only show if there are followed legs (#404) */}
-        {followedLegs.length > 0 && (
-          <FollowedLegsPanel
-            followedLegs={followedLegs}
-            onUnfollow={onUnfollowLeg || (() => {})}
-            onLegClick={onFollowedLegClick}
-          />
-        )}
-
-        {/* Column 4: Recent Events Log */}
-        <div className="p-3 flex flex-col overflow-hidden">
+        {/* Column 3: Recent Events Log */}
+        <div className={`p-3 flex flex-col overflow-hidden ${followedLegs.length === 0 ? 'col-span-1' : ''}`}>
           <div className="flex items-center gap-2 mb-2">
             <History size={12} className="text-app-muted" />
             <span className="text-xs text-app-muted font-medium uppercase tracking-wider">
@@ -413,6 +404,15 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
             )}
           </div>
         </div>
+
+        {/* Column 4: Followed Legs (#267) - only show if there are followed legs (#404) */}
+        {followedLegs.length > 0 && (
+          <FollowedLegsPanel
+            followedLegs={followedLegs}
+            onUnfollow={onUnfollowLeg || (() => {})}
+            onLegClick={onFollowedLegClick}
+          />
+        )}
       </div>
     </div>
   );

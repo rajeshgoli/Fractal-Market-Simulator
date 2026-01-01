@@ -270,7 +270,21 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
 
       {/* Pruning Thresholds Section */}
       <div className="space-y-3">
-        <span className="text-xs font-medium text-app-text">Pruning Thresholds</span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs font-medium text-app-text">Pruning Thresholds</span>
+          <button
+            onClick={() => setShowTooltip(showTooltip === 'pruning_section' ? null : 'pruning_section')}
+            className="text-app-muted hover:text-app-text transition-colors"
+            title="Controls which legs are pruned to reduce noise and keep significant structure"
+          >
+            <Info size={12} />
+          </button>
+        </div>
+        {showTooltip === 'pruning_section' && (
+          <p className="text-xs text-app-muted bg-app-bg-tertiary p-2 rounded">
+            Controls which legs are pruned to reduce noise and keep significant structure.
+          </p>
+        )}
         <div className="pl-4 space-y-3">
           {/* Engulfed - discrete Fib values */}
           {renderEngulfedSlider()}
@@ -287,9 +301,35 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
             colorMode: 'restrictive-right',
           })}
 
+          {/* Stale Extension */}
+          {renderSlider({
+            key: 'stale_extension_threshold',
+            label: 'Stale Extension',
+            min: 1.0,
+            max: 5.0,
+            step: 0.1,
+            description: 'Prune extended legs',
+            tooltip: 'Prune invalidated child legs after price moves this multiple of their range beyond origin.',
+            colorMode: 'restrictive-left',
+          })}
+
           {/* Origin Proximity sub-section */}
           <div className="space-y-2 pt-1">
-            <span className="text-[10px] font-medium text-app-muted uppercase">Origin Proximity</span>
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] font-medium text-app-muted uppercase">Origin Proximity</span>
+              <button
+                onClick={() => setShowTooltip(showTooltip === 'origin_section' ? null : 'origin_section')}
+                className="text-app-muted hover:text-app-text transition-colors"
+                title="Consolidate legs with similar origins. Both Range AND Time must be within threshold."
+              >
+                <Info size={10} />
+              </button>
+            </div>
+            {showTooltip === 'origin_section' && (
+              <p className="text-xs text-app-muted bg-app-bg-tertiary p-2 rounded">
+                Consolidate legs with similar origins. Both Range AND Time must be within threshold.
+              </p>
+            )}
             <div className="pl-2 space-y-3">
               {renderSlider({
                 key: 'origin_range_threshold',
@@ -315,18 +355,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
               })}
             </div>
           </div>
-
-          {/* Stale Extension */}
-          {renderSlider({
-            key: 'stale_extension_threshold',
-            label: 'Stale Extension',
-            min: 1.0,
-            max: 5.0,
-            step: 0.1,
-            description: 'Prune extended legs',
-            tooltip: 'Prune invalidated child legs after price moves this multiple of their range beyond origin.',
-            colorMode: 'restrictive-left',
-          })}
         </div>
       </div>
 
