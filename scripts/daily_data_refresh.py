@@ -39,11 +39,15 @@ SYMBOLS = {
         "contract_prefix": "NQ",
         "dir": "nq",
     },
-    # Future symbols (uncomment when ready)
-    # "YM": {"dataset": "GLBX.MDP3", "contract_prefix": "YM", "dir": "ym"},
-    # "SPX": {"dataset": "OPRA.PILLAR", "contract_prefix": "SPX", "dir": "spx"},
-    # "VIX": {"dataset": "GLBX.MDP3", "contract_prefix": "VX", "dir": "vix"},
-    # "DAX": {"dataset": "XEUR.T7", "contract_prefix": "FDAX", "dir": "dax"},
+    "YM": {
+        "dataset": "GLBX.MDP3",
+        "contract_prefix": "YM",
+        "dir": "ym",
+    },
+    # Not available on Databento:
+    # - SPX: Cash index (use ES futures)
+    # - VIX: Cboe futures not on Databento
+    # - DAX: Eurex data only from Mar 2025
 }
 
 

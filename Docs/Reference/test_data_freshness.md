@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Gap fill for ES and NQ completed on January 1, 2026 using Databento API. Data now extends from April 2007 to December 31, 2025 for both symbols. Weekly TradingView export workflow established for ongoing freshness.
+Gap fill for ES, NQ, and YM completed on January 1, 2026 using Databento API. Data now extends from April 2007 to December 31, 2025 for all three symbols. Automated refresh script handles ongoing updates.
 
 ---
 
@@ -46,20 +46,34 @@ Gap fill for ES and NQ completed on January 1, 2026 using Databento API. Data no
 | 1w | 1,384 | Oct 1988 → Dec 2025 | Aggregated from 1d |
 | 1mo | 319 | Oct 1988 → Dec 2025 | Aggregated from 1d |
 
+### YM (Mini Dow)
+
+| Timeframe | Bars | Range | Source |
+|-----------|------|-------|--------|
+| 1m | ~5.3M | Apr 2007 → Dec 31, 2025 | Original + Databento gap fill |
+| 5m | ~1.1M | Apr 2007 → Dec 31, 2025 | Aggregated from 1m |
+| 15m | ~350K | Apr 2007 → Dec 31, 2025 | Aggregated from 1m |
+| 30m | ~175K | Apr 2007 → Dec 31, 2025 | Aggregated from 1m |
+| 1h | ~88K | Apr 2007 → Dec 31, 2025 | Aggregated from 1m |
+| 4h | ~22K | Apr 2007 → Dec 31, 2025 | Aggregated from 1h |
+| 1d | ~4.5K | Apr 2007 → Dec 31, 2025 | Original + Databento (session bars) |
+| 1w | ~900 | Apr 2007 → Dec 2025 | Aggregated from 1d |
+| 1mo | ~210 | Apr 2007 → Dec 2025 | Aggregated from 1d |
+
 ### Symlinks in test_data/
 
-All ES and NQ files in `test_data/` are now symlinks to `~/Documents/backtest-data/`.
+All ES, NQ, and YM files in `test_data/` are now symlinks to `~/Documents/backtest-data/`.
 
-### Priority Symbols (Future)
+### Symbol Status
 
-| Priority | Symbol | Status |
-|----------|--------|--------|
-| 1 | ES | ✅ Complete |
-| 2 | NQ | ✅ Complete |
-| 3 | SPX | Pending |
-| 4 | YM | Pending |
-| 5 | VIX | Pending |
-| 6 | DAX | Pending |
+| Priority | Symbol | Status | Notes |
+|----------|--------|--------|-------|
+| 1 | ES | ✅ Complete | Databento |
+| 2 | NQ | ✅ Complete | Databento |
+| 3 | YM | ✅ Complete | Databento |
+| 4 | SPX | ❌ N/A | Cash index — use ES futures |
+| 5 | VIX | ❌ N/A | Cboe futures not on Databento |
+| 6 | DAX | ⚠️ Gap | Eurex data only from Mar 2025; needs TradingView gap fill |
 
 ---
 
