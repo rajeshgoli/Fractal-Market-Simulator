@@ -207,6 +207,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
           crosshairMarkerVisible: false,
           priceLineVisible: false,
           lastValueVisible: false,
+          // Prevent fib lines from affecting chart auto-scale (#411)
+          autoscaleInfoProvider: () => null,
         });
 
         // Apply opacity
