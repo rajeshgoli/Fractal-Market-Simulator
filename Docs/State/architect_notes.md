@@ -155,7 +155,9 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 | P3.3 | Track levels touched this session | Historical record of which levels were hit | P3.2 |
 | P3.4 | Show currently active levels | Levels within striking distance of current price | P3.2 |
 | P3.5 | Show current bar touches | Levels touched on most recent bar | P3.2 |
-| P3.6 | Display confluence zones | Thicker bands with participating references labeled | P3.1 |
+| P3.6 | ~~Display confluence zones~~ | Removed — visual clutter (#421) | P3.1 |
+
+**Note:** Confluence zone UI was implemented then removed due to visual clutter (labels stacking). Backend API (`/api/reference/confluence`) remains available.
 
 ### Phase 4: Opt-in Level Crossing — #416
 

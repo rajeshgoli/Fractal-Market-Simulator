@@ -785,3 +785,72 @@ class TrackLegResponse(BaseModel):
     leg_id: str
     tracked_count: int
     error: Optional[str] = None  # Error message if success is False
+
+
+# ============================================================================
+# Reference Config Models (Issue #423 - ReferenceConfig API)
+# ============================================================================
+
+
+class ReferenceConfigUpdateRequest(BaseModel):
+    """
+    Request to update reference layer configuration.
+
+    All fields are optional - only provided fields are updated.
+    Used by POST /api/reference/config to apply partial updates.
+    """
+    # Salience weights (L/XL)
+    big_range_weight: Optional[float] = None
+    big_impulse_weight: Optional[float] = None
+    big_recency_weight: Optional[float] = None
+
+    # Salience weights (S/M)
+    small_range_weight: Optional[float] = None
+    small_impulse_weight: Optional[float] = None
+    small_recency_weight: Optional[float] = None
+
+    # Formation threshold
+    formation_fib_threshold: Optional[float] = None
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "big_range_weight": 0.6,
+                "formation_fib_threshold": 0.5,
+            }
+        }
+    )
+
+
+class ReferenceConfigResponse(BaseModel):
+    """
+    Response with current reference layer configuration.
+
+    Returns all current values after an update, or the current defaults.
+    """
+    # Salience weights (L/XL)
+    big_range_weight: float
+    big_impulse_weight: float
+    big_recency_weight: float
+
+    # Salience weights (S/M)
+    small_range_weight: float
+    small_impulse_weight: float
+    small_recency_weight: float
+
+    # Formation threshold
+    formation_fib_threshold: float
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "big_range_weight": 0.5,
+                "big_impulse_weight": 0.4,
+                "big_recency_weight": 0.1,
+                "small_range_weight": 0.2,
+                "small_impulse_weight": 0.3,
+                "small_recency_weight": 0.5,
+                "formation_fib_threshold": 0.382,
+            }
+        }
+    )

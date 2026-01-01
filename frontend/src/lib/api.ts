@@ -817,3 +817,63 @@ export async function fetchTelemetryPanel(barIndex?: number): Promise<TelemetryP
   }
   return response.json();
 }
+
+// ============================================================================
+// Reference Config API (Issue #423 - ReferenceConfig API)
+// ============================================================================
+
+export interface ReferenceConfig {
+  big_range_weight: number;
+  big_impulse_weight: number;
+  big_recency_weight: number;
+  small_range_weight: number;
+  small_impulse_weight: number;
+  small_recency_weight: number;
+  formation_fib_threshold: number;
+}
+
+export interface ReferenceConfigUpdateRequest {
+  big_range_weight?: number;
+  big_impulse_weight?: number;
+  big_recency_weight?: number;
+  small_range_weight?: number;
+  small_impulse_weight?: number;
+  small_recency_weight?: number;
+  formation_fib_threshold?: number;
+}
+
+export const DEFAULT_REFERENCE_CONFIG: ReferenceConfig = {
+  big_range_weight: 0.5,
+  big_impulse_weight: 0.4,
+  big_recency_weight: 0.1,
+  small_range_weight: 0.2,
+  small_impulse_weight: 0.3,
+  small_recency_weight: 0.5,
+  formation_fib_threshold: 0.382,
+};
+
+export async function fetchReferenceConfig(): Promise<ReferenceConfig> {
+  const response = await fetch(`${API_BASE}/reference/config`);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch reference config: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function updateReferenceConfig(
+  request: ReferenceConfigUpdateRequest
+): Promise<ReferenceConfig> {
+  const response = await fetch(`${API_BASE}/reference/config`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to update reference config: ${response.statusText}`);
+  }
+  return response.json();
+}

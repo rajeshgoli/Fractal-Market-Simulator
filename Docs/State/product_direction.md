@@ -15,9 +15,8 @@
 
 P1-P4 Reference Layer is **complete**. Foundation enables:
 - Level formation/breach observation in real-time
-- Confluence zone visualization
-- Level crossing event tracking
 - Structure panel with touched/active/current levels
+- Level crossing event tracking
 
 **Two parallel tracks:**
 
@@ -105,7 +104,7 @@ New layer for rule discovery, downstream of Reference Layer:
 | Reference Layer filters valid references | ✅ Done (#361-#387) |
 | Reference Layer observability | ✅ Done (#400-#414) |
 | Structure Panel shows level touches | ✅ Done (#420) |
-| Confluence zones render on chart | ✅ Done (#421) |
+| Confluence zones render on chart | Removed (visual clutter) |
 | Reference Layer tuning UI | **Next** |
 | Salience formula validated empirically | **Next** |
 | Outcome Layer touch detection | **Next** |

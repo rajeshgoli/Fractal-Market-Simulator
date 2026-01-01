@@ -31,6 +31,8 @@ from ..schemas import (
     LevelCrossEventResponse,
     CrossingEventsResponse,
     TrackLegResponse,
+    ReferenceConfigResponse,
+    ReferenceConfigUpdateRequest,
 )
 from .cache import get_replay_cache, is_initialized
 
@@ -714,4 +716,99 @@ async def get_telemetry_panel(bar_index: Optional[int] = Query(None)):
         imbalance_ratio=imbalance_ratio,
         biggest_reference=biggest_reference,
         most_impulsive=most_impulsive,
+    )
+
+
+# ============================================================================
+# Reference Config Endpoints (Issue #423)
+# ============================================================================
+
+
+@router.get("/api/reference/config", response_model=ReferenceConfigResponse)
+async def get_reference_config():
+    """
+    Get current reference layer configuration.
+
+    Returns the current configuration values being used by the reference layer.
+    If no reference layer is initialized, returns the default configuration.
+
+    Returns:
+        ReferenceConfigResponse with all current config values.
+    """
+    from ...swing_analysis.reference_layer import ReferenceLayer
+    from ...swing_analysis.reference_config import ReferenceConfig
+
+    cache = get_replay_cache()
+
+    # Get reference layer config or use defaults
+    if cache.get("reference_layer") is not None:
+        config = cache["reference_layer"].reference_config
+    else:
+        config = ReferenceConfig.default()
+
+    return ReferenceConfigResponse(
+        big_range_weight=config.big_range_weight,
+        big_impulse_weight=config.big_impulse_weight,
+        big_recency_weight=config.big_recency_weight,
+        small_range_weight=config.small_range_weight,
+        small_impulse_weight=config.small_impulse_weight,
+        small_recency_weight=config.small_recency_weight,
+        formation_fib_threshold=config.formation_fib_threshold,
+    )
+
+
+@router.post("/api/reference/config", response_model=ReferenceConfigResponse)
+async def update_reference_config(request: ReferenceConfigUpdateRequest):
+    """
+    Update reference layer configuration.
+
+    Accepts partial updates - only provided fields are modified.
+    Returns the full updated configuration.
+
+    This endpoint allows changing salience weights and formation threshold.
+    The new config applies immediately to future reference calculations.
+
+    Args:
+        request: ReferenceConfigUpdateRequest with fields to update.
+
+    Returns:
+        ReferenceConfigResponse with all current config values after update.
+    """
+    from ...swing_analysis.reference_layer import ReferenceLayer
+    from ...swing_analysis.reference_config import ReferenceConfig
+
+    cache = get_replay_cache()
+
+    # Get or create reference layer
+    if cache.get("reference_layer") is None:
+        cache["reference_layer"] = ReferenceLayer()
+
+    ref_layer = cache["reference_layer"]
+    current_config = ref_layer.reference_config
+
+    # Apply salience weight updates
+    new_config = current_config.with_salience_weights(
+        big_range_weight=request.big_range_weight,
+        big_impulse_weight=request.big_impulse_weight,
+        big_recency_weight=request.big_recency_weight,
+        small_range_weight=request.small_range_weight,
+        small_impulse_weight=request.small_impulse_weight,
+        small_recency_weight=request.small_recency_weight,
+    )
+
+    # Apply formation threshold update
+    if request.formation_fib_threshold is not None:
+        new_config = new_config.with_formation_threshold(request.formation_fib_threshold)
+
+    # Update reference layer config (preserves accumulated state)
+    ref_layer.reference_config = new_config
+
+    return ReferenceConfigResponse(
+        big_range_weight=new_config.big_range_weight,
+        big_impulse_weight=new_config.big_impulse_weight,
+        big_recency_weight=new_config.big_recency_weight,
+        small_range_weight=new_config.small_range_weight,
+        small_impulse_weight=new_config.small_impulse_weight,
+        small_recency_weight=new_config.small_recency_weight,
+        formation_fib_threshold=new_config.formation_fib_threshold,
     )

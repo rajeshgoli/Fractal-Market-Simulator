@@ -38,7 +38,7 @@ python -m src.replay_server.main --data test_data/es-5m.csv --window 10000
 open http://127.0.0.1:8000
 ```
 
-**Levels at Play** — Reference Layer view showing valid trading references with fib levels, confluence zones, and level crossing events.
+**Levels at Play** — Reference Layer view showing valid trading references with fib levels and level crossing events.
 
 **Features:**
 - **Incremental build**: Watch legs form as each bar is processed
@@ -47,7 +47,6 @@ open http://127.0.0.1:8000
 - **Follow leg**: Track specific legs through their lifecycle with event markers
 - **Detection config panel**: Adjust thresholds at runtime without restart
 - **Reference Layer**: Scale classification (S/M/L/XL), formation tracking, fib level interaction
-- **Confluence zones**: Clustered levels from multiple references
 - **Level crossing**: Opt-in tracking for specific legs
 
 See [User Guide](Docs/Reference/user_guide.md) for detailed documentation.
