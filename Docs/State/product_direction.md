@@ -94,16 +94,16 @@ New layer for rule discovery, downstream of Reference Layer:
 
 | Criterion | Status |
 |-----------|--------|
-| <5s for 10K bars | Done (#158) |
-| 100K window loads in frontend | Done (#158) |
-| Valid swings (L1-L7) detected | Done (Dec 25) |
-| Reference Layer filters valid references | Done (#361-#387) |
-| Reference Layer observability | Done (#400-#414) |
-| Structure Panel shows level touches | **Pending** (#420) |
-| Confluence zones render on chart | **Pending** (#421) |
-| Reference Layer tuning UI | **Pending** |
-| Salience formula validated empirically | **Pending** |
-| Outcome Layer touch detection | **Future** |
+| <5s for 10K bars | ✅ Done (#158) |
+| 100K window loads in frontend | ✅ Done (#158) |
+| Valid swings (L1-L7) detected | ✅ Done (Dec 25) |
+| Reference Layer filters valid references | ✅ Done (#361-#387) |
+| Reference Layer observability | ✅ Done (#400-#414) |
+| Structure Panel shows level touches | ✅ Done (#420) |
+| Confluence zones render on chart | ✅ Done (#421) |
+| Reference Layer tuning UI | **Next** |
+| Salience formula validated empirically | **Next** |
+| Outcome Layer touch detection | **Next** |
 | Rule discovery statistics | **Future** |
 
 ---
@@ -112,8 +112,8 @@ New layer for rule discovery, downstream of Reference Layer:
 
 1. ✅ **P1: Reference Layer Core** — Complete
 2. ✅ **P2: Fib Level Interaction** — Complete
-3. ⚠️ **P3: Structure Panel + Confluence** — Backend done, frontend pending (#419)
-4. ⚠️ **P4: Level Crossing** — Backend done, frontend pending (#419)
+3. ✅ **P3: Structure Panel + Confluence** — Complete (#420)
+4. ✅ **P4: Level Crossing** — Complete (#421)
 5. ⏳ **Reference Layer Exploration** — Tuning UI + salience formula experiments
 6. ⏳ **Outcome Layer** — Rule discovery (parallel with #5)
 
@@ -122,7 +122,7 @@ New layer for rule discovery, downstream of Reference Layer:
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- #419 epic complete
 - Reference Layer tuning reveals unexpected behavior
-- Outcome Layer definition needs user input
+- Outcome Layer definition needs user input (interview required)
 - Direction uncertainty requiring user values
+- Ready to validate salience formula empirically
