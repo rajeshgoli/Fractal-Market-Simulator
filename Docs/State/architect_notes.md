@@ -54,10 +54,12 @@ Read in order:
 - Rename `largest_swing_id` → `largest_leg_id` in TreeStatistics
 - Fix docstring in leg_detector.py (references removed `swing_id`)
 
+**Completed naming cleanup:**
+- ✅ `swing_config.py` → `detection_config.py`
+- ✅ `SwingConfig` → `DetectionConfig`
+
 **Future naming cleanup (low priority):**
-- `detection_config.py` → `detection_config.py` (configures detection algorithm, not swings)
-- `DetectionConfig` → `DetectionConfig` (class rename to match)
-- `DetectionEvent` → `DetectionEvent` (no swing events remain post-#394)
+- `SwingEvent` → `DetectionEvent` (deferred)
 - Keep `src/swing_analysis/` — valid domain term for users
 
 ---
