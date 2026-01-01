@@ -5,9 +5,6 @@
 
 import React from 'react';
 import {
-  Activity,
-  CheckCircle,
-  XCircle,
   GitBranch,
   Scissors,
   Ban,
@@ -18,7 +15,7 @@ import { EventType } from '../types';
 /**
  * Get the icon component for an event type.
  *
- * @param type - Event type string (EventType enum or legacy string)
+ * @param type - Event type string (EventType enum)
  * @param size - Icon size in pixels (default: 16)
  */
 export function getIconForEventType(
@@ -26,19 +23,13 @@ export function getIconForEventType(
   size: number = 16
 ): React.ReactNode {
   switch (type) {
-    case EventType.SWING_FORMED:
-    case 'SWING_FORMED':
-      return <Activity size={size} className="text-trading-purple" />;
-    case EventType.COMPLETION:
-    case 'SWING_COMPLETED':
-      return <CheckCircle size={size} className="text-trading-bull" />;
-    case EventType.INVALIDATION:
-    case 'SWING_INVALIDATED':
-      return <XCircle size={size} className="text-trading-bear" />;
+    case EventType.LEG_CREATED:
     case 'LEG_CREATED':
       return <GitBranch size={size} className="text-trading-blue" />;
+    case EventType.LEG_PRUNED:
     case 'LEG_PRUNED':
       return <Scissors size={size} className="text-trading-orange" />;
+    case EventType.LEG_INVALIDATED:
     case 'LEG_INVALIDATED':
       return <Ban size={size} className="text-trading-bear" />;
     default:
@@ -53,20 +44,15 @@ export function getIconForEventType(
  */
 export function getColorForEventType(type: string): string {
   switch (type) {
-    case EventType.SWING_FORMED:
-    case 'SWING_FORMED':
-      return 'text-trading-purple';
-    case EventType.COMPLETION:
-    case 'SWING_COMPLETED':
-      return 'text-trading-bull';
-    case EventType.INVALIDATION:
-    case 'SWING_INVALIDATED':
-    case 'LEG_INVALIDATED':
-      return 'text-trading-bear';
+    case EventType.LEG_CREATED:
     case 'LEG_CREATED':
       return 'text-trading-blue';
+    case EventType.LEG_PRUNED:
     case 'LEG_PRUNED':
       return 'text-trading-orange';
+    case EventType.LEG_INVALIDATED:
+    case 'LEG_INVALIDATED':
+      return 'text-trading-bear';
     default:
       return 'text-trading-orange';
   }

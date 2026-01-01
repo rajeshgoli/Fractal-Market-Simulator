@@ -37,7 +37,6 @@ interface ChartPreferences {
   // Detection and linger settings
   detectionConfig: DetectionConfig | null; // null = use server defaults
   lingerEnabled: boolean;
-  replayLingerEvents: LingerEventStates; // Replay mode linger toggles
   dagLingerEvents: LingerEventStates; // DAG mode linger toggles
 }
 
@@ -52,7 +51,6 @@ const DEFAULT_PREFERENCES: ChartPreferences = {
   explanationPanelHeight: 224, // ~14rem, matching md:h-56
   detectionConfig: null,
   lingerEnabled: true,
-  replayLingerEvents: {},
   dagLingerEvents: {},
 };
 
@@ -93,7 +91,6 @@ interface UseChartPreferencesReturn {
   explanationPanelHeight: number;
   detectionConfig: DetectionConfig | null;
   lingerEnabled: boolean;
-  replayLingerEvents: LingerEventStates;
   dagLingerEvents: LingerEventStates;
   setChart1Aggregation: (value: AggregationScale) => void;
   setChart2Aggregation: (value: AggregationScale) => void;
@@ -105,7 +102,6 @@ interface UseChartPreferencesReturn {
   setExplanationPanelHeight: (value: number) => void;
   setDetectionConfig: (value: DetectionConfig | null) => void;
   setLingerEnabled: (value: boolean) => void;
-  setReplayLingerEvents: (value: LingerEventStates) => void;
   setDagLingerEvents: (value: LingerEventStates) => void;
 }
 
@@ -179,10 +175,6 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setPreferences(prev => ({ ...prev, lingerEnabled: value }));
   }, []);
 
-  const setReplayLingerEvents = useCallback((value: LingerEventStates) => {
-    setPreferences(prev => ({ ...prev, replayLingerEvents: value }));
-  }, []);
-
   const setDagLingerEvents = useCallback((value: LingerEventStates) => {
     setPreferences(prev => ({ ...prev, dagLingerEvents: value }));
   }, []);
@@ -198,7 +190,6 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     explanationPanelHeight: preferences.explanationPanelHeight,
     detectionConfig: preferences.detectionConfig,
     lingerEnabled: preferences.lingerEnabled,
-    replayLingerEvents: preferences.replayLingerEvents,
     dagLingerEvents: preferences.dagLingerEvents,
     setChart1Aggregation,
     setChart2Aggregation,
@@ -210,7 +201,6 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setExplanationPanelHeight,
     setDetectionConfig,
     setLingerEnabled,
-    setReplayLingerEvents,
     setDagLingerEvents,
   };
 }

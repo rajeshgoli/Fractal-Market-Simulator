@@ -32,7 +32,6 @@ export function dagLegToActiveLeg(leg: DagLeg, windowOffset: number = 0): Active
     origin_price: leg.origin_price,
     origin_index: leg.origin_index - windowOffset,
     retracement_pct: leg.retracement_pct,
-    formed: leg.formed,
     status: leg.status as 'active' | 'stale',
     origin_breached: leg.origin_breached,
     bar_count: leg.bar_count,

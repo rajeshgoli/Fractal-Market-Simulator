@@ -20,12 +20,10 @@ const formatPrice = (value: number, decimals: number = 2): string => {
   return value.toFixed(decimals);
 };
 
-// Get state badge style
+// Get state badge style (#408: 'forming'/'formed' → 'active')
 const getStateBadgeStyle = (state: FollowedLeg['state']): string => {
   switch (state) {
-    case 'forming':
-      return 'bg-trading-blue/20 text-trading-blue border-trading-blue/30';
-    case 'formed':
+    case 'active':
       return 'bg-trading-bull/20 text-trading-bull border-trading-bull/30';
     case 'pruned':
       return 'bg-trading-orange/20 text-trading-orange border-trading-orange/30';
@@ -36,11 +34,11 @@ const getStateBadgeStyle = (state: FollowedLeg['state']): string => {
   }
 };
 
-// Get event display name
+// Get event display name (#408: 'formed' → 'created')
 const getEventDisplayName = (eventType: string | undefined): string => {
   if (!eventType) return '—';
   switch (eventType) {
-    case 'formed': return 'Formed';
+    case 'created': return 'Created';
     case 'origin_breached': return 'Origin breached';
     case 'pivot_breached': return 'Pivot breached';
     case 'engulfed': return 'Engulfed';

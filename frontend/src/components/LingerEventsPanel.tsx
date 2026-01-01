@@ -3,7 +3,7 @@ import { Filter, ChevronDown, ChevronRight } from 'lucide-react';
 import { Toggle } from './ui/Toggle';
 import { getIconForEventType } from '../utils/eventTypeUtils';
 
-// Linger event configuration for mode-specific toggles
+// Linger event configuration for toggles
 export interface LingerEventConfig {
   id: string;
   label: string;
@@ -11,23 +11,14 @@ export interface LingerEventConfig {
   isEnabled: boolean;
 }
 
-// Default linger events for Replay mode
-export const REPLAY_LINGER_EVENTS: LingerEventConfig[] = [
-  { id: 'SWING_FORMED', label: 'Swing Formed', description: 'Pause when swing is detected', isEnabled: true },
-  { id: 'SWING_COMPLETED', label: 'Swing Completed', description: 'Pause when swing reaches target', isEnabled: true },
-  { id: 'SWING_INVALIDATED', label: 'Swing Invalidated', description: 'Pause when swing is invalidated', isEnabled: true },
-];
-
-// Default linger events for DAG mode
+// Default linger events for DAG mode (the only mode now)
 export const DAG_LINGER_EVENTS: LingerEventConfig[] = [
   { id: 'LEG_CREATED', label: 'Leg Created', description: 'Pause when new leg is created', isEnabled: true },
   { id: 'LEG_PRUNED', label: 'Leg Pruned', description: 'Pause when leg is pruned', isEnabled: true },
   { id: 'LEG_INVALIDATED', label: 'Leg Invalidated', description: 'Pause when leg is invalidated', isEnabled: true },
-  { id: 'SWING_FORMED', label: 'Swing Formed', description: 'Pause when swing is formed', isEnabled: true },
 ];
 
 interface LingerEventsPanelProps {
-  mode: 'replay' | 'dag';
   lingerEvents: LingerEventConfig[];
   onToggleLingerEvent: (eventId: string) => void;
   isCollapsed: boolean;
@@ -35,7 +26,6 @@ interface LingerEventsPanelProps {
 }
 
 export const LingerEventsPanel: React.FC<LingerEventsPanelProps> = ({
-  mode,
   lingerEvents,
   onToggleLingerEvent,
   isCollapsed,
@@ -50,7 +40,7 @@ export const LingerEventsPanel: React.FC<LingerEventsPanelProps> = ({
         <h2 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
           {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
           <Filter size={14} />
-          {mode === 'dag' ? 'Structure Events' : 'Linger Events'}
+          Structure Events
         </h2>
       </button>
 

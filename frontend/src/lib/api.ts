@@ -395,7 +395,6 @@ export interface DagLeg {
   origin_price: number;
   origin_index: number;
   retracement_pct: number;
-  formed: boolean;
   status: 'active' | 'stale';  // #345: 'invalidated' removed, use origin_breached
   origin_breached: boolean;    // #345: True if origin was breached (structural invalidation)
   bar_count: number;
@@ -464,7 +463,7 @@ export async function fetchLegLineage(legId: string): Promise<LegLineageResponse
 // Types for Follow Leg feature (Issue #267)
 export interface LifecycleEvent {
   leg_id: string;
-  event_type: 'formed' | 'origin_breached' | 'pivot_breached' | 'engulfed' | 'pruned' | 'invalidated';
+  event_type: 'created' | 'origin_breached' | 'pivot_breached' | 'engulfed' | 'pruned' | 'invalidated';
   bar_index: number;
   csv_index: number;
   timestamp: string;

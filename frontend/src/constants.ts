@@ -2,23 +2,23 @@ import { FilterState, EventType } from './types';
 
 export const INITIAL_FILTERS: FilterState[] = [
   {
-    id: EventType.SWING_FORMED,
-    label: 'Swing Formed',
-    description: 'New market structure swing detected',
+    id: EventType.LEG_CREATED,
+    label: 'Leg Created',
+    description: 'New leg detected',
     isEnabled: true,
     isDefault: true
   },
   {
-    id: EventType.COMPLETION,
-    label: 'Completion',
-    description: 'Ratio reached 2.0 extension',
+    id: EventType.LEG_PRUNED,
+    label: 'Leg Pruned',
+    description: 'Leg pruned due to threshold',
     isEnabled: true,
     isDefault: true
   },
   {
-    id: EventType.INVALIDATION,
-    label: 'Invalidation',
-    description: 'Ratio dropped below threshold',
+    id: EventType.LEG_INVALIDATED,
+    label: 'Leg Invalidated',
+    description: 'Leg invalidated by origin breach',
     isEnabled: true,
     isDefault: true
   },

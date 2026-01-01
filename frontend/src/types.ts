@@ -1,7 +1,7 @@
 export enum EventType {
-  SWING_FORMED = 'SWING_FORMED',
-  COMPLETION = 'COMPLETION',
-  INVALIDATION = 'INVALIDATION',
+  LEG_CREATED = 'LEG_CREATED',
+  LEG_PRUNED = 'LEG_PRUNED',
+  LEG_INVALIDATED = 'LEG_INVALIDATED',
 }
 
 export enum Direction {
@@ -225,7 +225,6 @@ export interface ActiveLeg {
   origin_price: number;
   origin_index: number;
   retracement_pct: number;
-  formed: boolean;
   status: LegStatus;
   bar_count: number;
   // #345: Origin breach tracking - true if origin has been breached (structural invalidation)

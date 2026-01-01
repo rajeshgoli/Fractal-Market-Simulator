@@ -1,34 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DetectionConfig, LegEvent, HighlightedDagItem } from '../types';
-import { BarChart2, Settings, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
-import { Toggle } from './ui/Toggle';
+import { Settings, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { ReplayEvent, DagLeg } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
 import { DetectionConfigPanel, DetectionConfigPanelHandle } from './DetectionConfigPanel';
 import { FeedbackForm } from './FeedbackForm';
-import type { FeedbackContext, ReplayContext, DagContext } from './FeedbackForm';
-import { LingerEventsPanel, REPLAY_LINGER_EVENTS, DAG_LINGER_EVENTS } from './LingerEventsPanel';
+import type { FeedbackContext, DagContext } from './FeedbackForm';
+import { LingerEventsPanel, DAG_LINGER_EVENTS } from './LingerEventsPanel';
 import type { LingerEventConfig } from './LingerEventsPanel';
 import { MarketStructurePanel } from './MarketStructurePanel';
 
 // Re-export for convenience
-export { REPLAY_LINGER_EVENTS, DAG_LINGER_EVENTS };
-export type { LingerEventConfig, DagContext, ReplayContext };
+export { DAG_LINGER_EVENTS };
+export type { LingerEventConfig, DagContext };
 
 interface SidebarProps {
-  // Mode selection
-  mode: 'replay' | 'dag';
-
-  // Linger event toggles (mode-specific)
+  // Linger event toggles
   lingerEvents: LingerEventConfig[];
   onToggleLingerEvent: (eventId: string) => void;
   onResetDefaults: () => void;
   className?: string;
-
-  // Stats panel toggle (shown during playback, replay mode only)
-  showStatsToggle?: boolean;
-  showStats?: boolean;
-  onToggleShowStats?: () => void;
 
   // Feedback props - now always visible during playback
   showFeedback?: boolean;
@@ -42,8 +33,7 @@ interface SidebarProps {
   // Pause playback on typing (for non-linger state)
   onPausePlayback?: () => void;
 
-  // Mode-specific context
-  replayContext?: ReplayContext;
+  // DAG context
   dagContext?: DagContext;
 
   // Screenshot capture target (main content area)
@@ -73,14 +63,10 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  mode,
   lingerEvents,
   onToggleLingerEvent,
   onResetDefaults,
   className = '',
-  showStatsToggle = false,
-  showStats = false,
-  onToggleShowStats,
   showFeedback = false,
   isLingering = false,
   lingerEvent,
@@ -89,7 +75,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onFeedbackFocus,
   onFeedbackBlur,
   onPausePlayback,
-  replayContext,
   dagContext,
   screenshotTargetRef,
   lingerEnabled = true,
@@ -142,7 +127,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Linger Event Toggles - only shown when linger is enabled */}
       {lingerEnabled && (
         <LingerEventsPanel
-          mode={mode}
           lingerEvents={lingerEvents}
           onToggleLingerEvent={onToggleLingerEvent}
           isCollapsed={isLingerEventsCollapsed}
@@ -187,45 +171,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
-      {/* Show Stats Toggle (shown during playback, replay mode only) */}
-      {showStatsToggle && onToggleShowStats && (
-        <div className="p-4 border-t border-app-border">
-          <div
-            className={`
-              group flex items-start gap-3 p-3 rounded-lg transition-all duration-200
-              ${showStats
-                ? 'bg-app-card border border-app-border'
-                : 'hover:bg-app-card/50 border border-transparent opacity-70'
-              }
-            `}
-          >
-            <div className="pt-1">
-              <BarChart2 size={16} className="text-trading-purple" />
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className={`text-sm font-medium ${showStats ? 'text-app-text' : 'text-app-muted'}`}>
-                  Show Stats
-                </span>
-                <Toggle
-                  checked={showStats}
-                  onChange={onToggleShowStats}
-                  id="toggle-show-stats"
-                />
-              </div>
-              <p className="text-xs text-app-muted">
-                Show calibration stats panel during playback
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Feedback Section (always visible during playback) */}
       {showFeedback && feedbackContext && currentPlaybackBar !== undefined && (
         <FeedbackForm
-          mode={mode}
           isLingering={isLingering}
           lingerEvent={lingerEvent}
           currentPlaybackBar={currentPlaybackBar}
@@ -233,7 +181,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onFeedbackFocus={onFeedbackFocus}
           onFeedbackBlur={onFeedbackBlur}
           onPausePlayback={onPausePlayback}
-          replayContext={replayContext}
           dagContext={dagContext}
           screenshotTargetRef={screenshotTargetRef}
           attachedItems={attachedItems}
@@ -243,8 +190,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* Market Structure (DAG mode only) - pinned to bottom */}
-      {mode === 'dag' && dagContext && (
+      {/* Market Structure - pinned to bottom */}
+      {dagContext && (
         <MarketStructurePanel
           dagContext={dagContext}
           legEvents={legEvents}

@@ -24,16 +24,6 @@ export interface FeedbackContext {
   swingsCompleted: number;
 }
 
-// Replay mode context
-export interface ReplayContext {
-  selectedSwing?: {
-    id: string;
-    scale: string;
-    direction: string;
-  };
-  calibrationState: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
-}
-
 // DAG mode context
 export interface DagContextLeg {
   leg_id: string;
@@ -59,7 +49,6 @@ export interface DagContext {
 }
 
 interface FeedbackFormProps {
-  mode: 'replay' | 'dag';
   isLingering: boolean;
   lingerEvent?: ReplayEvent;
   currentPlaybackBar: number;
@@ -67,7 +56,6 @@ interface FeedbackFormProps {
   onFeedbackFocus?: () => void;
   onFeedbackBlur?: () => void;
   onPausePlayback?: () => void;
-  replayContext?: ReplayContext;
   dagContext?: DagContext;
   screenshotTargetRef?: RefObject<HTMLElement | null>;
   attachedItems: AttachableItem[];
@@ -77,7 +65,6 @@ interface FeedbackFormProps {
 }
 
 export const FeedbackForm: React.FC<FeedbackFormProps> = ({
-  mode,
   isLingering,
   lingerEvent,
   currentPlaybackBar,
@@ -85,7 +72,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   onFeedbackFocus,
   onFeedbackBlur,
   onPausePlayback,
-  replayContext,
   dagContext,
   screenshotTargetRef,
   attachedItems,
@@ -139,12 +125,9 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         snapshot.event_context = eventContext;
       }
 
-      if (mode === 'replay' && replayContext) {
-        snapshot.replay_context = {
-          selected_swing: replayContext.selectedSwing,
-          calibration_state: replayContext.calibrationState,
-        };
-      } else if (mode === 'dag' && dagContext) {
+      // DAG mode context
+      if (dagContext) {
+        snapshot.mode = 'dag';
         snapshot.dag_context = {
           active_legs: dagContext.activeLegs.map(leg => ({
             leg_id: leg.leg_id,
@@ -240,7 +223,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, mode, replayContext, dagContext, screenshotTargetRef, attachedItems, onClearAttachments, detectionConfig]);
+  }, [feedbackText, lingerEvent, currentPlaybackBar, feedbackContext, dagContext, screenshotTargetRef, attachedItems, onClearAttachments, detectionConfig]);
 
   const handleInputFocus = useCallback(() => {
     onFeedbackFocus?.();

@@ -696,7 +696,6 @@ async def get_dag_state():
             origin_price=float(leg.origin_price),
             origin_index=window_offset + leg.origin_index,  # Convert to csv_index (#300)
             retracement_pct=float(leg.retracement_pct),
-            formed=False,  # Formation computed by Reference Layer at runtime (#394)
             status=leg.status,
             bar_count=leg.bar_count,
             origin_breached=leg.max_origin_breach is not None,  # #345: structural gate
@@ -842,7 +841,7 @@ async def get_followed_legs_events(
     on candles.
 
     Events tracked:
-    - formed: Leg transitioned from forming to formed
+    - created: New leg created
     - origin_breached: Price crossed origin beyond threshold
     - pivot_breached: Price crossed pivot beyond threshold
     - engulfed: Both origin and pivot breached

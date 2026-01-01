@@ -274,7 +274,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
   const handleRecentEventClick = useCallback((event: LegEvent, clickEvent: React.MouseEvent) => {
     const popupPosition = { x: clickEvent.clientX, y: clickEvent.clientY - 100 };
     const eventTypeMap: Record<LegEvent['type'], LifecycleEventWithLegInfo['event_type']> = {
-      'LEG_CREATED': 'formed',
+      'LEG_CREATED': 'created',
       'LEG_PRUNED': 'pruned',
       'ORIGIN_BREACHED': 'origin_breached',
     };
@@ -778,8 +778,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     let swingsInvalidated = 0;
     let swingsCompleted = 0;
     for (const event of forwardPlayback.allEvents) {
-      if (event.type === 'SWING_INVALIDATED' || event.type === 'LEG_INVALIDATED') swingsInvalidated++;
-      if (event.type === 'SWING_COMPLETED') swingsCompleted++;
+      if (event.type === 'LEG_INVALIDATED') swingsInvalidated++;
+      // SWING_COMPLETED was never emitted by backend - keeping swingsCompleted for interface compatibility
     }
 
     return {
@@ -858,7 +858,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
       <div className="flex-1 flex min-h-0">
         <div className={`${state.isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 ease-in-out overflow-hidden`}>
           <Sidebar
-            mode="dag"
             lingerEvents={state.lingerEvents}
             onToggleLingerEvent={handleToggleLingerEvent}
             onResetDefaults={handleResetDefaults}

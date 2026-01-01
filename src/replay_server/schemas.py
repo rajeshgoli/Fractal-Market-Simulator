@@ -401,7 +401,6 @@ class DagLegResponse(BaseModel):
     origin_price: float
     origin_index: int
     retracement_pct: float
-    formed: bool
     status: str  # "active" or "stale" (#345: invalidated status removed)
     bar_count: int
     # #345: Origin breach tracking - true if origin has been breached (structural invalidation)

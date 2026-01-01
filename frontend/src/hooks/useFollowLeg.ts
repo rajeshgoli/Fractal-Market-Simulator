@@ -51,7 +51,7 @@ export interface FollowedLeg {
   color: string;
   colorSlot: string;
   followedAtBar: number;  // Bar index when started following
-  state: 'forming' | 'formed' | 'pruned' | 'invalidated';
+  state: 'active' | 'pruned' | 'invalidated';  // #408: 'forming'/'formed' → 'active'
   lastEvent?: string;  // Most recent event type
   pivot_price: number;
   origin_price: number;
@@ -158,11 +158,8 @@ export function useFollowLeg(): UseFollowLegReturn {
     const colors = leg.direction === 'bull' ? availableColors.bull : availableColors.bear;
     const colorInfo = colors[0]; // First available
 
-    // Determine initial state
-    let state: FollowedLeg['state'] = 'forming';
-    if (leg.formed) {
-      state = 'formed';
-    }
+    // Determine initial state (#408: simplified to 'active' vs terminal states)
+    let state: FollowedLeg['state'] = 'active';
     // #345: Use origin_breached instead of status === 'invalidated'
     if (leg.origin_breached) {
       state = 'invalidated';
@@ -275,10 +272,11 @@ export function useFollowLeg(): UseFollowLegReturn {
           // Get the most recent event
           const lastEvent = legEvents[legEvents.length - 1];
 
-          // Determine new state based on event type
+          // Determine new state based on event type (#408: 'created' keeps 'active')
           let newState = leg.state;
-          if (lastEvent.event_type === 'formed') {
-            newState = 'formed';
+          if (lastEvent.event_type === 'created') {
+            // Leg creation doesn't change state from 'active'
+            newState = 'active';
           } else if (lastEvent.event_type === 'pruned' || lastEvent.event_type === 'engulfed') {
             newState = 'pruned';
           } else if (lastEvent.event_type === 'invalidated') {

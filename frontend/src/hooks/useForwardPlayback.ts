@@ -265,16 +265,7 @@ export function useForwardPlayback({
 
     return events.filter(event => {
       // Check event type filter
-      // Map backend event types to frontend types
-      let eventType = event.type;
-      if (eventType === 'SWING_INVALIDATED') eventType = 'INVALIDATION' as typeof event.type;
-      if (eventType === 'SWING_COMPLETED') eventType = 'COMPLETION' as typeof event.type;
-
-      if (!enabledEventTypes.has(eventType)) {
-        return false;
-      }
-
-      return true;
+      return enabledEventTypes.has(event.type);
     });
   }, [filters]);
 

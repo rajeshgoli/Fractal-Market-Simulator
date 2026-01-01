@@ -170,7 +170,6 @@ def build_dag_state(detector: LegDetector, window_offset: int = 0) -> DagStateRe
             origin_price=float(leg.origin_price),
             origin_index=window_offset + leg.origin_index,
             retracement_pct=float(leg.retracement_pct),
-            formed=False,  # Formation computed by Reference Layer at runtime
             status=leg.status,
             bar_count=leg.bar_count,
             origin_breached=leg.max_origin_breach is not None,
