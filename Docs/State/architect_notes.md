@@ -42,9 +42,14 @@ Read in order:
 - ✅ Removed refactoring vestiges: `swing_id` on events, `emit_level_crosses` config (#396)
 - ✅ Connected `depth` to `leg.depth`, replaced `parent_ids` with `parent_leg_id` (#396)
 - ✅ Unified `CalibrationSwingResponse` and `DagLegResponse` into `LegResponse` (#398)
-- ✅ Split `routers/replay.py` into domain routers (dag, reference, config, feedback) (#398)
+- ✅ Created domain routers (dag, reference, config, feedback) with helpers (#398)
 - ✅ Renamed `largest_swing_id` → `largest_leg_id` (#398)
 - ✅ `swing_config.py` → `detection_config.py`, `SwingConfig` → `DetectionConfig`
+
+**Pending cleanup (#403):**
+- Migrate `replay.py` to use `helpers/` (5 duplicated functions)
+- Remove tombstone comments (`# Swing hierarchy removed (#301)` - 14+ occurrences)
+- Reduce `replay.py` from 2090 lines to <800
 
 **Future naming cleanup (low priority):**
 - `SwingEvent` → `DetectionEvent` (deferred)
