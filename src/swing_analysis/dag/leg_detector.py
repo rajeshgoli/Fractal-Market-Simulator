@@ -472,7 +472,6 @@ class LegDetector:
                     events.append(OriginBreachedEvent(
                         bar_index=bar.index,
                         timestamp=timestamp,
-                        swing_id="",
                         leg_id=leg.leg_id,
                         breach_price=breach_price,
                         breach_amount=leg.max_origin_breach,
@@ -506,7 +505,6 @@ class LegDetector:
                             events.append(PivotBreachedEvent(
                                 bar_index=bar.index,
                                 timestamp=timestamp,
-                                swing_id="",
                                 leg_id=leg.leg_id,
                                 breach_price=bar_high,
                                 breach_amount=breach,
@@ -523,7 +521,6 @@ class LegDetector:
                             events.append(PivotBreachedEvent(
                                 bar_index=bar.index,
                                 timestamp=timestamp,
-                                swing_id="",
                                 leg_id=leg.leg_id,
                                 breach_price=bar_low,
                                 breach_amount=breach,
@@ -757,7 +754,6 @@ class LegDetector:
                 events.append(LegCreatedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id="",  # Leg doesn't have swing_id yet
                     leg_id=new_leg.leg_id,
                     direction=new_leg.direction,
                     origin_price=new_leg.origin_price,
@@ -874,7 +870,6 @@ class LegDetector:
                 events.append(LegCreatedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id="",
                     leg_id=new_bear_leg.leg_id,
                     direction=new_bear_leg.direction,
                     origin_price=new_bear_leg.origin_price,
@@ -980,7 +975,6 @@ class LegDetector:
                     events.append(LegCreatedEvent(
                         bar_index=bar.index,
                         timestamp=timestamp,
-                        swing_id="",
                         leg_id=new_bear_leg.leg_id,
                         direction=new_bear_leg.direction,
                         origin_price=new_bear_leg.origin_price,
@@ -1051,7 +1045,6 @@ class LegDetector:
                     events.append(LegCreatedEvent(
                         bar_index=bar.index,
                         timestamp=timestamp,
-                        swing_id="",
                         leg_id=new_bull_leg.leg_id,
                         direction=new_bull_leg.direction,
                         origin_price=new_bull_leg.origin_price,
@@ -1174,7 +1167,6 @@ class LegDetector:
             events.append(LegPrunedEvent(
                 bar_index=bar.index,
                 timestamp=timestamp,
-                swing_id="",
                 leg_id=leg.leg_id,
                 reason="extension_prune",
             ))

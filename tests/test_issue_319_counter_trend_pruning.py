@@ -117,13 +117,9 @@ class TestProximityPruneStrategyConfig:
         c3 = base.with_stale_extension(5.0)
         assert c3.proximity_prune_strategy == 'oldest'
 
-        # Test with_level_crosses
-        c4 = base.with_level_crosses(True)
-        assert c4.proximity_prune_strategy == 'oldest'
-
         # Test with_prune_toggles
-        c5 = base.with_prune_toggles(enable_engulfed_prune=False)
-        assert c5.proximity_prune_strategy == 'oldest'
+        c4 = base.with_prune_toggles(enable_engulfed_prune=False)
+        assert c4.proximity_prune_strategy == 'oldest'
 
 
 class TestCounterTrendScoring:

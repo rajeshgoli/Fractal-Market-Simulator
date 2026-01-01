@@ -358,7 +358,6 @@ The pipeline order per bar:
 | `SwingFormedEvent` | `SWING_FORMED` | Price breaches formation threshold from candidate pair |
 | `SwingInvalidatedEvent` | `SWING_INVALIDATED` | Defended pivot violated beyond tolerance |
 | `SwingCompletedEvent` | `SWING_COMPLETED` | Price reaches 2.0 extension target |
-| `LevelCrossEvent` | `LEVEL_CROSS` | Price crosses Fib level boundary |
 | `LegCreatedEvent` | `LEG_CREATED` | New candidate leg is created (pre-formation) |
 | `LegPrunedEvent` | `LEG_PRUNED` | Leg is removed (reasons: `turn_prune`, `origin_proximity_prune`, `breach_prune`, `extension_prune`) |
 | `LegInvalidatedEvent` | `LEG_INVALIDATED` | Leg breaches invalidation threshold (configurable, default 0.382) |
@@ -920,12 +919,12 @@ pip install -r requirements.txt
 
 ### Port conflict
 ```bash
-python -m src.ground_truth_annotator.main --data test.csv --port 8001
+python -m src.replay_server.main --data test.csv --port 8001
 ```
 
 ### Replay View API
 
-The replay view backend (`src/ground_truth_annotator/`) uses LegDetector for incremental swing detection with Reference layer filtering:
+The replay view backend (`src/replay_server/`) uses LegDetector for incremental swing detection with Reference layer filtering:
 
 ```python
 # Config: GET /api/config
@@ -1031,7 +1030,7 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
 ```
 
 **Key files:**
-- `src/ground_truth_annotator/routers/replay.py` - API endpoints
+- `src/replay_server/routers/replay.py` - API endpoints
 - `src/swing_analysis/reference_layer.py` - Filtering logic
 - `src/swing_analysis/dag/` - DAG algorithm (modularized)
   - `leg_detector.py` - LegDetector main class
@@ -1072,7 +1071,7 @@ The `detection_config` field captures the full detection configuration at observ
 - Origin range/time proximity thresholds
 - Pruning algorithm toggles (engulfed)
 
-**Backend storage** (`src/ground_truth_annotator/storage.py`):
+**Backend storage** (`src/replay_server/storage.py`):
 - `PLAYBACK_FEEDBACK_SCHEMA_VERSION = 2` - Current schema version
 - Observations persist to `ground_truth/playback_feedback.json`
 - Screenshots saved to `ground_truth/screenshots/`

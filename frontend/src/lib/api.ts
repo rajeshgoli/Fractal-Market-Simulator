@@ -124,11 +124,11 @@ export interface ReplayBarData {
 }
 
 export interface ReplayEvent {
-  type: 'SWING_FORMED' | 'SWING_INVALIDATED' | 'SWING_COMPLETED' | 'LEVEL_CROSS' | 'LEG_CREATED' | 'LEG_PRUNED' | 'LEG_INVALIDATED';
+  type: 'SWING_FORMED' | 'SWING_INVALIDATED' | 'SWING_COMPLETED' | 'LEG_CREATED' | 'LEG_PRUNED' | 'LEG_INVALIDATED';
   bar_index: number;
   scale: string;
   direction: string;
-  swing_id: string;
+  leg_id: string;
   swing?: {
     id: string;
     scale: string;
@@ -415,7 +415,6 @@ export interface DagLeg {
   spikiness: number | null;
   // Hierarchy fields for exploration (#250, #251)
   parent_leg_id: string | null;
-  swing_id: string | null;
   // Segment impulse tracking (#307): Two-impulse model for parent segments
   // impulse_to_deepest: Price change per bar from origin to deepest point
   impulse_to_deepest: number | null;

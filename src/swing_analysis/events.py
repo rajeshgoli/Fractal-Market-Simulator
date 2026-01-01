@@ -24,13 +24,11 @@ class SwingEvent:
         event_type: Discriminator for event type routing/filtering.
         bar_index: Bar index when the event occurred.
         timestamp: Datetime when the event occurred.
-        swing_id: Unique identifier of the affected swing.
     """
 
     event_type: str
     bar_index: int
     timestamp: datetime
-    swing_id: str  # Legacy field, kept for compatibility (always "" for leg events)
 
 
 @dataclass
@@ -57,7 +55,6 @@ class LegCreatedEvent(SwingEvent):
         >>> event = LegCreatedEvent(
         ...     bar_index=50,
         ...     timestamp=datetime.now(),
-        ...     swing_id="",  # Leg doesn't have swing_id yet
         ...     leg_id="leg_abc123",
         ...     direction="bull",
         ...     pivot_price=Decimal("5000.00"),
@@ -101,7 +98,6 @@ class LegPrunedEvent(SwingEvent):
         >>> event = LegPrunedEvent(
         ...     bar_index=100,
         ...     timestamp=datetime.now(),
-        ...     swing_id="",
         ...     leg_id="leg_abc123",
         ...     reason="staleness",
         ... )
@@ -134,7 +130,6 @@ class LegInvalidatedEvent(SwingEvent):
         >>> event = LegInvalidatedEvent(
         ...     bar_index=75,
         ...     timestamp=datetime.now(),
-        ...     swing_id="",
         ...     leg_id="leg_abc123",
         ...     invalidation_price=Decimal("4961.80"),
         ... )
@@ -170,7 +165,6 @@ class OriginBreachedEvent(SwingEvent):
         >>> event = OriginBreachedEvent(
         ...     bar_index=50,
         ...     timestamp=datetime.now(),
-        ...     swing_id="",
         ...     leg_id="leg_abc123",
         ...     breach_price=Decimal("4950.00"),
         ...     breach_amount=Decimal("2.50"),
@@ -207,7 +201,6 @@ class PivotBreachedEvent(SwingEvent):
         >>> event = PivotBreachedEvent(
         ...     bar_index=60,
         ...     timestamp=datetime.now(),
-        ...     swing_id="",
         ...     leg_id="leg_abc123",
         ...     breach_price=Decimal("5010.00"),
         ...     breach_amount=Decimal("5.00"),

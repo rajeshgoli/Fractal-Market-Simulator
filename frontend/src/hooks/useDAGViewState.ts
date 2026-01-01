@@ -39,7 +39,6 @@ export function dagLegToActiveLeg(leg: DagLeg, windowOffset: number = 0): Active
     impulsiveness: leg.impulsiveness,
     spikiness: leg.spikiness,
     parent_leg_id: leg.parent_leg_id,
-    swing_id: leg.swing_id,
     impulse_to_deepest: leg.impulse_to_deepest,
     impulse_back: leg.impulse_back,
     net_segment_impulse: leg.net_segment_impulse,

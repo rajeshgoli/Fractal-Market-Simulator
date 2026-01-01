@@ -174,7 +174,7 @@ export function useForwardPlayback({
     if (!event) return;
 
     setLingerEvent(event);
-    setLingerSwingId(event.swing_id);
+    setLingerSwingId(event.leg_id);
     setLingerQueuePosition(
       eventQueueRef.current.length > 1
         ? { current: eventIndexRef.current + 1, total: eventQueueRef.current.length }

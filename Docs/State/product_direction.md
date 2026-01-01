@@ -56,7 +56,7 @@ Config used: `origin_time_threshold=0.02`, `origin_range_threshold=0.02`, `max_t
 | **Session persistence** | Done — App loads last session automatically |
 | **Process Till** | Done — Fast-forward to specific CSV index with progress |
 
-**Usage:** `python -m src.ground_truth_annotator.main` (no args needed)
+**Usage:** `python -m src.replay_server.main` (no args needed)
 
 ---
 

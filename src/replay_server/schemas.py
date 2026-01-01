@@ -59,9 +59,9 @@ class CalibrationSwingResponse(BaseModel):
     size: float
     rank: int
     is_active: bool
-    # Hierarchy info (new)
+    # Hierarchy info
     depth: int = 0  # Hierarchy depth (0 = root)
-    parent_ids: List[str] = []  # Parent swing IDs
+    parent_leg_id: Optional[str] = None  # Parent leg ID
     # Fib levels for overlay
     fib_0: float
     fib_0382: float
@@ -124,18 +124,16 @@ class ReplayBarResponse(BaseModel):
 
 class ReplayEventResponse(BaseModel):
     """A playback event triggered by swing state change."""
-    type: str  # SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED, LEVEL_CROSS
+    type: str  # SWING_FORMED, SWING_INVALIDATED, SWING_COMPLETED
     bar_index: int
     scale: str  # Legacy scale for frontend compatibility
     direction: str
-    swing_id: str
+    leg_id: str  # ID of the affected leg
     swing: Optional[CalibrationSwingResponse] = None
-    level: Optional[float] = None  # For LEVEL_CROSS
-    previous_level: Optional[float] = None  # For LEVEL_CROSS
     trigger_explanation: Optional[str] = None
-    # Hierarchy info (new)
+    # Hierarchy info
     depth: int = 0
-    parent_ids: List[str] = []
+    parent_leg_id: Optional[str] = None
 
 
 class ReplaySwingState(BaseModel):
@@ -349,9 +347,6 @@ class TreeStatistics(BaseModel):
     median_range: float  # Median swing range
     smallest_range: float  # Smallest swing range
 
-    # Recently invalidated count
-    recently_invalidated: int  # Swings invalidated in last N bars
-
     # Validation quick-checks
     roots_have_children: bool  # All root swings have at least one child
     siblings_detected: bool  # Sibling swings exist (same 0, different 1s)
@@ -410,8 +405,6 @@ class DagLegResponse(BaseModel):
     spikiness: Optional[float] = None
     # Parent leg ID for hierarchy exploration (#250, #251)
     parent_leg_id: Optional[str] = None
-    # Swing ID if this leg has formed into a swing
-    swing_id: Optional[str] = None
     # Segment impulse tracking (#307): Two-impulse model for parent segments
     # When children form under this leg, tracks: origin -> deepest -> child_origin
     # impulse_to_deepest: Price change per bar from origin to deepest point

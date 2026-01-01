@@ -8,7 +8,6 @@ import {
   Activity,
   CheckCircle,
   XCircle,
-  Eye,
   GitBranch,
   Scissors,
   Ban,
@@ -36,9 +35,6 @@ export function getIconForEventType(
     case EventType.INVALIDATION:
     case 'SWING_INVALIDATED':
       return <XCircle size={size} className="text-trading-bear" />;
-    case EventType.LEVEL_CROSS:
-    case 'LEVEL_CROSS':
-      return <Eye size={size} className="text-trading-blue" />;
     case 'LEG_CREATED':
       return <GitBranch size={size} className="text-trading-blue" />;
     case 'LEG_PRUNED':
@@ -67,8 +63,6 @@ export function getColorForEventType(type: string): string {
     case 'SWING_INVALIDATED':
     case 'LEG_INVALIDATED':
       return 'text-trading-bear';
-    case EventType.LEVEL_CROSS:
-    case 'LEVEL_CROSS':
     case 'LEG_CREATED':
       return 'text-trading-blue';
     case 'LEG_PRUNED':

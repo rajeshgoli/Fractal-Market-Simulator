@@ -16,7 +16,6 @@ export const REPLAY_LINGER_EVENTS: LingerEventConfig[] = [
   { id: 'SWING_FORMED', label: 'Swing Formed', description: 'Pause when swing is detected', isEnabled: true },
   { id: 'SWING_COMPLETED', label: 'Swing Completed', description: 'Pause when swing reaches target', isEnabled: true },
   { id: 'SWING_INVALIDATED', label: 'Swing Invalidated', description: 'Pause when swing is invalidated', isEnabled: true },
-  { id: 'LEVEL_CROSS', label: 'Level Crossed', description: 'Pause on Fib level cross', isEnabled: false },
 ];
 
 // Default linger events for DAG mode

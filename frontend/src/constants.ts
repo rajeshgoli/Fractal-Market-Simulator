@@ -22,12 +22,6 @@ export const INITIAL_FILTERS: FilterState[] = [
     isEnabled: true,
     isDefault: true
   },
-  {
-    id: EventType.LEVEL_CROSS,
-    label: 'Level Cross',
-    description: 'Price crossed key Fib level (off by default - too frequent)',
-    isEnabled: false
-  },
 ];
 
 // Speed multipliers: how many aggregated bars per second at the selected aggregation

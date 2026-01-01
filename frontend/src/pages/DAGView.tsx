@@ -528,7 +528,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
       if (event.type === 'LEG_CREATED' || event.type === 'LEG_PRUNED' || event.type === 'LEG_INVALIDATED') {
         events.push({
           type: event.type as LegEvent['type'],
-          leg_id: event.swing_id,
+          leg_id: event.leg_id,
           bar_index: event.bar_index,
           direction: event.direction as 'bull' | 'bear',
           reason: event.trigger_explanation,

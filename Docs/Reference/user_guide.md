@@ -31,13 +31,13 @@ Market Structure View provides the primary interface for observing how the hiera
 source venv/bin/activate
 
 # Start the server (no data file required)
-python -m src.ground_truth_annotator.main
+python -m src.replay_server.main
 
 # Or start with a specific data file
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv
+python -m src.replay_server.main --data test_data/es-5m.csv
 
 # Start at a specific date
-python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --start-date 2023-01-15
+python -m src.replay_server.main --data test_data/es-5m.csv --start-date 2023-01-15
 ```
 
 Then open http://127.0.0.1:8000/replay in your browser.

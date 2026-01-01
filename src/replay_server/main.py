@@ -3,13 +3,13 @@ Main entry point for the Market Structure Analyzer Server.
 
 Usage:
     # Start without data (frontend prompts for file selection):
-    python -m src.ground_truth_annotator.main
+    python -m src.replay_server.main
 
     # Start with specific data file:
-    python -m src.ground_truth_annotator.main --data test_data/es-5m.csv
+    python -m src.replay_server.main --data test_data/es-5m.csv
 
     # Start at specific date:
-    python -m src.ground_truth_annotator.main --data test_data/es-5m.csv --start-date 2023-01-15
+    python -m src.replay_server.main --data test_data/es-5m.csv --start-date 2023-01-15
 """
 
 import argparse

@@ -34,6 +34,7 @@ For detailed technical architecture, see `Docs/State/architect_notes.md`.
 | Module | Purpose |
 |--------|---------|
 | `src/swing_analysis/` | Core detection: HierarchicalDetector, SwingNode, ReferenceFrame, BarAggregator |
+| `src/replay_server/` | FastAPI backend for Replay View, DAG inspection, Reference Layer queries |
 | `src/data/` | OHLC data loading and gap detection |
 
 ### Key Components

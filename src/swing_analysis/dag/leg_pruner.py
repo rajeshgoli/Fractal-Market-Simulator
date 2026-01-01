@@ -272,7 +272,6 @@ class LegPruner:
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id="",
                     leg_id=leg.leg_id,
                     reason="origin_proximity_prune",
                     explanation=prune_explanation,
@@ -332,7 +331,6 @@ class LegPruner:
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id="",
                     leg_id=leg.leg_id,
                     reason="origin_proximity_prune",
                     explanation=(
@@ -511,7 +509,6 @@ class LegPruner:
                 prune_events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id="",
                     leg_id=leg.leg_id,
                     reason="engulfed",
                 ))
@@ -628,7 +625,6 @@ class LegPruner:
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id="",
                     leg_id=leg.leg_id,
                     reason="min_counter_trend",
                     explanation=(
@@ -750,8 +746,7 @@ class LegPruner:
                     events.append(LegPrunedEvent(
                         bar_index=bar.index,
                         timestamp=timestamp,
-                        swing_id="",
-                        leg_id=counter_leg.leg_id,
+                            leg_id=counter_leg.leg_id,
                         reason="turn_ratio",
                         explanation=(
                             f"Turn ratio {turn_ratio:.3f} < {min_turn_ratio:.3f} threshold "
@@ -795,7 +790,6 @@ class LegPruner:
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id="",
                     leg_id=counter_leg.leg_id,
                     reason="turn_ratio_topk",
                     explanation=(
@@ -841,7 +835,6 @@ class LegPruner:
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id="",
                     leg_id=counter_leg.leg_id,
                     reason="turn_ratio_raw",
                     explanation=(

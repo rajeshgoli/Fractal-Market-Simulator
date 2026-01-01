@@ -42,11 +42,17 @@ Read in order:
 - ✅ `replay.py` and `calibrate.py` migrated to `update()` API
 
 **Pending architectural fixes (see `Docs/Working/architect_fixes.md`):**
-- Rename `ground_truth_annotator/` → `replay_server/` (misleading module name)
-- Remove refactoring vestiges: `swing_id` on events, `emit_level_crosses` config, tombstone comments
-- Unify `CalibrationSwingResponse` and `DagLegResponse` into single `LegResponse` schema
-- Connect `depth` field to `leg.depth` (currently hardcoded to 0)
-- Replace `parent_ids: List[str]` with `parent_leg_id: Optional[str]`
+- ✅ Renamed `ground_truth_annotator/` → `replay_server/` (module name now reflects purpose)
+- ✅ Removed refactoring vestiges: `swing_id` on events, `emit_level_crosses` config
+- ✅ Connected `depth` field to `leg.depth` (was hardcoded to 0)
+- ✅ Replaced `parent_ids: List[str]` with `parent_leg_id: Optional[str]`
+- Unify `CalibrationSwingResponse` and `DagLegResponse` into single `LegResponse` schema (deferred - larger change)
+
+**Future naming cleanup (low priority):**
+- `swing_config.py` → `detection_config.py` (configures detection algorithm, not swings)
+- `SwingConfig` → `DetectionConfig` (class rename to match)
+- `SwingEvent` → `DetectionEvent` (no swing events remain post-#394)
+- Keep `src/swing_analysis/` — valid domain term for users
 
 ---
 
@@ -298,7 +304,7 @@ All 3 pending changes accepted. Summary:
 - **Fibonacci levels:** Extended grid (16 levels)
 - **Resolution-agnostic:** 1m to 1mo source data supported
 - **Performance target:** <5s for 10K bars (achieved: 4.06s)
-- **Lean codebase:** 3 modules (data, swing_analysis, ground_truth_annotator)
+- **Lean codebase:** 3 modules (data, swing_analysis, replay_server)
 - **Backend-controlled boundaries:** Backend owns data visibility
 - **DAG/Reference separation:** DAG tracks structural extremas; Reference layer defines "good reference" semantics
 - **Rules by construction:** Temporal ordering enforced by bar relationships, not post-hoc filtering

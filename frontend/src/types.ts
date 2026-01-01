@@ -2,7 +2,6 @@ export enum EventType {
   SWING_FORMED = 'SWING_FORMED',
   COMPLETION = 'COMPLETION',
   INVALIDATION = 'INVALIDATION',
-  LEVEL_CROSS = 'LEVEL_CROSS',
 }
 
 export enum Direction {
@@ -91,6 +90,9 @@ export interface CalibrationSwing {
   size: number;
   rank: number;
   is_active: boolean;
+  // Hierarchy info
+  depth: number;
+  parent_leg_id: string | null;
   // Fib levels for overlay
   fib_0: number;
   fib_0382: number;
@@ -117,7 +119,6 @@ export interface TreeStatistics {
   largest_swing_id: string | null;
   median_range: number;
   smallest_range: number;
-  recently_invalidated: number;
   roots_have_children: boolean;
   siblings_detected: boolean;
   no_orphaned_nodes: boolean;
@@ -221,7 +222,6 @@ export interface ActiveLeg {
   spikiness: number | null;
   // Hierarchy fields for exploration (#250, #251)
   parent_leg_id: string | null;
-  swing_id: string | null;
   // Segment impulse tracking (#307): Two-impulse model for parent segments
   // impulse_to_deepest: Price change per bar from origin to deepest point
   impulse_to_deepest: number | null;

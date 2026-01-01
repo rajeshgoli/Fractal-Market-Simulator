@@ -70,9 +70,6 @@ class SwingConfig:
             Invalidated legs WITH A PARENT are pruned when price moves N x their range
             beyond origin. Root legs (no parent) are never pruned, preserving the anchor
             that began the move.
-        emit_level_crosses: Whether to emit LevelCrossEvent when price crosses Fib
-            levels. Disabled for performance by default. Can be toggled mid-stream
-            via update_config().
         enable_engulfed_prune: Whether to delete legs that are breached on both
             origin and pivot sides.
 
@@ -95,7 +92,6 @@ class SwingConfig:
     max_turns_per_pivot: int = 0
     max_turns_per_pivot_raw: int = 10
     stale_extension_threshold: float = 3.0
-    emit_level_crosses: bool = False
     # Pruning algorithm toggles (#288)
     enable_engulfed_prune: bool = True
 
@@ -129,7 +125,6 @@ class SwingConfig:
             max_turns_per_pivot=self.max_turns_per_pivot,
             max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
-            emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
@@ -152,7 +147,6 @@ class SwingConfig:
             max_turns_per_pivot=self.max_turns_per_pivot,
             max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
-            emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
@@ -201,7 +195,6 @@ class SwingConfig:
             max_turns_per_pivot=self.max_turns_per_pivot,
             max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
-            emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
@@ -227,33 +220,6 @@ class SwingConfig:
             max_turns_per_pivot=self.max_turns_per_pivot,
             max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=stale_extension_threshold,
-            emit_level_crosses=self.emit_level_crosses,
-            enable_engulfed_prune=self.enable_engulfed_prune,
-        )
-
-    def with_level_crosses(self, emit_level_crosses: bool) -> "SwingConfig":
-        """
-        Create a new config with modified level cross emission setting.
-
-        Since SwingConfig is frozen, this creates a new instance.
-
-        Args:
-            emit_level_crosses: Whether to emit LevelCrossEvent when price
-                crosses Fib levels. Set to False to skip level cross checks
-                (~55% of process_bar time) when events are not needed.
-        """
-        return SwingConfig(
-            bull=self.bull,
-            bear=self.bear,
-            origin_range_prune_threshold=self.origin_range_prune_threshold,
-            origin_time_prune_threshold=self.origin_time_prune_threshold,
-            proximity_prune_strategy=self.proximity_prune_strategy,
-            min_branch_ratio=self.min_branch_ratio,
-            min_turn_ratio=self.min_turn_ratio,
-            max_turns_per_pivot=self.max_turns_per_pivot,
-            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
-            stale_extension_threshold=self.stale_extension_threshold,
-            emit_level_crosses=emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
@@ -281,7 +247,6 @@ class SwingConfig:
             max_turns_per_pivot=self.max_turns_per_pivot,
             max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
-            emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
         )
 
@@ -308,7 +273,6 @@ class SwingConfig:
             max_turns_per_pivot=self.max_turns_per_pivot,
             max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
-            emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
@@ -336,7 +300,6 @@ class SwingConfig:
             max_turns_per_pivot=self.max_turns_per_pivot,
             max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
-            emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
@@ -362,7 +325,6 @@ class SwingConfig:
             max_turns_per_pivot=max_turns_per_pivot,
             max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
-            emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
@@ -390,6 +352,5 @@ class SwingConfig:
             max_turns_per_pivot=self.max_turns_per_pivot,
             max_turns_per_pivot_raw=max_turns_per_pivot_raw,
             stale_extension_threshold=self.stale_extension_threshold,
-            emit_level_crosses=self.emit_level_crosses,
             enable_engulfed_prune=self.enable_engulfed_prune,
         )

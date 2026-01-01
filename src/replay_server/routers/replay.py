@@ -191,8 +191,8 @@ def _leg_to_calibration_response(
         size=size,
         rank=rank,
         is_active=is_active,
-        depth=0,  # Swing hierarchy removed (#301)
-        parent_ids=[],  # Swing hierarchy removed (#301)
+        depth=leg.depth,
+        parent_leg_id=leg.parent_leg_id,
         fib_0=fib_0,
         fib_0382=fib_0382,
         fib_1=fib_1,
@@ -217,7 +217,6 @@ def _event_to_response(
         ReplayEventResponse for API response.
     """
     # Determine event type string
-    # Swing hierarchy removed in #301 - depth always 0, parent_ids always empty
     # Leg events (#309, #345)
     if isinstance(event, LegCreatedEvent):
         event_type = "LEG_CREATED"
@@ -232,8 +231,9 @@ def _event_to_response(
         event_type = "UNKNOWN"
         direction = "bull"
 
-    depth = 0  # Swing hierarchy removed (#301)
-    parent_ids: List[str] = []  # Swing hierarchy removed (#301)
+    # Get hierarchy info from leg
+    depth = leg.depth if leg else 0
+    parent_leg_id = leg.parent_leg_id if leg else None
 
     # Determine scale from size or default to "M"
     if leg and scale_thresholds:
@@ -268,7 +268,7 @@ def _event_to_response(
         swing=swing_response,
         trigger_explanation=trigger_explanation,
         depth=depth,
-        parent_ids=parent_ids,
+        parent_leg_id=parent_leg_id,
     )
 
 
@@ -718,7 +718,7 @@ async def calibrate_replay(
             max_depth=0, avg_children=0.0,
             defended_by_depth={"1": 0, "2": 0, "3": 0, "deeper": 0},
             largest_range=0.0, largest_swing_id=None, median_range=0.0,
-            smallest_range=0.0, recently_invalidated=0,
+            smallest_range=0.0,
             roots_have_children=True, siblings_detected=False, no_orphaned_nodes=True,
         )
         empty_swings_by_depth = SwingsByDepth()
