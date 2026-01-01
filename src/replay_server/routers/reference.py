@@ -19,6 +19,8 @@ from ..schemas import (
     ReferenceStateApiResponse,
     FibLevelResponse,
     ActiveLevelsResponse,
+    FilteredLegResponse,
+    FilterStatsResponse,
 )
 from .cache import get_cache
 
@@ -41,6 +43,49 @@ def _reference_swing_to_response(ref_swing) -> ReferenceSwingResponse:
     )
 
 
+def _filtered_leg_to_response(filtered_leg) -> FilteredLegResponse:
+    """Convert FilteredLeg to API response."""
+    return FilteredLegResponse(
+        leg_id=filtered_leg.leg.leg_id,
+        direction=filtered_leg.leg.direction,
+        origin_price=float(filtered_leg.leg.origin_price),
+        origin_index=filtered_leg.leg.origin_index,
+        pivot_price=float(filtered_leg.leg.pivot_price),
+        pivot_index=filtered_leg.leg.pivot_index,
+        scale=filtered_leg.scale,
+        filter_reason=filtered_leg.reason.value,
+        location=filtered_leg.location,
+        threshold=filtered_leg.threshold,
+    )
+
+
+def _compute_filter_stats(all_statuses, valid_leg_ids: set) -> FilterStatsResponse:
+    """Compute filter statistics from all leg statuses."""
+    total = len(all_statuses)
+    valid_count = len(valid_leg_ids)
+
+    # Count by reason
+    by_reason = {
+        'not_formed': 0,
+        'pivot_breached': 0,
+        'origin_breached': 0,
+        'completed': 0,
+        'cold_start': 0,
+    }
+
+    for status in all_statuses:
+        reason = status.reason.value
+        if reason != 'valid' and reason in by_reason:
+            by_reason[reason] += 1
+
+    return FilterStatsResponse(
+        total_legs=total,
+        valid_count=valid_count,
+        pass_rate=valid_count / total if total > 0 else 0.0,
+        by_reason=by_reason,
+    )
+
+
 @router.get("/api/reference-state", response_model=ReferenceStateApiResponse)
 async def get_reference_state(bar_index: Optional[int] = Query(None)):
     """
@@ -53,10 +98,11 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
         bar_index: Optional bar index for state. Uses current playback position if not provided.
 
     Returns:
-        ReferenceStateApiResponse with all valid references and groupings.
+        ReferenceStateApiResponse with all valid references, groupings,
+        filtered legs, and filter statistics for observation mode.
     """
     from ..api import get_state
-    from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceState
+    from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceState, FilterReason
 
     cache = get_cache()
 
@@ -115,6 +161,22 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
     # Update reference layer and get state
     ref_state: ReferenceState = cache.reference_layer.update(active_legs, bar)
 
+    # Get all legs with filter status for observation mode
+    all_statuses = cache.reference_layer.get_all_with_status(active_legs, bar)
+
+    # Build valid leg IDs set for stats
+    valid_leg_ids = {r.leg.leg_id for r in ref_state.references}
+
+    # Get only filtered (non-valid) legs for response
+    filtered_legs = [
+        _filtered_leg_to_response(s)
+        for s in all_statuses
+        if s.reason != FilterReason.VALID
+    ]
+
+    # Compute filter statistics
+    filter_stats = _compute_filter_stats(all_statuses, valid_leg_ids)
+
     # Convert to API response
     refs_response = [_reference_swing_to_response(r) for r in ref_state.references]
 
@@ -142,6 +204,8 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
         is_warming_up=ref_state.is_warming_up,
         warmup_progress=list(ref_state.warmup_progress),
         tracked_leg_ids=list(cache.reference_layer.get_tracked_leg_ids()),
+        filtered_legs=filtered_legs,
+        filter_stats=filter_stats,
     )
 
 

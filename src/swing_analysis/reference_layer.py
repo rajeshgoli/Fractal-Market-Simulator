@@ -24,6 +24,7 @@ See Docs/Reference/valid_swings.md for the canonical rules.
 import bisect
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import Enum
 from typing import List, Optional, Dict, Tuple, Set
 
 from .detection_config import DetectionConfig
@@ -31,6 +32,73 @@ from .reference_frame import ReferenceFrame
 from .reference_config import ReferenceConfig
 from .types import Bar
 from .dag.leg import Leg
+
+
+class FilterReason(Enum):
+    """
+    Reason why a leg was filtered from valid references.
+
+    Used by get_all_with_status() to explain why each leg didn't become
+    a valid trading reference. VALID indicates the leg passed all filters.
+
+    Filter conditions (evaluated in order):
+    1. COLD_START - System warming up (< min_swings_for_scale formed legs)
+    2. NOT_FORMED - Price hasn't reached formation threshold (38.2% retracement)
+    3. PIVOT_BREACHED - Location < 0 (price past defended pivot)
+    4. COMPLETED - Location > 2 (past 2× extension target)
+    5. ORIGIN_BREACHED - Scale-dependent tolerance exceeded
+       - S/M: 0% (any touch)
+       - L/XL: 15% trade breach OR 10% close breach
+
+    Example:
+        >>> leg = create_leg(...)
+        >>> status = ref_layer.get_all_with_status([leg], bar)[0]
+        >>> if status.reason == FilterReason.NOT_FORMED:
+        ...     print(f"Needs to reach {status.threshold:.1%} formation")
+    """
+    VALID = "valid"                   # Leg passes all filters
+    COLD_START = "cold_start"         # Not enough data for scale classification
+    NOT_FORMED = "not_formed"         # Price hasn't reached formation threshold
+    PIVOT_BREACHED = "pivot_breached" # Location < 0 (past defended pivot)
+    COMPLETED = "completed"           # Location > 2 (past 2× extension)
+    ORIGIN_BREACHED = "origin_breached"  # Scale-dependent tolerance exceeded
+
+
+@dataclass
+class FilteredLeg:
+    """
+    A DAG leg with its filter status for observability.
+
+    Unlike ReferenceSwing which only contains valid references, FilteredLeg
+    wraps ANY active leg with its filter reason. This enables the Reference
+    Observation UI to show why each leg was filtered.
+
+    Attributes:
+        leg: The underlying DAG leg.
+        reason: Why this leg was filtered (or VALID if it passed).
+        scale: Size classification ('S', 'M', 'L', 'XL').
+        location: Current price position in reference frame (0-2 range).
+        threshold: The threshold that was violated (for breach reasons).
+            - For NOT_FORMED: formation_fib_threshold (0.382)
+            - For ORIGIN_BREACHED: the tolerance exceeded
+            - None for other reasons.
+
+    Example:
+        >>> status = FilteredLeg(
+        ...     leg=leg,
+        ...     reason=FilterReason.NOT_FORMED,
+        ...     scale='M',
+        ...     location=0.28,
+        ...     threshold=0.382,
+        ... )
+        >>> print(f"Leg needs to reach {status.threshold:.1%} (currently at {status.location:.1%})")
+        Leg needs to reach 38.2% (currently at 28.0%)
+    """
+    leg: Leg
+    reason: FilterReason
+    scale: str                        # 'S' | 'M' | 'L' | 'XL'
+    location: float                   # Current price in reference frame
+    threshold: Optional[float] = None # Violated threshold (for breach reasons)
 
 
 @dataclass
@@ -854,3 +922,148 @@ class ReferenceLayer:
             is_warming_up=False,
             warmup_progress=self.cold_start_progress,
         )
+
+    def get_all_with_status(self, legs: List[Leg], bar: Bar) -> List[FilteredLeg]:
+        """
+        Get all legs with their filter status for observability.
+
+        Unlike update() which returns only valid references, this method returns
+        every active leg with its filter reason. Used by the Reference Observation
+        UI to show why each leg was filtered.
+
+        Filter evaluation order:
+        1. Cold Start - If < min_swings_for_scale formed, all legs get COLD_START
+        2. Not Formed - Leg hasn't reached formation threshold (38.2%)
+        3. Pivot Breached - Location < 0 (past defended pivot)
+        4. Completed - Location > 2 (past 2× extension target)
+        5. Origin Breached - Scale-dependent tolerance exceeded
+        6. VALID - Passed all filters
+
+        Args:
+            legs: Active legs from DAG.
+            bar: Current bar with OHLC.
+
+        Returns:
+            List of FilteredLeg for every input leg, with reason explaining
+            filter status.
+
+        Example:
+            >>> legs = detector.state.active_legs
+            >>> statuses = ref_layer.get_all_with_status(legs, bar)
+            >>> for s in statuses:
+            ...     if s.reason != FilterReason.VALID:
+            ...         print(f"{s.leg.leg_id}: {s.reason.value}")
+        """
+        current_price = Decimal(str(bar.close))
+        bar_high = Decimal(str(bar.high))
+        bar_low = Decimal(str(bar.low))
+        results: List[FilteredLeg] = []
+
+        # Check formation for all legs first (populates _formed_refs)
+        for leg in legs:
+            self._is_formed_for_reference(leg, current_price)
+
+        for leg in legs:
+            scale = self._classify_scale(leg.range)
+            location = self._compute_location(leg, current_price)
+
+            # Cold start: return all legs with COLD_START reason
+            if self.is_cold_start:
+                results.append(FilteredLeg(
+                    leg=leg,
+                    reason=FilterReason.COLD_START,
+                    scale=scale,
+                    location=min(location, 2.0),
+                    threshold=None,
+                ))
+                continue
+
+            # Not formed: hasn't reached formation threshold
+            if leg.leg_id not in self._formed_refs:
+                results.append(FilteredLeg(
+                    leg=leg,
+                    reason=FilterReason.NOT_FORMED,
+                    scale=scale,
+                    location=min(location, 2.0),
+                    threshold=self.reference_config.formation_fib_threshold,
+                ))
+                continue
+
+            # Compute extreme location for breach checks
+            if leg.direction == 'bear':
+                extreme_location = self._compute_location(leg, bar_low)
+            else:
+                extreme_location = self._compute_location(leg, bar_high)
+            bar_close_location = location
+
+            # Pivot breached: location < 0
+            if extreme_location < 0:
+                self._formed_refs.discard(leg.leg_id)
+                results.append(FilteredLeg(
+                    leg=leg,
+                    reason=FilterReason.PIVOT_BREACHED,
+                    scale=scale,
+                    location=min(location, 2.0),
+                    threshold=None,
+                ))
+                continue
+
+            # Completed: location > 2
+            if extreme_location > 2:
+                self._formed_refs.discard(leg.leg_id)
+                results.append(FilteredLeg(
+                    leg=leg,
+                    reason=FilterReason.COMPLETED,
+                    scale=scale,
+                    location=min(location, 2.0),
+                    threshold=2.0,
+                ))
+                continue
+
+            # Origin breached: scale-dependent tolerance
+            if scale in ('S', 'M'):
+                tolerance = self.reference_config.small_origin_tolerance
+                if extreme_location > (1.0 + tolerance):
+                    self._formed_refs.discard(leg.leg_id)
+                    results.append(FilteredLeg(
+                        leg=leg,
+                        reason=FilterReason.ORIGIN_BREACHED,
+                        scale=scale,
+                        location=min(location, 2.0),
+                        threshold=1.0 + tolerance,
+                    ))
+                    continue
+            else:  # L, XL
+                trade_tolerance = self.reference_config.big_trade_breach_tolerance
+                close_tolerance = self.reference_config.big_close_breach_tolerance
+                if extreme_location > (1.0 + trade_tolerance):
+                    self._formed_refs.discard(leg.leg_id)
+                    results.append(FilteredLeg(
+                        leg=leg,
+                        reason=FilterReason.ORIGIN_BREACHED,
+                        scale=scale,
+                        location=min(location, 2.0),
+                        threshold=1.0 + trade_tolerance,
+                    ))
+                    continue
+                if bar_close_location > (1.0 + close_tolerance):
+                    self._formed_refs.discard(leg.leg_id)
+                    results.append(FilteredLeg(
+                        leg=leg,
+                        reason=FilterReason.ORIGIN_BREACHED,
+                        scale=scale,
+                        location=min(location, 2.0),
+                        threshold=1.0 + close_tolerance,
+                    ))
+                    continue
+
+            # Passed all filters - VALID
+            results.append(FilteredLeg(
+                leg=leg,
+                reason=FilterReason.VALID,
+                scale=scale,
+                location=min(location, 2.0),
+                threshold=None,
+            ))
+
+        return results

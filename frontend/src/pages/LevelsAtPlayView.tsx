@@ -60,6 +60,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [sessionInfo, setSessionInfo] = useState<{ windowOffset: number; totalSourceBars: number } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProcessingTill, setIsProcessingTill] = useState(false);
+  const [showFiltered, setShowFiltered] = useState(false);  // Reference Observation mode
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -636,6 +637,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 bars={visibleChart1Bars}
                 stickyLegIds={stickyLegIds}
                 onLegClick={toggleStickyLeg}
+                filteredLegs={referenceState?.filtered_legs ?? []}
+                showFiltered={showFiltered}
               />
             }
             chart2Overlay={
@@ -647,6 +650,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 bars={visibleChart2Bars}
                 stickyLegIds={stickyLegIds}
                 onLegClick={toggleStickyLeg}
+                filteredLegs={referenceState?.filtered_legs ?? []}
+                showFiltered={showFiltered}
               />
             }
           />
@@ -710,7 +715,11 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
           <ResizeHandle onResize={handlePanelResize} />
 
           <div className="shrink-0" style={{ height: chartPrefs.explanationPanelHeight }}>
-            <ReferenceTelemetryPanel referenceState={referenceState} />
+            <ReferenceTelemetryPanel
+              referenceState={referenceState}
+              showFiltered={showFiltered}
+              onToggleShowFiltered={() => setShowFiltered(prev => !prev)}
+            />
           </div>
         </main>
 

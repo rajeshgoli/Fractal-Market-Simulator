@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2025-12-31
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- #400 — Reference Observation Mode: Backend filter status API (FilterReason enum, FilteredLeg dataclass, get_all_with_status method, extended /api/reference-state with filtered_legs and filter_stats) + Frontend UI (Show Filtered toggle in telemetry panel, dashed filtered leg rendering in overlay, filter reason badges)
 - #403 — Router cleanup: removed duplicate helper functions from replay.py, updated to use helpers/ imports
 - #404 — DAG cleanup epic: simplified config (removed enable_engulfed_prune, min_branch_ratio, turn_ratio_mode; added max_turns), symmetric engulfed_breach_threshold, discrete Fib slider, rebuilt DetectionConfigPanel with tooltips, dynamic column layout, Followed Legs panel as last column
 - #408 — Dead code cleanup: removed replay mode infrastructure, SWING_* events, 'formed' field vestiges, fixed follow leg state machine ('forming'/'formed' → 'active')

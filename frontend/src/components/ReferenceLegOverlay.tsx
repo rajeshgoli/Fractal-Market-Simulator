@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import type { IChartApi, ISeriesApi, Time, LineData, LineWidth } from 'lightweight-charts';
 import { LineSeries, LineStyle } from 'lightweight-charts';
-import { ReferenceSwing } from '../lib/api';
+import { ReferenceSwing, FilteredLeg, FilterReason } from '../lib/api';
 import { BarData } from '../types';
 
 interface ReferenceLegOverlayProps {
@@ -13,6 +13,9 @@ interface ReferenceLegOverlayProps {
   // Phase 2: Sticky leg support
   stickyLegIds?: Set<string>;
   onLegClick?: (legId: string) => void;
+  // Reference Observation mode (Issue #400)
+  filteredLegs?: FilteredLeg[];
+  showFiltered?: boolean;
 }
 
 // Scale to line width mapping
@@ -46,6 +49,16 @@ const STICKY_COLORS = [
   '#f97316', // orange
 ];
 
+// Filter reason badge colors (Issue #400)
+const FILTER_REASON_COLORS: Record<FilterReason, { bg: string; text: string; label: string }> = {
+  'valid': { bg: '#22c55e', text: '#ffffff', label: 'Valid' },
+  'not_formed': { bg: '#eab308', text: '#000000', label: 'Not Formed' },
+  'pivot_breached': { bg: '#ef4444', text: '#ffffff', label: 'Pivot' },
+  'origin_breached': { bg: '#f97316', text: '#ffffff', label: 'Origin' },
+  'completed': { bg: '#3b82f6', text: '#ffffff', label: 'Complete' },
+  'cold_start': { bg: '#6b7280', text: '#ffffff', label: 'Cold' },
+};
+
 /**
  * ReferenceLegOverlay renders reference legs using lightweight-charts LineSeries.
  *
@@ -62,6 +75,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   bars,
   stickyLegIds = new Set(),
   onLegClick,
+  filteredLegs = [],
+  showFiltered = false,
 }) => {
   // Track created line series so we can remove them on update
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,6 +87,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
   // Label positions state (for rendering scale/location badges)
   const [labelPositions, setLabelPositions] = useState<Map<string, { x: number; y: number; ref: ReferenceSwing }>>(new Map());
+  // Filtered leg label positions (Issue #400)
+  const [filteredLabelPositions, setFilteredLabelPositions] = useState<Map<string, { x: number; y: number; leg: FilteredLeg }>>(new Map());
 
   // Hover state
   const [hoveredLegId, setHoveredLegId] = useState<string | null>(null);
@@ -264,6 +281,57 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     }
   }, [chart, series, getTimestampForIndex]);
 
+  // Create line series for a filtered leg (dashed, semi-transparent)
+  const createFilteredLegLine = useCallback((leg: FilteredLeg): ISeriesApi<'Line'> | null => {
+    if (!chart || !series) return null;
+
+    // Use a muted gray color for filtered legs
+    const color = '#6b7280';
+    const lineWidth = 1 as LineWidth;
+    const opacity = 0.4;
+
+    // Get timestamps for origin and pivot
+    const originTime = getTimestampForIndex(leg.origin_index);
+    const pivotTime = getTimestampForIndex(leg.pivot_index);
+
+    if (originTime === null || pivotTime === null) {
+      return null;
+    }
+
+    try {
+      // Create dashed line series for filtered leg
+      const lineSeries = chart.addSeries(LineSeries, {
+        color,
+        lineWidth,
+        lineStyle: LineStyle.Dashed,
+        crosshairMarkerVisible: false,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+
+      // Apply opacity via color
+      lineSeries.applyOptions({
+        color: `rgba(107, 114, 128, ${opacity})`,
+      });
+
+      // Set data: line from origin to pivot
+      const data: LineData<Time>[] = [
+        { time: originTime as Time, value: leg.origin_price },
+        { time: pivotTime as Time, value: leg.pivot_price },
+      ];
+
+      // Sort by time (required by lightweight-charts)
+      data.sort((a, b) => (a.time as number) - (b.time as number));
+
+      lineSeries.setData(data);
+
+      return lineSeries;
+    } catch (error) {
+      console.error('Failed to create filtered leg line:', error);
+      return null;
+    }
+  }, [chart, series, getTimestampForIndex]);
+
   // Update label positions when visible range changes
   const updateLabelPositions = useCallback(() => {
     if (!chart || !series || bars.length === 0) {
@@ -289,6 +357,30 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
     setLabelPositions(positions);
   }, [chart, series, references, fadingRefs, bars, getTimestampForIndex]);
+
+  // Update filtered label positions (Issue #400)
+  const updateFilteredLabelPositions = useCallback(() => {
+    if (!chart || !series || bars.length === 0 || !showFiltered) {
+      setFilteredLabelPositions(new Map());
+      return;
+    }
+
+    const positions = new Map<string, { x: number; y: number; leg: FilteredLeg }>();
+
+    for (const leg of filteredLegs) {
+      const pivotTime = getTimestampForIndex(leg.pivot_index);
+      if (pivotTime === null) continue;
+
+      const pivotX = chart.timeScale().timeToCoordinate(pivotTime as Time);
+      const pivotY = series.priceToCoordinate(leg.pivot_price);
+
+      if (pivotX !== null && pivotY !== null) {
+        positions.set(leg.leg_id, { x: pivotX, y: pivotY, leg });
+      }
+    }
+
+    setFilteredLabelPositions(positions);
+  }, [chart, series, filteredLegs, bars, showFiltered, getTimestampForIndex]);
 
   // Update fib levels for hovered and sticky legs
   const updateFibLevels = useCallback(() => {
@@ -335,8 +427,19 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         }
       }
 
+      // Create line series for filtered legs when showFiltered is true (Issue #400)
+      if (showFiltered) {
+        for (const leg of filteredLegs) {
+          const lineSeries = createFilteredLegLine(leg);
+          if (lineSeries) {
+            lineSeriesRef.current.set(`filtered_${leg.leg_id}`, lineSeries);
+          }
+        }
+      }
+
       // Update label positions
       updateLabelPositions();
+      updateFilteredLabelPositions();
 
       // Update fib levels
       updateFibLevels();
@@ -352,7 +455,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         // Ignore disposal errors during cleanup
       }
     };
-  }, [chart, series, references, fadingRefs, bars, clearLineSeries, clearFibSeries, createRefLine, updateLabelPositions, updateFibLevels]);
+  }, [chart, series, references, fadingRefs, bars, clearLineSeries, clearFibSeries, createRefLine, updateLabelPositions, updateFibLevels, showFiltered, filteredLegs, createFilteredLegLine, updateFilteredLabelPositions]);
 
   // Update fib levels when hover or sticky state changes
   useEffect(() => {
@@ -365,6 +468,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
     const handleRangeChange = () => {
       updateLabelPositions();
+      updateFilteredLabelPositions();
       updateFibLevels();
     };
 
@@ -373,7 +477,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
     };
-  }, [chart, updateLabelPositions, updateFibLevels]);
+  }, [chart, updateLabelPositions, updateFilteredLabelPositions, updateFibLevels]);
 
   // Handle mouse enter on label
   const handleLabelMouseEnter = useCallback((legId: string) => {
@@ -394,7 +498,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
   // Get chart container for label positioning
   const chartContainer = chart?.chartElement()?.closest('.chart-container');
-  if (!chartContainer || labelPositions.size === 0) {
+  if (!chartContainer || (labelPositions.size === 0 && filteredLabelPositions.size === 0)) {
     return null;
   }
 
@@ -523,6 +627,62 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
           });
         });
       })()}
+
+      {/* Filtered leg badges (Issue #400) */}
+      {showFiltered && Array.from(filteredLabelPositions.entries()).map(([legId, { x, y, leg }]) => {
+        const filterBadge = FILTER_REASON_COLORS[leg.filter_reason] || FILTER_REASON_COLORS['cold_start'];
+
+        return (
+          <g
+            key={`filtered_${legId}`}
+            transform={`translate(${x + 8}, ${y})`}
+            style={{ pointerEvents: 'all' }}
+          >
+            {/* Filter reason badge */}
+            <rect
+              x={0}
+              y={-10}
+              width={48}
+              height={16}
+              rx={3}
+              fill={filterBadge.bg}
+              opacity={0.8}
+            />
+            <text
+              x={24}
+              y={2}
+              textAnchor="middle"
+              fill={filterBadge.text}
+              fontSize={9}
+              fontWeight="500"
+              fontFamily="system-ui, sans-serif"
+            >
+              {filterBadge.label}
+            </text>
+
+            {/* Scale badge (smaller, to the right) */}
+            <rect
+              x={52}
+              y={-10}
+              width={18}
+              height={16}
+              rx={3}
+              fill="rgba(75, 85, 99, 0.6)"
+            />
+            <text
+              x={61}
+              y={2}
+              textAnchor="middle"
+              fill="#9ca3af"
+              fontSize={9}
+              fontWeight="500"
+              fontFamily="system-ui, sans-serif"
+            >
+              {leg.scale}
+            </text>
+          </g>
+        );
+      })}
     </svg>
   );
 };

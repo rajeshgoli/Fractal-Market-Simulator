@@ -1,13 +1,26 @@
 import React from 'react';
-import { ReferenceStateResponse } from '../lib/api';
-import { TrendingUp, TrendingDown, Layers, Activity } from 'lucide-react';
+import { ReferenceStateResponseExtended } from '../lib/api';
+import { TrendingUp, TrendingDown, Layers, Activity, Filter, Eye, EyeOff } from 'lucide-react';
 
 interface ReferenceTelemetryPanelProps {
-  referenceState: ReferenceStateResponse | null;
+  referenceState: ReferenceStateResponseExtended | null;
+  showFiltered: boolean;
+  onToggleShowFiltered: () => void;
 }
+
+// Filter reason display names and colors
+const FILTER_REASON_LABELS: Record<string, { label: string; color: string }> = {
+  not_formed: { label: 'Not Formed', color: 'text-yellow-400' },
+  pivot_breached: { label: 'Pivot Breached', color: 'text-red-400' },
+  origin_breached: { label: 'Origin Breached', color: 'text-orange-400' },
+  completed: { label: 'Completed', color: 'text-blue-400' },
+  cold_start: { label: 'Cold Start', color: 'text-gray-400' },
+};
 
 export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = ({
   referenceState,
+  showFiltered,
+  onToggleShowFiltered,
 }) => {
   if (!referenceState) {
     return (
@@ -42,7 +55,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
     );
   }
 
-  const { by_scale, by_direction, direction_imbalance, references } = referenceState;
+  const { by_scale, by_direction, direction_imbalance, references, filter_stats } = referenceState;
 
   // Find biggest and most impulsive
   const biggestRef = references.length > 0
@@ -63,7 +76,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
 
   return (
     <div className="h-full bg-app-secondary p-4 overflow-y-auto border-t border-app-border">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         {/* References by Scale */}
         <div className="bg-app-card rounded-lg p-3 border border-app-border">
           <div className="flex items-center gap-2 mb-3">
@@ -175,6 +188,63 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
               </div>
             )}
           </div>
+        </div>
+
+        {/* Filter Stats (Issue #400) */}
+        <div className="bg-app-card rounded-lg p-3 border border-app-border">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Filter size={14} className="text-trading-blue" />
+              <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">Filters</h3>
+            </div>
+            <button
+              onClick={onToggleShowFiltered}
+              className={`p-1 rounded transition-colors ${
+                showFiltered
+                  ? 'bg-trading-blue/20 text-trading-blue'
+                  : 'bg-app-border text-app-muted hover:text-app-text'
+              }`}
+              title={showFiltered ? 'Hide filtered legs' : 'Show filtered legs'}
+            >
+              {showFiltered ? <Eye size={14} /> : <EyeOff size={14} />}
+            </button>
+          </div>
+          {filter_stats ? (
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-app-muted">Pass Rate</span>
+                <span className="text-sm font-mono text-app-text">
+                  {(filter_stats.pass_rate * 100).toFixed(0)}%
+                </span>
+              </div>
+              <div className="w-full bg-app-border rounded-full h-1.5 mb-2">
+                <div
+                  className="bg-trading-bull h-1.5 rounded-full transition-all"
+                  style={{ width: `${filter_stats.pass_rate * 100}%` }}
+                />
+              </div>
+              <div className="text-[10px] text-app-muted">
+                {filter_stats.valid_count} / {filter_stats.total_legs} legs passed
+              </div>
+              {Object.entries(filter_stats.by_reason)
+                .filter(([, count]) => count > 0)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 3)
+                .map(([reason, count]) => {
+                  const info = FILTER_REASON_LABELS[reason] || { label: reason, color: 'text-app-muted' };
+                  return (
+                    <div key={reason} className="flex justify-between items-center text-[10px]">
+                      <span className={info.color}>{info.label}</span>
+                      <span className="font-mono text-app-muted">{count}</span>
+                    </div>
+                  );
+                })}
+            </div>
+          ) : (
+            <div className="text-xs text-app-muted text-center py-2">
+              No filter data
+            </div>
+          )}
         </div>
       </div>
     </div>

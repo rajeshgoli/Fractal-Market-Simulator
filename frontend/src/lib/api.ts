@@ -588,8 +588,33 @@ export interface ReferenceStateResponse {
   warmup_progress: [number, number];
 }
 
+// Reference Observation types (Issue #400)
+export type FilterReason = 'valid' | 'cold_start' | 'not_formed' | 'pivot_breached' | 'completed' | 'origin_breached';
+
+export interface FilteredLeg {
+  leg_id: string;
+  direction: 'bull' | 'bear';
+  origin_price: number;
+  origin_index: number;
+  pivot_price: number;
+  pivot_index: number;
+  scale: 'S' | 'M' | 'L' | 'XL';
+  filter_reason: FilterReason;
+  location: number;
+  threshold: number | null;
+}
+
+export interface FilterStats {
+  total_legs: number;
+  valid_count: number;
+  pass_rate: number;
+  by_reason: Record<string, number>;
+}
+
 export interface ReferenceStateResponseExtended extends ReferenceStateResponse {
   tracked_leg_ids: string[];
+  filtered_legs: FilteredLeg[];
+  filter_stats: FilterStats | null;
 }
 
 export async function fetchReferenceState(barIndex?: number): Promise<ReferenceStateResponseExtended> {

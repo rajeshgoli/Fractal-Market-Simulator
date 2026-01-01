@@ -607,6 +607,9 @@ class ReferenceStateApiResponse(BaseModel):
     is_warming_up: bool
     warmup_progress: List[int]  # [current, target]
     tracked_leg_ids: List[str] = []  # Leg IDs tracked for level crossing
+    # Reference Observation Mode (Issue #400)
+    filtered_legs: List['FilteredLegResponse'] = []  # All non-valid legs with reasons
+    filter_stats: Optional['FilterStatsResponse'] = None  # Filter breakdown statistics
 
 
 class FibLevelResponse(BaseModel):
@@ -621,3 +624,30 @@ class FibLevelResponse(BaseModel):
 class ActiveLevelsResponse(BaseModel):
     """API response for all active fib levels from valid references."""
     levels_by_ratio: Dict[str, List[FibLevelResponse]]  # Keyed by ratio as string
+
+
+# ============================================================================
+# Reference Observation Models (Issue #400 - Reference Observation Mode)
+# ============================================================================
+
+
+class FilteredLegResponse(BaseModel):
+    """API response for a filtered leg with filter reason."""
+    leg_id: str
+    direction: str  # "bull" or "bear"
+    origin_price: float
+    origin_index: int
+    pivot_price: float
+    pivot_index: int
+    scale: str  # "S", "M", "L", "XL"
+    filter_reason: str  # "valid", "cold_start", "not_formed", "pivot_breached", "completed", "origin_breached"
+    location: float  # 0.0 - 2.0 (current price position in reference frame)
+    threshold: Optional[float] = None  # Violated threshold (for breach reasons)
+
+
+class FilterStatsResponse(BaseModel):
+    """API response for filter statistics."""
+    total_legs: int
+    valid_count: int
+    pass_rate: float
+    by_reason: Dict[str, int]  # Counts by filter reason
