@@ -72,8 +72,13 @@ test.csv
 
 # Claude Code Settings
 .claude/settings.local.json
-test_data/es-1m.csv
 .archive/
+
+# Test data (symlinks to ~/Documents/backtest-data/, too large for git)
+test_data/*.csv
+
+# Data refresh logs
+logs/
 
 # Validation session files
 validation_sessions/
@@ -84,6 +89,11 @@ validation_results/
 
 # Local-only files
 .claude/why.md
+
+# Credentials (stored in ~/.databento_credentials, not in project)
+.databento_credentials
+*_credentials
+*.credentials
 
 # Ground truth annotator - in-progress sessions (ephemeral)
 ground_truth/sessions/
