@@ -23,19 +23,11 @@ const SCALE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
   'S': { bg: 'bg-gray-600/20', text: 'text-gray-400' },
 };
 
-// Format touch display
-const formatTouch = (touch: LevelTouch): string => {
-  const ratioLabel = touch.ratio.toFixed(3);
-  return `${ratioLabel} (${touch.scale} ${touch.direction})`;
-};
-
 // Format level display
-const formatLevel = (level: FibLevel, currentPrice: number): { label: string; distance: string; direction: 'above' | 'below' } => {
-  const ratioLabel = level.ratio.toFixed(3);
+const formatLevel = (level: FibLevel, currentPrice: number): { distance: string; direction: 'above' | 'below' } => {
   const direction = level.price > currentPrice ? 'above' : 'below';
   const distance = Math.abs(level.price - currentPrice).toFixed(2);
   return {
-    label: `${ratioLabel} @ ${level.price.toFixed(2)}`,
     distance,
     direction,
   };
@@ -204,7 +196,7 @@ const ActiveLevelItem: React.FC<{
   onToggleTrack: (legId: string) => Promise<{ success: boolean; error?: string }>;
 }> = ({ level, currentPrice, isTracked, onToggleTrack }) => {
   const scaleStyle = SCALE_BADGE_COLORS[level.scale] || SCALE_BADGE_COLORS['S'];
-  const { label, distance, direction } = formatLevel(level, currentPrice);
+  const { distance, direction } = formatLevel(level, currentPrice);
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();

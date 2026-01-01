@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import type { IChartApi, ISeriesApi, Time, LineData, LineWidth } from 'lightweight-charts';
-import { LineSeries, LineStyle, AreaSeries } from 'lightweight-charts';
+import { LineSeries, LineStyle } from 'lightweight-charts';
 import { ReferenceSwing, FilteredLeg, FilterReason, ConfluenceZone } from '../lib/api';
 import { BarData } from '../types';
 
@@ -959,12 +959,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       })}
 
       {/* Confluence zone labels (Issue #421) */}
-      {!showFiltered && Array.from(confluenceLabelPositions.entries()).map(([key, { x, y, zone }]) => {
-        // Build label showing participating references
-        const refLabels = zone.levels.slice(0, 3).map(l => `${l.scale} ${l.direction === 'bull' ? '▲' : '▼'}`).join(' + ');
-        const moreCount = zone.levels.length > 3 ? ` +${zone.levels.length - 3}` : '';
-
-        return (
+      {!showFiltered && Array.from(confluenceLabelPositions.entries()).map(([key, { x, y, zone }]) => (
           <g key={key} transform={`translate(${x - 80}, ${y})`}>
             {/* Confluence badge */}
             <rect
@@ -1000,8 +995,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
               {zone.reference_count} refs
             </text>
           </g>
-        );
-      })}
+      ))}
     </svg>
   );
 };

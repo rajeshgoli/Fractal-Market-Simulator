@@ -1,6 +1,6 @@
 import React from 'react';
 import { ReferenceStateResponseExtended, LevelCrossEvent, LifecycleEvent } from '../lib/api';
-import { TrendingUp, TrendingDown, Layers, Activity, Filter, Eye, EyeOff, Crosshair, AlertCircle, X, Zap, Clock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Layers, Activity, Filter, Eye, EyeOff, Crosshair, AlertCircle, X, Zap } from 'lucide-react';
 
 interface ReferenceTelemetryPanelProps {
   referenceState: ReferenceStateResponseExtended | null;
