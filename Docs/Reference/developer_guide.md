@@ -967,10 +967,6 @@ python -m src.replay_server.main --data test.csv --port 8001
 The replay view backend (`src/replay_server/`) uses LegDetector for incremental swing detection with Reference layer filtering:
 
 ```python
-# Config: GET /api/config
-# Returns application configuration including visualization mode
-# {mode: "calibration" | "dag"}
-
 # Init: POST /api/dag/init (#410)
 # Initializes detector with empty state, ready for incremental bar processing
 # Returns empty calibration response (no bars processed)
@@ -1061,7 +1057,7 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
 ┌─────────────────────────────────────────────────────────────────┐
 │                     API Request Flow                             │
 │                                                                  │
-│  1. calibrate(bars) ─────► LegDetector                          │
+│  1. init() ─────────────► LegDetector                           │
 │                              │                                   │
 │                              ▼                                   │
 │  2. detector.get_active_swings() ────► Raw DAG swings           │
@@ -1077,13 +1073,11 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
 ```
 
 **Key files:**
-- `src/replay_server/routers/` - API endpoints (modularized #398)
-  - `replay.py` - Core advance/reverse/calibrate endpoints
-  - `dag.py` - DAG state, lineage, followed-legs endpoints
+- `src/replay_server/routers/` - API endpoints (modularized #398, consolidated #410)
+  - `dag.py` - Init, advance, reverse, state, lineage, config, followed-legs endpoints
   - `reference.py` - Reference Layer state and levels
-  - `config.py` - Detection config endpoints
   - `feedback.py` - Playback feedback endpoint
-  - `cache.py` - Shared ReplayCache state
+  - `cache.py` - Shared replay cache state
   - `helpers/` - Conversion and builder functions
 - `src/swing_analysis/reference_layer.py` - Filtering logic
 - `src/swing_analysis/dag/` - DAG algorithm (modularized)
@@ -1104,7 +1098,7 @@ The feedback system captures user observations with rich context snapshots:
 **Snapshot fields:**
 ```typescript
 interface PlaybackFeedbackSnapshot {
-  state: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
+  state: 'initializing' | 'initialized' | 'playing' | 'paused';
   csv_index: number;           // Authoritative CSV row index
   bars_since_calibration: number;
   current_bar_index: number;

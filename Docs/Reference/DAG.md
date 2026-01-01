@@ -924,14 +924,14 @@ detector = LegDetector()
 new_config = DetectionConfig.default().with_bull(formation_fib=0.5)
 detector.update_config(new_config)
 
-# Must re-calibrate after config change
+# Must re-process after config change
 for bar in bars:
     detector.process_bar(bar)
 ```
 
 **Key behaviors:**
 - `update_config()` resets internal state (clears legs, pending origins, etc.)
-- Caller must re-run calibration from bar 0 to apply new thresholds
+- Caller must re-process bars from bar 0 to apply new thresholds
 - Useful for experimenting with different thresholds during analysis
 
 **Frontend integration:**
@@ -941,7 +941,7 @@ The Detection Config Panel in the sidebar provides sliders for adjusting thresho
 - Max Legs (0-20) — Limit legs per pivot, scored by counter-trend range (#404)
 - Bull/Bear Engulfed Threshold (0.0-1.0) — Per-direction engulfed pruning (1.0 = disabled)
 
-Changes trigger automatic re-calibration via `PUT /api/replay/config`.
+Changes trigger automatic re-initialization via `PUT /api/dag/config`.
 
 ### Retired Parameters (Issue #404)
 
