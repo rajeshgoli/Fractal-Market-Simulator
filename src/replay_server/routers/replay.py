@@ -38,7 +38,8 @@ from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceSwing
 from ...swing_analysis.bar_aggregator import BarAggregator
 from ..schemas import (
     BarResponse,
-    CalibrationSwingResponse,
+    LegResponse,  # Unified schema (Issue #398)
+    CalibrationSwingResponse,  # Legacy alias to LegResponse
     ReplayAdvanceRequest,
     ReplayReverseRequest,
     ReplayBarResponse,
@@ -128,76 +129,91 @@ def _size_to_scale(size: float, scale_thresholds: Dict[str, float]) -> str:
     return "S"
 
 
-def _leg_to_calibration_response(
+def _leg_to_response(
     leg: Leg,
     is_active: bool,
     rank: int = 1,
     scale_thresholds: Optional[Dict[str, float]] = None,
-) -> CalibrationSwingResponse:
+    include_fib_levels: bool = True,
+) -> 'LegResponse':
     """
-    Convert Leg to CalibrationSwingResponse.
+    Convert Leg to LegResponse (unified schema).
 
     Args:
         leg: Leg from LegDetector.
         is_active: Whether leg is currently active.
         rank: Leg rank by size.
         scale_thresholds: Optional thresholds for scale assignment.
+        include_fib_levels: Whether to compute and include fib levels.
 
     Returns:
-        CalibrationSwingResponse for API response.
+        LegResponse for API response.
     """
-    # Derive high/low from origin/pivot based on direction
-    if leg.direction == "bull":
-        high = float(leg.pivot_price)
-        low = float(leg.origin_price)
-        high_bar_index = leg.pivot_index
-        low_bar_index = leg.origin_index
-    else:
-        high = float(leg.origin_price)
-        low = float(leg.pivot_price)
-        high_bar_index = leg.origin_index
-        low_bar_index = leg.pivot_index
+    from ..schemas import LegResponse
 
-    size = high - low
+    origin_price = float(leg.origin_price)
+    pivot_price = float(leg.pivot_price)
+    range_size = abs(pivot_price - origin_price)
 
     # Determine scale - use size-based thresholds if available, otherwise "M"
+    scale = None
     if scale_thresholds:
-        scale = _size_to_scale(size, scale_thresholds)
-    else:
-        scale = "M"
+        scale = _size_to_scale(range_size, scale_thresholds)
 
-    # Calculate Fib levels based on direction
-    if leg.direction == "bull":
-        # Bull: defending low (origin)
-        fib_0 = low
-        fib_0382 = low + size * 0.382
-        fib_1 = high
-        fib_2 = low + size * 2.0
-    else:
-        # Bear: defending high (origin)
-        fib_0 = high
-        fib_0382 = high - size * 0.382
-        fib_1 = low
-        fib_2 = high - size * 2.0
+    # Calculate Fib levels if requested
+    fib_levels = None
+    if include_fib_levels and range_size > 0:
+        if leg.direction == "bull":
+            # Bull: origin=low, pivot=high
+            fib_levels = {
+                "0": origin_price,
+                "0.382": origin_price + range_size * 0.382,
+                "0.5": origin_price + range_size * 0.5,
+                "0.618": origin_price + range_size * 0.618,
+                "1": pivot_price,
+                "1.382": origin_price + range_size * 1.382,
+                "1.618": origin_price + range_size * 1.618,
+                "2": origin_price + range_size * 2.0,
+            }
+        else:
+            # Bear: origin=high, pivot=low
+            fib_levels = {
+                "0": origin_price,
+                "0.382": origin_price - range_size * 0.382,
+                "0.5": origin_price - range_size * 0.5,
+                "0.618": origin_price - range_size * 0.618,
+                "1": pivot_price,
+                "1.382": origin_price - range_size * 1.382,
+                "1.618": origin_price - range_size * 1.618,
+                "2": origin_price - range_size * 2.0,
+            }
 
-    return CalibrationSwingResponse(
-        id=leg.leg_id,
-        scale=scale,
+    return LegResponse(
+        leg_id=leg.leg_id,
         direction=leg.direction,
-        high_price=high,
-        high_bar_index=high_bar_index,
-        low_price=low,
-        low_bar_index=low_bar_index,
-        size=size,
+        origin_price=origin_price,
+        origin_index=leg.origin_index,
+        pivot_price=pivot_price,
+        pivot_index=leg.pivot_index,
+        range=range_size,
         rank=rank,
         is_active=is_active,
         depth=leg.depth,
         parent_leg_id=leg.parent_leg_id,
-        fib_0=fib_0,
-        fib_0382=fib_0382,
-        fib_1=fib_1,
-        fib_2=fib_2,
+        fib_levels=fib_levels,
+        scale=scale,
     )
+
+
+# Legacy alias for backward compatibility during migration
+def _leg_to_calibration_response(
+    leg: Leg,
+    is_active: bool,
+    rank: int = 1,
+    scale_thresholds: Optional[Dict[str, float]] = None,
+) -> 'LegResponse':
+    """Legacy alias - use _leg_to_response instead."""
+    return _leg_to_response(leg, is_active, rank, scale_thresholds)
 
 
 def _event_to_response(
@@ -530,7 +546,7 @@ def _compute_tree_statistics(
             avg_children=0.0,
             defended_by_depth={"1": 0, "2": 0, "3": 0, "deeper": 0},
             largest_range=0.0,
-            largest_swing_id=None,
+            largest_leg_id=None,
             median_range=0.0,
             smallest_range=0.0,
             roots_have_children=True,
@@ -562,10 +578,10 @@ def _compute_tree_statistics(
     smallest_range = sorted_ranges[-1] if sorted_ranges else 0.0
 
     # Find the largest leg ID
-    largest_swing_id = None
+    largest_leg_id = None
     for leg in all_legs:
         if float(leg.range) == largest_range:
-            largest_swing_id = leg.leg_id
+            largest_leg_id = leg.leg_id
             break
 
     # Validation checks simplified (swing hierarchy removed #301)
@@ -582,7 +598,7 @@ def _compute_tree_statistics(
         avg_children=round(avg_children, 1),
         defended_by_depth=defended_by_depth,
         largest_range=round(largest_range, 2),
-        largest_swing_id=largest_swing_id,
+        largest_leg_id=largest_leg_id,
         median_range=round(median_range, 2),
         smallest_range=round(smallest_range, 2),
         roots_have_children=roots_have_children,
@@ -717,7 +733,7 @@ async def calibrate_replay(
             root_swings=0, root_bull=0, root_bear=0, total_nodes=0,
             max_depth=0, avg_children=0.0,
             defended_by_depth={"1": 0, "2": 0, "3": 0, "deeper": 0},
-            largest_range=0.0, largest_swing_id=None, median_range=0.0,
+            largest_range=0.0, largest_leg_id=None, median_range=0.0,
             smallest_range=0.0,
             roots_have_children=True, siblings_detected=False, no_orphaned_nodes=True,
         )

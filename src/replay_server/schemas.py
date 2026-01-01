@@ -43,30 +43,40 @@ class SessionResponse(BaseModel):
 
 
 # ============================================================================
-# Calibration Models
+# Unified Leg Response (Issue #398 - Schema Unification)
 # ============================================================================
 
 
-class CalibrationSwingResponse(BaseModel):
-    """A swing detected during calibration."""
-    id: str
-    scale: str  # Legacy scale for frontend compatibility
+class LegResponse(BaseModel):
+    """Unified leg response using origin/pivot terminology.
+
+    Replaces CalibrationSwingResponse with consistent terminology:
+    - Origin: where the move started (fixed)
+    - Pivot: defended extreme (extends)
+
+    For bull legs: origin=LOW, pivot=HIGH
+    For bear legs: origin=HIGH, pivot=LOW
+    """
+    leg_id: str
     direction: str  # "bull" or "bear"
-    high_price: float
-    high_bar_index: int
-    low_price: float
-    low_bar_index: int
-    size: float
-    rank: int
-    is_active: bool
+    origin_price: float
+    origin_index: int
+    pivot_price: float
+    pivot_index: int
+    range: float  # |origin_price - pivot_price|
+    rank: int = 1
+    is_active: bool = True
     # Hierarchy info
     depth: int = 0  # Hierarchy depth (0 = root)
     parent_leg_id: Optional[str] = None  # Parent leg ID
-    # Fib levels for overlay
-    fib_0: float
-    fib_0382: float
-    fib_1: float
-    fib_2: float
+    # Optional fib levels (computed on request)
+    fib_levels: Optional[Dict[str, float]] = None
+    # Scale for Reference Layer (computed at runtime, not stored)
+    scale: Optional[str] = None  # "S", "M", "L", "XL"
+
+
+# Legacy alias for backward compatibility during migration
+CalibrationSwingResponse = LegResponse
 
 
 class CalibrationScaleStats(BaseModel):
@@ -342,8 +352,8 @@ class TreeStatistics(BaseModel):
     defended_by_depth: Dict[str, int]  # {"1": 12, "2": 38, "3": 94, "deeper": 186}
 
     # Range distribution
-    largest_range: float  # Largest swing range in points
-    largest_swing_id: Optional[str] = None  # ID of largest swing
+    largest_range: float  # Largest leg range in points
+    largest_leg_id: Optional[str] = None  # ID of largest leg (#398: renamed from largest_swing_id)
     median_range: float  # Median swing range
     smallest_range: float  # Smallest swing range
 
@@ -601,3 +611,48 @@ class SwingConfigResponse(BaseModel):
             }
         }
     )
+
+
+# ============================================================================
+# Reference Layer Models (Issue #375, #388 - Reference Layer UI)
+# ============================================================================
+
+
+class ReferenceSwingResponse(BaseModel):
+    """API response for a single reference swing from the Reference Layer."""
+    leg_id: str
+    scale: str  # "S", "M", "L", "XL"
+    depth: int
+    location: float  # 0.0 - 1.0 (where current price is within leg range)
+    salience_score: float
+    direction: str  # "bull" or "bear"
+    origin_price: float
+    origin_index: int
+    pivot_price: float
+    pivot_index: int
+
+
+class ReferenceStateApiResponse(BaseModel):
+    """API response for reference layer state."""
+    references: List[ReferenceSwingResponse]
+    by_scale: Dict[str, List[ReferenceSwingResponse]]
+    by_depth: Dict[int, List[ReferenceSwingResponse]]
+    by_direction: Dict[str, List[ReferenceSwingResponse]]
+    direction_imbalance: Optional[str]  # "bull", "bear", or None
+    is_warming_up: bool
+    warmup_progress: List[int]  # [current, target]
+    tracked_leg_ids: List[str] = []  # Leg IDs tracked for level crossing
+
+
+class FibLevelResponse(BaseModel):
+    """API response for a single fib level from Reference Layer."""
+    price: float
+    ratio: float
+    leg_id: str
+    scale: str  # "S", "M", "L", "XL"
+    direction: str  # "bull" or "bear"
+
+
+class ActiveLevelsResponse(BaseModel):
+    """API response for all active fib levels from valid references."""
+    levels_by_ratio: Dict[str, List[FibLevelResponse]]  # Keyed by ratio as string

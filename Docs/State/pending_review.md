@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-31
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - #396 (addendum) — Naming cleanup: SwingConfig → DetectionConfig, SwingEvent → DetectionEvent
+- #398 — Schema unification and router cleanup epic: LegResponse schema, router split, largest_leg_id rename
 
 ---
 

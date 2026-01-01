@@ -124,26 +124,26 @@ export interface ReplayBarData {
 }
 
 export interface ReplayEvent {
-  type: 'SWING_FORMED' | 'SWING_INVALIDATED' | 'SWING_COMPLETED' | 'LEG_CREATED' | 'LEG_PRUNED' | 'LEG_INVALIDATED';
+  type: 'SWING_FORMED' | 'SWING_INVALIDATED' | 'SWING_COMPLETED' | 'LEG_CREATED' | 'LEG_PRUNED' | 'LEG_INVALIDATED' | 'ORIGIN_BREACHED';
   bar_index: number;
   scale: string;
   direction: string;
   leg_id: string;
   swing?: {
-    id: string;
-    scale: string;
+    // Unified LegResponse fields (Issue #398)
+    leg_id: string;
     direction: string;
-    high_price: number;
-    high_bar_index: number;
-    low_price: number;
-    low_bar_index: number;
-    size: number;
+    origin_price: number;
+    origin_index: number;
+    pivot_price: number;
+    pivot_index: number;
+    range: number;
     rank: number;
     is_active: boolean;
-    fib_0: number;
-    fib_0382: number;
-    fib_1: number;
-    fib_2: number;
+    depth: number;
+    parent_leg_id: string | null;
+    fib_levels?: Record<string, number>;
+    scale?: string;
   };
   level?: number;
   previous_level?: number;
@@ -273,10 +273,11 @@ export interface PlaybackFeedbackEventContext {
   event_type?: string;
   scale?: string;
   swing?: {
-    high_bar_index: number;
-    low_bar_index: number;
-    high_price: string;
-    low_price: string;
+    // Unified origin/pivot terminology (Issue #398)
+    origin_bar_index: number;
+    pivot_bar_index: number;
+    origin_price: string;
+    pivot_price: string;
     direction: string;
   };
   detection_bar_index?: number;

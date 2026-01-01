@@ -79,26 +79,40 @@ export enum PlaybackState {
 // Calibration Types (Replay View v2)
 // ============================================================================
 
-export interface CalibrationSwing {
-  id: string;
-  scale: string;
+/**
+ * Unified leg response using origin/pivot terminology.
+ *
+ * Replaces the old high/low terminology with consistent naming:
+ * - Origin: where the move started (fixed)
+ * - Pivot: defended extreme (extends)
+ *
+ * For bull legs: origin=LOW, pivot=HIGH
+ * For bear legs: origin=HIGH, pivot=LOW
+ */
+export interface LegResponseType {
+  leg_id: string;
   direction: 'bull' | 'bear';
-  high_price: number;
-  high_bar_index: number;
-  low_price: number;
-  low_bar_index: number;
-  size: number;
+  origin_price: number;
+  origin_index: number;
+  pivot_price: number;
+  pivot_index: number;
+  range: number;  // |origin_price - pivot_price|
   rank: number;
   is_active: boolean;
   // Hierarchy info
   depth: number;
   parent_leg_id: string | null;
-  // Fib levels for overlay
-  fib_0: number;
-  fib_0382: number;
-  fib_1: number;
-  fib_2: number;
+  // Optional fib levels (computed on request)
+  fib_levels?: Record<string, number>;  // e.g., {"0": 100, "0.382": 103.82, ...}
+  // Scale for Reference Layer (computed at runtime)
+  scale?: string;  // "S", "M", "L", "XL"
 }
+
+/**
+ * Legacy alias for backward compatibility.
+ * CalibrationSwing is now LegResponseType.
+ */
+export type CalibrationSwing = LegResponseType;
 
 export interface SwingsByDepth {
   depth_1: CalibrationSwing[];  // Root swings (depth 0)
@@ -116,7 +130,7 @@ export interface TreeStatistics {
   avg_children: number;
   defended_by_depth: Record<string, number>;
   largest_range: number;
-  largest_swing_id: string | null;
+  largest_leg_id: string | null;  // #398: renamed from largest_swing_id
   median_range: number;
   smallest_range: number;
   roots_have_children: boolean;

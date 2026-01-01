@@ -125,11 +125,12 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         };
 
         if (lingerEvent.swing) {
+          // Using unified origin/pivot terminology (Issue #398)
           eventContext.swing = {
-            high_bar_index: lingerEvent.swing.high_bar_index,
-            low_bar_index: lingerEvent.swing.low_bar_index,
-            high_price: String(lingerEvent.swing.high_price),
-            low_price: String(lingerEvent.swing.low_price),
+            origin_bar_index: lingerEvent.swing.origin_index,
+            pivot_bar_index: lingerEvent.swing.pivot_index,
+            origin_price: String(lingerEvent.swing.origin_price),
+            pivot_price: String(lingerEvent.swing.pivot_price),
             direction: lingerEvent.swing.direction,
           };
           eventContext.detection_bar_index = lingerEvent.bar_index;
