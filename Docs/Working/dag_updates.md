@@ -328,6 +328,7 @@ Discrete stops: **0, 0.236, 0.382, 0.5, 0.618, 1**
 
 ## Notes
 
-- All changes should maintain backward compatibility via config defaults
+- **Break compatibility intentionally** — remove old fields/methods completely, don't leave stubs
+- If something breaks, surface it loudly (crash > silent failure)
+- Run full test suite — fix any failures from renamed/removed fields
 - Profile each change individually before combining
-- Run full test suite after implementation
