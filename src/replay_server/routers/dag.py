@@ -44,7 +44,6 @@ from ..schemas import (
 from .helpers import (
     event_to_response,
     event_to_lifecycle_event,
-    calculate_scale_thresholds,
     build_swing_state,
     build_aggregated_bars,
     build_dag_state,
@@ -85,9 +84,6 @@ def _ensure_initialized() -> None:
     # Initialize cache for incremental advance
     cache["detector"] = detector
     cache["last_bar_index"] = -1
-    cache["calibration_bar_count"] = 0
-    cache["calibration_events"] = []
-    cache["scale_thresholds"] = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
     cache["reference_layer"] = ref_layer
     cache["source_resolution"] = s.resolution_minutes
     cache["lifecycle_events"] = []
@@ -130,9 +126,6 @@ async def init_dag():
     # Initialize cache for incremental advance
     cache["detector"] = detector
     cache["last_bar_index"] = -1
-    cache["calibration_bar_count"] = 0
-    cache["calibration_events"] = []
-    cache["scale_thresholds"] = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
     cache["reference_layer"] = ref_layer
     cache["source_resolution"] = s.resolution_minutes
     cache["lifecycle_events"] = []
@@ -190,9 +183,6 @@ async def reset_dag():
     # Reset cache to initial state
     cache["detector"] = detector
     cache["last_bar_index"] = -1
-    cache["calibration_bar_count"] = 0
-    cache["calibration_events"] = []
-    cache["scale_thresholds"] = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
     cache["reference_layer"] = ref_layer
     cache["source_resolution"] = s.resolution_minutes
     cache["lifecycle_events"] = []
@@ -308,7 +298,8 @@ async def advance_dag(request: ReplayAdvanceRequest):
         # End of data
         current_bar = s.source_bars[-1]
         active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
-        scale_thresholds = cache.get("scale_thresholds", {})
+        # scale_thresholds removed (#412) - Reference Layer owns scale
+        scale_thresholds: Dict[str, float] = {}
 
         # Build optional fields
         aggregated_bars = None
@@ -334,7 +325,8 @@ async def advance_dag(request: ReplayAdvanceRequest):
     # Process new bars incrementally
     new_bars: List[ReplayBarResponse] = []
     all_events: List[ReplayEventResponse] = []
-    scale_thresholds = cache.get("scale_thresholds", {})
+    # scale_thresholds removed (#412) - Reference Layer owns scale
+    scale_thresholds: Dict[str, float] = {}
 
     # Per-bar DAG states for high-speed playback (#283)
     per_bar_dag_states: List[DagStateResponse] = []
@@ -471,7 +463,8 @@ async def reverse_dag(request: ReplayReverseRequest):
 
         detector = cache["detector"]
         active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
-        scale_thresholds = cache.get("scale_thresholds", {})
+        # scale_thresholds removed (#412) - Reference Layer owns scale
+        scale_thresholds: Dict[str, float] = {}
 
         dag_state = build_dag_state(detector, s.window_offset) if request.include_dag_state else None
 
@@ -533,7 +526,8 @@ async def reverse_dag(request: ReplayReverseRequest):
     # Build response
     current_bar = s.source_bars[target_idx]
     active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
-    scale_thresholds = cache.get("scale_thresholds", {})
+    # scale_thresholds removed (#412) - Reference Layer owns scale
+    scale_thresholds: Dict[str, float] = {}
     swing_state = build_swing_state(active_legs, scale_thresholds)
 
     # Build optional aggregated bars

@@ -138,13 +138,7 @@ export interface TreeStatistics {
   no_orphaned_nodes: boolean;
 }
 
-export interface CalibrationData {
-  calibration_bar_count: number;
-  current_price: number;
-  tree_stats: TreeStatistics;
-  swings_by_depth: SwingsByDepth;
-  active_swings_by_depth: SwingsByDepth;
-}
+// CalibrationData interface removed (#412) - use dagState instead
 
 // ============================================================================
 // Swing Display Configuration (Active Swing Count)

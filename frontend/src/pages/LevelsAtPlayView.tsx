@@ -44,11 +44,11 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   // Reference state hook (Phase 2: includes sticky leg support)
   const { referenceState, fetchReferenceState, fadingRefs, stickyLegIds, toggleStickyLeg } = useReferenceState();
 
-  // Core state
+  // Core state (#412: simplified from CalibrationData)
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [calibrationData, setCalibrationData] = useState<any>(null);
+  const [calibrationBarCount, setCalibrationBarCount] = useState(0);
   const [calibrationBars, setCalibrationBars] = useState<BarData[]>([]);
   const [sourceBars, setSourceBars] = useState<BarData[]>([]);
   const [chart1Bars, setChart1Bars] = useState<BarData[]>([]);
@@ -112,9 +112,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     if (chart2BarData) setChart2Bars(chart2BarData);
   }, [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation]);
 
-  // Forward playback hook
+  // Forward playback hook (#412: simplified from CalibrationData)
   const forwardPlayback = useForwardPlayback({
-    calibrationBarCount: calibrationData?.calibration_bar_count ?? 0,
+    calibrationBarCount,
     calibrationBars,
     playbackIntervalMs: effectivePlaybackIntervalMs,
     barsPerAdvance,
@@ -133,22 +133,20 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     onDagStateChange: () => {},
   });
 
-  // Get current playback position
+  // Get current playback position (#412: simplified from CalibrationData)
   const currentPlaybackPosition = useMemo(() => {
     if (isPlaying) {
       return forwardPlayback.currentPosition;
-    } else if (calibrationData) {
-      return calibrationData.calibration_bar_count - 1;
     }
-    return 0;
-  }, [isPlaying, forwardPlayback.currentPosition, calibrationData]);
+    return calibrationBarCount > 0 ? calibrationBarCount - 1 : 0;
+  }, [isPlaying, forwardPlayback.currentPosition, calibrationBarCount]);
 
-  // Fetch reference state when playback position changes
+  // Fetch reference state when playback position changes (#412: simplified from CalibrationData)
   useEffect(() => {
-    if (calibrationData) {
+    if (calibrationBarCount > 0) {
       fetchReferenceState(currentPlaybackPosition);
     }
-  }, [currentPlaybackPosition, calibrationData, fetchReferenceState]);
+  }, [currentPlaybackPosition, calibrationBarCount, fetchReferenceState]);
 
   // Compute a "live" aggregated bar from source bars for incremental display
   const computeLiveBar = useCallback((
@@ -380,16 +378,16 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     syncChartsToPositionRef.current = syncChartsToPosition;
   }, [syncChartsToPosition]);
 
-  // Scroll charts when data is first loaded (before playing)
+  // Scroll charts when data is first loaded (before playing) (#412: simplified from CalibrationData)
   useEffect(() => {
-    if (!isPlaying && calibrationData) {
+    if (!isPlaying && calibrationBarCount > 0) {
       const timeout = setTimeout(() => {
-        const calibrationEndIndex = calibrationData.calibration_bar_count - 1;
+        const calibrationEndIndex = calibrationBarCount - 1;
         syncChartsToPositionRef.current(calibrationEndIndex);
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [isPlaying, calibrationData]);
+  }, [isPlaying, calibrationBarCount]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -502,16 +500,13 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         const hasExistingState = session.current_bar_index !== null && session.current_bar_index >= 0;
 
         if (hasExistingState) {
-          // Backend has state - use it without resetting
-          // Only calibration_bar_count is used for existing state, other fields are placeholders
-          setCalibrationData({
-            calibration_bar_count: session.current_bar_index! + 1,
-          } as any);
+          // Backend has state - use it without resetting (#412: simplified from CalibrationData)
+          setCalibrationBarCount(session.current_bar_index! + 1);
           // Sync forward playback with backend position
           forwardPlayback.syncToPosition(session.current_bar_index!, [], 0, []);
         } else {
           // No existing state - backend will auto-init on first /dag/state call (#412)
-          setCalibrationData({ calibration_bar_count: 0 } as any);
+          setCalibrationBarCount(0);
         }
 
         setSourceBars([]);

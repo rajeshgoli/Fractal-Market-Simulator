@@ -6,7 +6,6 @@ import {
 } from '../lib/api';
 import {
   BarData,
-  CalibrationData,
   ActiveLeg,
   LegEvent,
   HighlightedDagItem,
@@ -89,9 +88,9 @@ interface UseDAGViewStateReturn {
   chart2Bars: BarData[];
   setChart2Bars: React.Dispatch<React.SetStateAction<BarData[]>>;
 
-  // Calibration state
-  calibrationData: CalibrationData | null;
-  setCalibrationData: React.Dispatch<React.SetStateAction<CalibrationData | null>>;
+  // Playback state (#412: simplified from CalibrationData)
+  calibrationBarCount: number;
+  setCalibrationBarCount: React.Dispatch<React.SetStateAction<number>>;
   isPlaying: boolean;
   setIsPlaying: React.Dispatch<React.SetStateAction<boolean>>;
 
@@ -178,8 +177,8 @@ export function useDAGViewState({
   const [chart1Bars, setChart1Bars] = useState<BarData[]>([]);
   const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
 
-  // Calibration state (simplified: just track playing state, #412)
-  const [calibrationData, setCalibrationData] = useState<CalibrationData | null>(null);
+  // Playback state (#412: simplified from CalibrationData)
+  const [calibrationBarCount, setCalibrationBarCount] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
   // DAG state
@@ -372,9 +371,9 @@ export function useDAGViewState({
     chart2Bars,
     setChart2Bars,
 
-    // Calibration state
-    calibrationData,
-    setCalibrationData,
+    // Playback state (#412: simplified from CalibrationData)
+    calibrationBarCount,
+    setCalibrationBarCount,
     isPlaying,
     setIsPlaying,
 

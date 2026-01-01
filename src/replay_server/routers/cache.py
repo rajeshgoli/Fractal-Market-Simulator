@@ -16,22 +16,16 @@ from typing import Any, Dict
 #   - detector: LegDetector instance
 #   - reference_layer: ReferenceLayer instance
 #   - last_bar_index: int (-1 = not started)
-#   - calibration_bar_count: int
-#   - calibration_events: List[DetectionEvent]
 #   - lifecycle_events: List[Dict] - events for Follow Leg feature
-#   - scale_thresholds: Dict[str, float]
 #   - source_resolution: int (bar resolution in minutes)
 #   - aggregator: BarAggregator instance (optional)
 _replay_cache: Dict[str, Any] = {
     "last_bar_index": -1,
     "detector": None,
-    "calibration_bar_count": 0,
-    "calibration_events": [],
     "reference_layer": None,
     "aggregator": None,
     "source_resolution": 5,
     "lifecycle_events": [],
-    "scale_thresholds": {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0},
 }
 
 
@@ -45,13 +39,10 @@ def reset_replay_cache() -> None:
     global _replay_cache
     _replay_cache["last_bar_index"] = -1
     _replay_cache["detector"] = None
-    _replay_cache["calibration_bar_count"] = 0
-    _replay_cache["calibration_events"] = []
     _replay_cache["reference_layer"] = None
     _replay_cache["aggregator"] = None
     _replay_cache["source_resolution"] = 5
     _replay_cache["lifecycle_events"] = []
-    _replay_cache["scale_thresholds"] = {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
 
 
 def is_initialized() -> bool:
