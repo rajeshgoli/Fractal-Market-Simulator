@@ -194,13 +194,16 @@ async def get_all_lifecycle_events():
     Returns:
         FollowedLegsEventsResponse with all lifecycle events.
     """
-    cache = get_cache()
+    # Import the legacy dict cache directly - events are stored there via replay.py
+    # The dataclass cache (get_cache()) is not auto-synced with the dict
+    from .replay import _replay_cache
 
-    if not cache.is_initialized():
+    if "detector" not in _replay_cache or _replay_cache["detector"] is None:
         return FollowedLegsEventsResponse(events=[])
 
-    # Return all lifecycle events (already in LifecycleEvent format)
-    return FollowedLegsEventsResponse(events=cache.lifecycle_events)
+    # Return all lifecycle events from the dict cache
+    lifecycle_events = _replay_cache.get("lifecycle_events", [])
+    return FollowedLegsEventsResponse(events=lifecycle_events)
 
 
 @router.get("/api/followed-legs/events", response_model=FollowedLegsEventsResponse)
