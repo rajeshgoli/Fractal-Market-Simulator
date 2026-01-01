@@ -30,18 +30,22 @@ def make_leg(
     origin_index: int = 100,
     pivot_price: float = 100.0,
     pivot_index: int = 105,
-    formed: bool = True,
     impulsiveness: float = None,
     depth: int = 0,
 ) -> Leg:
-    """Helper to create a test Leg."""
+    """Helper to create a test Leg.
+
+    Note: Formation is now checked by Reference Layer based on price location,
+    not a flag on the Leg. Use bar close prices to control formation:
+    - Bear leg: close >= pivot + 0.382 * (origin - pivot) for formation
+    - Bull leg: close <= pivot - 0.382 * (pivot - origin) for formation
+    """
     return Leg(
         direction=direction,
         origin_price=Decimal(str(origin_price)),
         origin_index=origin_index,
         pivot_price=Decimal(str(pivot_price)),
         pivot_index=pivot_index,
-        formed=formed,
         impulsiveness=impulsiveness,
         depth=depth,
     )
@@ -92,16 +96,17 @@ class TestUpdateColdStart:
         config = ReferenceConfig.default()
         ref_layer = ReferenceLayer(reference_config=config)
 
-        # Create only 10 legs (below threshold of 50)
+        # Create only 10 legs with same range (below threshold of 50)
         legs = [
-            make_leg(origin_index=i, origin_price=100 + i)
+            make_leg(origin_index=i, origin_price=110, pivot_price=100)
             for i in range(10)
         ]
-        bar = make_bar(close=104.0)  # Would form references
+        # close=105 forms all legs (location 0.5 > 0.382)
+        bar = make_bar(close=105.0)
 
         state = ref_layer.update(legs, bar)
 
-        # Should return empty state due to cold start
+        # Should return empty state due to cold start (only 10 legs, need 50)
         assert len(state.references) == 0
         assert state.direction_imbalance is None
 
@@ -110,17 +115,18 @@ class TestUpdateColdStart:
         config = ReferenceConfig(min_swings_for_scale=5)  # Lower threshold for test
         ref_layer = ReferenceLayer(reference_config=config)
 
-        # Create 10 legs with non-zero ranges (above threshold of 5)
-        # Each leg: origin at 110 + i*2, pivot at 100 → range = 10 + i*2
+        # Create 10 legs with same range so they all form
+        # All legs: origin=110, pivot=100, range=10
         legs = [
-            make_leg(origin_index=i, origin_price=110 + i * 2, pivot_price=100)
+            make_leg(origin_index=i, origin_price=110, pivot_price=100)
             for i in range(10)
         ]
-        bar = make_bar(close=104.0)  # At 0.4 location (above formation threshold)
+        # close=105 forms all legs (location 0.5 > 0.382)
+        bar = make_bar(close=105.0)
 
         state = ref_layer.update(legs, bar)
 
-        # Should have references now
+        # Should have references now (10 formed legs > min of 5)
         assert len(state.references) > 0
 
 
@@ -132,12 +138,13 @@ class TestUpdateRangeDistribution:
         config = ReferenceConfig(min_swings_for_scale=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
-        # First update with 2 legs
+        # First update with 2 legs (same range to ensure consistent formation)
         legs1 = [
-            make_leg(origin_price=110, pivot_price=100),  # range = 10
-            make_leg(origin_price=120, pivot_price=100, origin_index=50),  # range = 20
+            make_leg(origin_price=110, pivot_price=100, origin_index=1),  # range = 10
+            make_leg(origin_price=110, pivot_price=100, origin_index=50),  # range = 10
         ]
-        bar = make_bar(close=104.0)
+        # close=105 forms both legs (location 0.5 > 0.382)
+        bar = make_bar(close=105.0)
         ref_layer.update(legs1, bar)
 
         assert len(ref_layer._range_distribution) == 2
@@ -147,7 +154,7 @@ class TestUpdateRangeDistribution:
         assert len(ref_layer._range_distribution) == 2
 
         # Third update with one new leg
-        legs2 = legs1 + [make_leg(origin_price=130, pivot_price=100, origin_index=75)]
+        legs2 = legs1 + [make_leg(origin_price=110, pivot_price=100, origin_index=75)]
         ref_layer.update(legs2, bar)
         assert len(ref_layer._range_distribution) == 3
 

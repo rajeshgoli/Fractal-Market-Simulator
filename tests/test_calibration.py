@@ -15,7 +15,6 @@ from src.swing_analysis.dag import (
     calibrate,
     calibrate_from_dataframe,
     dataframe_to_bars,
-    FIB_LEVELS,
 )
 from src.swing_analysis.swing_config import SwingConfig
 
@@ -50,32 +49,8 @@ class TestCalibrateFunction:
 
         # Should have same state
         assert detector1.state.last_bar_index == detector2.state.last_bar_index
-        assert len(detector1.get_active_swings()) == len(detector2.get_active_swings())
+        assert len(detector1.state.active_legs) == len(detector2.state.active_legs)
         assert len(events1) == len(events2)
-
-
-class TestFibLevelBands:
-    """Test Fib level band detection."""
-
-    def test_find_level_band(self):
-        """Level bands are correctly identified."""
-        detector = HierarchicalDetector()
-
-        # Returns highest fib level <= ratio
-        assert detector._find_level_band(0.0) == 0.0
-        assert detector._find_level_band(0.1) == 0.0
-        assert detector._find_level_band(0.3) == 0.236
-        assert detector._find_level_band(0.4) == 0.382
-        assert detector._find_level_band(0.55) == 0.5
-        assert detector._find_level_band(0.7) == 0.618
-        assert detector._find_level_band(0.9) == 0.786
-        assert detector._find_level_band(1.1) == 1.0
-        assert detector._find_level_band(1.3) == 1.236
-        assert detector._find_level_band(1.45) == 1.382  # Below 1.5
-        assert detector._find_level_band(1.5) == 1.5     # Exactly 1.5
-        assert detector._find_level_band(1.6) == 1.5     # Between 1.5 and 1.618
-        assert detector._find_level_band(1.7) == 1.618
-        assert detector._find_level_band(2.5) == 2.0
 
 
 class TestProgressCallback:
@@ -234,7 +209,7 @@ class TestCalibrateFromDataframe:
         detector2, events2 = calibrate(bars, config)
 
         assert detector1.state.last_bar_index == detector2.state.last_bar_index
-        assert len(detector1.get_active_swings()) == len(detector2.get_active_swings())
+        assert len(detector1.state.active_legs) == len(detector2.state.active_legs)
         assert len(events1) == len(events2)
 
     def test_with_progress_callback(self):
@@ -312,102 +287,17 @@ class TestCalibrationPerformance:
         assert isinstance(events, list)
 
 
-class TestPhase1Optimizations:
-    """Tests for Phase 1 quick wins: inlining formation checks (#155)."""
+class TestPerformance:
+    """Performance benchmarks for calibration."""
 
-    def test_inline_formation_matches_reference_frame(self):
-        """Verify inlined formation calculations match ReferenceFrame."""
-        from src.swing_analysis.reference_frame import ReferenceFrame
-
-        test_cases = [
-            # (origin, pivot, close_price, direction, expected_formed)
-            (Decimal("5100"), Decimal("5000"), Decimal("5030"), "bull", True),   # 30% > 28.7%
-            (Decimal("5100"), Decimal("5000"), Decimal("5020"), "bull", False),  # 20% < 28.7%
-            (Decimal("5100"), Decimal("5000"), Decimal("5050"), "bull", True),   # 50% > 28.7%
-            (Decimal("5000"), Decimal("5100"), Decimal("5070"), "bear", True),   # 30% > 28.7%
-            (Decimal("5000"), Decimal("5100"), Decimal("5080"), "bear", False),  # 20% < 28.7%
-            (Decimal("5000"), Decimal("5100"), Decimal("5050"), "bear", True),   # 50% > 28.7%
-        ]
-
-        formation_fib = 0.287
-
-        for origin, pivot, close_price, direction, expected in test_cases:
-            swing_range = abs(origin - pivot)
-
-            # Inline calculation (as used in _try_form_direction_swings)
-            if direction == "bull":
-                inline_ratio = (close_price - pivot) / swing_range
-            else:
-                inline_ratio = (pivot - close_price) / swing_range
-            inline_formed = inline_ratio >= Decimal(str(formation_fib))
-
-            # ReferenceFrame calculation
-            if direction == "bull":
-                frame = ReferenceFrame(
-                    anchor0=pivot,  # Low is defended
-                    anchor1=origin,  # High is origin
-                    direction="BULL",
-                )
-            else:
-                frame = ReferenceFrame(
-                    anchor0=pivot,  # High is defended
-                    anchor1=origin,  # Low is origin
-                    direction="BEAR",
-                )
-            frame_formed = frame.is_formed(close_price, formation_fib)
-
-            assert inline_formed == frame_formed, \
-                f"Mismatch for {direction} {origin}->{pivot} at {close_price}: " \
-                f"inline={inline_formed}, frame={frame_formed}"
-
-    def test_output_equivalence_with_optimizations(self):
-        """Full output equivalence test - optimizations don't change results."""
-        # Create a realistic price pattern that forms swings
-        bars = []
-        # Rising prices
-        for i in range(50):
-            base = 5000 + i * 2
-            bars.append(make_bar(i, base, base + 5, base - 2, base + 3))
-        # Pullback
-        for i in range(50, 80):
-            base = 5100 - (i - 50) * 3
-            bars.append(make_bar(i, base, base + 5, base - 2, base + 3))
-        # Continuation
-        for i in range(80, 100):
-            base = 5010 + (i - 80) * 2
-            bars.append(make_bar(i, base, base + 5, base - 2, base + 3))
-
-        config = SwingConfig.default()
-
-        # Run calibration
-        detector, events = calibrate(bars, config)
-
-        # Verify we get some swings and events (sanity check)
-        assert len(detector.get_active_swings()) >= 0  # May or may not have active swings
-        assert isinstance(events, list)
-
-        # Verify last bar processed
-        assert detector.state.last_bar_index == 99
-
-    def test_performance_1k_bars_dag_only(self):
-        """Performance test: 1K bars should complete in reasonable time.
-
-        Note: This tests DAG-only path (without Reference layer pruning).
-        After DAG/Reference layer separation (#164), swings accumulate
-        without pruning until the Reference layer processes them.
-
-        The 30s threshold applies to this isolated DAG test. The full
-        pipeline with Reference layer achieves <60s for 6M bars as
-        documented in CLAUDE.md. See #176 for tracking.
-
-        Tech debt: Consider reducing this threshold as optimizations land.
-        """
+    def test_performance_1k_bars(self):
+        """Performance test: 1K bars should complete in reasonable time."""
         # Create 1K bars with realistic price pattern
         bars = []
         base_ts = 1700000000
         for i in range(1000):
             ts = base_ts + i * 300
-            # Create price oscillation that forms swings
+            # Create price oscillation
             phase = (i % 100) / 100.0
             if phase < 0.5:
                 base = 5000 + (i % 50) * 2
@@ -419,7 +309,5 @@ class TestPhase1Optimizations:
         detector, events = calibrate(bars)
         elapsed = time.time() - start
 
-        # DAG-only path allows 30s for 1K bars due to swing accumulation.
-        # Full pipeline with Reference layer is much faster (see #176).
         assert elapsed < 30.0, f"1K bars took {elapsed:.2f}s, should be <30s"
         assert detector.state.last_bar_index == 999

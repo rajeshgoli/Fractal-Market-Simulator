@@ -29,7 +29,6 @@ class Leg:
         pivot_price: Current defended extreme (extends as leg grows)
         pivot_index: Bar index of current pivot
         retracement_pct: Current retracement percentage toward origin
-        formed: Whether 38.2% threshold has been reached
         parent_leg_id: ID of parent leg if this is a child
         status: 'active' or 'stale' (use origin_breached for invalidation check)
         bar_count: Number of bars since leg started
@@ -45,7 +44,6 @@ class Leg:
     pivot_price: Decimal
     pivot_index: int
     retracement_pct: Decimal = Decimal("0")
-    formed: bool = False
     parent_leg_id: Optional[str] = None
     status: Literal['active', 'stale'] = 'active'
     bar_count: int = 0
@@ -55,7 +53,6 @@ class Leg:
     # leg_id is now deterministic based on (direction, origin_price, origin_index)
     # This ensures IDs survive BE reset on step-back (#299)
     leg_id: str = field(default="")  # Computed in __post_init__
-    swing_id: Optional[str] = None  # Set when leg forms into swing (#174)
     max_origin_breach: Optional[Decimal] = None  # Max breach beyond origin (None if never breached)
     max_pivot_breach: Optional[Decimal] = None  # Max breach beyond pivot (None if never breached)
     impulse: float = 0.0  # Points per bar (range / bar_count) - measures move intensity (#236)
@@ -131,26 +128,6 @@ class Leg:
             Deterministic ID like "leg_bull_4425.50_1234"
         """
         return f"leg_{direction}_{origin_price}_{origin_index}"
-
-    @staticmethod
-    def make_swing_id(
-        direction: str, origin_price: Decimal, origin_index: int
-    ) -> str:
-        """
-        Generate deterministic swing ID from leg properties.
-
-        Uses same base as leg_id but with "swing_" prefix.
-        Called when a leg forms into a swing.
-
-        Args:
-            direction: 'bull' or 'bear'
-            origin_price: Origin price of the forming leg
-            origin_index: Origin bar index of the forming leg
-
-        Returns:
-            Deterministic ID like "swing_bull_4425.50_1234"
-        """
-        return f"swing_{direction}_{origin_price}_{origin_index}"
 
     @property
     def range(self) -> Decimal:

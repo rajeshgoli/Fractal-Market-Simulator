@@ -29,14 +29,9 @@ from decimal import Decimal
 from typing import List, Dict, Tuple, Optional, TYPE_CHECKING
 
 from ..swing_config import SwingConfig
-from ..swing_node import SwingNode
-from ..reference_frame import ReferenceFrame
 from ..types import Bar
 from ..events import (
     SwingEvent,
-    SwingFormedEvent,
-    SwingInvalidatedEvent,
-    LevelCrossEvent,
     LegCreatedEvent,
     LegPrunedEvent,
     OriginBreachedEvent,
@@ -48,10 +43,6 @@ from .leg_pruner import LegPruner
 
 if TYPE_CHECKING:
     from ..reference_layer import ReferenceLayer
-
-
-# Fibonacci levels to track for level cross events
-FIB_LEVELS = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.382, 1.5, 1.618, 2.0]
 
 
 def _calculate_impulse(range_value: Decimal, origin_index: int, pivot_index: int) -> float:
@@ -424,12 +415,11 @@ class LegDetector:
 
         Origin breach is now the sole structural gate (#345):
         - When origin is breached, the leg is structurally compromised
-        - Extensions and formations are disabled for origin-breached legs
-        - If the leg has a swing, the swing is also invalidated
+        - Extensions are disabled for origin-breached legs
 
-        Pivot breach is only tracked for FORMED legs. Once formed, the pivot
-        is frozen as a structural reference. Price going past it = breach.
-        For unformed legs, price movement past pivot is extension, not breach.
+        Pivot breach tracking is based on extension state. Once a leg stops
+        extending (origin breached), the pivot is frozen as a structural
+        reference. Price going past it = breach.
 
         Origin breach and pivot breach are independent - either can happen
         without the other. If BOTH happen, the leg is "engulfed".
@@ -442,7 +432,7 @@ class LegDetector:
 
         Returns:
             Tuple of (events, newly_breached_legs) where events include
-            OriginBreachedEvent, PivotBreachedEvent, and SwingInvalidatedEvent.
+            OriginBreachedEvent and PivotBreachedEvent.
         """
         events: List[SwingEvent] = []
         newly_breached_legs: List[Leg] = []
@@ -476,23 +466,11 @@ class LegDetector:
                     events.append(OriginBreachedEvent(
                         bar_index=bar.index,
                         timestamp=timestamp,
-                        swing_id=leg.swing_id or "",
+                        swing_id="",
                         leg_id=leg.leg_id,
                         breach_price=breach_price,
                         breach_amount=leg.max_origin_breach,
                     ))
-                    # Propagate to swing if leg formed into one (#174, #345)
-                    if leg.swing_id:
-                        for swing in self.state.active_swings:
-                            if swing.swing_id == leg.swing_id and swing.status == 'active':
-                                swing.invalidate()
-                                events.append(SwingInvalidatedEvent(
-                                    bar_index=bar.index,
-                                    timestamp=timestamp,
-                                    swing_id=swing.swing_id,
-                                    reason="origin_breached",
-                                ))
-                                break
             else:
                 # Update max_origin_breach if current breach is larger
                 if leg.direction == 'bull':
@@ -506,10 +484,10 @@ class LegDetector:
                         if breach > leg.max_origin_breach:
                             leg.max_origin_breach = breach
 
-            # Pivot breach tracking (formed legs only)
-            # Once formed, the pivot is frozen as a structural reference
-            # Price going past it = breach (for unformed legs, it would just extend)
-            if leg.formed and leg.range > 0:
+            # Pivot breach tracking (origin-breached legs only)
+            # Once origin is breached, the pivot is frozen as a structural reference
+            # Price going past it = breach (for live legs, it would just extend)
+            if leg.max_origin_breach is not None and leg.range > 0:
                 if leg.direction == 'bull':
                     # Bull pivot (HIGH) breached when price goes above it
                     if bar_high > leg.pivot_price:
@@ -522,7 +500,7 @@ class LegDetector:
                             events.append(PivotBreachedEvent(
                                 bar_index=bar.index,
                                 timestamp=timestamp,
-                                swing_id=leg.swing_id or "",
+                                swing_id="",
                                 leg_id=leg.leg_id,
                                 breach_price=bar_high,
                                 breach_amount=breach,
@@ -539,7 +517,7 @@ class LegDetector:
                             events.append(PivotBreachedEvent(
                                 bar_index=bar.index,
                                 timestamp=timestamp,
-                                swing_id=leg.swing_id or "",
+                                swing_id="",
                                 leg_id=leg.leg_id,
                                 breach_price=bar_low,
                                 breach_amount=breach,
@@ -547,7 +525,7 @@ class LegDetector:
 
         return events, newly_breached_legs
 
-    def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[SwingFormedEvent]:
+    def _update_dag_state(self, bar: Bar, timestamp: datetime) -> List[SwingEvent]:
         """
         Update DAG state with new bar using streaming leg tracking.
 
@@ -560,9 +538,9 @@ class LegDetector:
             timestamp: Timestamp for events
 
         Returns:
-            List of SwingFormedEvent for any newly formed swings
+            List of SwingEvent for any events generated
         """
-        events: List[SwingFormedEvent] = []
+        events: List[SwingEvent] = []
         bar_high = Decimal(str(bar.high))
         bar_low = Decimal(str(bar.low))
         bar_close = Decimal(str(bar.close))
@@ -796,9 +774,6 @@ class LegDetector:
                 price=bar_low, bar_index=bar.index, direction='bull', source='low'
             )
 
-        # Check for formations using close price (don't know H/L order within bar)
-        events.extend(self._check_leg_formations(bar, timestamp, bar_close))
-
         return events
 
     def _process_type2_bear(
@@ -915,9 +890,6 @@ class LegDetector:
             self.state.pending_origins['bear'] = PendingOrigin(
                 price=bar_high, bar_index=bar.index, direction='bear', source='high'
             )
-
-        # Check for formations using close price
-        events.extend(self._check_leg_formations(bar, timestamp, bar_close))
 
         return events
 
@@ -1114,9 +1086,6 @@ class LegDetector:
                     retracement = (leg.origin_price - bar_low) / leg.range
                     leg.retracement_pct = retracement
 
-        # Check for formations (can use H/L for inside bars)
-        events.extend(self._check_leg_formations_with_extremes(bar, timestamp, bar_high, bar_low))
-
         return events
 
     def _process_type3(
@@ -1146,156 +1115,7 @@ class LegDetector:
                 price=bar_high, bar_index=bar.index, direction='bear', source='high'
             )
 
-        # Check for formations using close (conservative - don't know H/L order)
-        events.extend(self._check_leg_formations(bar, timestamp, bar_close))
-
         return events
-
-    def _check_leg_formations(
-        self, bar: Bar, timestamp: datetime, check_price: Decimal
-    ) -> List[SwingFormedEvent]:
-        """
-        Check if any legs have reached 38.2% retracement threshold.
-
-        Args:
-            bar: Current bar
-            timestamp: Event timestamp
-            check_price: Price to use for retracement calculation (usually close)
-
-        Returns:
-            List of SwingFormedEvent for newly formed swings
-        """
-        events = []
-        formation_threshold = Decimal(str(self.config.bull.formation_fib))
-
-        for leg in self.state.active_legs:
-            # Skip legs that are origin-breached (#345) - can't form swings
-            if leg.status != 'active' or leg.formed or leg.max_origin_breach is not None:
-                continue
-
-            if leg.range == 0:
-                continue
-
-            # Calculate retracement (extension from origin toward pivot)
-            # Bull: origin=LOW, retracement = (current - origin) / range
-            # Bear: origin=HIGH, retracement = (origin - current) / range
-            if leg.direction == 'bull':
-                retracement = (check_price - leg.origin_price) / leg.range
-            else:
-                retracement = (leg.origin_price - check_price) / leg.range
-
-            leg.retracement_pct = retracement
-
-            if retracement >= formation_threshold:
-                leg.formed = True
-                event = self._form_swing_from_leg(leg, bar, timestamp)
-                if event:
-                    events.append(event)
-
-        return events
-
-    def _check_leg_formations_with_extremes(
-        self, bar: Bar, timestamp: datetime, bar_high: Decimal, bar_low: Decimal
-    ) -> List[SwingFormedEvent]:
-        """
-        Check formations using H/L directly (for inside bars where temporal order is known).
-        """
-        events = []
-        formation_threshold = Decimal(str(self.config.bull.formation_fib))
-
-        for leg in self.state.active_legs:
-            # Skip legs that are origin-breached (#345) - can't form swings
-            if leg.status != 'active' or leg.formed or leg.max_origin_breach is not None:
-                continue
-
-            if leg.range == 0:
-                continue
-
-            # For bull legs, use bar.high (prev.L was before bar.H for inside bars)
-            # For bear legs, use bar.low (prev.H was before bar.L for inside bars)
-            # Bull: origin=LOW, retracement = (current - origin) / range
-            # Bear: origin=HIGH, retracement = (origin - current) / range
-            if leg.direction == 'bull':
-                retracement = (bar_high - leg.origin_price) / leg.range
-            else:
-                retracement = (leg.origin_price - bar_low) / leg.range
-
-            leg.retracement_pct = retracement
-
-            if retracement >= formation_threshold:
-                leg.formed = True
-                event = self._form_swing_from_leg(leg, bar, timestamp)
-                if event:
-                    events.append(event)
-
-        return events
-
-    def _form_swing_from_leg(
-        self, leg: Leg, bar: Bar, timestamp: datetime
-    ) -> Optional[SwingFormedEvent]:
-        """
-        Create a SwingNode from a formed leg and add to active swings.
-
-        No separation check needed at formation - DAG pruning (10% rule) already
-        ensures surviving origins are sufficiently separated (#163).
-
-        Returns:
-            SwingFormedEvent or None if swing already exists
-        """
-        # Create SwingNode
-        # Bull leg: origin at LOW -> pivot at HIGH
-        # Bear leg: origin at HIGH -> pivot at LOW
-        # Use deterministic swing_id derived from leg properties (#299)
-        deterministic_swing_id = Leg.make_swing_id(
-            leg.direction, leg.origin_price, leg.origin_index
-        )
-        if leg.direction == 'bull':
-            swing = SwingNode(
-                swing_id=deterministic_swing_id,
-                low_bar_index=leg.origin_index,  # origin is at LOW
-                low_price=leg.origin_price,
-                high_bar_index=leg.pivot_index,  # pivot is at HIGH
-                high_price=leg.pivot_price,
-                direction="bull",
-                status="active",
-                formed_at_bar=bar.index,
-            )
-        else:
-            swing = SwingNode(
-                swing_id=deterministic_swing_id,
-                high_bar_index=leg.origin_index,  # origin is at HIGH
-                high_price=leg.origin_price,
-                low_bar_index=leg.pivot_index,  # pivot is at LOW
-                low_price=leg.pivot_price,
-                direction="bear",
-                status="active",
-                formed_at_bar=bar.index,
-            )
-
-        # Link leg to swing (#174)
-        leg.swing_id = swing.swing_id
-
-        # Record impulse in formed population for percentile ranking (#241, #242)
-        bisect.insort(self.state.formed_leg_impulses, leg.impulse)
-
-        # Add to active swings
-        self.state.active_swings.append(swing)
-
-        # Initialize level tracking
-        ratio = float(leg.retracement_pct)
-        self.state.fib_levels_crossed[swing.swing_id] = self._find_level_band(ratio)
-
-        return SwingFormedEvent(
-            bar_index=bar.index,
-            timestamp=timestamp,
-            swing_id=swing.swing_id,
-            high_bar_index=swing.high_bar_index,
-            high_price=swing.high_price,
-            low_bar_index=swing.low_bar_index,
-            low_price=swing.low_price,
-            direction=swing.direction,
-            parent_ids=[],  # Swing hierarchy removed (#301)
-        )
 
     def _check_extension_prune(self, bar: Bar, timestamp: datetime) -> List[LegPrunedEvent]:
         """
@@ -1348,7 +1168,7 @@ class LegDetector:
             events.append(LegPrunedEvent(
                 bar_index=bar.index,
                 timestamp=timestamp,
-                swing_id=leg.swing_id or "",
+                swing_id="",
                 leg_id=leg.leg_id,
                 reason="extension_prune",
             ))
@@ -1424,11 +1244,7 @@ class LegDetector:
         # Create timestamp from bar
         timestamp = datetime.fromtimestamp(bar.timestamp) if bar.timestamp else datetime.now()
 
-        # 1. Check level crosses (structural tracking) - skip if disabled
-        if self.config.emit_level_crosses:
-            events.extend(self._check_level_crosses(bar, timestamp))
-
-        # 4. Update DAG state and form new swings (O(1) per bar)
+        # Update DAG state (O(1) per bar)
         dag_events = self._update_dag_state(bar, timestamp)
         events.extend(dag_events)
 
@@ -1516,78 +1332,6 @@ class LegDetector:
                 leg._moment_sum_x2,
                 leg._moment_sum_x3
             )
-
-    def _check_level_crosses(
-        self, bar: Bar, timestamp: datetime
-    ) -> List[LevelCrossEvent]:
-        """
-        Check each active swing for Fib level crosses.
-
-        Tracks the last level for each swing and emits events when
-        the current price crosses into a new level band.
-
-        Args:
-            bar: Current bar being processed.
-            timestamp: Timestamp for events.
-
-        Returns:
-            List of LevelCrossEvent for any level crosses.
-        """
-        events = []
-        for swing in self.state.active_swings:
-            if swing.status != "active":
-                continue
-
-            frame = ReferenceFrame(
-                anchor0=swing.defended_pivot,
-                anchor1=swing.origin,
-                direction="BULL" if swing.is_bull else "BEAR",
-            )
-
-            # Use close price for level cross tracking
-            close_price = Decimal(str(bar.close))
-            current_ratio = float(frame.ratio(close_price))
-
-            # Find current level band
-            current_level = self._find_level_band(current_ratio)
-            previous_level = self.state.fib_levels_crossed.get(
-                swing.swing_id, current_level
-            )
-
-            if current_level != previous_level:
-                events.append(
-                    LevelCrossEvent(
-                        bar_index=bar.index,
-                        timestamp=timestamp,
-                        swing_id=swing.swing_id,
-                        level=current_level,
-                        previous_level=previous_level,
-                        price=close_price,
-                    )
-                )
-                self.state.fib_levels_crossed[swing.swing_id] = current_level
-
-        return events
-
-    def _find_level_band(self, ratio: float) -> float:
-        """
-        Find the Fib level band for a given ratio.
-
-        Returns the highest Fib level that is <= the ratio.
-
-        Args:
-            ratio: Current ratio in the reference frame.
-
-        Returns:
-            The Fib level band (e.g., 0.382, 0.618, etc.)
-        """
-        level = FIB_LEVELS[0]
-        for fib in FIB_LEVELS:
-            if ratio >= fib:
-                level = fib
-            else:
-                break
-        return level
 
     def _find_leg_by_id(self, leg_id: str) -> Optional[Leg]:
         """
@@ -1757,15 +1501,6 @@ class LegDetector:
             longest = max(matching_legs, key=lambda l: l.range)
             return float(longest.range)
         return None
-
-    def get_active_swings(self) -> List[SwingNode]:
-        """
-        Get all currently active swings.
-
-        Returns:
-            List of SwingNode with status "active".
-        """
-        return [s for s in self.state.active_swings if s.status == "active"]
 
     def get_state(self) -> DetectorState:
         """

@@ -2,7 +2,7 @@
 
 **A Trader's Guide to the Algorithm**
 
-*Last Updated: December 24, 2025*
+*Last Updated: December 31, 2025*
 
 ---
 
@@ -85,14 +85,16 @@ Without the retracement, we don't know if the extreme matters. The algorithm wai
 
 ## Fundamental Concepts <a name="fundamental-concepts"></a>
 
-### Legs vs. Swings
+### Legs vs. References
 
 | Concept | Definition | Trader Analogy |
 |---------|------------|----------------|
-| **Leg** | Directional move from origin to pivot, before confirmation | "Price is pushing up from here" |
-| **Swing** | Confirmed leg that reached 28.7% retracement | "That was a real swing low" |
+| **Leg** | Directional move from origin to pivot, tracked by DAG layer | "Price is pushing up from here" |
+| **Reference** | Formed leg filtered by Reference Layer (price at 38.2%+ of range) | "That's a real swing low" |
 
-A leg is a *candidate* swing. It becomes a swing when the market confirms the extreme matters by retracing toward it.
+A leg is a *candidate* reference. The Reference Layer "forms" a leg into a reference when price has progressed at least 38.2% of the range from pivot toward origin. The DAG layer tracks all legs; the Reference Layer filters which ones are meaningful for trading.
+
+**Note (December 2025):** The `SwingNode` class and `formed` flag on Leg have been removed (#394). Formation is now computed at runtime by the Reference Layer based on current price location.
 
 ### Origin and Pivot
 
@@ -116,24 +118,27 @@ BEAR LEG:
 
 **Key insight:** Origins are fixed; pivots extend. The origin is where the move started — it's the level being defended. The pivot is where the move reached — it extends as price pushes further.
 
-### The 28.7% Formation Threshold
+### Formation (Reference Layer)
 
-Why 28.7%? It's between the 23.6% and 38.2% Fibonacci levels — enough progress to confirm the move is real, not just noise.
+Formation is now handled by the **Reference Layer**, not the DAG layer. The Reference Layer determines which legs are "formed" based on price location at the time of query.
 
-**Important:** Formation is about the move's *progress*, not a pullback. The leg forms when price has moved at least 28.7% of the way from origin toward pivot.
+**Formation threshold:** 38.2% (configurable via `ReferenceConfig.formation_threshold`)
+
+A leg is considered formed when price has progressed at least 38.2% of the range from pivot toward origin:
 
 ```
-Example: Bull leg from 3900 (origin) to 3950 (pivot)
-Range = 50 points
+Example: Bear leg from 110 (origin) to 100 (pivot)
+Range = 10 points
+Formation location = 0.382
 
-Formation happens when: (current - origin) / range >= 0.287
-                       (current - 3900) / 50 >= 0.287
-                       current >= 3900 + 14.35 = 3914.35
+Formation happens when: (current - pivot) / range >= 0.382
+                       (current - 100) / 10 >= 0.382
+                       current >= 100 + 3.82 = 103.82
 
-When current price >= 3914.35, the swing is FORMED.
-This can happen immediately on the same bar the leg is created,
-if price has already moved far enough.
+When current price >= 103.82, the reference is FORMED.
 ```
+
+**Key difference from previous design:** Formation is now computed at runtime, not stored on the Leg. A leg can be "formed" in one bar and "unformed" in the next if price moves away. Once formed, the Reference Layer remembers the leg was formed (sticky formation).
 
 ### Origin Breach Detection (#345)
 
@@ -1316,16 +1321,16 @@ Current defaults are symmetric. If asymmetric behavior isn't needed, simplify to
 
 ## Appendix B: Event Types
 
-The algorithm emits events for state changes:
+The DAG layer emits events for state changes:
 
 | Event | Trigger |
 |-------|---------|
 | `LegCreatedEvent` | New leg from pending origin |
 | `LegPrunedEvent` | Leg removed by pruning |
 | `LegInvalidatedEvent` | Origin breach beyond threshold |
-| `SwingFormedEvent` | Leg reached formation threshold |
-| `SwingInvalidatedEvent` | Formed swing's origin breached |
 | `LevelCrossEvent` | Price crossed Fibonacci level |
+
+**Note:** `SwingFormedEvent` and `SwingInvalidatedEvent` have been removed (#394). Formation is now handled by the Reference Layer at runtime.
 
 ---
 
@@ -1333,12 +1338,12 @@ The algorithm emits events for state changes:
 
 | Term | Definition |
 |------|------------|
-| **Leg** | Directional move from origin to pivot, before confirmation |
-| **Swing** | Confirmed leg (reached 28.7% retracement) |
+| **Leg** | Directional move from origin to pivot, tracked by DAG layer |
+| **Reference** | Formed leg filtered by Reference Layer (price 38.2%+ into range) |
 | **Origin** | Where the move started (fixed, defended level) |
 | **Pivot** | Current extreme of the move (extends on new extremes) |
 | **Range** | Distance from origin to pivot |
-| **Formation** | Confirmation of swing via retracement |
+| **Formation** | Reference Layer determining a leg is meaningful (38.2%+ progress) |
 | **Invalidation** | Structure broken via origin breach |
 | **Pruning** | Removing redundant or dominated legs |
 | **DAG** | Directed Acyclic Graph (hierarchical structure) |

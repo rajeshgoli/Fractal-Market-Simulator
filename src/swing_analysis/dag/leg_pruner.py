@@ -13,7 +13,6 @@ from decimal import Decimal
 from typing import List, Dict, Set, Optional, Tuple, TYPE_CHECKING
 
 from ..swing_config import SwingConfig
-from ..swing_node import SwingNode
 from ..types import Bar
 from ..events import LegPrunedEvent
 from .leg import Leg
@@ -144,8 +143,6 @@ class LegPruner:
 
         current_bar = bar.index
         pruned_leg_ids: Set[str] = set()
-        # Track swing transfers: pruned_leg_id -> survivor_leg that inherits the swing
-        swing_transfers: Dict[str, Leg] = {}
 
         # Step 1: Group legs by pivot (pivot_price, pivot_index)
         pivot_groups: Dict[Tuple[Decimal, int], List[Leg]] = defaultdict(list)
@@ -165,22 +162,14 @@ class LegPruner:
                 # Counter-trend scoring: build clusters, score by counter-trend range
                 events.extend(self._apply_counter_trend_prune(
                     state, group_legs, range_threshold, time_threshold,
-                    current_bar, bar, timestamp, pruned_leg_ids, swing_transfers
+                    current_bar, bar, timestamp, pruned_leg_ids
                 ))
             else:
                 # Legacy 'oldest' strategy
                 events.extend(self._apply_oldest_wins_prune(
                     state, group_legs, range_threshold, time_threshold,
-                    current_bar, bar, timestamp, pruned_leg_ids, swing_transfers
+                    current_bar, bar, timestamp, pruned_leg_ids
                 ))
-
-        # Transfer swings from pruned legs to their survivor legs
-        for pruned_leg in state.active_legs:
-            if pruned_leg.leg_id in swing_transfers:
-                survivor = swing_transfers[pruned_leg.leg_id]
-                # Transfer swing_id to survivor if survivor doesn't already have one
-                if pruned_leg.swing_id and not survivor.swing_id:
-                    survivor.swing_id = pruned_leg.swing_id
 
         # Reparent children of pruned legs before removal (#281)
         for leg in state.active_legs:
@@ -206,7 +195,6 @@ class LegPruner:
         bar: Bar,
         timestamp: datetime,
         pruned_leg_ids: Set[str],
-        swing_transfers: Dict[str, Leg],
     ) -> List[LegPrunedEvent]:
         """
         Apply oldest-wins proximity pruning (legacy strategy).
@@ -281,13 +269,10 @@ class LegPruner:
             if should_prune:
                 leg.status = 'pruned'
                 pruned_leg_ids.add(leg.leg_id)
-                # Track swing transfer if pruned leg has a swing
-                if leg.swing_id:
-                    swing_transfers[leg.leg_id] = prune_by_leg
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id=leg.swing_id or "",
+                    swing_id="",
                     leg_id=leg.leg_id,
                     reason="origin_proximity_prune",
                     explanation=prune_explanation,
@@ -309,7 +294,6 @@ class LegPruner:
         bar: Bar,
         timestamp: datetime,
         pruned_leg_ids: Set[str],
-        swing_transfers: Dict[str, Leg],
     ) -> List[LegPrunedEvent]:
         """
         Apply counter-trend scoring proximity pruning (#319).
@@ -345,13 +329,10 @@ class LegPruner:
             for leg, score in scored[1:]:
                 leg.status = 'pruned'
                 pruned_leg_ids.add(leg.leg_id)
-                # Track swing transfer if pruned leg has a swing
-                if leg.swing_id:
-                    swing_transfers[leg.leg_id] = best_leg
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id=leg.swing_id or "",
+                    swing_id="",
                     leg_id=leg.leg_id,
                     reason="origin_proximity_prune",
                     explanation=(
@@ -518,10 +499,10 @@ class LegPruner:
         prune_events: List[LegPrunedEvent] = []
         legs_to_prune: List[Leg] = []
 
-        # Check formed legs for engulfed condition (#345)
+        # Check legs for engulfed condition (#345)
         # Engulfed: both origin AND pivot have been breached at some point
         for leg in state.active_legs:
-            if not leg.formed or leg.range == 0:
+            if leg.range == 0:
                 continue
 
             # Engulfed: both origin AND pivot have been breached
@@ -530,7 +511,7 @@ class LegPruner:
                 prune_events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id=leg.swing_id or "",
+                    swing_id="",
                     leg_id=leg.leg_id,
                     reason="engulfed",
                 ))
@@ -611,10 +592,10 @@ class LegPruner:
         events: List[LegPrunedEvent] = []
         min_ratio = self.config.min_counter_trend_ratio
 
-        # Get formed legs of the specified direction (with live origin) (#345)
+        # Get legs of the specified direction (with live origin) (#345)
         legs_to_check = [
             leg for leg in state.active_legs
-            if leg.direction == direction and leg.max_origin_breach is None and leg.formed
+            if leg.direction == direction and leg.max_origin_breach is None
         ]
 
         # Determine opposite direction
@@ -647,7 +628,7 @@ class LegPruner:
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id=leg.swing_id or "",
+                    swing_id="",
                     leg_id=leg.leg_id,
                     reason="min_counter_trend",
                     explanation=(
@@ -769,7 +750,7 @@ class LegPruner:
                     events.append(LegPrunedEvent(
                         bar_index=bar.index,
                         timestamp=timestamp,
-                        swing_id=counter_leg.swing_id or "",
+                        swing_id="",
                         leg_id=counter_leg.leg_id,
                         reason="turn_ratio",
                         explanation=(
@@ -814,7 +795,7 @@ class LegPruner:
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id=counter_leg.swing_id or "",
+                    swing_id="",
                     leg_id=counter_leg.leg_id,
                     reason="turn_ratio_topk",
                     explanation=(
@@ -860,7 +841,7 @@ class LegPruner:
                 events.append(LegPrunedEvent(
                     bar_index=bar.index,
                     timestamp=timestamp,
-                    swing_id=counter_leg.swing_id or "",
+                    swing_id="",
                     leg_id=counter_leg.leg_id,
                     reason="turn_ratio_raw",
                     explanation=(

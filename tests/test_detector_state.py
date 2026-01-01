@@ -13,7 +13,6 @@ from src.swing_analysis.dag import (
     calibrate,
 )
 from src.swing_analysis.swing_config import SwingConfig
-from src.swing_analysis.swing_node import SwingNode
 
 from conftest import make_bar
 
@@ -28,49 +27,37 @@ class TestDetectorStateSerialization:
         restored = DetectorState.from_dict(data)
 
         assert restored.last_bar_index == -1
-        assert len(restored.active_swings) == 0
+        assert len(restored.active_legs) == 0
 
-    def test_state_with_swings_roundtrip(self):
-        """State with active swings serializes and deserializes correctly."""
-        swing1 = SwingNode(
-            swing_id="swing01",
-            high_bar_index=0,
-            high_price=Decimal("110"),
-            low_bar_index=10,
-            low_price=Decimal("100"),
+    def test_state_with_legs_roundtrip(self):
+        """State with active legs serializes and deserializes correctly."""
+        from src.swing_analysis.dag import Leg
+
+        leg1 = Leg(
             direction="bull",
-            status="active",
-            formed_at_bar=10,
+            pivot_price=Decimal("100"),
+            pivot_index=0,
+            origin_price=Decimal("110"),
+            origin_index=10,
         )
-        swing2 = SwingNode(
-            swing_id="swing02",
-            high_bar_index=20,
-            high_price=Decimal("108"),
-            low_bar_index=30,
-            low_price=Decimal("102"),
-            direction="bull",
-            status="active",
-            formed_at_bar=30,
+        leg2 = Leg(
+            direction="bear",
+            pivot_price=Decimal("108"),
+            pivot_index=20,
+            origin_price=Decimal("102"),
+            origin_index=30,
         )
 
         state = DetectorState(
-            active_swings=[swing1, swing2],
-            all_swing_ranges=[swing1.range, swing2.range],
+            active_legs=[leg1, leg2],
+            all_swing_ranges=[abs(leg1.origin_price - leg1.pivot_price)],
         )
         data = state.to_dict()
         restored = DetectorState.from_dict(data)
 
-        assert len(restored.active_swings) == 2
-
-        # Find swings in restored state
-        restored_swing1 = next(
-            s for s in restored.active_swings if s.swing_id == "swing01"
-        )
-        restored_swing2 = next(
-            s for s in restored.active_swings if s.swing_id == "swing02"
-        )
-        assert restored_swing1.direction == "bull"
-        assert restored_swing2.direction == "bull"
+        assert len(restored.active_legs) == 2
+        assert restored.active_legs[0].direction == "bull"
+        assert restored.active_legs[1].direction == "bear"
 
 
 class TestHierarchicalDetectorInitialization:
@@ -96,7 +83,7 @@ class TestHierarchicalDetectorInitialization:
         """Detector starts with empty state."""
         detector = HierarchicalDetector()
         assert detector.state.last_bar_index == -1
-        assert len(detector.get_active_swings()) == 0
+        assert len(detector.state.active_legs) == 0
 
 
 class TestSingleBarProcessing:
@@ -111,16 +98,17 @@ class TestSingleBarProcessing:
 
         assert detector.state.last_bar_index == 0
 
-    def test_single_bar_no_swing(self):
-        """Single bar cannot form a swing (needs origin before pivot)."""
+    def test_single_bar_no_leg(self):
+        """Single bar cannot form a leg (needs origin confirmation)."""
         detector = HierarchicalDetector()
         bar = make_bar(0, 100.0, 105.0, 95.0, 102.0)
 
         events = detector.process_bar(bar)
 
-        from src.swing_analysis.events import SwingFormedEvent
-        assert len([e for e in events if isinstance(e, SwingFormedEvent)]) == 0
-        assert len(detector.get_active_swings()) == 0
+        from src.swing_analysis.events import LegCreatedEvent
+        assert len([e for e in events if isinstance(e, LegCreatedEvent)]) == 0
+        # First bar can set up pending origins but not form legs
+        assert len(detector.state.active_legs) == 0
 
 
 class TestNoLookahead:

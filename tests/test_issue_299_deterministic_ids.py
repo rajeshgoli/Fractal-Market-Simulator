@@ -114,29 +114,6 @@ class TestLegDeterministicId:
         assert leg1.leg_id != leg2.leg_id
 
 
-class TestSwingDeterministicId:
-    """Test deterministic swing ID generation."""
-
-    def test_swing_id_format(self):
-        """Swing ID has format swing_{direction}_{origin_price}_{origin_index}."""
-        swing_id = Leg.make_swing_id("bull", Decimal("4425.50"), 1234)
-        assert swing_id == "swing_bull_4425.50_1234"
-
-    def test_swing_id_from_leg(self):
-        """Swing ID derived from leg properties."""
-        leg = Leg(
-            direction="bull",
-            origin_price=Decimal("4425.50"),
-            origin_index=1234,
-            pivot_price=Decimal("4430.00"),
-            pivot_index=1240,
-        )
-        swing_id = Leg.make_swing_id(leg.direction, leg.origin_price, leg.origin_index)
-        # Should use same base as leg but with swing_ prefix
-        assert swing_id == "swing_bull_4425.50_1234"
-        assert leg.leg_id == "leg_bull_4425.50_1234"
-
-
 class TestDetectorIdDeterminism:
     """Test that detector produces deterministic IDs across resets."""
 
@@ -180,25 +157,6 @@ class TestDetectorIdDeterminism:
 
         # IDs should be identical
         assert leg_ids_1 == leg_ids_2
-
-    def test_same_bars_same_swing_ids(self):
-        """Processing same bars twice produces same swing IDs."""
-        bars = self._create_bars()
-
-        # First run
-        detector1 = LegDetector()
-        for bar in bars:
-            detector1.process_bar(bar)
-        swing_ids_1 = [s.swing_id for s in detector1.state.active_swings]
-
-        # Second run
-        detector2 = LegDetector()
-        for bar in bars:
-            detector2.process_bar(bar)
-        swing_ids_2 = [s.swing_id for s in detector2.state.active_swings]
-
-        # IDs should be identical
-        assert swing_ids_1 == swing_ids_2
 
     def test_followed_leg_survives_reset(self):
         """

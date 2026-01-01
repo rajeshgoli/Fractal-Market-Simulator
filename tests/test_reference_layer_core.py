@@ -32,18 +32,21 @@ def make_leg(
     origin_index: int = 100,
     pivot_price: float = 100.0,
     pivot_index: int = 105,
-    formed: bool = True,
     impulsiveness: float = None,
     depth: int = 0,
 ) -> Leg:
-    """Helper to create a test Leg."""
+    """Helper to create a test Leg.
+
+    Note: Formation is now checked by Reference Layer based on price location,
+    not a flag on the Leg. Create bars with appropriate close prices to test
+    formed vs unformed scenarios.
+    """
     return Leg(
         direction=direction,
         origin_price=Decimal(str(origin_price)),
         origin_index=origin_index,
         pivot_price=Decimal(str(pivot_price)),
         pivot_index=pivot_index,
-        formed=formed,
         impulsiveness=impulsiveness,
         depth=depth,
     )
@@ -228,33 +231,43 @@ class TestReferenceStateWarmupInfo:
 
 
 class TestRangeDistributionFormedLegsOnly:
-    """Tests for range distribution tracking formed legs only (#372)."""
+    """Tests for range distribution tracking formed legs only (#372).
+
+    Formation is now determined by price position, not a flag.
+    For bear leg (origin 110, pivot 100, range 10):
+    - Formation threshold = 0.382
+    - Price needs to be at 103.82+ for formation
+    - close=102 -> location 0.2 -> NOT formed
+    - close=105 -> location 0.5 -> formed
+    """
 
     def test_unformed_legs_not_added(self):
-        """Unformed legs should not be added to distribution."""
+        """Legs with price below formation threshold should not be added to distribution."""
         ref_layer = ReferenceLayer()
 
-        # Create unformed legs
+        # Bear legs: origin > pivot, need close > pivot + 0.382*(origin-pivot)
         unformed_legs = [
-            make_leg(origin_price=105, pivot_price=100, formed=False),
-            make_leg(origin_price=108, pivot_price=100, formed=False),
+            make_leg(origin_price=105, pivot_price=100, origin_index=1),  # range=5, needs close>=101.91
+            make_leg(origin_price=108, pivot_price=100, origin_index=2),  # range=8, needs close>=103.06
         ]
 
-        bar = make_bar(close=102)
+        # close=101 is below both formation thresholds
+        bar = make_bar(close=101)
         ref_layer.update(unformed_legs, bar)
 
         assert len(ref_layer._range_distribution) == 0
 
     def test_formed_legs_added_to_distribution(self):
-        """Formed legs should be added to distribution."""
+        """Legs with price at/above formation threshold should be added to distribution."""
         ref_layer = ReferenceLayer()
 
         formed_legs = [
-            make_leg(origin_price=105, pivot_price=100, formed=True),
-            make_leg(origin_price=110, pivot_price=100, formed=True),
+            make_leg(origin_price=105, pivot_price=100, origin_index=1),  # range=5, needs close>=101.91
+            make_leg(origin_price=110, pivot_price=100, origin_index=2),  # range=10, needs close>=103.82
         ]
 
-        bar = make_bar(close=102)
+        # close=105 is above both formation thresholds (location=0.5 for both)
+        bar = make_bar(close=105)
         ref_layer.update(formed_legs, bar)
 
         assert len(ref_layer._range_distribution) == 2
@@ -263,29 +276,32 @@ class TestRangeDistributionFormedLegsOnly:
         assert Decimal("10") in ref_layer._range_distribution
 
     def test_mixed_formed_unformed(self):
-        """Only formed legs should be added from a mixed set."""
+        """Only formed legs should be added from a mixed set based on price position."""
         ref_layer = ReferenceLayer()
 
         mixed_legs = [
-            make_leg(origin_price=105, pivot_price=100, formed=True, origin_index=1),  # range=5, formed
-            make_leg(origin_price=108, pivot_price=100, formed=False, origin_index=2),  # range=8, unformed
-            make_leg(origin_price=115, pivot_price=100, formed=True, origin_index=3),  # range=15, formed
+            make_leg(origin_price=105, pivot_price=100, origin_index=1),  # range=5, needs close>=101.91
+            make_leg(origin_price=120, pivot_price=100, origin_index=2),  # range=20, needs close>=107.64
+            make_leg(origin_price=115, pivot_price=100, origin_index=3),  # range=15, needs close>=105.73
         ]
 
-        bar = make_bar(close=102)
+        # close=106 forms first and third, not second
+        bar = make_bar(close=106)
         ref_layer.update(mixed_legs, bar)
 
+        # First (range=5) and third (range=15) legs should be formed
         assert len(ref_layer._range_distribution) == 2
         assert Decimal("5") in ref_layer._range_distribution
         assert Decimal("15") in ref_layer._range_distribution
-        assert Decimal("8") not in ref_layer._range_distribution
+        assert Decimal("20") not in ref_layer._range_distribution
 
     def test_no_duplicate_entries(self):
         """Same leg should not be added twice on subsequent updates."""
         ref_layer = ReferenceLayer()
 
-        leg = make_leg(origin_price=110, pivot_price=100, formed=True)
-        bar = make_bar(close=102)
+        leg = make_leg(origin_price=110, pivot_price=100)
+        # close=105 forms the leg (location=0.5 > 0.382)
+        bar = make_bar(close=105)
 
         # First update
         ref_layer.update([leg], bar)
@@ -300,12 +316,13 @@ class TestRangeDistributionFormedLegsOnly:
         ref_layer = ReferenceLayer()
 
         legs = [
-            make_leg(origin_price=150, pivot_price=100, formed=True, origin_index=1),  # range=50
-            make_leg(origin_price=110, pivot_price=100, formed=True, origin_index=2),  # range=10
-            make_leg(origin_price=130, pivot_price=100, formed=True, origin_index=3),  # range=30
+            make_leg(origin_price=150, pivot_price=100, origin_index=1),  # range=50
+            make_leg(origin_price=110, pivot_price=100, origin_index=2),  # range=10
+            make_leg(origin_price=130, pivot_price=100, origin_index=3),  # range=30
         ]
 
-        bar = make_bar(close=102)
+        # close=120 forms all legs (all have location > 0.382)
+        bar = make_bar(close=120)
         ref_layer.update(legs, bar)
 
         # Should be sorted
@@ -562,28 +579,25 @@ class TestEndToEndWorkflow:
         """Test transition from cold start to active state."""
         ref_layer = ReferenceLayer()
 
-        # Generate 50 legs and process them
+        # Generate 50 legs with same range to ensure consistent formation
         legs = []
         for i in range(50):
             leg = make_leg(
                 direction='bear',
-                origin_price=110 + i,
+                origin_price=110,  # All same origin for consistent formation
                 pivot_price=100,
                 origin_index=i,
-                formed=True,
             )
             legs.append(leg)
 
-        bar = make_bar(close=104, index=100)
-
+        # close=105 forms all legs (range=10, formation at 103.82, 105 > 103.82)
         # First 49 legs: still warming up
         for i in range(49):
-            state = ref_layer.update([legs[i]], make_bar(close=104, index=i))
-            if i < 49:
-                assert state.is_warming_up is True
+            state = ref_layer.update([legs[i]], make_bar(close=105, index=i))
+            assert state.is_warming_up is True
 
         # 50th leg: should exit cold start
-        state = ref_layer.update([legs[49]], make_bar(close=104, index=49))
+        state = ref_layer.update([legs[49]], make_bar(close=105, index=49))
         assert state.is_warming_up is False
 
     def test_multiple_references_lifecycle(self):
@@ -653,12 +667,12 @@ class TestReferenceLayerReset:
 
         for i in range(10):
             leg = make_leg(
-                origin_price=110 + i,
+                origin_price=110,  # Same origin for consistent formation
                 pivot_price=100,
                 origin_index=i,
-                formed=True,
             )
-            bar = make_bar(close=104, index=i)
+            # close=105 forms each leg (range=10, formation at 103.82)
+            bar = make_bar(close=105, index=i)
             ref_layer.update([leg], bar)
 
         # Should have accumulated 10 legs in distribution

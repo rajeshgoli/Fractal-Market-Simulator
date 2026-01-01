@@ -241,28 +241,3 @@ class TestDagStateWithHierarchy:
         child_restored = next(l for l in restored.active_legs if l.leg_id == "child")
         assert child_restored.parent_leg_id == "parent"
 
-    def test_leg_serialization_includes_swing_id(self):
-        """Leg serialization preserves swing_id."""
-        state = DetectorState()
-
-        leg = Leg(
-            direction='bull',
-            origin_price=Decimal("100"),
-            origin_index=0,
-            pivot_price=Decimal("110"),
-            pivot_index=10,
-            leg_id="test-leg",
-            swing_id="swing-123",
-            formed=True,
-        )
-        state.active_legs.append(leg)
-
-        # Serialize
-        serialized = state.to_dict()
-
-        # Deserialize
-        restored = DetectorState.from_dict(serialized)
-
-        # Check swing_id is preserved
-        restored_leg = restored.active_legs[0]
-        assert restored_leg.swing_id == "swing-123"

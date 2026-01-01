@@ -101,14 +101,13 @@ class TestPivotExtension:
         bar3 = make_bar(3, 4422.0, 4435.0, 4425.0, 4433.0)
         detector.process_bar(bar3)
 
-        # Verify leg is now formed
+        # Verify leg exists and origin is NOT breached
         bear_legs = [
             leg for leg in detector.state.active_legs
             if leg.direction == 'bear' and leg.status == 'active'
         ]
-        formed_bear_legs = [leg for leg in bear_legs if leg.formed]
-        assert len(formed_bear_legs) >= 1
-        bear_leg = formed_bear_legs[0]
+        assert len(bear_legs) >= 1
+        bear_leg = bear_legs[0]
         assert bear_leg.max_origin_breach is None  # Origin NOT breached
 
         # Bar 4: Price drops below pivot to 4415
@@ -159,14 +158,13 @@ class TestPivotExtension:
         bar3 = make_bar(3, 4428.0, 4429.0, 4412.0, 4415.0)
         detector.process_bar(bar3)
 
-        # Verify leg is now formed and origin NOT breached
+        # Verify leg exists and origin is NOT breached
         bull_legs = [
             leg for leg in detector.state.active_legs
             if leg.direction == 'bull' and leg.status == 'active'
         ]
-        formed_bull_legs = [leg for leg in bull_legs if leg.formed]
-        assert len(formed_bull_legs) >= 1
-        bull_leg = formed_bull_legs[0]
+        assert len(bull_legs) >= 1
+        bull_leg = bull_legs[0]
         assert bull_leg.max_origin_breach is None  # Origin NOT breached
 
         # Bar 4: Price rallies above pivot to 4435
@@ -259,10 +257,10 @@ class TestEngulfedLegDetection:
         bar3 = make_bar(3, 4422.0, 4435.0, 4425.0, 4433.0)
         detector.process_bar(bar3)
 
-        # Verify leg is formed
+        # Verify leg exists
         bear_legs = [
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bear' and leg.status == 'active' and leg.formed
+            if leg.direction == 'bear' and leg.status == 'active'
         ]
         assert len(bear_legs) >= 1
         original_leg_id = bear_legs[0].leg_id
@@ -409,10 +407,10 @@ class TestInvalidatedLegEngulfed:
         bar1 = make_bar(1, 4438.0, 4439.0, 4425.0, 4426.0)
         detector.process_bar(bar1)
 
-        # Find the bear leg - should be formed
+        # Find the bear leg
         bear_legs = [
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bear' and leg.formed
+            if leg.direction == 'bear' and leg.status == 'active'
         ]
         assert len(bear_legs) >= 1
         target_leg = bear_legs[0]
@@ -487,10 +485,10 @@ class TestInvalidatedLegEngulfed:
         # Find the bull leg
         bull_legs = [
             leg for leg in detector.state.active_legs
-            if leg.direction == 'bull' and leg.formed
+            if leg.direction == 'bull' and leg.status == 'active'
         ]
         if not bull_legs:
-            return  # No formed bull leg, skip test
+            return  # No active bull leg, skip test
 
         target_leg = bull_legs[0]
         leg_id = target_leg.leg_id

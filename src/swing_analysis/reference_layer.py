@@ -27,7 +27,6 @@ from decimal import Decimal
 from typing import List, Optional, Dict, Tuple, Set
 
 from .swing_config import SwingConfig
-from .swing_node import SwingNode
 from .reference_frame import ReferenceFrame
 from .reference_config import ReferenceConfig
 from .types import Bar
@@ -158,41 +157,6 @@ class ReferenceState:
 
 
 @dataclass
-class ReferenceSwingInfo:
-    """
-    Additional metadata for a reference swing.
-
-    This wraps a SwingNode with reference-layer specific annotations.
-
-    Attributes:
-        swing: The underlying SwingNode from the DAG.
-        touch_tolerance: Invalidation tolerance for touch (wick) violations.
-        close_tolerance: Invalidation tolerance for close violations.
-        is_reference: Whether this swing passes all filters to be a trading reference.
-        filter_reason: If not a reference, why it was filtered out.
-    """
-    swing: SwingNode
-    touch_tolerance: float = 0.0
-    close_tolerance: float = 0.0
-    is_reference: bool = True
-    filter_reason: Optional[str] = None
-
-    def is_big(self) -> bool:
-        """
-        Check if this is a big swing.
-
-        Note: This is set during get_reference_swings() based on range-based
-        definition (top 10% by range per valid_swings.md Rule 2.2).
-
-        Returns:
-            True if swing is in top 10% by range, False otherwise.
-        """
-        # This is computed by ReferenceLayer and stored in tolerances
-        # A swing is big if it has non-zero tolerance
-        return self.touch_tolerance > 0
-
-
-@dataclass
 class InvalidationResult:
     """
     Result of checking swing invalidation.
@@ -253,26 +217,18 @@ class ReferenceLayer:
         >>> from swing_analysis.reference_layer import ReferenceLayer
         >>> from swing_analysis.dag import calibrate
         >>>
-        >>> # Get swings from DAG
+        >>> # Get legs from DAG
         >>> detector, events = calibrate(bars)
-        >>> swings = detector.get_active_swings()
+        >>> legs = detector.state.active_legs
         >>>
         >>> # Apply reference layer filters
         >>> config = SwingConfig.default()
         >>> ref_layer = ReferenceLayer(config)
-        >>> reference_swings = ref_layer.get_reference_swings(swings)
         >>>
-        >>> # Check invalidation on new bar
-        >>> for info in reference_swings:
-        ...     result = ref_layer.check_invalidation(info.swing, bar)
-        ...     if result.is_invalidated:
-        ...         print(f"{info.swing.swing_id} invalidated: {result.reason}")
-        >>>
-        >>> # Check completion on new bar
-        >>> for info in reference_swings:
-        ...     result = ref_layer.check_completion(info.swing, bar)
-        ...     if result.is_completed:
-        ...         print(f"{info.swing.swing_id} completed")
+        >>> # Update on each bar
+        >>> state = ref_layer.update(legs, bar)
+        >>> for ref in state.references:
+        ...     print(f"{ref.leg.leg_id}: scale={ref.scale}, salience={ref.salience_score:.2f}")
     """
 
     # Tolerance constants for big swings (Rule 2.2)
@@ -297,8 +253,6 @@ class ReferenceLayer:
         """
         self.config = config or SwingConfig.default()
         self.reference_config = reference_config or ReferenceConfig.default()
-        self._swing_info: Dict[str, ReferenceSwingInfo] = {}
-        self._big_swing_threshold: Optional[Decimal] = None
         # Range distribution for scale classification (sorted for O(log n) percentile)
         # All-time distribution; DAG pruning handles recency per spec
         self._range_distribution: List[Decimal] = []
@@ -334,66 +288,6 @@ class ReferenceLayer:
             Tuple of (current swings in distribution, required minimum).
         """
         return (len(self._range_distribution), self.reference_config.min_swings_for_scale)
-
-    def _compute_big_swing_threshold(self, swings: List[SwingNode]) -> Decimal:
-        """
-        Compute the range threshold for big swing classification.
-
-        Big swings are those in the top 10% by range per valid_swings.md Rule 2.2.
-
-        Args:
-            swings: List of SwingNode to compute threshold from.
-
-        Returns:
-            The minimum range for a swing to be considered "big".
-        """
-        if not swings:
-            return Decimal("0")
-
-        ranges = sorted([s.range for s in swings], reverse=True)
-        cutoff_idx = max(0, int(len(ranges) * self.BIG_SWING_PERCENTILE) - 1)
-
-        if cutoff_idx >= len(ranges):
-            return ranges[-1] if ranges else Decimal("0")
-
-        return ranges[cutoff_idx]
-
-    def _is_big_swing(self, swing: SwingNode) -> bool:
-        """
-        Check if a swing is a "big swing" (top 10% by range).
-
-        Per valid_swings.md Rule 2.2: Big swings are those whose range is
-        in the top 10% of all reference swings (historically called XL).
-
-        Note: _big_swing_threshold must be computed first via get_reference_swings().
-
-        Args:
-            swing: The SwingNode to check.
-
-        Returns:
-            True if swing's range >= big swing threshold, False otherwise.
-        """
-        if self._big_swing_threshold is None:
-            return False
-        return swing.range >= self._big_swing_threshold
-
-    def _compute_tolerances(self, swing: SwingNode) -> Tuple[float, float]:
-        """
-        Compute invalidation tolerances for a swing.
-
-        Big swings (top 10% by range): Full tolerance (0.15 touch, 0.10 close)
-        Small swings: Zero tolerance
-
-        Args:
-            swing: The SwingNode to compute tolerances for.
-
-        Returns:
-            Tuple of (touch_tolerance, close_tolerance).
-        """
-        if self._is_big_swing(swing):
-            return self.BIG_SWING_TOUCH_TOLERANCE, self.BIG_SWING_CLOSE_TOLERANCE
-        else:
-            return 0.0, 0.0
 
     def _compute_percentile(self, leg_range: Decimal) -> float:
         """
@@ -473,27 +367,6 @@ class ReferenceLayer:
         """
         bisect.insort(self._range_distribution, leg_range)
 
-    def _update_range_distribution(self, legs: List[Leg]) -> None:
-        """
-        Update range distribution with ranges from formed legs.
-
-        Only includes formed legs (leg.formed == True) to match the
-        population used for scale classification. Legs that haven't
-        reached 38.2% retracement are not structurally confirmed and
-        should not influence percentile boundaries.
-
-        Range distribution is all-time (not windowed). DAG pruning
-        naturally handles recency by removing old legs.
-
-        Args:
-            legs: List of active legs from the DAG.
-        """
-        for leg in legs:
-            # Only track formed legs for scale classification
-            if leg.formed and leg.leg_id not in self._seen_leg_ids:
-                self._seen_leg_ids.add(leg.leg_id)
-                self._add_to_range_distribution(leg.range)
-
     def _compute_location(self, leg: Leg, current_price: Decimal) -> float:
         """
         Compute location in reference frame.
@@ -563,6 +436,10 @@ class ReferenceLayer:
         # This means location must be >= threshold
         if location >= threshold:
             self._formed_refs.add(leg.leg_id)
+            # Add to range distribution on first formation (#372)
+            if leg.leg_id not in self._seen_leg_ids:
+                self._seen_leg_ids.add(leg.leg_id)
+                self._add_to_range_distribution(leg.range)
             return True
 
         return False
@@ -857,8 +734,10 @@ class ReferenceLayer:
         """
         current_price = Decimal(str(bar.close))
 
-        # Update range distribution with any new legs
-        self._update_range_distribution(legs)
+        # Check formation for all legs first (this updates range distribution
+        # for newly formed legs, which affects cold start progress)
+        for leg in legs:
+            self._is_formed_for_reference(leg, current_price)
 
         # Cold start check: not enough swings for meaningful scale classification
         if self.is_cold_start:
@@ -877,8 +756,8 @@ class ReferenceLayer:
             scale = self._classify_scale(leg.range)
             location = self._compute_location(leg, current_price)
 
-            # Formation check (price-based)
-            if not self._is_formed_for_reference(leg, current_price):
+            # Formation check (already computed above, just checking membership)
+            if leg.leg_id not in self._formed_refs:
                 continue
 
             # Compute location from bar extremes for breach check
@@ -938,254 +817,3 @@ class ReferenceLayer:
             is_warming_up=False,
             warmup_progress=self.cold_start_progress,
         )
-
-    def get_reference_swings(
-        self,
-        swings: List[SwingNode],
-    ) -> List[ReferenceSwingInfo]:
-        """
-        Get all swings with reference layer annotations.
-
-        Computes tolerances for each swing based on range-based big swing
-        classification per valid_swings.md Rule 2.2.
-
-        Args:
-            swings: List of SwingNode from the DAG.
-
-        Returns:
-            List of ReferenceSwingInfo with tolerances computed.
-        """
-        if not swings:
-            self._swing_info = {}
-            self._big_swing_threshold = None
-            return []
-
-        # Compute big swing threshold FIRST (top 10% by range)
-        self._big_swing_threshold = self._compute_big_swing_threshold(swings)
-
-        result = {}
-        for swing in swings:
-            touch_tol, close_tol = self._compute_tolerances(swing)
-
-            info = ReferenceSwingInfo(
-                swing=swing,
-                touch_tolerance=touch_tol,
-                close_tolerance=close_tol,
-                is_reference=True,
-            )
-            result[swing.swing_id] = info
-
-        self._swing_info = result
-
-        return [
-            info for info in self._swing_info.values()
-            if info.is_reference
-        ]
-
-    def check_invalidation(
-        self,
-        swing: SwingNode,
-        bar: Bar,
-        use_close: bool = True,
-    ) -> InvalidationResult:
-        """
-        Check if a swing should be invalidated by this bar (Rule 2.2).
-
-        Applies differentiated invalidation based on range:
-        - Big swings (top 10% by range): touch tolerance 0.15, close tolerance 0.10
-        - Small swings: no tolerance (any violation invalidates)
-
-        Args:
-            swing: The swing to check.
-            bar: Current bar with high, low, close prices.
-            use_close: Whether to also check close-based invalidation.
-                If False, only touch (wick) violations are checked.
-
-        Returns:
-            InvalidationResult with invalidation status and details.
-        """
-        # Get or compute tolerances
-        info = self._swing_info.get(swing.swing_id)
-        if info is None:
-            touch_tolerance, close_tolerance = self._compute_tolerances(swing)
-        else:
-            touch_tolerance = info.touch_tolerance
-            close_tolerance = info.close_tolerance
-
-        bar_high = Decimal(str(bar.high))
-        bar_low = Decimal(str(bar.low))
-        bar_close = Decimal(str(bar.close))
-
-        # Create reference frame for ratio calculations
-        frame = ReferenceFrame(
-            anchor0=swing.defended_pivot,
-            anchor1=swing.origin,
-            direction="BULL" if swing.is_bull else "BEAR",
-        )
-
-        # Touch price (wick extreme)
-        touch_price = bar_low if swing.is_bull else bar_high
-
-        # Check touch (wick) violation first
-        if frame.is_violated(touch_price, touch_tolerance):
-            excess = abs(touch_price - swing.defended_pivot)
-            return InvalidationResult(
-                is_invalidated=True,
-                reason="touch_violation",
-                violation_price=touch_price,
-                excess=excess,
-            )
-
-        # Check close violation (stricter threshold)
-        if use_close and frame.is_violated(bar_close, close_tolerance):
-            excess = abs(bar_close - swing.defended_pivot)
-            return InvalidationResult(
-                is_invalidated=True,
-                reason="close_violation",
-                violation_price=bar_close,
-                excess=excess,
-            )
-
-        return InvalidationResult(is_invalidated=False)
-
-    def check_completion(
-        self,
-        swing: SwingNode,
-        bar: Bar,
-    ) -> CompletionResult:
-        """
-        Check if a swing should be marked as completed.
-
-        Completion rules (range-based per valid_swings.md):
-        - Small swings: Complete at 2× extension
-        - Big swings (top 10% by range): Never complete — keep active indefinitely
-
-        Args:
-            swing: The swing to check.
-            bar: Current bar with high, low, close prices.
-
-        Returns:
-            CompletionResult with completion status and details.
-        """
-        # Big swings never complete
-        if self._is_big_swing(swing):
-            return CompletionResult(is_completed=False)
-
-        # Small swings complete at 2×
-        bar_high = Decimal(str(bar.high))
-        bar_low = Decimal(str(bar.low))
-
-        # Create reference frame
-        frame = ReferenceFrame(
-            anchor0=swing.defended_pivot,
-            anchor1=swing.origin,
-            direction="BULL" if swing.is_bull else "BEAR",
-        )
-
-        # Check completion at 2.0
-        completion_price = bar_high if swing.is_bull else bar_low
-        if frame.is_completed(completion_price):
-            return CompletionResult(
-                is_completed=True,
-                reason="reached_2x_extension",
-                completion_price=completion_price,
-            )
-
-        return CompletionResult(is_completed=False)
-
-    def get_swing_info(self, swing_id: str) -> Optional[ReferenceSwingInfo]:
-        """
-        Get classification info for a specific swing.
-
-        Args:
-            swing_id: The swing's unique identifier.
-
-        Returns:
-            ReferenceSwingInfo if swing has been processed, None otherwise.
-        """
-        return self._swing_info.get(swing_id)
-
-    def get_big_swings(self, swings: List[SwingNode]) -> List[SwingNode]:
-        """
-        Get only the "big swings" (top 10% by range).
-
-        Per valid_swings.md Rule 2.2: Big swings are those whose range is
-        in the top 10% of all reference swings (historically called XL).
-
-        Note: Threshold is computed from the provided swings list.
-
-        Args:
-            swings: List of SwingNode from the DAG.
-
-        Returns:
-            List of SwingNode in top 10% by range.
-        """
-        # Ensure threshold is computed
-        if self._big_swing_threshold is None:
-            self._big_swing_threshold = self._compute_big_swing_threshold(swings)
-
-        return [s for s in swings if self._is_big_swing(s)]
-
-    def update_invalidation_on_bar(
-        self,
-        swings: List[SwingNode],
-        bar: Bar,
-    ) -> List[Tuple[SwingNode, InvalidationResult]]:
-        """
-        Check all swings for invalidation on a new bar.
-
-        Convenience method that applies check_invalidation to all swings
-        and returns those that were invalidated.
-
-        Args:
-            swings: List of SwingNode to check.
-            bar: Current bar.
-
-        Returns:
-            List of (swing, result) tuples for invalidated swings.
-        """
-        # Ensure info is current
-        self.get_reference_swings(swings)
-
-        invalidated = []
-        for swing in swings:
-            if swing.status != "active":
-                continue
-
-            result = self.check_invalidation(swing, bar)
-            if result.is_invalidated:
-                invalidated.append((swing, result))
-
-        return invalidated
-
-    def update_completion_on_bar(
-        self,
-        swings: List[SwingNode],
-        bar: Bar,
-    ) -> List[Tuple[SwingNode, CompletionResult]]:
-        """
-        Check all swings for completion on a new bar.
-
-        Convenience method that applies check_completion to all swings
-        and returns those that were completed.
-
-        Args:
-            swings: List of SwingNode to check.
-            bar: Current bar.
-
-        Returns:
-            List of (swing, result) tuples for completed swings.
-        """
-        # Ensure info is current
-        self.get_reference_swings(swings)
-
-        completed = []
-        for swing in swings:
-            if swing.status != "active":
-                continue
-
-            result = self.check_completion(swing, bar)
-            if result.is_completed:
-                completed.append((swing, result))
-
-        return completed

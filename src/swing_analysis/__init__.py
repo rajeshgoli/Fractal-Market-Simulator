@@ -19,8 +19,14 @@ from .dag import (
     BarType,
     LegPruner,
 )
-from .swing_node import SwingNode
 from .swing_config import SwingConfig
 
 # Reference layer (post-DAG filtering)
-from .reference_layer import ReferenceLayer, ReferenceSwingInfo, InvalidationResult
+from .reference_layer import (
+    ReferenceLayer,
+    ReferenceSwing,
+    ReferenceState,
+    LevelInfo,
+    InvalidationResult,
+    CompletionResult,
+)

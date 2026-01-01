@@ -41,7 +41,6 @@ def make_bull_leg(
         origin_index=origin_index,
         pivot_price=Decimal(str(pivot_price)),
         pivot_index=pivot_index,
-        formed=True,
         price_at_creation=Decimal(str(pivot_price)),
         last_modified_bar=pivot_index,
         bar_count=pivot_index - origin_index,
@@ -339,49 +338,6 @@ class TestOriginProximityPivotGrouping:
         prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
         assert len(prox_events) == 0
         assert len(state.active_legs) == 2
-
-
-class TestOriginProximitySwingTransfer:
-    """Test that swings are transferred when legs with active swings are pruned."""
-
-    def test_swing_transferred_to_older_leg(self):
-        """When a leg with a swing is pruned, its swing should transfer to the older leg."""
-        config = SwingConfig.default().with_origin_prune(
-            origin_range_prune_threshold=0.50,
-            origin_time_prune_threshold=0.50,
-        )
-        pruner = LegPruner(config)
-
-        state = DetectorState()
-        leg1 = make_bull_leg(100.0, 0, 110.0, 10)
-        leg2 = make_bull_leg(101.0, 5, 110.0, 10)
-        leg2.swing_id = "swing-123"  # Has an active swing
-
-        # Add mock swing to active_swings
-        from src.swing_analysis.swing_node import SwingNode
-        swing = SwingNode(
-            swing_id="swing-123",
-            direction='bull',
-            high_bar_index=10,
-            high_price=Decimal('110.0'),
-            low_bar_index=5,
-            low_price=Decimal('101.0'),
-            status='active',
-            formed_at_bar=10,
-        )
-        state.active_swings.append(swing)
-        state.active_legs = [leg1, leg2]
-
-        bar = make_bar(20)
-        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
-
-        # leg2 should be pruned (no immunity) and swing transferred to leg1
-        prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
-        assert len(prox_events) == 1
-        assert prox_events[0].swing_id == "swing-123"
-        assert len(state.active_legs) == 1
-        # Swing should have been transferred to the surviving older leg
-        assert leg1.swing_id == "swing-123"
 
 
 class TestOriginProximityMultipleLegs:

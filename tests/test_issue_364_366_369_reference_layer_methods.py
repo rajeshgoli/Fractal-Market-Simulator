@@ -29,7 +29,6 @@ def make_leg(
     origin_index: int = 100,
     pivot_price: float = 100.0,
     pivot_index: int = 105,
-    formed: bool = True,
     impulsiveness: float = None,
     depth: int = 0,
 ) -> Leg:
@@ -40,7 +39,6 @@ def make_leg(
         origin_index=origin_index,
         pivot_price=Decimal(str(pivot_price)),
         pivot_index=pivot_index,
-        formed=formed,
         impulsiveness=impulsiveness,
         depth=depth,
     )

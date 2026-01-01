@@ -43,7 +43,6 @@ def make_bull_leg(
         origin_index=origin_index,
         pivot_price=Decimal(str(pivot_price)),
         pivot_index=pivot_index,
-        formed=True,
         price_at_creation=Decimal(str(pivot_price)),
         last_modified_bar=pivot_index,
         bar_count=pivot_index - origin_index,
@@ -66,7 +65,6 @@ def make_bear_leg(
         origin_index=origin_index,
         pivot_price=Decimal(str(pivot_price)),
         pivot_index=pivot_index,
-        formed=True,
         price_at_creation=Decimal(str(pivot_price)),
         last_modified_bar=pivot_index,
         bar_count=pivot_index - origin_index,
@@ -522,39 +520,6 @@ class TestCounterTrendVsOldest:
         prox_ct = [e for e in events_ct if e.reason == 'origin_proximity_prune']
         assert len(prox_ct) == 1
         assert prox_ct[0].leg_id == leg1_ct.leg_id  # Opposite of oldest!
-
-
-class TestSwingTransferWithCounterTrend:
-    """Test that swings are properly transferred with counter-trend strategy."""
-
-    def test_swing_transferred_to_highest_scorer(self):
-        """Swing should transfer to the leg with highest counter-trend score."""
-        config = SwingConfig.default().with_origin_prune(
-            origin_range_prune_threshold=0.50,
-            origin_time_prune_threshold=0.50,
-            proximity_prune_strategy='counter_trend',
-        )
-        pruner = LegPruner(config)
-
-        state = DetectorState()
-
-        # Two legs with same pivot, leg2 has swing but lower score
-        leg1 = make_bull_leg(100.0, 0, 110.0, 10)   # range = 10, no swing
-        leg2 = make_bull_leg(102.0, 5, 110.0, 10)   # range = 8, HAS swing
-        leg2.swing_id = "swing-123"
-
-        state.active_legs = [leg1, leg2]
-
-        bar = make_bar(20)
-        events = pruner.apply_origin_proximity_prune(state, 'bull', bar, datetime.now())
-
-        # leg1 survives (higher score), leg2 pruned
-        prox_events = [e for e in events if e.reason == 'origin_proximity_prune']
-        assert len(prox_events) == 1
-        assert prox_events[0].swing_id == "swing-123"
-
-        # Swing should be transferred to leg1
-        assert leg1.swing_id == "swing-123"
 
 
 class TestMultipleClustersPruning:

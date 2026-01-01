@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2025-12-31
 
@@ -8,9 +8,7 @@
 
 ## Pending Changes
 
-| Issue | Description |
-|-------|-------------|
-| #388 | Reference Layer Phase 2: Fib level interaction (hover preview, click-to-stick, color-coding, persistence API) |
+(None — all reviewed)
 
 ---
 

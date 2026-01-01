@@ -10,7 +10,6 @@ from decimal import Decimal
 from enum import Enum
 from typing import List, Dict, Optional
 
-from ..swing_node import SwingNode
 from ..types import Bar
 from .leg import Leg, PendingOrigin
 
@@ -39,9 +38,7 @@ class DetectorState:
     Can be serialized to JSON for persistence.
 
     Attributes:
-        active_swings: List of currently active swing nodes.
         last_bar_index: Most recent bar index processed.
-        fib_levels_crossed: Map of swing_id -> last Fib level for cross tracking.
         all_swing_ranges: List of all swing ranges seen, for big swing calculation.
         _cached_big_threshold_bull: Cached big swing threshold for bull swings.
         _cached_big_threshold_bear: Cached big swing threshold for bear swings.
@@ -53,14 +50,11 @@ class DetectorState:
         pending_origins: Potential origins for new legs awaiting temporal confirmation.
 
         # Population tracking for percentile ranking (#241, #242):
-        formed_leg_impulses: Sorted list of impulse values from all formed legs.
-            Used for O(log n) percentile lookup. Includes pruned/engulfed legs
-            since they were formed at some point.
+        formed_leg_impulses: Sorted list of impulse values from legs.
+            Used for O(log n) percentile lookup.
     """
 
-    active_swings: List[SwingNode] = field(default_factory=list)
     last_bar_index: int = -1
-    fib_levels_crossed: Dict[str, float] = field(default_factory=dict)
     all_swing_ranges: List[Decimal] = field(default_factory=list)
     # Cached big swing thresholds (performance optimization #155)
     _cached_big_threshold_bull: Optional[Decimal] = None
@@ -106,7 +100,6 @@ class DetectorState:
                 "origin_price": str(leg.origin_price),
                 "origin_index": leg.origin_index,
                 "retracement_pct": str(leg.retracement_pct),
-                "formed": leg.formed,
                 "parent_leg_id": leg.parent_leg_id,
                 "status": leg.status,
                 "bar_count": leg.bar_count,
@@ -114,7 +107,6 @@ class DetectorState:
                 "last_modified_bar": leg.last_modified_bar,
                 "price_at_creation": str(leg.price_at_creation),
                 "leg_id": leg.leg_id,
-                "swing_id": leg.swing_id,
                 "impulse": leg.impulse,
                 "impulsiveness": leg.impulsiveness,
                 "spikiness": leg.spikiness,
@@ -160,21 +152,7 @@ class DetectorState:
             }
 
         return {
-            "active_swings": [
-                {
-                    "swing_id": s.swing_id,
-                    "high_bar_index": s.high_bar_index,
-                    "high_price": str(s.high_price),
-                    "low_bar_index": s.low_bar_index,
-                    "low_price": str(s.low_price),
-                    "direction": s.direction,
-                    "status": s.status,
-                    "formed_at_bar": s.formed_at_bar,
-                }
-                for s in self.active_swings
-            ],
             "last_bar_index": self.last_bar_index,
-            "fib_levels_crossed": self.fib_levels_crossed,
             "all_swing_ranges": [str(r) for r in self.all_swing_ranges],
             # Cache fields (will be recomputed on restore, but included for completeness)
             "_cached_big_threshold_bull": str(self._cached_big_threshold_bull) if self._cached_big_threshold_bull is not None else None,
@@ -198,21 +176,6 @@ class DetectorState:
     @classmethod
     def from_dict(cls, data: Dict) -> "DetectorState":
         """Create from dictionary."""
-        # Create swing nodes
-        swings: List[SwingNode] = []
-        for swing_data in data.get("active_swings", []):
-            swing = SwingNode(
-                swing_id=swing_data["swing_id"],
-                high_bar_index=swing_data["high_bar_index"],
-                high_price=Decimal(swing_data["high_price"]),
-                low_bar_index=swing_data["low_bar_index"],
-                low_price=Decimal(swing_data["low_price"]),
-                direction=swing_data["direction"],
-                status=swing_data["status"],
-                formed_at_bar=swing_data["formed_at_bar"],
-            )
-            swings.append(swing)
-
         # Restore cache fields if present (they'll be recomputed on first use anyway)
         cached_bull = data.get("_cached_big_threshold_bull")
         cached_bear = data.get("_cached_big_threshold_bear")
@@ -227,7 +190,6 @@ class DetectorState:
                 origin_price=Decimal(leg_data["origin_price"]),
                 origin_index=leg_data["origin_index"],
                 retracement_pct=Decimal(leg_data.get("retracement_pct", "0")),
-                formed=leg_data.get("formed", False),
                 parent_leg_id=leg_data.get("parent_leg_id"),
                 status=leg_data.get("status", "active"),
                 bar_count=leg_data.get("bar_count", 0),
@@ -237,7 +199,6 @@ class DetectorState:
                 # Prefer stored leg_id for backward compatibility; if missing,
                 # __post_init__ will compute deterministic ID from properties (#299)
                 leg_id=leg_data.get("leg_id", ""),
-                swing_id=leg_data.get("swing_id"),
                 impulse=leg_data.get("impulse", 0.0),
                 impulsiveness=leg_data.get("impulsiveness"),
                 spikiness=leg_data.get("spikiness"),
@@ -296,9 +257,7 @@ class DetectorState:
         has_created_bear_leg = data.get("_has_created_bear_leg", False)
 
         return cls(
-            active_swings=swings,
             last_bar_index=data.get("last_bar_index", -1),
-            fib_levels_crossed=data.get("fib_levels_crossed", {}),
             all_swing_ranges=[
                 Decimal(r) for r in data.get("all_swing_ranges", [])
             ],

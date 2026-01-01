@@ -79,7 +79,6 @@ class TestBranchRatioDomination:
             origin_index=0,
             pivot_price=Decimal('200'),
             pivot_index=10,
-            formed=True,
             price_at_creation=Decimal('200'),
             last_modified_bar=10,
         )
@@ -92,7 +91,6 @@ class TestBranchRatioDomination:
             origin_index=0,
             pivot_price=Decimal('100'),  # pivot == parent's origin
             pivot_index=5,
-            formed=True,
             price_at_creation=Decimal('100'),
             last_modified_bar=5,
         )
@@ -105,7 +103,6 @@ class TestBranchRatioDomination:
             origin_index=15,
             pivot_price=Decimal('150'),  # pivot == child's origin
             pivot_index=20,
-            formed=True,
             price_at_creation=Decimal('150'),
             last_modified_bar=20,
         )
@@ -165,7 +162,6 @@ class TestBranchRatioDomination:
             origin_index=0,
             pivot_price=Decimal('200'),
             pivot_index=10,
-            formed=True,
             price_at_creation=Decimal('200'),
             last_modified_bar=10,
         )
@@ -178,7 +174,6 @@ class TestBranchRatioDomination:
             origin_index=0,
             pivot_price=Decimal('100'),
             pivot_index=5,
-            formed=True,
             price_at_creation=Decimal('100'),
             last_modified_bar=5,
         )
@@ -191,7 +186,6 @@ class TestBranchRatioDomination:
             origin_index=15,
             pivot_price=Decimal('150'),
             pivot_index=20,
-            formed=True,
             price_at_creation=Decimal('150'),
             last_modified_bar=20,
         )

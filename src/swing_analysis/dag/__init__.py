@@ -25,7 +25,7 @@ Example:
     >>> detector, events = calibrate(bars)
 """
 
-from .leg_detector import LegDetector, HierarchicalDetector, FIB_LEVELS
+from .leg_detector import LegDetector, HierarchicalDetector
 from .leg import Leg, PendingOrigin
 from .state import DetectorState, BarType
 from .leg_pruner import LegPruner
@@ -46,6 +46,4 @@ __all__ = [
     "calibrate",
     "calibrate_from_dataframe",
     "dataframe_to_bars",
-    # Constants
-    "FIB_LEVELS",
 ]

@@ -11,18 +11,16 @@ import pandas as pd
 
 from ..swing_config import SwingConfig
 from ..types import Bar
-from ..events import SwingEvent, SwingInvalidatedEvent, SwingCompletedEvent
+from ..events import SwingEvent
 
 if TYPE_CHECKING:
     from .leg_detector import LegDetector
-    from ..reference_layer import ReferenceLayer
 
 
 def calibrate(
     bars: List[Bar],
     config: SwingConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
-    ref_layer: Optional["ReferenceLayer"] = None,
 ) -> Tuple["LegDetector", List[SwingEvent]]:
     """
     Run detection on historical bars.
@@ -30,18 +28,10 @@ def calibrate(
     This is process_bar() in a loop - guarantees identical behavior
     to incremental playback.
 
-    When a ReferenceLayer is provided, invalidation and completion checks
-    are applied after each bar according to the Reference layer rules
-    (tolerance-based invalidation for big swings, 2x completion for small swings).
-    See Docs/Working/DAG_spec.md for the pipeline integration spec.
-
     Args:
         bars: Historical bars to process.
         config: Detection configuration (defaults to SwingConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
-        ref_layer: Optional ReferenceLayer for tolerance-based invalidation and
-            completion. If provided, swings are pruned according to Reference
-            layer rules during calibration (not just at response time).
 
     Returns:
         Tuple of (detector with state, all events generated).
@@ -49,7 +39,7 @@ def calibrate(
     Example:
         >>> bars = [Bar(index=i, ...) for i in range(1000)]
         >>> detector, events = calibrate(bars)
-        >>> print(f"Found {len(detector.get_active_swings())} active swings")
+        >>> print(f"Found {len(detector.state.active_legs)} active legs")
         >>> # Continue processing new bars
         >>> new_events = detector.process_bar(new_bar)
 
@@ -57,11 +47,6 @@ def calibrate(
         >>> def on_progress(current, total):
         ...     print(f"Processing bar {current}/{total}")
         >>> detector, events = calibrate(bars, progress_callback=on_progress)
-
-        >>> # With Reference layer for tolerance-based invalidation
-        >>> from swing_analysis.reference_layer import ReferenceLayer
-        >>> ref_layer = ReferenceLayer(config)
-        >>> detector, events = calibrate(bars, ref_layer=ref_layer)
     """
     # Import here to avoid circular import
     from .leg_detector import LegDetector
@@ -73,38 +58,9 @@ def calibrate(
     total = len(bars)
 
     for i, bar in enumerate(bars):
-        # Create timestamp for events
-        timestamp = datetime.fromtimestamp(bar.timestamp) if bar.timestamp else datetime.now()
-
-        # 1. Process bar for DAG events (formation, structural invalidation, level cross)
+        # Process bar for DAG events (leg creation, pruning, invalidation)
         events = detector.process_bar(bar)
         all_events.extend(events)
-
-        # 2. Apply Reference layer invalidation/completion if provided (#175)
-        if ref_layer is not None:
-            active_swings = detector.get_active_swings()
-
-            # Check invalidation (tolerance-based rules)
-            invalidated = ref_layer.update_invalidation_on_bar(active_swings, bar)
-            for swing, result in invalidated:
-                swing.invalidate()
-                all_events.append(SwingInvalidatedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id=swing.swing_id,
-                    reason=f"reference_layer:{result.reason}",
-                ))
-
-            # Check completion (2x for small swings, big swings never complete)
-            completed = ref_layer.update_completion_on_bar(active_swings, bar)
-            for swing, result in completed:
-                swing.complete()
-                all_events.append(SwingCompletedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id=swing.swing_id,
-                    completion_price=result.completion_price,
-                ))
 
         if progress_callback:
             progress_callback(i + 1, total)
@@ -177,7 +133,6 @@ def calibrate_from_dataframe(
     df: pd.DataFrame,
     config: SwingConfig = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
-    ref_layer: Optional["ReferenceLayer"] = None,
 ) -> Tuple["LegDetector", List[SwingEvent]]:
     """
     Convenience wrapper for DataFrame input.
@@ -188,9 +143,6 @@ def calibrate_from_dataframe(
         df: DataFrame with OHLC columns (open, high, low, close).
         config: Detection configuration (defaults to SwingConfig.default()).
         progress_callback: Optional callback(current, total) for progress reporting.
-        ref_layer: Optional ReferenceLayer for tolerance-based invalidation and
-            completion. If provided, swings are pruned according to Reference
-            layer rules during calibration (not just at response time).
 
     Returns:
         Tuple of (detector with state, all events generated).
@@ -199,12 +151,7 @@ def calibrate_from_dataframe(
         >>> import pandas as pd
         >>> df = pd.read_csv("ES-5m.csv")
         >>> detector, events = calibrate_from_dataframe(df)
-        >>> print(f"Detected {len(detector.get_active_swings())} active swings")
-
-        >>> # With Reference layer for tolerance-based invalidation
-        >>> from swing_analysis.reference_layer import ReferenceLayer
-        >>> ref_layer = ReferenceLayer()
-        >>> detector, events = calibrate_from_dataframe(df, ref_layer=ref_layer)
+        >>> print(f"Detected {len(detector.state.active_legs)} active legs")
     """
     bars = dataframe_to_bars(df)
-    return calibrate(bars, config, progress_callback, ref_layer)
+    return calibrate(bars, config, progress_callback)
