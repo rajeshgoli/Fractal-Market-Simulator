@@ -352,17 +352,14 @@ The pipeline order per bar:
 - **Directional leg creation** — Bull legs are only created in TYPE_2_BULL (HH, HL) and bear legs only in TYPE_2_BEAR (LH, LL). This ensures correct temporal order: origin_index < pivot_index for all legs (#195, #197)
 - **Leg terminology** — Origin is where the move started (fixed), Pivot is the defended extreme (extends). Bull leg: origin=LOW, pivot=HIGH. Bear leg: origin=HIGH, pivot=LOW (#197)
 
-**Event types:**
+**Event types (#408: SWING_* events removed):**
 | Event | API Type | When emitted |
 |-------|----------|--------------|
-| `SwingFormedEvent` | `SWING_FORMED` | Price breaches formation threshold from candidate pair |
-| `SwingInvalidatedEvent` | `SWING_INVALIDATED` | Defended pivot violated beyond tolerance |
-| `SwingCompletedEvent` | `SWING_COMPLETED` | Price reaches 2.0 extension target |
-| `LegCreatedEvent` | `LEG_CREATED` | New candidate leg is created (pre-formation) |
+| `LegCreatedEvent` | `LEG_CREATED` | New candidate leg is created |
 | `LegPrunedEvent` | `LEG_PRUNED` | Leg is removed (reasons: `turn_prune`, `origin_proximity_prune`, `breach_prune`, `extension_prune`) |
 | `LegInvalidatedEvent` | `LEG_INVALIDATED` | Leg breaches invalidation threshold (configurable, default 0.382) |
 
-All event types are serialized with their API type string (second column) in API responses. Leg events include their specific metadata: `LegPrunedEvent` includes `reason` and `explanation` fields in the `trigger_explanation`.
+All event types are serialized with their API type string (second column) in API responses. `LegPrunedEvent` includes `reason` and `explanation` fields in the `trigger_explanation`.
 
 **Tolerance rules (Rule 2.2):**
 - Big swings (top 10% by range): full tolerance (0.15)

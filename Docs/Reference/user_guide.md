@@ -275,7 +275,7 @@ The Follow Leg feature lets you track specific legs through their complete lifec
 - **Recolored leg**: The leg's line changes to your assigned tracking color (from the palette)
 - **Followed Legs Panel**: The leg appears in Column 3 with state, last event, and unfollow button
 - **Candle markers**: When lifecycle events occur, markers appear on the candles:
-  - **F** (formed): Leg transitioned from forming to formed
+  - **C** (created): New leg created (#408: renamed from 'formed')
   - **P** (pruned): Leg removed from active set
   - **E** (engulfed): Both origin and pivot breached
   - **O!** (origin breached): Price touched or crossed the leg's origin (#345)
