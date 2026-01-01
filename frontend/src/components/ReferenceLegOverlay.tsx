@@ -267,7 +267,18 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
   // Update confluence zone label positions
   const updateConfluenceLabelPositions = useCallback(() => {
-    if (!chart || !series || bars.length === 0 || confluenceZones.length === 0) {
+    if (!chart || !series || bars.length === 0 || confluenceZones.length === 0 || showFiltered) {
+      setConfluenceLabelPositions(new Map());
+      return;
+    }
+
+    // Only show labels for significant zones (3+ refs, top 5)
+    const significantZones = confluenceZones
+      .filter(z => z.reference_count >= 3)
+      .sort((a, b) => b.reference_count - a.reference_count)
+      .slice(0, 5);
+
+    if (significantZones.length === 0) {
       setConfluenceLabelPositions(new Map());
       return;
     }
@@ -285,7 +296,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     const x = chart.timeScale().timeToCoordinate(rightTime as Time);
     if (x === null) return;
 
-    confluenceZones.forEach((zone, idx) => {
+    significantZones.forEach((zone, idx) => {
       const y = series.priceToCoordinate(zone.center_price);
       if (y !== null) {
         positions.set(`confluence_${idx}`, { x: x - 10, y, zone });
@@ -293,7 +304,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     });
 
     setConfluenceLabelPositions(positions);
-  }, [chart, series, bars, confluenceZones]);
+  }, [chart, series, bars, confluenceZones, showFiltered]);
 
   // Compute fib levels for a reference
   const computeFibLevels = useCallback((ref: ReferenceSwing): { ratio: number; price: number }[] => {
@@ -606,8 +617,14 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       }
 
       // Create confluence zone bands (Issue #421)
+      // Only show zones with 3+ references, limit to top 5 by reference count
       if (!showFiltered && confluenceZones.length > 0) {
-        confluenceZones.forEach((zone, idx) => {
+        const significantZones = confluenceZones
+          .filter(z => z.reference_count >= 3)
+          .sort((a, b) => b.reference_count - a.reference_count)
+          .slice(0, 5);
+
+        significantZones.forEach((zone, idx) => {
           createConfluenceZoneBand(zone, idx);
         });
       }
