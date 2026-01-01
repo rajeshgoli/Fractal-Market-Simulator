@@ -1,5 +1,5 @@
 import React, { useState, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react';
-import { Settings, RotateCcw, Loader } from 'lucide-react';
+import { Settings, RotateCcw, Loader, Info } from 'lucide-react';
 import { DetectionConfig, DEFAULT_DETECTION_CONFIG } from '../types';
 import { updateDetectionConfig, DetectionConfigUpdateRequest } from '../lib/api';
 
@@ -10,33 +10,58 @@ interface SliderConfig {
   max: number;
   step: number;
   description: string;
+  tooltip: string;  // Full tooltip explanation
   displayAsPercent?: boolean;  // Display value as percentage (multiply by 100, add %)
   colorMode?: 'restrictive-right' | 'restrictive-left';  // Which direction is more restrictive
 }
 
-// Slider configurations for global parameters (excluding turn ratio which has special handling)
-const GLOBAL_SLIDERS: SliderConfig[] = [
-  { key: 'stale_extension_threshold', label: 'Stale Extension', min: 1.0, max: 5.0, step: 0.1, description: 'Extension multiple for stale pruning', colorMode: 'restrictive-left' },
-  { key: 'origin_range_threshold', label: 'Origin Range %', min: 0.0, max: 0.10, step: 0.01, description: 'Range similarity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
-  { key: 'origin_time_threshold', label: 'Origin Time %', min: 0.0, max: 0.10, step: 0.01, description: 'Time proximity threshold for origin-proximity pruning', displayAsPercent: true, colorMode: 'restrictive-right' },
-  { key: 'min_branch_ratio', label: 'Branch Ratio', min: 0.0, max: 0.20, step: 0.01, description: 'Min ratio of child counter-trend to parent counter-trend for origin domination', displayAsPercent: true, colorMode: 'restrictive-right' },
+// Prune threshold sliders (#404 - simplified config)
+const PRUNE_SLIDERS: SliderConfig[] = [
+  {
+    key: 'stale_extension_threshold',
+    label: 'Stale Extension',
+    min: 1.0,
+    max: 5.0,
+    step: 0.1,
+    description: 'Prune extended legs',
+    tooltip: 'When a leg extends N times its range beyond origin, prune it. Lower = more aggressive pruning.',
+    colorMode: 'restrictive-left',
+  },
+  {
+    key: 'origin_range_threshold',
+    label: 'Origin Proximity',
+    min: 0.0,
+    max: 0.10,
+    step: 0.01,
+    description: 'Consolidate similar origins',
+    tooltip: 'Legs with origins within this range % are consolidated. 0 = disabled. Higher = more aggressive.',
+    displayAsPercent: true,
+    colorMode: 'restrictive-right',
+  },
+  {
+    key: 'max_turns',
+    label: 'Turn Ranking',
+    min: 0,
+    max: 20,
+    step: 1,
+    description: 'Max legs per pivot',
+    tooltip: 'Keep only top k legs at each pivot by counter-trend size (heft). 0 = disabled.',
+    colorMode: 'restrictive-right',
+  },
 ];
 
-// Turn ratio mode is now implicit based on slider values (#347):
-// - min_turn_ratio > 0: threshold mode
-// - max_turns_per_pivot > 0: top-k mode
-// - both 0: disabled
-
-// Toggle configurations for pruning algorithms
-interface ToggleConfig {
-  key: keyof DetectionConfig;
-  label: string;
-  description: string;
-}
-
-const PRUNE_TOGGLES: ToggleConfig[] = [
-  { key: 'enable_engulfed_prune', label: 'Engulfed', description: 'Delete legs breached on both origin and pivot sides' },
-];
+// Per-direction engulfed threshold slider
+const ENGULFED_SLIDER: SliderConfig = {
+  key: 'engulfed_breach_threshold',
+  label: 'Engulfed',
+  min: 0.0,
+  max: 0.30,
+  step: 0.01,
+  description: 'Threshold for engulfed pruning',
+  tooltip: 'Prune legs breached on both sides when combined breach exceeds this %. 0 = any breach triggers prune. 1.0 = disabled.',
+  displayAsPercent: true,
+  colorMode: 'restrictive-right',
+};
 
 interface DetectionConfigPanelProps {
   config: DetectionConfig;
@@ -62,6 +87,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
 }, ref) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTooltip, setShowTooltip] = useState<string | null>(null);
   // Initialize local state from saved preferences if available, otherwise from server config
   const [localConfig, setLocalConfig] = useState<DetectionConfig>(
     initialLocalConfig ?? config
@@ -87,34 +113,9 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       localConfig.stale_extension_threshold !== config.stale_extension_threshold ||
       localConfig.origin_range_threshold !== config.origin_range_threshold ||
       localConfig.origin_time_threshold !== config.origin_time_threshold ||
-      localConfig.min_branch_ratio !== config.min_branch_ratio ||
-      localConfig.min_turn_ratio !== config.min_turn_ratio ||
-      localConfig.max_turns_per_pivot !== config.max_turns_per_pivot ||
-      localConfig.max_turns_per_pivot_raw !== config.max_turns_per_pivot_raw ||
-      localConfig.enable_engulfed_prune !== config.enable_engulfed_prune
+      localConfig.max_turns !== config.max_turns
     );
   }, [localConfig, config]);
-
-  // Handle turn ratio slider changes with mutual exclusion (#347, #355)
-  // Setting one slider > 0 automatically zeros the others
-  const handleTurnRatioChange = useCallback((key: 'min_turn_ratio' | 'max_turns_per_pivot' | 'max_turns_per_pivot_raw', value: number) => {
-    setLocalConfig(prev => {
-      if (key === 'min_turn_ratio' && value > 0) {
-        // Setting threshold > 0 clears both top-k modes
-        return { ...prev, min_turn_ratio: value, max_turns_per_pivot: 0, max_turns_per_pivot_raw: 0 };
-      } else if (key === 'max_turns_per_pivot' && value > 0) {
-        // Setting top-k ratio > 0 clears threshold and raw mode
-        return { ...prev, min_turn_ratio: 0, max_turns_per_pivot: value, max_turns_per_pivot_raw: 0 };
-      } else if (key === 'max_turns_per_pivot_raw' && value > 0) {
-        // Setting top-k raw > 0 clears threshold and ratio mode
-        return { ...prev, min_turn_ratio: 0, max_turns_per_pivot: 0, max_turns_per_pivot_raw: value };
-      } else {
-        // Setting to 0 just sets that field
-        return { ...prev, [key]: value };
-      }
-    });
-    setError(null);
-  }, []);
 
   const handleSliderChange = useCallback((
     direction: 'bull' | 'bear' | 'global',
@@ -133,11 +134,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
     setError(null);
   }, []);
 
-  const handleToggleChange = useCallback((key: keyof DetectionConfig, value: boolean) => {
-    setLocalConfig(prev => ({ ...prev, [key]: value }));
-    setError(null);
-  }, []);
-
   const handleApply = useCallback(async () => {
     if (!isCalibrated) {
       setError('Must calibrate before updating config');
@@ -149,7 +145,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
 
     try {
       // Build request with all current values
-      // Note: formation_fib removed (#394) - formation now handled by Reference Layer at runtime
       const request: DetectionConfigUpdateRequest = {
         bull: {
           engulfed_breach_threshold: localConfig.bull.engulfed_breach_threshold,
@@ -160,12 +155,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         stale_extension_threshold: localConfig.stale_extension_threshold,
         origin_range_threshold: localConfig.origin_range_threshold,
         origin_time_threshold: localConfig.origin_time_threshold,
-        min_branch_ratio: localConfig.min_branch_ratio,
-        min_turn_ratio: localConfig.min_turn_ratio,
-        max_turns_per_pivot: localConfig.max_turns_per_pivot,
-        max_turns_per_pivot_raw: localConfig.max_turns_per_pivot_raw,
-        // Pruning algorithm toggles
-        enable_engulfed_prune: localConfig.enable_engulfed_prune,
+        max_turns: localConfig.max_turns,
       };
 
       const updatedConfig = await updateDetectionConfig(request);
@@ -212,7 +202,7 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
       : slider.step >= 1 ? String(Math.round(value)) : value.toFixed(slider.step >= 0.1 ? 1 : 2);
 
     // Calculate position ratio for color gradient (0 = min, 1 = max)
-    const positionRatio = (value - slider.min) / (slider.max - slider.min);
+    const positionRatio = slider.max > slider.min ? (value - slider.min) / (slider.max - slider.min) : 0;
 
     // Calculate color based on position and restrictiveness mode
     // restrictive-right: left=green, right=red (higher values are more restrictive)
@@ -229,13 +219,23 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
     };
 
     const sliderColor = getSliderColor();
+    const sliderKey = `${direction}-${slider.key}`;
 
     return (
-      <div key={`${direction}-${slider.key}`} className="space-y-1">
+      <div key={sliderKey} className="space-y-1">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-app-muted" title={slider.description}>
-            {slider.label}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-app-muted">
+              {slider.label}
+            </span>
+            <button
+              onClick={() => setShowTooltip(showTooltip === sliderKey ? null : sliderKey)}
+              className="text-app-muted hover:text-app-text transition-colors"
+              title={slider.tooltip}
+            >
+              <Info size={12} />
+            </button>
+          </div>
           <span
             className={`text-xs font-mono ${isDefault ? 'text-app-muted' : ''}`}
             style={!isDefault ? { color: sliderColor } : undefined}
@@ -243,6 +243,11 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
             {displayValue}
           </span>
         </div>
+        {showTooltip === sliderKey && (
+          <p className="text-xs text-app-muted bg-app-bg-tertiary p-2 rounded mb-1">
+            {slider.tooltip}
+          </p>
+        )}
         <input
           type="range"
           min={slider.min}
@@ -255,39 +260,6 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
           disabled={isUpdating}
         />
       </div>
-    );
-  };
-
-  const renderToggle = (toggle: ToggleConfig) => {
-    const value = localConfig[toggle.key] as boolean;
-    const defaultValue = DEFAULT_DETECTION_CONFIG[toggle.key] as boolean;
-    const isDefault = value === defaultValue;
-
-    return (
-      <label
-        key={toggle.key}
-        className="flex items-center justify-between cursor-pointer group"
-        title={toggle.description}
-      >
-        <span className={`text-xs ${isDefault ? 'text-app-muted' : 'text-trading-blue'}`}>
-          {toggle.label}
-        </span>
-        <div className="relative">
-          <input
-            type="checkbox"
-            checked={value}
-            onChange={(e) => handleToggleChange(toggle.key, e.target.checked)}
-            disabled={isUpdating}
-            className="sr-only peer"
-          />
-          <div className={`w-8 h-4 rounded-full transition-colors ${
-            value ? 'bg-trading-blue' : 'bg-app-border'
-          } peer-disabled:opacity-50`} />
-          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
-            value ? 'translate-x-4' : 'translate-x-0'
-          }`} />
-        </div>
-      </label>
     );
   };
 
@@ -311,94 +283,25 @@ export const DetectionConfigPanel = forwardRef<DetectionConfigPanelHandle, Detec
         </div>
       )}
 
-      {/* Global Thresholds */}
+      {/* Prune Thresholds Section */}
       <div className="space-y-2">
-        <span className="text-xs font-medium text-app-text">Global</span>
+        <span className="text-xs font-medium text-app-text">Prune Thresholds</span>
         <div className="pl-4 space-y-3">
-          {GLOBAL_SLIDERS.map(slider => renderSlider('global', slider))}
+          {PRUNE_SLIDERS.map(slider => renderSlider('global', slider))}
         </div>
       </div>
 
-      {/* Turn Ratio Pruning (#347, #355) - three sliders with mutual exclusion */}
+      {/* Direction-Specific Engulfed Thresholds */}
       <div className="space-y-2">
-        <span className="text-xs font-medium text-app-text">Turn Ratio Pruning</span>
+        <span className="text-xs font-medium text-app-text">Engulfed Threshold</span>
         <div className="pl-4 space-y-3">
-          {/* Min turn ratio slider (threshold mode) */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-app-muted" title="Min turn ratio threshold (counter-leg range / leg range). Setting > 0 disables other modes.">
-                Min Ratio %
-              </span>
-              <span className={`text-xs font-mono ${(localConfig.min_turn_ratio ?? 0) > 0 ? 'text-trading-blue' : 'text-app-muted'}`}>
-                {(localConfig.min_turn_ratio ?? 0) === 0 ? 'off' : `${Math.round((localConfig.min_turn_ratio ?? 0) * 100)}%`}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={0.50}
-              step={0.01}
-              value={localConfig.min_turn_ratio ?? 0}
-              onChange={(e) => handleTurnRatioChange('min_turn_ratio', parseFloat(e.target.value))}
-              className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
-              style={{ accentColor: (localConfig.min_turn_ratio ?? 0) > 0 ? 'rgb(59, 130, 246)' : 'rgb(107, 114, 128)' }}
-              disabled={isUpdating}
-            />
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-trading-bull font-medium">Bull</span>
+            <span className="text-xs text-app-muted">|</span>
+            <span className="text-xs text-trading-bear font-medium">Bear</span>
           </div>
-
-          {/* Max turns slider (top-k by ratio mode) */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-app-muted" title="Keep only top k legs per pivot by turn ratio. Setting > 0 disables other modes.">
-                Max Turns
-              </span>
-              <span className={`text-xs font-mono ${(localConfig.max_turns_per_pivot ?? 0) > 0 ? 'text-trading-blue' : 'text-app-muted'}`}>
-                {(localConfig.max_turns_per_pivot ?? 0) === 0 ? 'off' : localConfig.max_turns_per_pivot}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={20}
-              step={1}
-              value={localConfig.max_turns_per_pivot ?? 0}
-              onChange={(e) => handleTurnRatioChange('max_turns_per_pivot', parseInt(e.target.value))}
-              className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
-              style={{ accentColor: (localConfig.max_turns_per_pivot ?? 0) > 0 ? 'rgb(59, 130, 246)' : 'rgb(107, 114, 128)' }}
-              disabled={isUpdating}
-            />
-          </div>
-
-          {/* Max heft slider (top-k by raw counter-heft mode, #355) */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-app-muted" title="Keep only top k legs per pivot by raw counter-leg range (ignores ratio). Setting > 0 disables other modes.">
-                Max Heft
-              </span>
-              <span className={`text-xs font-mono ${(localConfig.max_turns_per_pivot_raw ?? 0) > 0 ? 'text-trading-blue' : 'text-app-muted'}`}>
-                {(localConfig.max_turns_per_pivot_raw ?? 0) === 0 ? 'off' : localConfig.max_turns_per_pivot_raw}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={20}
-              step={1}
-              value={localConfig.max_turns_per_pivot_raw ?? 0}
-              onChange={(e) => handleTurnRatioChange('max_turns_per_pivot_raw', parseInt(e.target.value))}
-              className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer"
-              style={{ accentColor: (localConfig.max_turns_per_pivot_raw ?? 0) > 0 ? 'rgb(59, 130, 246)' : 'rgb(107, 114, 128)' }}
-              disabled={isUpdating}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Pruning Algorithms */}
-      <div className="space-y-2">
-        <span className="text-xs font-medium text-app-text">Pruning Algorithms</span>
-        <div className="pl-4 space-y-2">
-          {PRUNE_TOGGLES.map(toggle => renderToggle(toggle))}
+          {renderSlider('bull', { ...ENGULFED_SLIDER, label: 'Bull' })}
+          {renderSlider('bear', { ...ENGULFED_SLIDER, label: 'Bear' })}
         </div>
       </div>
 

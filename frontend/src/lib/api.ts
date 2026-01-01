@@ -289,16 +289,14 @@ export interface FeedbackDirectionConfig {
   engulfed_breach_threshold: number;
 }
 
-// Detection config captured in feedback snapshot (#320)
+// Detection config captured in feedback snapshot (#320, #404 simplified)
 export interface FeedbackDetectionConfig {
   bull: FeedbackDirectionConfig;
   bear: FeedbackDirectionConfig;
   stale_extension_threshold: number;
   origin_range_threshold: number;
   origin_time_threshold: number;
-  min_branch_ratio: number;  // Min branch ratio for origin domination (#337)
-  min_turn_ratio: number;  // Min turn ratio for sibling pruning (#341)
-  enable_engulfed_prune: boolean;
+  max_turns: number;  // Max legs per pivot by heft (#404)
 }
 
 // Rich context snapshot for always-on feedback
@@ -506,7 +504,8 @@ export async function fetchFollowedLegsEvents(
 /**
  * Request to update detection configuration.
  * Only provided fields are updated; omitted fields keep defaults.
- * #394: formation_fib removed - formation now handled by Reference Layer at runtime
+ * #404: Simplified - removed min_branch_ratio, min_turn_ratio, max_turns_per_pivot,
+ *       max_turns_per_pivot_raw, enable_engulfed_prune. Added max_turns.
  */
 export interface DetectionConfigUpdateRequest {
   bull?: {
@@ -518,12 +517,7 @@ export interface DetectionConfigUpdateRequest {
   stale_extension_threshold?: number;
   origin_range_threshold?: number;  // Origin proximity range threshold (#294)
   origin_time_threshold?: number;  // Origin proximity time threshold (#294)
-  min_branch_ratio?: number;  // Min branch ratio for origin domination (#337)
-  min_turn_ratio?: number;  // Min turn ratio for sibling pruning (#341)
-  max_turns_per_pivot?: number;  // Top-k turn ratio pruning (#342)
-  max_turns_per_pivot_raw?: number;  // Top-k raw counter-heft pruning (#355)
-  // Pruning algorithm toggles
-  enable_engulfed_prune?: boolean;
+  max_turns?: number;  // Max legs per pivot by heft (#404)
 }
 
 /**

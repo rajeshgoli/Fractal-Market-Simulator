@@ -70,30 +70,23 @@ class DetectionConfig:
             Invalidated legs WITH A PARENT are pruned when price moves N x their range
             beyond origin. Root legs (no parent) are never pruned, preserving the anchor
             that began the move.
-        enable_engulfed_prune: Whether to delete legs that are breached on both
-            origin and pivot sides.
+        max_turns: Maximum legs to keep at each pivot by raw counter-heft (#404).
+            Replaces the old three-mode system (min_turn_ratio, max_turns_per_pivot,
+            max_turns_per_pivot_raw). Set to 0 to disable. Default: 10.
 
     Example:
         >>> config = DetectionConfig.default()
         >>> config.bull.formation_fib
-        0.287
+        0.236
     """
     bull: DirectionConfig = field(default_factory=DirectionConfig)
     bear: DirectionConfig = field(default_factory=DirectionConfig)
     origin_range_prune_threshold: float = 0.02
     origin_time_prune_threshold: float = 0.02
     proximity_prune_strategy: str = 'oldest'
-    min_branch_ratio: float = 0.0
-    min_turn_ratio: float = 0.0
-    # Turn ratio mode selection (mutually exclusive):
-    #   - min_turn_ratio > 0: threshold mode (prune legs below ratio)
-    #   - max_turns_per_pivot > 0: top-k by ratio
-    #   - max_turns_per_pivot_raw > 0: top-k by raw counter-heft
-    max_turns_per_pivot: int = 0
-    max_turns_per_pivot_raw: int = 10
+    # #404: max_turns replaces min_turn_ratio + max_turns_per_pivot + max_turns_per_pivot_raw
+    max_turns: int = 10
     stale_extension_threshold: float = 3.0
-    # Pruning algorithm toggles (#288)
-    enable_engulfed_prune: bool = True
 
     @classmethod
     def default(cls) -> "DetectionConfig":
@@ -120,12 +113,8 @@ class DetectionConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_branch_ratio=self.min_branch_ratio,
-            min_turn_ratio=self.min_turn_ratio,
-            max_turns_per_pivot=self.max_turns_per_pivot,
-            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
+            max_turns=self.max_turns,
             stale_extension_threshold=self.stale_extension_threshold,
-            enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
     def with_bear(self, **kwargs: Any) -> "DetectionConfig":
@@ -142,12 +131,8 @@ class DetectionConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_branch_ratio=self.min_branch_ratio,
-            min_turn_ratio=self.min_turn_ratio,
-            max_turns_per_pivot=self.max_turns_per_pivot,
-            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
+            max_turns=self.max_turns,
             stale_extension_threshold=self.stale_extension_threshold,
-            enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
     def with_origin_prune(
@@ -190,12 +175,8 @@ class DetectionConfig:
                 if proximity_prune_strategy is not None
                 else self.proximity_prune_strategy
             ),
-            min_branch_ratio=self.min_branch_ratio,
-            min_turn_ratio=self.min_turn_ratio,
-            max_turns_per_pivot=self.max_turns_per_pivot,
-            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
+            max_turns=self.max_turns,
             stale_extension_threshold=self.stale_extension_threshold,
-            enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
     def with_stale_extension(self, stale_extension_threshold: float) -> "DetectionConfig":
@@ -215,26 +196,19 @@ class DetectionConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_branch_ratio=self.min_branch_ratio,
-            min_turn_ratio=self.min_turn_ratio,
-            max_turns_per_pivot=self.max_turns_per_pivot,
-            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
+            max_turns=self.max_turns,
             stale_extension_threshold=stale_extension_threshold,
-            enable_engulfed_prune=self.enable_engulfed_prune,
         )
 
-    def with_prune_toggles(
-        self,
-        enable_engulfed_prune: bool = None,
-    ) -> "DetectionConfig":
+    def with_max_turns(self, max_turns: int) -> "DetectionConfig":
         """
-        Create a new config with modified pruning algorithm toggles.
+        Create a new config with modified max turns (#404).
 
         Since DetectionConfig is frozen, this creates a new instance.
-        Only provided parameters are modified; others keep their current values.
 
         Args:
-            enable_engulfed_prune: Enable/disable engulfed leg deletion.
+            max_turns: Maximum number of legs to keep at each pivot by raw
+                counter-heft. Set to 0 to disable turn-based pruning.
         """
         return DetectionConfig(
             bull=self.bull,
@@ -242,115 +216,6 @@ class DetectionConfig:
             origin_range_prune_threshold=self.origin_range_prune_threshold,
             origin_time_prune_threshold=self.origin_time_prune_threshold,
             proximity_prune_strategy=self.proximity_prune_strategy,
-            min_branch_ratio=self.min_branch_ratio,
-            min_turn_ratio=self.min_turn_ratio,
-            max_turns_per_pivot=self.max_turns_per_pivot,
-            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
+            max_turns=max_turns,
             stale_extension_threshold=self.stale_extension_threshold,
-            enable_engulfed_prune=enable_engulfed_prune if enable_engulfed_prune is not None else self.enable_engulfed_prune,
-        )
-
-    def with_min_branch_ratio(self, min_branch_ratio: float) -> "DetectionConfig":
-        """
-        Create a new config with modified min branch ratio threshold (#337).
-
-        Since DetectionConfig is frozen, this creates a new instance.
-
-        Args:
-            min_branch_ratio: Minimum ratio of child's counter-trend to parent's.
-                A new leg's counter-trend must be >= min_branch_ratio * parent's.
-                0.1 means child's counter-trend must be at least 10% of parent's.
-                0.0 disables branch ratio domination.
-        """
-        return DetectionConfig(
-            bull=self.bull,
-            bear=self.bear,
-            origin_range_prune_threshold=self.origin_range_prune_threshold,
-            origin_time_prune_threshold=self.origin_time_prune_threshold,
-            proximity_prune_strategy=self.proximity_prune_strategy,
-            min_branch_ratio=min_branch_ratio,
-            min_turn_ratio=self.min_turn_ratio,
-            max_turns_per_pivot=self.max_turns_per_pivot,
-            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
-            stale_extension_threshold=self.stale_extension_threshold,
-            enable_engulfed_prune=self.enable_engulfed_prune,
-        )
-
-    def with_min_turn_ratio(self, min_turn_ratio: float) -> "DetectionConfig":
-        """
-        Create a new config with modified min turn ratio threshold (#341).
-
-        Since DetectionConfig is frozen, this creates a new instance.
-
-        Args:
-            min_turn_ratio: Minimum turn ratio for sibling pruning at shared pivots.
-                When a new leg forms at origin O, counter-legs with pivot=O and
-                turn_ratio < min_turn_ratio are pruned.
-                0.5 means legs cannot extend more than 2x their counter-trend.
-                0.0 disables turn ratio pruning.
-        """
-        return DetectionConfig(
-            bull=self.bull,
-            bear=self.bear,
-            origin_range_prune_threshold=self.origin_range_prune_threshold,
-            origin_time_prune_threshold=self.origin_time_prune_threshold,
-            proximity_prune_strategy=self.proximity_prune_strategy,
-            min_branch_ratio=self.min_branch_ratio,
-            min_turn_ratio=min_turn_ratio,
-            max_turns_per_pivot=self.max_turns_per_pivot,
-            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
-            stale_extension_threshold=self.stale_extension_threshold,
-            enable_engulfed_prune=self.enable_engulfed_prune,
-        )
-
-    def with_max_turns_per_pivot(self, max_turns_per_pivot: int) -> "DetectionConfig":
-        """
-        Create a new config with modified max turns per pivot (#342).
-
-        Since DetectionConfig is frozen, this creates a new instance.
-
-        Args:
-            max_turns_per_pivot: Maximum number of legs to keep at each pivot
-                in top-k mode. Only active when min_turn_ratio == 0.
-                0 disables top-k mode (uses threshold mode if min_turn_ratio > 0).
-        """
-        return DetectionConfig(
-            bull=self.bull,
-            bear=self.bear,
-            origin_range_prune_threshold=self.origin_range_prune_threshold,
-            origin_time_prune_threshold=self.origin_time_prune_threshold,
-            proximity_prune_strategy=self.proximity_prune_strategy,
-            min_branch_ratio=self.min_branch_ratio,
-            min_turn_ratio=self.min_turn_ratio,
-            max_turns_per_pivot=max_turns_per_pivot,
-            max_turns_per_pivot_raw=self.max_turns_per_pivot_raw,
-            stale_extension_threshold=self.stale_extension_threshold,
-            enable_engulfed_prune=self.enable_engulfed_prune,
-        )
-
-    def with_max_turns_per_pivot_raw(self, max_turns_per_pivot_raw: int) -> "DetectionConfig":
-        """
-        Create a new config with modified max turns per pivot (raw mode) (#355).
-
-        Since DetectionConfig is frozen, this creates a new instance.
-
-        Args:
-            max_turns_per_pivot_raw: Maximum number of legs to keep at each pivot
-                in raw counter-heft mode. Only active when min_turn_ratio == 0
-                and max_turns_per_pivot == 0.
-                Sorts by raw _max_counter_leg_range instead of ratio.
-                0 disables raw counter-heft mode.
-        """
-        return DetectionConfig(
-            bull=self.bull,
-            bear=self.bear,
-            origin_range_prune_threshold=self.origin_range_prune_threshold,
-            origin_time_prune_threshold=self.origin_time_prune_threshold,
-            proximity_prune_strategy=self.proximity_prune_strategy,
-            min_branch_ratio=self.min_branch_ratio,
-            min_turn_ratio=self.min_turn_ratio,
-            max_turns_per_pivot=self.max_turns_per_pivot,
-            max_turns_per_pivot_raw=max_turns_per_pivot_raw,
-            stale_extension_threshold=self.stale_extension_threshold,
-            enable_engulfed_prune=self.enable_engulfed_prune,
         )

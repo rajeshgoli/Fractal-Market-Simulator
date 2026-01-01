@@ -609,48 +609,35 @@ Both endpoints violated = structure is meaningless.
 Leg is deleted immediately. No replacement.
 ```
 
-### 4. Min Counter-Trend Ratio Pruning
+### 4. Heft-Based Turn Pruning (#404)
 
-**Rule:** Child legs require sufficient counter-trend at their origin relative to their parent's counter-trend.
+**Rule:** At each pivot, keep only the top k legs ranked by counter-trend heft (raw range).
 
-This is an **origin selection filter** that operates at leg creation time (#337). It prevents insignificant child legs from being created by requiring the counter-trend at the child's origin to be at least a minimum ratio of the counter-trend at the parent's origin.
+When a new leg forms at origin O, we look at all counter-direction legs whose pivot equals O. These legs are ranked by their `_max_counter_leg_range` (the largest opposite-direction leg that existed at their origin when they were created). Only the top `max_turns` legs are kept; the rest are pruned.
 
 ```
-Formula:
-  R0 = range of largest counter-direction leg at new leg's origin
-  R1 = range of largest counter-direction leg at parent's origin
+Example at pivot 100:
+  Bull legs sharing pivot=100:
+    L1: origin=80, heft=15 (range of bear counter-trend at origin)
+    L2: origin=85, heft=12
+    L3: origin=90, heft=8
+    L4: origin=92, heft=5
+    L5: origin=95, heft=3
 
-  Create leg if: R0 >= min_branch_ratio * R1
+  With max_turns=3:
+    Keep: L1, L2, L3 (top 3 by heft)
+    Prune: L4, L5
 
-For root legs (no parent):
-  Always create (root legs have no parent to compare against)
-
-For legs where parent has no counter-trend (R1 is None):
-  Always create (parent is root-like, no comparison possible)
-
-Example:
-  Bear B1: 200 → 100 (range 100) - creates counter-trend at 100
-  Bull L1: 100 → 190 (root) - uses B1 as counter-trend at origin
-  Bear B2: 111 → 110 (range 1) - creates counter-trend at 110
-  Bull L2: 110 → 190 (parent = L1)
-    R0 = 1 (B2's range at L2's origin)
-    R1 = 100 (B1's range at L1's origin)
-    Check: 1 >= 0.1 * 100 = 10 → FAILS → L2 blocked
-
-  With min_branch_ratio = 0.1 (10%): L2 blocked because 1 < 10
+  The largest leg at the pivot is always exempt from pruning.
 ```
-
-**Recursive scaling:**
-The threshold scales naturally through the hierarchy:
-- Root level: Large counter-trend (e.g., 100 pts)
-- Child needs: >= 10% of 100 = 10 pts
-- Grandchild needs: >= 10% of 10 = 1 pt
 
 **Why this works:**
-- At strong pivots (large counter-trend), child origins need significant counter-trend
-- At weak pivots (small counter-trend), smaller counter-trends are acceptable
-- This captures the fractal nature of market structure
-- Operates at creation time, not as post-hoc pruning
+- Higher heft = stronger counter-trend foundation
+- These legs are more likely to represent meaningful structural levels
+- Simple single slider controls the pruning aggressiveness
+- 0 = disabled, 10 = default, higher = more aggressive filtering
+
+**Note:** This replaced the old three-mode turn ratio system (min_turn_ratio threshold, max_turns_per_pivot ratio top-k, and max_turns_per_pivot_raw heft top-k). See [Retired Parameters](#retired-parameters-issue-404) for migration details.
 
 ### Real ES Example: Pruning in Action
 
@@ -911,13 +898,11 @@ All thresholds are configurable. Defaults shown:
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
 | `formation_fib` | 0.236 | Retracement % to confirm swing |
-| `engulfed_breach_threshold` | 0.0 | Combined breach % for engulfed deletion (#236) |
-| `origin_range_prune_threshold` | 0.0 | Range similarity % for origin-proximity consolidation (#294) |
-| `origin_time_prune_threshold` | 0.0 | Time proximity % for origin-proximity consolidation (#294) |
+| `engulfed_breach_threshold` | 0.0 | Combined breach % for engulfed deletion - per direction (#236, #404) |
+| `origin_range_prune_threshold` | 0.02 | Range similarity % for origin-proximity consolidation (#294) |
+| `origin_time_prune_threshold` | 0.02 | Time proximity % for origin-proximity consolidation (#294) |
 | `proximity_prune_strategy` | 'oldest' | Strategy for selecting survivor: 'oldest' or 'counter_trend' (#319) |
-| `min_branch_ratio` | 0.0 | Branch ratio for origin domination - prevents insignificant child legs (#337) |
-| `min_turn_ratio` | 0.0 | Turn ratio threshold for sibling pruning (threshold mode) (#341, #344) |
-| `max_turns_per_pivot` | 0 | Top-k turn ratio pruning - keep only k highest-ratio legs per pivot (#342, #344) |
+| `max_turns` | 10 | Max legs per pivot by raw counter-heft (#404) |
 | `stale_extension_threshold` | 3.0 | Prune breached child legs at 3x range (root legs preserved) |
 
 **Note (#345):** Origin breach is detected at 0% (any touch of origin). The old `invalidation_threshold` parameter has been removed. Leg status is now only `'active'` or `'stale'`, with `max_origin_breach` tracking structural invalidation.
@@ -951,19 +936,30 @@ for bar in bars:
 
 **Frontend integration:**
 The Detection Config Panel in the sidebar provides sliders for adjusting thresholds:
-- Bull/Bear Formation threshold (0.1-1.0)
-- Bull/Bear Invalidation threshold (0.1-1.0)
-- Stale Extension threshold (1.0-5.0)
-- Origin Range % threshold (0.0-0.5) — Range similarity for origin-proximity pruning (#294)
-- Origin Time % threshold (0.0-0.5) — Time proximity for origin-proximity pruning (#294)
-- Min Branch Ratio % threshold (0.0-0.2) — Branch ratio for origin domination (#337)
-- Turn Ratio Pruning mode toggle (#342, #344):
-  - Off: Disabled
-  - %: Threshold mode with min_turn_ratio slider
-  - Top-k: Top-k mode with max_turns_per_pivot slider
-  - Note: The largest leg at each pivot is always exempt from turn-ratio pruning (#344)
+- Stale Extension threshold (1.0-5.0) — Prune extended legs
+- Origin Proximity % threshold (0.0-0.10) — Consolidate similar origins
+- Turn Ranking (0-20) — Max legs per pivot by heft (#404)
+- Bull/Bear Engulfed Threshold (0.0-0.30) — Per-direction engulfed pruning
 
 Changes trigger automatic re-calibration via `PUT /api/replay/config`.
+
+### Retired Parameters (Issue #404)
+
+The following parameters were removed in issue #404 to simplify the DAG configuration:
+
+| Parameter | Replacement | Rationale |
+|-----------|-------------|-----------|
+| `enable_engulfed_prune` | `engulfed_breach_threshold >= 1.0` | Boolean toggle replaced by continuous threshold. Set threshold to 1.0 or higher to disable engulfed pruning. |
+| `min_branch_ratio` | *(removed)* | Origin domination by branch ratio was experimental with no clear behavioral impact. |
+| `min_turn_ratio` | `max_turns` | Threshold mode for turn ratio pruning removed. Only top-k by raw counter-heft is supported. |
+| `max_turns_per_pivot` | `max_turns` | Top-k by ratio mode removed. Only raw counter-heft mode retained. |
+| `max_turns_per_pivot_raw` | `max_turns` | Renamed for clarity. Behavior unchanged. |
+
+**Migration notes:**
+- If you were using `enable_engulfed_prune = false`, set `engulfed_breach_threshold = 1.0` instead.
+- If you were using `min_turn_ratio > 0`, switch to `max_turns` (top-k by heft).
+- If you were using `max_turns_per_pivot > 0`, switch to `max_turns`.
+- `min_branch_ratio` has no replacement; this filtering is no longer available.
 
 ---
 
@@ -1306,15 +1302,14 @@ Current defaults are symmetric. If asymmetric behavior isn't needed, simplify to
 
 | Threshold | Value | Purpose |
 |-----------|-------|---------|
-| Formation Fibonacci | 0.287 | Retracement to confirm swing |
+| Formation Fibonacci | 0.236 | Retracement to confirm swing |
 | Invalidation Threshold | 0.382 | Origin breach to invalidate |
 | Pivot Breach Threshold | 0.10 | Pivot extension to replace |
-| Origin Range Prune | 0.0 | Range similarity for origin-proximity pruning (#294) |
-| Origin Time Prune | 0.0 | Time proximity for origin-proximity pruning (#294) |
+| Origin Range Prune | 0.02 | Range similarity for origin-proximity pruning (#294) |
+| Origin Time Prune | 0.02 | Time proximity for origin-proximity pruning (#294) |
+| Max Turns | 10 | Top-k by raw counter-heft at each pivot (#404) |
+| Engulfed Breach Threshold | 0.0 | Combined breach % for engulfed deletion (per direction) |
 | Big Swing Threshold | 0.10 | Top 10% by range = "big" |
-| Big Swing Price Tolerance | 0.15 | Touch tolerance for big swings |
-| Big Swing Close Tolerance | 0.10 | Close tolerance for big swings |
-| Child Swing Tolerance | 0.10 | Tolerance for children of big swings |
 | Stale Extension | 3.0 | Prune invalidated child legs at 3x range |
 
 ---

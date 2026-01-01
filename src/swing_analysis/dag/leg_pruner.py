@@ -471,11 +471,16 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Delete engulfed legs (#208).
+        Delete engulfed legs (#208, #404).
 
         A leg is "engulfed" when both origin AND pivot have been breached over time.
         This means price has gone past both ends of the leg, making it structurally
         meaningless (inside a larger range).
+
+        Engulfed pruning is controlled by engulfed_breach_threshold in DirectionConfig:
+        - threshold = 0.0: prune any leg with both sides breached (most aggressive)
+        - threshold > 0.0: only prune if combined breach fraction exceeds threshold
+        - threshold >= 1.0: effectively disables engulfed pruning
 
         Note: The original #208 design included a "pivot breach replacement" path
         for legs where pivot was breached but origin was not. That code path was
@@ -491,9 +496,6 @@ class LegPruner:
         Returns:
             List of LegPrunedEvent for pruned legs with reason="engulfed"
         """
-        if not self.config.enable_engulfed_prune:
-            return []
-
         prune_events: List[LegPrunedEvent] = []
         legs_to_prune: List[Leg] = []
 
@@ -505,13 +507,27 @@ class LegPruner:
 
             # Engulfed: both origin AND pivot have been breached
             if leg.max_pivot_breach is not None and leg.max_origin_breach is not None:
-                legs_to_prune.append(leg)
-                prune_events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    leg_id=leg.leg_id,
-                    reason="engulfed",
-                ))
+                # Get direction-specific threshold
+                dir_config = self.config.bull if leg.direction == 'bull' else self.config.bear
+                threshold = dir_config.engulfed_breach_threshold
+
+                # Threshold >= 1.0 effectively disables pruning
+                if threshold >= 1.0:
+                    continue
+
+                # Calculate combined breach fraction
+                combined_breach = float(leg.max_origin_breach + leg.max_pivot_breach) / float(leg.range)
+
+                # Prune if combined breach exceeds threshold
+                # At threshold=0.0, any engulfed leg is pruned
+                if combined_breach >= threshold:
+                    legs_to_prune.append(leg)
+                    prune_events.append(LegPrunedEvent(
+                        bar_index=bar.index,
+                        timestamp=timestamp,
+                        leg_id=leg.leg_id,
+                        reason="engulfed",
+                    ))
 
         # Reparent children before removal (#281)
         for leg in legs_to_prune:
@@ -549,105 +565,7 @@ class LegPruner:
             if leg.parent_leg_id == pruned_leg.leg_id:
                 leg.parent_leg_id = pruned_leg.parent_leg_id  # Could be None (root)
 
-    def apply_min_counter_trend_prune(
-        self,
-        state: DetectorState,
-        direction: str,
-        bar: Bar,
-        timestamp: datetime,
-    ) -> List[LegPrunedEvent]:
-        """
-        Prune legs with insufficient counter-trend ratio (#336).
-
-        This filter removes legs whose counter-trend pressure is too small relative
-        to their total range. It operates independently of proximity clustering.
-
-        Counter-trend ratio = longest_opposite_range / leg.range
-
-        Where longest_opposite_range is the range of the longest opposite-direction
-        leg whose pivot equals this leg's origin. This measures how much counter-trend
-        pressure accumulated at the pivot before this leg started.
-
-        Example:
-            At pivot 100, bull legs exist: 50→100, 60→100, 70→100
-            New bear leg: 100→20 (range=80)
-            longest_opposite_range = 50 (from the 50→100 bull leg)
-            ratio = 50/80 = 0.625 (62.5%)
-
-        Legs with ratio < min_counter_trend_ratio are pruned as insignificant
-        (insufficient counter-trend pressure to justify this structural level).
-
-        Args:
-            state: Current detector state (mutated)
-            direction: 'bull' or 'bear' - which legs to check
-            bar: Current bar (for event metadata)
-            timestamp: Timestamp for events
-
-        Returns:
-            List of LegPrunedEvent for pruned legs with reason="min_counter_trend"
-        """
-        events: List[LegPrunedEvent] = []
-        min_ratio = self.config.min_counter_trend_ratio
-
-        # Get legs of the specified direction (with live origin) (#345)
-        legs_to_check = [
-            leg for leg in state.active_legs
-            if leg.direction == direction and leg.max_origin_breach is None
-        ]
-
-        # Determine opposite direction
-        opposite_direction = 'bear' if direction == 'bull' else 'bull'
-
-        pruned_leg_ids: Set[str] = set()
-
-        for leg in legs_to_check:
-            if leg.range == 0:
-                continue
-
-            # Calculate counter-trend ratio (#336):
-            # Use the stored origin_counter_trend_range (captured at leg creation)
-            # This is the range of the longest opposite leg at this origin when leg formed
-            # The opposite leg may have been pruned since, but we use the captured value
-            if leg.origin_counter_trend_range is not None:
-                ratio = leg.origin_counter_trend_range / float(leg.range)
-            else:
-                # No opposite legs at this origin when leg was created - passes by default
-                ratio = 1.0
-
-            # Always store the ratio on the leg for display/inspection
-            leg.counter_trend_ratio = ratio
-
-            # Prune if threshold is enabled and ratio is below it
-            if min_ratio > 0 and ratio < min_ratio:
-                leg.status = 'pruned'
-                pruned_leg_ids.add(leg.leg_id)
-                opposite_range = leg.origin_counter_trend_range or 0.0
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    leg_id=leg.leg_id,
-                    reason="min_counter_trend",
-                    explanation=(
-                        f"CTR ratio {ratio:.3f} < {min_ratio:.3f} threshold "
-                        f"(opposite_range={opposite_range:.2f}, leg_range={float(leg.range):.2f})"
-                    ),
-                ))
-
-        # Reparent children of pruned legs before removal
-        for leg in state.active_legs:
-            if leg.leg_id in pruned_leg_ids:
-                self.reparent_children(state, leg)
-
-        # Remove pruned legs
-        if pruned_leg_ids:
-            state.active_legs = [
-                leg for leg in state.active_legs
-                if leg.leg_id not in pruned_leg_ids
-            ]
-
-        return events
-
-    def prune_by_turn_ratio(
+    def prune_by_heft(
         self,
         state: DetectorState,
         new_leg: Leg,
@@ -655,26 +573,18 @@ class LegPruner:
         timestamp: datetime,
     ) -> List[LegPrunedEvent]:
         """
-        Prune counter-legs at the new leg's origin based on turn ratio (#341, #342, #344, #355).
+        Prune counter-legs at the new leg's origin by heft ranking (#404).
 
-        Three mutually exclusive modes:
-        1. **Threshold mode** (min_turn_ratio > 0): Prune if turn_ratio < threshold
-        2. **Top-k mode** (min_turn_ratio == 0, max_turns_per_pivot > 0): Keep only
-           the k highest-ratio legs at each pivot
-        3. **Raw counter-heft mode** (both 0, max_turns_per_pivot_raw > 0): Keep only
-           the k highest _max_counter_leg_range legs at each pivot (#355)
+        Keeps only the top max_turns highest _max_counter_leg_range legs at each pivot.
+        This is the simplified version of the old three-mode turn ratio system.
 
-        **#344 Exemption**: The largest leg (by range) at the shared pivot is always
-        exempt from turn-ratio pruning. This is because the largest leg represents
-        primary structure — it has the lowest turn ratio (range is in denominator)
-        but is the most significant level at this pivot.
+        **Exemption**: The largest leg (by range) at the shared pivot is always
+        exempt from pruning. This is because the largest leg represents primary
+        structure — it may have lower heft but is the most significant level.
 
         When a new leg forms at origin O, for each counter-leg whose pivot == O:
-        - turn_ratio = counter_leg._max_counter_leg_range / counter_leg.range
-
-        This filters horizontally (siblings at shared pivots) rather than vertically
-        (parent-child via branch ratio). It removes legs that have extended far
-        beyond what their structural context justified.
+        - Score by raw _max_counter_leg_range (counter-heft)
+        - Keep top max_turns, prune the rest
 
         Args:
             state: Current detector state (mutated)
@@ -683,24 +593,14 @@ class LegPruner:
             timestamp: Timestamp for events
 
         Returns:
-            List of LegPrunedEvent for pruned counter-legs with reason="turn_ratio"
+            List of LegPrunedEvent for pruned counter-legs with reason="heft"
         """
         events: List[LegPrunedEvent] = []
-        min_turn_ratio = self.config.min_turn_ratio
-        max_turns_per_pivot = self.config.max_turns_per_pivot
-        max_turns_per_pivot_raw = self.config.max_turns_per_pivot_raw
+        max_turns = self.config.max_turns
 
-        # Determine mode:
-        # - Threshold mode: min_turn_ratio > 0 (ignores others)
-        # - Top-k mode: min_turn_ratio == 0 and max_turns_per_pivot > 0
-        # - Raw mode: both 0 and max_turns_per_pivot_raw > 0
-        # - Disabled: all are 0
-        use_threshold_mode = min_turn_ratio > 0
-        use_topk_mode = not use_threshold_mode and max_turns_per_pivot > 0
-        use_raw_mode = not use_threshold_mode and not use_topk_mode and max_turns_per_pivot_raw > 0
-
-        if not use_threshold_mode and not use_topk_mode and not use_raw_mode:
-            return events  # Disabled
+        # Disabled if max_turns is 0
+        if max_turns <= 0:
+            return events
 
         # Find counter-legs: opposite direction, pivot == new_leg.origin (#345)
         opposite_direction = 'bear' if new_leg.direction == 'bull' else 'bull'
@@ -715,9 +615,7 @@ class LegPruner:
         if not counter_legs:
             return events
 
-        # #344: Exempt the largest leg from pruning - it's primary structure
-        # The biggest leg has the lowest turn ratio (since range is in denominator)
-        # but represents the most significant structure at this pivot
+        # Exempt the largest leg from pruning - it's primary structure
         largest_leg = max(counter_legs, key=lambda l: l.range)
         pruneable_legs = [leg for leg in counter_legs if leg.leg_id != largest_leg.leg_id]
 
@@ -727,121 +625,44 @@ class LegPruner:
 
         pruned_leg_ids: Set[str] = set()
 
-        if use_threshold_mode:
-            # Threshold mode: prune legs with turn_ratio < min_turn_ratio
-            for counter_leg in pruneable_legs:
-                if counter_leg.range == 0:
-                    continue
+        # Score by raw counter-leg range (heft)
+        scored_legs: List[Tuple[Leg, float]] = []
+        for counter_leg in pruneable_legs:
+            if counter_leg.range == 0:
+                continue
+            if counter_leg._max_counter_leg_range is None:
+                # Legacy leg - give it a neutral score so it's not pruned
+                scored_legs.append((counter_leg, float('inf')))
+                continue
+            scored_legs.append((counter_leg, counter_leg._max_counter_leg_range))
 
-                # If _max_counter_leg_range is None, the leg was created before this
-                # feature - skip it (don't prune legacy legs)
-                if counter_leg._max_counter_leg_range is None:
-                    continue
+        if len(scored_legs) <= max_turns:
+            # Not enough legs to prune
+            return events
 
-                turn_ratio = counter_leg._max_counter_leg_range / float(counter_leg.range)
+        # Sort by heft descending (highest range = most significant)
+        scored_legs.sort(key=lambda x: -x[1])
 
-                if turn_ratio < min_turn_ratio:
-                    counter_leg.status = 'pruned'
-                    pruned_leg_ids.add(counter_leg.leg_id)
-                    events.append(LegPrunedEvent(
-                        bar_index=bar.index,
-                        timestamp=timestamp,
-                            leg_id=counter_leg.leg_id,
-                        reason="turn_ratio",
-                        explanation=(
-                            f"Turn ratio {turn_ratio:.3f} < {min_turn_ratio:.3f} threshold "
-                            f"(max_counter={counter_leg._max_counter_leg_range:.2f}, "
-                            f"leg_range={float(counter_leg.range):.2f})"
-                        ),
-                    ))
-        elif use_topk_mode:
-            # Top-k mode: keep only max_turns_per_pivot highest-ratio legs
-            # Score each leg by turn_ratio (skip legacy legs without _max_counter_leg_range)
-            # Note: largest leg is already exempt, only score pruneable_legs
-            scored_legs: List[Tuple[Leg, float]] = []
-            for counter_leg in pruneable_legs:
-                if counter_leg.range == 0:
-                    continue
-                if counter_leg._max_counter_leg_range is None:
-                    # Legacy leg - give it a neutral score so it's not pruned
-                    # but also not favored over legs with actual ratios
-                    scored_legs.append((counter_leg, float('inf')))
-                    continue
-                turn_ratio = counter_leg._max_counter_leg_range / float(counter_leg.range)
-                scored_legs.append((counter_leg, turn_ratio))
+        # Keep top k, prune the rest
+        legs_to_prune = scored_legs[max_turns:]
 
-            if len(scored_legs) <= max_turns_per_pivot:
-                # Not enough legs to prune
-                return events
+        for counter_leg, heft in legs_to_prune:
+            # Don't prune legacy legs (inf score)
+            if heft == float('inf'):
+                continue
 
-            # Sort by turn_ratio descending (highest ratio = most significant)
-            scored_legs.sort(key=lambda x: -x[1])
-
-            # Keep top k, prune the rest
-            legs_to_prune = scored_legs[max_turns_per_pivot:]
-
-            for counter_leg, turn_ratio in legs_to_prune:
-                # Don't prune legacy legs (inf ratio)
-                if turn_ratio == float('inf'):
-                    continue
-
-                counter_leg.status = 'pruned'
-                pruned_leg_ids.add(counter_leg.leg_id)
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    leg_id=counter_leg.leg_id,
-                    reason="turn_ratio_topk",
-                    explanation=(
-                        f"Turn ratio {turn_ratio:.3f} not in top-{max_turns_per_pivot} "
-                        f"(max_counter={counter_leg._max_counter_leg_range:.2f}, "
-                        f"leg_range={float(counter_leg.range):.2f})"
-                    ),
-                ))
-
-        else:
-            # Raw counter-heft mode (#355): keep only max_turns_per_pivot_raw highest
-            # _max_counter_leg_range legs (ignores ratio, uses absolute range)
-            # Note: largest leg is already exempt, only score pruneable_legs
-            scored_legs: List[Tuple[Leg, float]] = []
-            for counter_leg in pruneable_legs:
-                if counter_leg.range == 0:
-                    continue
-                if counter_leg._max_counter_leg_range is None:
-                    # Legacy leg - give it a neutral score so it's not pruned
-                    # but also not favored over legs with actual data
-                    scored_legs.append((counter_leg, float('inf')))
-                    continue
-                # Score by raw counter-leg range (not ratio)
-                scored_legs.append((counter_leg, counter_leg._max_counter_leg_range))
-
-            if len(scored_legs) <= max_turns_per_pivot_raw:
-                # Not enough legs to prune
-                return events
-
-            # Sort by raw counter-leg range descending (highest range = most significant)
-            scored_legs.sort(key=lambda x: -x[1])
-
-            # Keep top k, prune the rest
-            legs_to_prune = scored_legs[max_turns_per_pivot_raw:]
-
-            for counter_leg, counter_range in legs_to_prune:
-                # Don't prune legacy legs (inf score)
-                if counter_range == float('inf'):
-                    continue
-
-                counter_leg.status = 'pruned'
-                pruned_leg_ids.add(counter_leg.leg_id)
-                events.append(LegPrunedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    leg_id=counter_leg.leg_id,
-                    reason="turn_ratio_raw",
-                    explanation=(
-                        f"Counter-heft {counter_range:.2f} not in top-{max_turns_per_pivot_raw} "
-                        f"(leg_range={float(counter_leg.range):.2f})"
-                    ),
-                ))
+            counter_leg.status = 'pruned'
+            pruned_leg_ids.add(counter_leg.leg_id)
+            events.append(LegPrunedEvent(
+                bar_index=bar.index,
+                timestamp=timestamp,
+                leg_id=counter_leg.leg_id,
+                reason="heft",
+                explanation=(
+                    f"Heft {heft:.2f} not in top-{max_turns} "
+                    f"(leg_range={float(counter_leg.range):.2f})"
+                ),
+            ))
 
         # Reparent children of pruned legs before removal
         for leg in state.active_legs:

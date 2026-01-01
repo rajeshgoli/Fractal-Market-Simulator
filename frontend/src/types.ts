@@ -364,6 +364,8 @@ export interface DirectionConfig {
 
 /**
  * Full detection configuration for swing detection.
+ * #404: Simplified - removed min_branch_ratio, min_turn_ratio, max_turns_per_pivot,
+ *       max_turns_per_pivot_raw, enable_engulfed_prune. Added max_turns.
  */
 export interface DetectionConfig {
   bull: DirectionConfig;
@@ -371,12 +373,7 @@ export interface DetectionConfig {
   stale_extension_threshold: number;  // 3x extension prune (default: 3.0)
   origin_range_threshold: number;  // Origin proximity range threshold (#294)
   origin_time_threshold: number;  // Origin proximity time threshold (#294)
-  min_branch_ratio: number;  // Min branch ratio for origin domination (#337, default: 0.0)
-  min_turn_ratio: number;  // Min turn ratio for sibling pruning (#341, default: 0.0)
-  max_turns_per_pivot: number;  // Top-k turn ratio pruning (#342, default: 0)
-  max_turns_per_pivot_raw: number;  // Top-k raw counter-heft pruning (#355, default: 0)
-  // Pruning algorithm toggles
-  enable_engulfed_prune: boolean;  // Enable engulfed leg deletion (default: true)
+  max_turns: number;  // Max legs per pivot by heft (#404, default: 10)
 }
 
 /**
@@ -390,11 +387,7 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
     engulfed_breach_threshold: 0.0,
   },
   stale_extension_threshold: 3.0,
-  origin_range_threshold: 0.0,
-  origin_time_threshold: 0.0,
-  min_branch_ratio: 0.0,
-  min_turn_ratio: 0.0,
-  max_turns_per_pivot: 0,
-  max_turns_per_pivot_raw: 0,
-  enable_engulfed_prune: true,
+  origin_range_threshold: 0.02,
+  origin_time_threshold: 0.02,
+  max_turns: 10,
 };

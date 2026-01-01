@@ -277,8 +277,8 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
         </div>
       </div>
 
-      {/* Content Grid */}
-      <div className="flex-1 grid grid-cols-4 divide-x divide-app-border/50 overflow-hidden">
+      {/* Content Grid - Dynamic columns based on followed legs (#404) */}
+      <div className={`flex-1 grid ${followedLegs.length > 0 ? 'grid-cols-4' : 'grid-cols-3'} divide-x divide-app-border/50 overflow-hidden`}>
         {/* Column 1: Bull Legs */}
         <div className="p-3 flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 mb-2">
@@ -367,12 +367,14 @@ export const DAGStatePanel: React.FC<DAGStatePanelProps> = ({
           </div>
         </div>
 
-        {/* Column 3: Followed Legs (#267) */}
-        <FollowedLegsPanel
-          followedLegs={followedLegs}
-          onUnfollow={onUnfollowLeg || (() => {})}
-          onLegClick={onFollowedLegClick}
-        />
+        {/* Column 3: Followed Legs (#267) - only show if there are followed legs (#404) */}
+        {followedLegs.length > 0 && (
+          <FollowedLegsPanel
+            followedLegs={followedLegs}
+            onUnfollow={onUnfollowLeg || (() => {})}
+            onLegClick={onFollowedLegClick}
+          />
+        )}
 
         {/* Column 4: Recent Events Log */}
         <div className="p-3 flex flex-col overflow-hidden">

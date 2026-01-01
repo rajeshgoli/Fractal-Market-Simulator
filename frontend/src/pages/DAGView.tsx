@@ -721,7 +721,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
         state.setDagState(initialDagState);
 
         try {
-          // If we have saved preferences, push them to server to override defaults (#358)
+          // If we have saved preferences, push them to server to override defaults (#358, #404)
           if (chartPrefs.detectionConfig) {
             const savedConfig = chartPrefs.detectionConfig;
             const pushedConfig = await updateDetectionConfig({
@@ -734,11 +734,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
               stale_extension_threshold: savedConfig.stale_extension_threshold,
               origin_range_threshold: savedConfig.origin_range_threshold,
               origin_time_threshold: savedConfig.origin_time_threshold,
-              min_branch_ratio: savedConfig.min_branch_ratio,
-              min_turn_ratio: savedConfig.min_turn_ratio,
-              max_turns_per_pivot: savedConfig.max_turns_per_pivot,
-              max_turns_per_pivot_raw: savedConfig.max_turns_per_pivot_raw,
-              enable_engulfed_prune: savedConfig.enable_engulfed_prune,
+              max_turns: savedConfig.max_turns,
             });
             state.setDetectionConfigFromServer(pushedConfig);
           } else {

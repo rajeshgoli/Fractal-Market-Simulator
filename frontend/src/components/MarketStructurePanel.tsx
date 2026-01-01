@@ -85,7 +85,7 @@ export const MarketStructurePanel: React.FC<MarketStructurePanelProps> = ({
 
       {!isCollapsed && (
         <div className="px-3 pb-3 space-y-3">
-          {/* Current State + Pruning Stats - compact side by side */}
+          {/* Current State + Pruning Stats - compact side by side (#404 simplified) */}
           <div className="grid grid-cols-2 gap-3 text-[10px]">
             <div className="space-y-0.5">
               <div className="flex justify-between">
@@ -93,26 +93,18 @@ export const MarketStructurePanel: React.FC<MarketStructurePanelProps> = ({
                 <span className="text-app-text font-medium">{dagContext.activeLegs.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-app-muted">Formed</span>
-                <span className="text-trading-bull font-medium">{legStats.formed}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-app-muted">Turn</span>
-                <span className="text-app-text font-medium">{legStats.turnRatio}</span>
-              </div>
-            </div>
-            <div className="space-y-0.5">
-              <div className="flex justify-between">
                 <span className="text-app-muted">Engulfed</span>
                 <span className="text-trading-orange font-medium">{legStats.engulfed}</span>
               </div>
+            </div>
+            <div className="space-y-0.5">
               <div className="flex justify-between">
                 <span className="text-app-muted">Proximity</span>
                 <span className="text-app-text font-medium">{legStats.proximity}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-app-muted">CTR</span>
-                <span className="text-app-text font-medium">{legStats.minCtr}</span>
+                <span className="text-app-muted">Heft</span>
+                <span className="text-app-text font-medium">{legStats.heft}</span>
               </div>
             </div>
           </div>

@@ -117,8 +117,8 @@ class TestProximityPruneStrategyConfig:
         c3 = base.with_stale_extension(5.0)
         assert c3.proximity_prune_strategy == 'oldest'
 
-        # Test with_prune_toggles
-        c4 = base.with_prune_toggles(enable_engulfed_prune=False)
+        # Test with_max_turns (#404: replaces with_prune_toggles)
+        c4 = base.with_max_turns(5)
         assert c4.proximity_prune_strategy == 'oldest'
 
 
