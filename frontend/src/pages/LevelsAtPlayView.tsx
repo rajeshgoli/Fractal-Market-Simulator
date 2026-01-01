@@ -172,10 +172,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   }, [sourceBars]);
 
   // Filter chart bars to only show candles up to current playback position
+  // Always filter based on position - don't show all bars before playback starts (#412)
   const visibleChart1Bars = useMemo(() => {
-    if (!isPlaying) {
-      return chart1Bars;
-    }
     const result: BarData[] = [];
     for (const bar of chart1Bars) {
       if (bar.source_end_index <= currentPlaybackPosition) {
@@ -186,12 +184,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       }
     }
     return result;
-  }, [chart1Bars, currentPlaybackPosition, isPlaying, computeLiveBar]);
+  }, [chart1Bars, currentPlaybackPosition, computeLiveBar]);
 
   const visibleChart2Bars = useMemo(() => {
-    if (!isPlaying) {
-      return chart2Bars;
-    }
     const result: BarData[] = [];
     for (const bar of chart2Bars) {
       if (bar.source_end_index <= currentPlaybackPosition) {
@@ -202,7 +197,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       }
     }
     return result;
-  }, [chart2Bars, currentPlaybackPosition, isPlaying, computeLiveBar]);
+  }, [chart2Bars, currentPlaybackPosition, computeLiveBar]);
 
   // Chart ready handlers
   const handleChart1Ready = useCallback((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {

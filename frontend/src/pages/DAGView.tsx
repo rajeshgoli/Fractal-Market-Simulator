@@ -191,10 +191,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
   }, [state.sourceBars]);
 
   // Filter chart bars to only show candles up to current playback position
+  // Always filter based on position - don't show all bars before playback starts (#412)
   const visibleChart1Bars = useMemo(() => {
-    if (!state.isPlaying) {
-      return state.chart1Bars;
-    }
     const result: BarData[] = [];
     for (const bar of state.chart1Bars) {
       if (bar.source_end_index <= currentPlaybackPosition) {
@@ -205,12 +203,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
       }
     }
     return result;
-  }, [state.chart1Bars, currentPlaybackPosition, state.isPlaying, computeLiveBar]);
+  }, [state.chart1Bars, currentPlaybackPosition, computeLiveBar]);
 
   const visibleChart2Bars = useMemo(() => {
-    if (!state.isPlaying) {
-      return state.chart2Bars;
-    }
     const result: BarData[] = [];
     for (const bar of state.chart2Bars) {
       if (bar.source_end_index <= currentPlaybackPosition) {
@@ -221,7 +216,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
       }
     }
     return result;
-  }, [state.chart2Bars, currentPlaybackPosition, state.isPlaying, computeLiveBar]);
+  }, [state.chart2Bars, currentPlaybackPosition, computeLiveBar]);
 
   // Event handlers
   const handleTreeIconClick = useCallback((legId: string) => {
