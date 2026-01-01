@@ -35,6 +35,7 @@ Read in order:
 - #240 — TODO: Empirically determine engulfed retention threshold based on impulse
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
 - #399 — TODO: Salience optimization if needed (periodic refresh, event-driven, or lazy with TTL)
+- #408 — Dead replay mode + SWING_* events: ~15 files of frontend dead code from #394 SwingNode removal
 
 **Completed architectural cleanup (#394, #396, #398):**
 - ✅ SwingNode, `swing_id`, `formed` removed from DAG; old Reference Layer API removed (#394)
@@ -129,17 +130,17 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 | — | #386 Fix view switching | State preservation | ✅ |
 | — | #387 Fix overlay rendering | SVG positioning | ✅ |
 
-### Phase 2: Fib Level Interaction
+### Phase 2: Fib Level Interaction — ✅ COMPLETE
 
-**Epic #P2: Fib Level Display**
+**Epic #P2: Fib Level Display** — #388 (5 sub-issues: #389-#393)
 
-| # | Issue | Description | Depends On |
-|---|-------|-------------|------------|
-| P2.1 | Implement get_active_levels() | Return fib levels with source reference info | P1.10 |
-| P2.2 | Add hover preview | Show all 9 fib levels as horizontal lines on hover | P2.1 |
-| P2.3 | Implement click-to-stick | Click makes fib levels persist; click again un-sticks | P2.2 |
-| P2.4 | Color-code by source | Distinguish fib levels from different references | P2.3 |
-| P2.5 | Track sticky state in Reference Layer | `_tracked_for_crossing` set persisted | P2.3 |
+| # | Issue | Description | Status |
+|---|-------|-------------|--------|
+| P2.1 | #389 Implement get_active_levels() | Return fib levels with source reference info | ✅ |
+| P2.2 | #390 Add hover preview | Show all 9 fib levels as horizontal lines on hover | ✅ |
+| P2.3 | #391 Implement click-to-stick | Click makes fib levels persist; click again un-sticks | ✅ |
+| P2.4 | #392 Color-code by source | Distinguish fib levels from different references | ✅ |
+| P2.5 | #393 Track sticky state in Reference Layer | `_tracked_for_crossing` set persisted | ✅ |
 
 ### Phase 3: Structure Panel + Confluence
 
@@ -197,10 +198,10 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 - ✅ P1 (Core Backend) — COMPLETE (13 issues)
 - ✅ P1-UI (Levels at Play UI) — COMPLETE (11 issues including bugfixes)
 - ✅ DAG Cleanup (#394) — COMPLETE (vestiges tracked in architect_fixes.md)
+- ✅ P2 (Fib Level Interaction) — COMPLETE (5 issues: #388-#393)
 - ⏳ **Reference Observation (#400)** — NEXT (2 issues: #401, #402)
-- Architectural Fixes — After observation (see `Docs/Working/architect_fixes.md`)
-- P2 (Fib Levels) — After arch fixes (5 issues)
-- P3 + P4 (Structure Panel + Crossing) — 11 issues
+- P3 (Structure Panel + Confluence) — 6 issues
+- P4 (Level Crossing Tracking) — 5 issues
 
 **Next step:** Reference Observation epic (#400) — filter status API + observation UI in Levels at Play
 

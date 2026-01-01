@@ -7,13 +7,13 @@
 
 ## Current Objective
 
-**Add observability to Reference Layer before building Fib level features (P2).**
+**Add observability to Reference Layer before building Structure Panel (P3).**
 
 ---
 
 ## Current Phase: Reference Observation (#400)
 
-Reference Layer Phase 1 complete (backend + Levels at Play UI). Before building P2 (Fib Level Display), adding observability to understand filtering behavior.
+Reference Layer P1 (backend + Levels at Play UI) and P2 (Fib Level Interaction) complete. Before building P3 (Structure Panel + Confluence), adding observability to understand filtering behavior.
 
 **Epic:** #400 Reference Observation Mode
 - #401 Backend: Filter Status API
@@ -26,6 +26,20 @@ Reference Layer Phase 1 complete (backend + Levels at Play UI). Before building 
 - Filtered legs highlighted, valid refs muted when toggle on
 - Filter stats panel (counts by reason, pass rate)
 - Explanation panel shows why each leg was filtered
+
+---
+
+## Completed: Reference Layer Phase 2 (Dec 31, 2025)
+
+**Status:** Complete. Fib Level Interaction (5 issues, #388-#393).
+
+| Component | Status |
+|-----------|--------|
+| get_active_levels() backend | Complete |
+| Hover preview UI | Complete |
+| Click-to-stick | Complete |
+| Color-coding by source | Complete |
+| Sticky state persistence | Complete |
 
 ---
 
@@ -95,8 +109,8 @@ Config used: `origin_time_threshold=0.02`, `origin_range_threshold=0.02`, `max_t
 
 ## Roadmap
 
-1. **Reference Observation** (#400) — Current
-2. **P2: Fib Level Display** — Hover/click for fib levels
+1. ✅ **P2: Fib Level Interaction** — Complete (#388-#393)
+2. ⏳ **Reference Observation** (#400) — Current
 3. **P3: Structure Panel + Confluence** — Level analysis
 4. **P4: Level Crossing Tracking** — Opt-in crossing events
 
