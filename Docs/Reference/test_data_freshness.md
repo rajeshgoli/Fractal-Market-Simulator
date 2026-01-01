@@ -1,6 +1,16 @@
 # Test Data Freshness
 
-Backtest data for ES, NQ, YM, and DAX is kept fresh via automated Databento API pulls. This document covers data locations, formats, and the refresh workflow.
+## Overview
+
+The project requires historical OHLCV data for backtesting and validation. Previously, data ended in August 2024 and required manual TradingView exports to update — a tedious process that often fell behind.
+
+**Solution:** Automated refresh via Databento API. A single script fetches missing data, handles contract rollovers, and regenerates all timeframes.
+
+**Current state:**
+- ES, NQ, YM: Continuous 1m data from 2007 to present
+- DAX: Continuous 30m+ from 2000 to present (1m from Mar 2025)
+- Cost: ~$0.04/day (~$14/year) to keep all symbols current
+- Run `python scripts/daily_data_refresh.py` anytime to catch up
 
 ---
 
