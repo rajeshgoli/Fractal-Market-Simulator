@@ -8,7 +8,7 @@ Read in order:
 3. **`Docs/Reference/developer_guide.md`** — Implementation details as needed
 
 **Core architectural decisions:**
-- Hierarchical swing model (SwingNode DAG) — replaces S/M/L/XL buckets
+- Hierarchical swing model (Leg DAG) — replaces S/M/L/XL buckets
 - Single incremental algorithm (LegDetector.process_bar())
 - Fibonacci-based structural analysis (0.382 formation/invalidation)
 - Resolution-agnostic (1m to 1mo)
@@ -24,7 +24,7 @@ Read in order:
 - **Two-impulse model:** Segment tracking with impulse_to_deepest, impulse_back, net_segment_impulse (#307)
 - **Leg hierarchy:** Parent-child relationships with reparenting on prune (#281)
 - **Runtime config:** Detection parameters adjustable via UI without restart (#288)
-- **Deterministic IDs:** Leg/swing IDs based on (direction, origin_price, origin_index) survive BE reset (#299)
+- **Deterministic IDs:** `leg_id` based on (direction, origin_price, origin_index) survives BE reset (#299)
 - **Session persistence:** UI preferences (charts, speed, config) persist via localStorage (#321)
 - **Origin breach as single gate:** No 'invalidated' status — use `max_origin_breach is not None` (#345)
 - **Branch ratio domination:** Creation-time filter prevents insignificant child legs (#337)
@@ -33,6 +33,14 @@ Read in order:
 **Known debt:**
 - #240 — TODO: Empirically determine engulfed retention threshold based on impulse
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
+- **Zombie leg bug** — `formed` gates pivot breach tracking, creating immortal legs (see `Docs/Working/formed_analysis.md`)
+
+**Pending cleanup (per reference_layer_spec.md Rev 6):**
+- Remove `SwingNode` class — redundant 1:1 wrapper around Leg geometry
+- Remove `swing_id` from Leg — single-leg identifier, not linkage concept
+- Remove `formed` from Leg — trading concept belongs in Reference Layer
+- Remove old Reference Layer API (`get_reference_swings`, `check_invalidation`, etc.) — replaced by `update()`
+- Migrate `replay.py` and `calibrate.py` to use `update()` API exclusively
 
 ---
 
@@ -151,6 +159,28 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 |---|-------|-------------|------------|
 | EXP.1 | Analyze depth vs scale correlation | Compute correlation, identify disagreement cases | P1.1, P1.5 |
 
+### DAG Cleanup Epic (Pre-P2) — #394
+
+**Rationale:** The `formed_analysis.md` investigation revealed that `formed`, `SwingNode`, and `swing_id` are architectural mistakes that leaked trading concepts into the DAG layer. This creates bugs (zombie legs) and duplicates logic with Reference Layer.
+
+**Epic: Remove SwingNode/swing_id/formed from DAG** — [#394](https://github.com/rajeshgoli/Fractal-Market-Simulator/issues/394)
+
+| # | Task | Description | Files |
+|---|------|-------------|-------|
+| C.1 | Delete SwingNode class | Remove redundant wrapper | `swing_node.py` (delete) |
+| C.2 | Remove swing_id from Leg | Delete field and make_swing_id() | `dag/leg.py` |
+| C.3 | Remove formed from Leg | Delete field, fix gates | `dag/leg.py`, `dag/leg_detector.py`, `dag/leg_pruner.py` |
+| C.4 | Remove active_swings from state | Delete SwingNode tracking | `dag/state.py` |
+| C.5 | Delete old Reference Layer API | Remove SwingNode-based methods | `reference_layer.py` |
+| C.6 | Migrate replay.py | Use update() API exclusively | `routers/replay.py` |
+| C.7 | Migrate calibrate.py | Use update() API exclusively | `dag/calibrate.py` |
+| C.8 | Update API schemas | Remove formed from LegInfo | `schemas.py` |
+| C.9 | Update frontend | Remove formed display | `types.ts`, components |
+| C.10 | Update events | Remove swing events, clean leg events | `events.py` |
+| C.11 | Fix tests | Update all affected tests | `tests/` |
+
+**Zombie bug fix:** C.3 fixes the zombie leg bug by removing `formed` gate from pivot breach tracking.
+
 ---
 
 ## Implementation Order
@@ -158,12 +188,13 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 **Status:**
 - ✅ P1 (Core Backend) — COMPLETE (13 issues)
 - ✅ P1-UI (Levels at Play UI) — COMPLETE (11 issues including bugfixes)
-- ⏳ P2 (Fib Levels) — NEXT (5 issues)
+- ⏳ **DAG Cleanup** — NEXT (11 tasks, fixes zombie bug)
+- P2 (Fib Levels) — After cleanup (5 issues)
 - P3 + P4 (Structure Panel + Crossing) — 11 issues
 
-**Next step:** P2 (Fib Level Display) — Hover preview and click-to-stick for fib levels
+**Next step:** DAG Cleanup Epic — Remove SwingNode/swing_id/formed (fixes zombie leg bug, aligns with spec Rev 6)
 
-**Remaining: 16 issues across 3 phases**
+**Remaining: 27 tasks across cleanup + 3 phases**
 
 ---
 
@@ -220,7 +251,7 @@ All 3 pending changes accepted. Summary:
 | Leg Origin Updates | **Fixed** | Origins update on price extensions (#188) |
 | Origin Breach | **Simplified** | No 'invalidated' status, breach at 0% (#345) |
 | SwingConfig | Complete | Centralizes all parameters including pruning toggles (#288) |
-| SwingNode | Complete | DAG hierarchy model |
+| SwingNode | **Pending Removal** | Redundant wrapper; see formed_analysis.md |
 | ReferenceFrame | Complete | Central coordinate abstraction |
 | ReferenceLayer | **Phase 1 Complete** | Core + Levels at Play UI (#361-#387) |
 | Pivot Breach Pruning | Complete | 10% threshold with replacement leg (#208) |
