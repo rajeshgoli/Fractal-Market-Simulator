@@ -576,7 +576,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       <Header
         onToggleSidebar={() => {}}
         currentTimestamp={currentTimestamp}
-        sourceBarCount={sourceBars.length}
+        sourceBarCount={forwardPlayback.currentPosition + 1}
         initStatus={isPlaying ? 'playing' : 'initialized'}
         dataFileName={dataFileName}
         onOpenSettings={() => setIsSettingsOpen(true)}
@@ -672,7 +672,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               onNavigateNext={() => {}}
               onDismissLinger={() => {}}
               lingerEnabled={false}
-              onToggleLinger={() => {}}
+              lingerDisabled={true}
               currentTimestamp={sourceBars[currentPlaybackPosition]?.timestamp}
               maxTimestamp={
                 sourceBars[currentPlaybackPosition]?.timestamp && sessionInfo?.totalSourceBars

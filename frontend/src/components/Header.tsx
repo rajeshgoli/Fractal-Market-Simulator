@@ -38,7 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const viewOptions = [
-    { value: 'dag' as ViewMode, label: 'DAG View', icon: BarChart3 },
+    { value: 'dag' as ViewMode, label: 'Structural Legs', icon: BarChart3 },
     { value: 'levels-at-play' as ViewMode, label: 'Levels at Play', icon: Layers },
   ];
 

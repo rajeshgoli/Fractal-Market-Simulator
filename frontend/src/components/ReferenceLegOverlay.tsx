@@ -87,6 +87,12 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
   // Label positions state (for rendering scale/location badges)
   const [labelPositions, setLabelPositions] = useState<Map<string, { x: number; y: number; ref: ReferenceSwing }>>(new Map());
+  // Leg line positions for hit testing (origin to pivot)
+  const [legLinePositions, setLegLinePositions] = useState<Map<string, {
+    originX: number; originY: number;
+    pivotX: number; pivotY: number;
+    ref: ReferenceSwing
+  }>>(new Map());
   // Filtered leg label positions (Issue #400)
   const [filteredLabelPositions, setFilteredLabelPositions] = useState<Map<string, { x: number; y: number; leg: FilteredLeg }>>(new Map());
 
@@ -332,30 +338,41 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     }
   }, [chart, series, getTimestampForIndex]);
 
-  // Update label positions when visible range changes
+  // Update label positions and leg line positions when visible range changes
   const updateLabelPositions = useCallback(() => {
     if (!chart || !series || bars.length === 0) {
       setLabelPositions(new Map());
+      setLegLinePositions(new Map());
       return;
     }
 
-    const positions = new Map<string, { x: number; y: number; ref: ReferenceSwing }>();
+    const labelPos = new Map<string, { x: number; y: number; ref: ReferenceSwing }>();
+    const linePos = new Map<string, {
+      originX: number; originY: number;
+      pivotX: number; pivotY: number;
+      ref: ReferenceSwing
+    }>();
 
     for (const ref of references) {
       if (fadingRefs.has(ref.leg_id)) continue;
 
+      const originTime = getTimestampForIndex(ref.origin_index);
       const pivotTime = getTimestampForIndex(ref.pivot_index);
-      if (pivotTime === null) continue;
+      if (originTime === null || pivotTime === null) continue;
 
+      const originX = chart.timeScale().timeToCoordinate(originTime as Time);
+      const originY = series.priceToCoordinate(ref.origin_price);
       const pivotX = chart.timeScale().timeToCoordinate(pivotTime as Time);
       const pivotY = series.priceToCoordinate(ref.pivot_price);
 
-      if (pivotX !== null && pivotY !== null) {
-        positions.set(ref.leg_id, { x: pivotX, y: pivotY, ref });
+      if (originX !== null && originY !== null && pivotX !== null && pivotY !== null) {
+        labelPos.set(ref.leg_id, { x: pivotX, y: pivotY, ref });
+        linePos.set(ref.leg_id, { originX, originY, pivotX, pivotY, ref });
       }
     }
 
-    setLabelPositions(positions);
+    setLabelPositions(labelPos);
+    setLegLinePositions(linePos);
   }, [chart, series, references, fadingRefs, bars, getTimestampForIndex]);
 
   // Update filtered label positions (Issue #400)
@@ -498,7 +515,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
   // Get chart container for label positioning
   const chartContainer = chart?.chartElement()?.closest('.chart-container');
-  if (!chartContainer || (labelPositions.size === 0 && filteredLabelPositions.size === 0)) {
+  if (!chartContainer || (labelPositions.size === 0 && legLinePositions.size === 0 && filteredLabelPositions.size === 0)) {
     return null;
   }
 
@@ -508,6 +525,28 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       className="absolute inset-0"
       style={{ width: '100%', height: '100%', zIndex: 100, pointerEvents: 'none' }}
     >
+      {/* Invisible hit-test lines for leg interaction (#411) */}
+      {Array.from(legLinePositions.entries()).map(([legId, { originX, originY, pivotX, pivotY }]) => {
+        const isHovered = hoveredLegId === legId;
+        const isSticky = stickyLegIds.has(legId);
+        return (
+          <line
+            key={`hitline_${legId}`}
+            x1={originX}
+            y1={originY}
+            x2={pivotX}
+            y2={pivotY}
+            stroke={isHovered || isSticky ? 'rgba(255,255,255,0.15)' : 'transparent'}
+            strokeWidth={12}
+            style={{ pointerEvents: 'all', cursor: 'pointer' }}
+            onMouseEnter={() => handleLabelMouseEnter(legId)}
+            onMouseLeave={handleLabelMouseLeave}
+            onClick={() => handleLabelClick(legId)}
+          />
+        );
+      })}
+
+      {/* Scale/location badges (display only, no pointer events) */}
       {Array.from(labelPositions.entries()).map(([legId, { x, y, ref }]) => {
         const scaleBadge = SCALE_BADGE_COLORS[ref.scale] || SCALE_BADGE_COLORS['S'];
         const color = ref.direction === 'bear' ? '#22c55e' : '#ef4444';
@@ -518,10 +557,6 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
           <g
             key={legId}
             transform={`translate(${x + 8}, ${y})`}
-            style={{ pointerEvents: 'all', cursor: 'pointer' }}
-            onMouseEnter={() => handleLabelMouseEnter(legId)}
-            onMouseLeave={handleLabelMouseLeave}
-            onClick={() => handleLabelClick(legId)}
           >
             {/* Scale badge */}
             <rect

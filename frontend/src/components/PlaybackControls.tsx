@@ -48,6 +48,7 @@ interface PlaybackControlsProps {
   // Linger toggle
   lingerEnabled?: boolean;
   onToggleLinger?: () => void;
+  lingerDisabled?: boolean;  // When true, shows disabled button with "coming soon" tooltip
   // Process Till feature (#328) - date-based navigation
   currentTimestamp?: number;  // Unix timestamp of current bar
   maxTimestamp?: number;  // Unix timestamp of last available bar
@@ -90,6 +91,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onDismissLinger,
   lingerEnabled = true,
   onToggleLinger,
+  lingerDisabled = false,
   currentTimestamp,
   maxTimestamp,
   resolutionMinutes = 5,
@@ -325,18 +327,21 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         </div>
 
         {/* Linger Toggle */}
-        {onToggleLinger && (
+        {(onToggleLinger || lingerDisabled) && (
           <button
-            onClick={onToggleLinger}
+            onClick={lingerDisabled ? undefined : onToggleLinger}
+            disabled={lingerDisabled}
             className={`flex items-center gap-1.5 px-2 py-1 rounded border transition-colors ${
-              lingerEnabled
-                ? 'bg-trading-orange/10 border-trading-orange/30 text-trading-orange hover:bg-trading-orange/20'
-                : 'bg-app-bg border-app-border text-app-muted hover:text-white hover:bg-app-card'
+              lingerDisabled
+                ? 'bg-app-bg border-app-border text-app-muted/50 cursor-not-allowed'
+                : lingerEnabled
+                  ? 'bg-trading-orange/10 border-trading-orange/30 text-trading-orange hover:bg-trading-orange/20'
+                  : 'bg-app-bg border-app-border text-app-muted hover:text-white hover:bg-app-card'
             }`}
-            title={lingerEnabled ? "Linger ON: Pause on events" : "Linger OFF: Continuous playback"}
-            aria-label={lingerEnabled ? "Disable linger (pause on events)" : "Enable linger (pause on events)"}
+            title={lingerDisabled ? "Linger (coming soon!)" : lingerEnabled ? "Linger ON: Pause on events" : "Linger OFF: Continuous playback"}
+            aria-label={lingerDisabled ? "Linger feature coming soon" : lingerEnabled ? "Disable linger (pause on events)" : "Enable linger (pause on events)"}
           >
-            {lingerEnabled ? <Timer size={14} /> : <TimerOff size={14} />}
+            {lingerDisabled || !lingerEnabled ? <TimerOff size={14} /> : <Timer size={14} />}
             <span className="text-xs font-medium">Linger</span>
           </button>
         )}
