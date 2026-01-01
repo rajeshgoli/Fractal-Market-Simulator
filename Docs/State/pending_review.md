@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2026-01-01
 
@@ -13,6 +13,7 @@
 3. **#420** — P3/P4 Frontend: Structure Panel component + Telemetry Events section
 4. **#421** — P3/P4 Frontend: Track button (confluence zones removed due to visual clutter)
 5. **#423, #424** — ReferenceConfig API endpoints + ReferenceSidebar component
+6. **#425** — ReferenceConfigPanel component with salience weight sliders + localStorage persistence
 
 ---
 

@@ -7,6 +7,7 @@ import { ReferenceTelemetryPanel } from '../components/ReferenceTelemetryPanel';
 import { ReferenceLegOverlay } from '../components/ReferenceLegOverlay';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { StructurePanel } from '../components/StructurePanel';
+import { ReferenceSidebar } from '../components/ReferenceSidebar';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { useChartPreferences } from '../hooks/useChartPreferences';
 import { useSessionSettings } from '../hooks/useSessionSettings';
@@ -16,6 +17,10 @@ import {
   fetchSession,
   restartSession,
   advanceReplay,
+  fetchReferenceConfig,
+  updateReferenceConfig,
+  ReferenceConfig,
+  DEFAULT_REFERENCE_CONFIG,
 } from '../lib/api';
 import { formatReplayBarsData } from '../utils/barDataUtils';
 import {
@@ -72,6 +77,47 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProcessingTill, setIsProcessingTill] = useState(false);
   const [showFiltered, setShowFiltered] = useState(false);  // Reference Observation mode
+
+  // Reference Config state (Issue #425)
+  const [referenceConfig, setReferenceConfig] = useState<ReferenceConfig>(
+    chartPrefs.referenceConfig ?? DEFAULT_REFERENCE_CONFIG
+  );
+
+  // Reference Config update handler (Issue #425)
+  const handleReferenceConfigUpdate = useCallback(async (newConfig: ReferenceConfig) => {
+    try {
+      // Send to backend API
+      const updatedConfig = await updateReferenceConfig(newConfig);
+      // Update local state
+      setReferenceConfig(updatedConfig);
+      // Persist to localStorage
+      chartPrefs.setReferenceConfig(updatedConfig);
+      // Refresh reference state to reflect new salience weights
+      if (calibrationBarCount > 0) {
+        fetchReferenceState(currentPlaybackPosition);
+      }
+    } catch (err) {
+      console.error('Failed to update reference config:', err);
+    }
+  }, [chartPrefs.setReferenceConfig, calibrationBarCount, currentPlaybackPosition, fetchReferenceState]);
+
+  // Load reference config from backend on mount (Issue #425)
+  useEffect(() => {
+    const loadReferenceConfig = async () => {
+      try {
+        const config = await fetchReferenceConfig();
+        setReferenceConfig(config);
+        // Update localStorage if different from saved
+        if (JSON.stringify(config) !== JSON.stringify(chartPrefs.referenceConfig)) {
+          chartPrefs.setReferenceConfig(config);
+        }
+      } catch (err) {
+        console.error('Failed to load reference config:', err);
+        // Fall back to localStorage or defaults
+      }
+    };
+    loadReferenceConfig();
+  }, []);
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -726,6 +772,33 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             </div>
           </div>
         </main>
+
+        {/* Reference Config Sidebar (Issue #425) */}
+        <ReferenceSidebar
+          referenceConfig={referenceConfig}
+          onReferenceConfigUpdate={handleReferenceConfigUpdate}
+          structureData={structureData}
+          references={referenceState?.references ?? []}
+          trackedLegIds={stickyLegIds}
+          onToggleTrack={toggleStickyLeg}
+          telemetryData={referenceState ? {
+            counts_by_scale: {
+              S: referenceState.by_scale.S.length,
+              M: referenceState.by_scale.M.length,
+              L: referenceState.by_scale.L.length,
+              XL: referenceState.by_scale.XL.length,
+            },
+            total_count: referenceState.references.length,
+            bull_count: referenceState.by_direction.bull.length,
+            bear_count: referenceState.by_direction.bear.length,
+            direction_imbalance: referenceState.direction_imbalance,
+            imbalance_ratio: null,
+            biggest_reference: null,
+            most_impulsive: null,
+          } : undefined}
+          onResetDefaults={() => handleReferenceConfigUpdate(DEFAULT_REFERENCE_CONFIG)}
+          className="w-64 shrink-0"
+        />
 
         <SettingsPanel
           isOpen={isSettingsOpen}

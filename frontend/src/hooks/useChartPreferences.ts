@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AggregationScale, DetectionConfig, DEFAULT_DETECTION_CONFIG } from '../types';
 import { LogicalRange } from 'lightweight-charts';
+import { ReferenceConfig, DEFAULT_REFERENCE_CONFIG } from '../lib/api';
 
 const STORAGE_KEY = 'chart-preferences';
 const ZOOM_DEBOUNCE_MS = 500; // Debounce zoom saves to avoid performance issues
@@ -22,6 +23,23 @@ function mergeDetectionConfig(saved: Partial<DetectionConfig> | null): Detection
   };
 }
 
+/**
+ * Deep merge saved reference config with defaults to ensure all fields exist.
+ * Handles schema evolution when new salience weights are added (#425).
+ */
+function mergeReferenceConfig(saved: Partial<ReferenceConfig> | null): ReferenceConfig | null {
+  if (!saved) return null;
+  return {
+    big_range_weight: saved.big_range_weight ?? DEFAULT_REFERENCE_CONFIG.big_range_weight,
+    big_impulse_weight: saved.big_impulse_weight ?? DEFAULT_REFERENCE_CONFIG.big_impulse_weight,
+    big_recency_weight: saved.big_recency_weight ?? DEFAULT_REFERENCE_CONFIG.big_recency_weight,
+    small_range_weight: saved.small_range_weight ?? DEFAULT_REFERENCE_CONFIG.small_range_weight,
+    small_impulse_weight: saved.small_impulse_weight ?? DEFAULT_REFERENCE_CONFIG.small_impulse_weight,
+    small_recency_weight: saved.small_recency_weight ?? DEFAULT_REFERENCE_CONFIG.small_recency_weight,
+    formation_fib_threshold: saved.formation_fib_threshold ?? DEFAULT_REFERENCE_CONFIG.formation_fib_threshold,
+  };
+}
+
 // Store linger event enabled states as a simple record
 type LingerEventStates = Record<string, boolean>;
 
@@ -38,6 +56,8 @@ interface ChartPreferences {
   detectionConfig: DetectionConfig | null; // null = use server defaults
   lingerEnabled: boolean;
   dagLingerEvents: LingerEventStates; // DAG mode linger toggles
+  // Reference config (salience weights) - Issue #425
+  referenceConfig: ReferenceConfig | null; // null = use server defaults
 }
 
 const DEFAULT_PREFERENCES: ChartPreferences = {
@@ -52,6 +72,7 @@ const DEFAULT_PREFERENCES: ChartPreferences = {
   detectionConfig: null,
   lingerEnabled: true,
   dagLingerEvents: {},
+  referenceConfig: null, // null = use server defaults (#425)
 };
 
 function loadPreferences(): ChartPreferences {
@@ -64,6 +85,8 @@ function loadPreferences(): ChartPreferences {
         ...parsed,
         // Deep merge detection config to handle schema evolution (#347)
         detectionConfig: mergeDetectionConfig(parsed.detectionConfig),
+        // Deep merge reference config to handle schema evolution (#425)
+        referenceConfig: mergeReferenceConfig(parsed.referenceConfig),
       };
     }
   } catch (e) {
@@ -92,6 +115,7 @@ interface UseChartPreferencesReturn {
   detectionConfig: DetectionConfig | null;
   lingerEnabled: boolean;
   dagLingerEvents: LingerEventStates;
+  referenceConfig: ReferenceConfig | null;
   setChart1Aggregation: (value: AggregationScale) => void;
   setChart2Aggregation: (value: AggregationScale) => void;
   setSpeedMultiplier: (value: number) => void;
@@ -103,6 +127,7 @@ interface UseChartPreferencesReturn {
   setDetectionConfig: (value: DetectionConfig | null) => void;
   setLingerEnabled: (value: boolean) => void;
   setDagLingerEvents: (value: LingerEventStates) => void;
+  setReferenceConfig: (value: ReferenceConfig | null) => void;
 }
 
 export function useChartPreferences(): UseChartPreferencesReturn {
@@ -179,6 +204,10 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setPreferences(prev => ({ ...prev, dagLingerEvents: value }));
   }, []);
 
+  const setReferenceConfig = useCallback((value: ReferenceConfig | null) => {
+    setPreferences(prev => ({ ...prev, referenceConfig: value }));
+  }, []);
+
   return {
     chart1Aggregation: preferences.chart1Aggregation,
     chart2Aggregation: preferences.chart2Aggregation,
@@ -191,6 +220,7 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     detectionConfig: preferences.detectionConfig,
     lingerEnabled: preferences.lingerEnabled,
     dagLingerEvents: preferences.dagLingerEvents,
+    referenceConfig: preferences.referenceConfig,
     setChart1Aggregation,
     setChart2Aggregation,
     setSpeedMultiplier,
@@ -202,5 +232,6 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setDetectionConfig,
     setLingerEnabled,
     setDagLingerEvents,
+    setReferenceConfig,
   };
 }

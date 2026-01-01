@@ -1,5 +1,5 @@
-import React, { useState, useRef, useImperativeHandle, forwardRef } from 'react';
-import { ChevronDown, ChevronRight, Settings, RotateCcw, Layers, Activity } from 'lucide-react';
+import React, { useState, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
+import { ChevronDown, ChevronRight, Settings, RotateCcw, Layers, Activity, Loader } from 'lucide-react';
 import {
   ReferenceConfig,
   StructurePanelResponse,
@@ -23,7 +23,7 @@ export interface ReferenceConfigPanelHandle {
 
 interface ReferenceConfigPanelProps {
   config: ReferenceConfig;
-  onConfigUpdate: (config: ReferenceConfig) => void;
+  onConfigUpdate: (config: ReferenceConfig) => void | Promise<void>;
   hideHeader?: boolean;
 }
 
@@ -34,30 +34,49 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
 }, ref) => {
   // Local state for sliders
   const [localConfig, setLocalConfig] = useState<ReferenceConfig>(config);
-  const [isDirty, setIsDirty] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const hasAppliedRef = React.useRef(false);
+
+  // Track if config has changes from server config
+  const hasChanges = useMemo(() => {
+    return (
+      localConfig.big_range_weight !== config.big_range_weight ||
+      localConfig.big_impulse_weight !== config.big_impulse_weight ||
+      localConfig.big_recency_weight !== config.big_recency_weight ||
+      localConfig.small_range_weight !== config.small_range_weight ||
+      localConfig.small_impulse_weight !== config.small_impulse_weight ||
+      localConfig.small_recency_weight !== config.small_recency_weight ||
+      localConfig.formation_fib_threshold !== config.formation_fib_threshold
+    );
+  }, [localConfig, config]);
 
   // Reset handler exposed via ref
   useImperativeHandle(ref, () => ({
     reset: () => {
       setLocalConfig(DEFAULT_REFERENCE_CONFIG);
-      setIsDirty(true);
     },
   }));
 
-  // Update local config when prop changes
+  // Update local config when prop changes (after successful apply)
   React.useEffect(() => {
-    setLocalConfig(config);
-    setIsDirty(false);
+    if (hasAppliedRef.current) {
+      setLocalConfig(config);
+      hasAppliedRef.current = false;
+    }
   }, [config]);
 
   const handleSliderChange = (key: keyof ReferenceConfig, value: number) => {
     setLocalConfig(prev => ({ ...prev, [key]: value }));
-    setIsDirty(true);
   };
 
-  const handleApply = () => {
-    onConfigUpdate(localConfig);
-    setIsDirty(false);
+  const handleApply = async () => {
+    setIsUpdating(true);
+    try {
+      hasAppliedRef.current = true;
+      await onConfigUpdate(localConfig);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (
@@ -79,6 +98,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
+          disabled={isUpdating}
         />
         <SliderRow
           label="Impulse"
@@ -87,6 +107,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
+          disabled={isUpdating}
         />
         <SliderRow
           label="Recency"
@@ -95,6 +116,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
+          disabled={isUpdating}
         />
       </div>
 
@@ -108,6 +130,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
+          disabled={isUpdating}
         />
         <SliderRow
           label="Impulse"
@@ -116,6 +139,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
+          disabled={isUpdating}
         />
         <SliderRow
           label="Recency"
@@ -124,6 +148,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
+          disabled={isUpdating}
         />
       </div>
 
@@ -138,18 +163,29 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           max={0.5}
           step={0.01}
           formatValue={(v) => v.toFixed(3)}
+          disabled={isUpdating}
         />
       </div>
 
       {/* Apply Button */}
-      {isDirty && (
-        <button
-          onClick={handleApply}
-          className="w-full py-2 px-4 bg-trading-blue/20 text-trading-blue rounded hover:bg-trading-blue/30 transition-colors text-xs font-medium"
-        >
-          Apply Changes
-        </button>
-      )}
+      <button
+        onClick={handleApply}
+        disabled={!hasChanges || isUpdating}
+        className={`w-full py-2 text-xs font-medium rounded transition-colors flex items-center justify-center gap-2 ${
+          hasChanges && !isUpdating
+            ? 'bg-trading-blue text-white hover:bg-blue-600'
+            : 'bg-app-border text-app-muted cursor-not-allowed'
+        }`}
+      >
+        {isUpdating ? (
+          <>
+            <Loader size={12} className="animate-spin" />
+            Applying...
+          </>
+        ) : (
+          'Apply'
+        )}
+      </button>
     </div>
   );
 });
@@ -167,6 +203,7 @@ interface SliderRowProps {
   max: number;
   step: number;
   formatValue?: (value: number) => string;
+  disabled?: boolean;
 }
 
 const SliderRow: React.FC<SliderRowProps> = ({
@@ -177,6 +214,7 @@ const SliderRow: React.FC<SliderRowProps> = ({
   max,
   step,
   formatValue = (v) => v.toFixed(1),
+  disabled = false,
 }) => {
   return (
     <div className="flex items-center gap-3">
@@ -189,6 +227,7 @@ const SliderRow: React.FC<SliderRowProps> = ({
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer accent-trading-blue"
+        disabled={disabled}
       />
       <span className="text-[10px] font-mono text-app-text w-10 text-right">
         {formatValue(value)}
@@ -283,7 +322,7 @@ function getScaleBadgeColor(scale: string): { bg: string; text: string } {
 interface ReferenceSidebarProps {
   // Reference Config
   referenceConfig?: ReferenceConfig;
-  onReferenceConfigUpdate?: (config: ReferenceConfig) => void;
+  onReferenceConfigUpdate?: (config: ReferenceConfig) => void | Promise<void>;
 
   // Feedback (same as DAG Sidebar)
   showFeedback?: boolean;
