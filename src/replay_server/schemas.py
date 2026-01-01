@@ -590,6 +590,7 @@ class ReferenceSwingResponse(BaseModel):
     origin_index: int
     pivot_price: float
     pivot_index: int
+    impulsiveness: Optional[float] = None  # Impulsiveness score (Issue #415)
 
 
 class ReferenceStateApiResponse(BaseModel):
@@ -646,3 +647,100 @@ class FilterStatsResponse(BaseModel):
     valid_count: int
     pass_rate: float
     by_reason: Dict[str, int]  # Counts by filter reason
+
+
+# ============================================================================
+# Confluence Zone Models (Issue #415 - Reference Layer P3)
+# ============================================================================
+
+
+class ConfluenceZoneLevelResponse(BaseModel):
+    """A fib level participating in a confluence zone."""
+    price: float
+    ratio: float
+    leg_id: str
+    scale: str
+    direction: str
+
+
+class ConfluenceZoneResponse(BaseModel):
+    """API response for a confluence zone - clustered fib levels from multiple references."""
+    center_price: float
+    min_price: float
+    max_price: float
+    levels: List[ConfluenceZoneLevelResponse]
+    reference_count: int
+    reference_ids: List[str]
+
+
+class ConfluenceZonesResponse(BaseModel):
+    """API response for all confluence zones from valid references."""
+    zones: List[ConfluenceZoneResponse]
+    tolerance_pct: float  # The tolerance used for clustering
+
+
+# ============================================================================
+# Structure Panel Models (Issue #415 - Reference Layer P3)
+# ============================================================================
+
+
+class LevelTouchResponse(BaseModel):
+    """API response for a level touch/cross event."""
+    price: float
+    ratio: float
+    leg_id: str
+    scale: str
+    direction: str
+    bar_index: int
+    touch_price: float
+    cross_direction: str  # 'up' | 'down'
+
+
+class StructurePanelResponse(BaseModel):
+    """
+    API response for Structure Panel data.
+
+    Three sections per spec:
+    1. Touched this session - Historical record of which levels were hit
+    2. Currently active - Levels within striking distance of current price
+    3. Current bar - Levels touched on most recent bar
+    """
+    touched_this_session: List[LevelTouchResponse]
+    currently_active: List[FibLevelResponse]
+    current_bar_touches: List[LevelTouchResponse]
+    current_price: float
+    active_level_distance_pct: float  # The threshold used for "striking distance"
+
+
+# ============================================================================
+# Telemetry Panel Models (Issue #415 - Reference Layer P3)
+# ============================================================================
+
+
+class TopReferenceResponse(BaseModel):
+    """API response for a top reference (biggest or most impulsive)."""
+    leg_id: str
+    scale: str
+    direction: str
+    range_value: float
+    impulsiveness: Optional[float]
+    salience_score: float
+
+
+class TelemetryPanelResponse(BaseModel):
+    """
+    API response for Telemetry Panel data.
+
+    Shows real-time reference state like DAG's market structure panel:
+    - Reference counts by scale
+    - Direction imbalance
+    - Top references (biggest, most impulsive)
+    """
+    counts_by_scale: Dict[str, int]  # {"S": 5, "M": 10, "L": 3, "XL": 1}
+    total_count: int
+    bull_count: int
+    bear_count: int
+    direction_imbalance: Optional[str]  # "bull" | "bear" | None
+    imbalance_ratio: Optional[str]  # e.g., "3:1"
+    biggest_reference: Optional[TopReferenceResponse]
+    most_impulsive: Optional[TopReferenceResponse]

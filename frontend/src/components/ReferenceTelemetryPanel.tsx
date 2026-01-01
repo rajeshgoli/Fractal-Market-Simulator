@@ -57,7 +57,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
 
   const { by_scale, by_direction, direction_imbalance, references, filter_stats } = referenceState;
 
-  // Find biggest and most impulsive
+  // Find biggest, most salient, and most impulsive
   const biggestRef = references.length > 0
     ? references.reduce((a, b) => {
         const aRange = Math.abs(a.origin_price - a.pivot_price);
@@ -66,7 +66,11 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
       })
     : null;
 
-  const mostSalient = references.length > 0 ? references[0] : null; // Already sorted by salience
+  // Most impulsive - only consider refs with impulsiveness data
+  const refsWithImpulse = references.filter(r => r.impulsiveness !== null);
+  const mostImpulsive = refsWithImpulse.length > 0
+    ? refsWithImpulse.reduce((a, b) => (a.impulsiveness! > b.impulsiveness! ? a : b))
+    : null;
 
   const bullCount = by_direction.bull?.length || 0;
   const bearCount = by_direction.bear?.length || 0;
@@ -166,18 +170,18 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
                 </div>
               </div>
             )}
-            {mostSalient && mostSalient !== biggestRef && (
+            {mostImpulsive && mostImpulsive !== biggestRef && (
               <div className="text-xs">
-                <div className="text-app-muted mb-0.5">Most Salient</div>
+                <div className="text-app-muted mb-0.5">Most Impulsive</div>
                 <div className="flex items-center gap-1.5">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getScaleColor(mostSalient.scale)}`}>
-                    {mostSalient.scale}
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getScaleColor(mostImpulsive.scale)}`}>
+                    {mostImpulsive.scale}
                   </span>
-                  <span className={mostSalient.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
-                    {mostSalient.direction === 'bull' ? '▲' : '▼'}
+                  <span className={mostImpulsive.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
+                    {mostImpulsive.direction === 'bull' ? '▲' : '▼'}
                   </span>
                   <span className="font-mono text-app-text">
-                    score: {mostSalient.salience_score.toFixed(2)}
+                    {mostImpulsive.impulsiveness?.toFixed(0)}%
                   </span>
                 </div>
               </div>

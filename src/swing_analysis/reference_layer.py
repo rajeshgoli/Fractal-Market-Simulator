@@ -181,6 +181,84 @@ class LevelInfo:
 
 
 @dataclass
+class ConfluenceZone:
+    """
+    A cluster of fib levels from different references.
+
+    When levels from multiple references fall within a small tolerance,
+    they form a confluence zone - an area of increased significance.
+
+    Attributes:
+        center_price: Average price of all levels in the zone.
+        min_price: Lowest price level in the zone.
+        max_price: Highest price level in the zone.
+        levels: List of LevelInfo that form this zone.
+        reference_count: Number of unique references contributing.
+        reference_ids: Set of leg_ids for participating references.
+
+    Example:
+        >>> zone = ConfluenceZone(
+        ...     center_price=4150.25,
+        ...     min_price=4149.50,
+        ...     max_price=4151.00,
+        ...     levels=[level1, level2, level3],
+        ...     reference_count=3,
+        ...     reference_ids={'leg_bear_1', 'leg_bull_2', 'leg_bear_3'},
+        ... )
+        >>> zone.reference_count
+        3
+    """
+    center_price: float           # Average price of levels in zone
+    min_price: float              # Lowest level price
+    max_price: float              # Highest level price
+    levels: List[LevelInfo]       # Participating levels
+    reference_count: int          # Number of unique references
+    reference_ids: Set[str]       # Leg IDs of participating references
+
+
+@dataclass
+class LevelTouch:
+    """
+    Record of a fib level being touched/crossed by price.
+
+    A level is "touched" when price trades at or through it. Used by the
+    Structure Panel to track which levels have been tested.
+
+    Attributes:
+        level: The LevelInfo that was touched.
+        bar_index: Bar index when touch occurred.
+        touch_price: The price at which the touch was detected.
+        cross_direction: 'up' if price crossed from below, 'down' if from above.
+    """
+    level: LevelInfo
+    bar_index: int
+    touch_price: float
+    cross_direction: str  # 'up' | 'down'
+
+
+@dataclass
+class StructurePanelData:
+    """
+    Data for the Structure Panel showing level touch history.
+
+    Three sections per spec:
+    1. Touched this session - Historical record of which levels were hit
+    2. Currently active - Levels within striking distance of current price
+    3. Current bar - Levels touched on most recent bar
+
+    Attributes:
+        touched_this_session: All level touches recorded during the session.
+        currently_active: Levels within striking distance (configurable threshold).
+        current_bar_touches: Levels touched on the most recent bar.
+        current_price: Current price for reference.
+    """
+    touched_this_session: List[LevelTouch]
+    currently_active: List[LevelInfo]
+    current_bar_touches: List[LevelTouch]
+    current_price: float
+
+
+@dataclass
 class ReferenceState:
     """
     Complete reference layer output for a given bar.
@@ -331,6 +409,10 @@ class ReferenceLayer:
         self._tracked_for_crossing: Set[str] = set()
         # Track which leg_ids have been added to range distribution (to avoid duplicates)
         self._seen_leg_ids: Set[str] = set()
+        # Structure Panel: level touches recorded during the session
+        self._session_level_touches: List[LevelTouch] = []
+        # Track last known price to detect touch directions
+        self._last_price: Optional[float] = None
 
     def copy_state_from(self, other: 'ReferenceLayer') -> None:
         """
@@ -347,6 +429,8 @@ class ReferenceLayer:
         self._formed_refs = other._formed_refs.copy()
         self._tracked_for_crossing = other._tracked_for_crossing.copy()
         self._seen_leg_ids = other._seen_leg_ids.copy()
+        self._session_level_touches = other._session_level_touches.copy()
+        self._last_price = other._last_price
 
     def track_formation(self, legs: List[Leg], bar: Bar) -> None:
         """
@@ -781,6 +865,178 @@ class ReferenceLayer:
                 ))
 
         return levels
+
+    def get_confluence_zones(
+        self,
+        state: ReferenceState,
+        tolerance_pct: Optional[float] = None,
+    ) -> List[ConfluenceZone]:
+        """
+        Find where fib levels from different references cluster.
+
+        When levels from multiple references fall within the tolerance,
+        they form a confluence zone - an area of increased significance.
+
+        Algorithm:
+        1. Collect all levels from all valid references
+        2. Sort by price
+        3. Cluster adjacent levels within tolerance
+        4. Only include clusters from 2+ unique references
+
+        Args:
+            state: ReferenceState from update() containing valid references.
+            tolerance_pct: Percentage tolerance for clustering (e.g., 0.001 = 0.1%).
+                If None, uses config default.
+
+        Returns:
+            List of ConfluenceZone, each containing clustered levels.
+
+        Example:
+            >>> zones = ref_layer.get_confluence_zones(state, tolerance_pct=0.001)
+            >>> for zone in zones:
+            ...     print(f"Confluence at {zone.center_price:.2f}: {zone.reference_count} refs")
+        """
+        tolerance = tolerance_pct if tolerance_pct is not None else self.reference_config.confluence_tolerance_pct
+
+        # Collect all levels with their source reference
+        all_levels: List[LevelInfo] = []
+        levels_by_ratio = self.get_active_levels(state)
+        for ratio_levels in levels_by_ratio.values():
+            all_levels.extend(ratio_levels)
+
+        if len(all_levels) < 2:
+            return []
+
+        # Sort by price
+        all_levels.sort(key=lambda lvl: lvl.price)
+
+        # Cluster adjacent levels within tolerance
+        zones: List[ConfluenceZone] = []
+        current_cluster: List[LevelInfo] = [all_levels[0]]
+
+        for i in range(1, len(all_levels)):
+            prev_price = current_cluster[-1].price
+            curr_price = all_levels[i].price
+
+            # Calculate tolerance based on the average of the two prices
+            avg_price = (prev_price + curr_price) / 2
+            allowed_distance = avg_price * tolerance
+
+            if abs(curr_price - prev_price) <= allowed_distance:
+                # Within tolerance, add to current cluster
+                current_cluster.append(all_levels[i])
+            else:
+                # New cluster starts, finalize previous
+                if len(current_cluster) >= 2:
+                    zone = self._create_confluence_zone(current_cluster)
+                    if zone.reference_count >= 2:
+                        zones.append(zone)
+                current_cluster = [all_levels[i]]
+
+        # Don't forget the last cluster
+        if len(current_cluster) >= 2:
+            zone = self._create_confluence_zone(current_cluster)
+            if zone.reference_count >= 2:
+                zones.append(zone)
+
+        return zones
+
+    def _create_confluence_zone(self, levels: List[LevelInfo]) -> ConfluenceZone:
+        """
+        Create a ConfluenceZone from a list of clustered levels.
+
+        Args:
+            levels: List of LevelInfo that form the cluster.
+
+        Returns:
+            ConfluenceZone with computed center, bounds, and reference info.
+        """
+        prices = [lvl.price for lvl in levels]
+        ref_ids = {lvl.reference.leg.leg_id for lvl in levels}
+
+        return ConfluenceZone(
+            center_price=sum(prices) / len(prices),
+            min_price=min(prices),
+            max_price=max(prices),
+            levels=levels,
+            reference_count=len(ref_ids),
+            reference_ids=ref_ids,
+        )
+
+    def get_structure_panel_data(
+        self,
+        state: ReferenceState,
+        bar: Bar,
+    ) -> StructurePanelData:
+        """
+        Get data for the Structure Panel.
+
+        Three sections per spec:
+        1. Touched this session - Historical record of which levels were hit
+        2. Currently active - Levels within striking distance of current price
+        3. Current bar - Levels touched on most recent bar
+
+        Level "testing" = touch/cross (not proximity). A level is tested
+        when price actually trades at or through it.
+
+        Args:
+            state: ReferenceState from update().
+            bar: Current bar with OHLC.
+
+        Returns:
+            StructurePanelData with all three sections populated.
+        """
+        current_price = float(bar.close)
+        bar_high = float(bar.high)
+        bar_low = float(bar.low)
+
+        # Get all active levels
+        levels_by_ratio = self.get_active_levels(state)
+        all_levels: List[LevelInfo] = []
+        for ratio_levels in levels_by_ratio.values():
+            all_levels.extend(ratio_levels)
+
+        # Detect level touches on current bar
+        current_bar_touches: List[LevelTouch] = []
+        for level in all_levels:
+            # A level is touched if price traded through it on this bar
+            if bar_low <= level.price <= bar_high:
+                # Determine cross direction based on where price came from
+                cross_direction = 'up' if self._last_price is not None and self._last_price < level.price else 'down'
+                touch = LevelTouch(
+                    level=level,
+                    bar_index=bar.index,
+                    touch_price=level.price,
+                    cross_direction=cross_direction,
+                )
+                current_bar_touches.append(touch)
+                self._session_level_touches.append(touch)
+
+        # Update last price for next call
+        self._last_price = current_price
+
+        # Currently active: levels within striking distance
+        distance_threshold = current_price * self.reference_config.active_level_distance_pct
+        currently_active: List[LevelInfo] = [
+            level for level in all_levels
+            if abs(level.price - current_price) <= distance_threshold
+        ]
+
+        return StructurePanelData(
+            touched_this_session=self._session_level_touches.copy(),
+            currently_active=currently_active,
+            current_bar_touches=current_bar_touches,
+            current_price=current_price,
+        )
+
+    def clear_session_touches(self) -> None:
+        """
+        Clear the session level touch history.
+
+        Call this when starting a new session or restarting playback.
+        """
+        self._session_level_touches.clear()
+        self._last_price = None
 
     def add_crossing_tracking(self, leg_id: str) -> None:
         """

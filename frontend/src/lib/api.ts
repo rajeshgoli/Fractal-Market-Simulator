@@ -560,6 +560,7 @@ export interface ReferenceSwing {
   origin_index: number;
   pivot_price: number;
   pivot_index: number;
+  impulsiveness: number | null;
 }
 
 export interface ReferenceStateResponse {
@@ -667,6 +668,133 @@ export async function untrackLegForCrossing(legId: string): Promise<{ success: b
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ detail: response.statusText }));
     throw new Error(errorData.detail || `Failed to untrack leg: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ============================================================================
+// Confluence Zones API (Issue #415 - Reference Layer P3)
+// ============================================================================
+
+export interface ConfluenceZoneLevel {
+  price: number;
+  ratio: number;
+  leg_id: string;
+  scale: 'S' | 'M' | 'L' | 'XL';
+  direction: 'bull' | 'bear';
+}
+
+export interface ConfluenceZone {
+  center_price: number;
+  min_price: number;
+  max_price: number;
+  levels: ConfluenceZoneLevel[];
+  reference_count: number;
+  reference_ids: string[];
+}
+
+export interface ConfluenceZonesResponse {
+  zones: ConfluenceZone[];
+  tolerance_pct: number;
+}
+
+export async function fetchConfluenceZones(barIndex?: number, tolerancePct?: number): Promise<ConfluenceZonesResponse> {
+  const params = new URLSearchParams();
+  if (barIndex !== undefined) params.set('bar_index', barIndex.toString());
+  if (tolerancePct !== undefined) params.set('tolerance_pct', tolerancePct.toString());
+
+  const url = params.toString()
+    ? `${API_BASE}/reference/confluence?${params.toString()}`
+    : `${API_BASE}/reference/confluence`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch confluence zones: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ============================================================================
+// Structure Panel API (Issue #415 - Reference Layer P3)
+// ============================================================================
+
+export interface LevelTouch {
+  price: number;
+  ratio: number;
+  leg_id: string;
+  scale: 'S' | 'M' | 'L' | 'XL';
+  direction: 'bull' | 'bear';
+  bar_index: number;
+  touch_price: number;
+  cross_direction: 'up' | 'down';
+}
+
+export interface StructurePanelResponse {
+  touched_this_session: LevelTouch[];
+  currently_active: FibLevel[];
+  current_bar_touches: LevelTouch[];
+  current_price: number;
+  active_level_distance_pct: number;
+}
+
+export async function fetchStructurePanel(barIndex?: number): Promise<StructurePanelResponse> {
+  const url = barIndex !== undefined
+    ? `${API_BASE}/reference/structure?bar_index=${barIndex}`
+    : `${API_BASE}/reference/structure`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch structure panel: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function clearSessionTouches(): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${API_BASE}/reference/structure/clear`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to clear session touches: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ============================================================================
+// Telemetry Panel API (Issue #415 - Reference Layer P3)
+// ============================================================================
+
+export interface TopReference {
+  leg_id: string;
+  scale: 'S' | 'M' | 'L' | 'XL';
+  direction: 'bull' | 'bear';
+  range_value: number;
+  impulsiveness: number | null;
+  salience_score: number;
+}
+
+export interface TelemetryPanelResponse {
+  counts_by_scale: Record<string, number>;
+  total_count: number;
+  bull_count: number;
+  bear_count: number;
+  direction_imbalance: 'bull' | 'bear' | null;
+  imbalance_ratio: string | null;
+  biggest_reference: TopReference | null;
+  most_impulsive: TopReference | null;
+}
+
+export async function fetchTelemetryPanel(barIndex?: number): Promise<TelemetryPanelResponse> {
+  const url = barIndex !== undefined
+    ? `${API_BASE}/reference/telemetry?bar_index=${barIndex}`
+    : `${API_BASE}/reference/telemetry`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to fetch telemetry panel: ${response.statusText}`);
   }
   return response.json();
 }

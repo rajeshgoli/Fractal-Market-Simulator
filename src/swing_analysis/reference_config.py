@@ -94,6 +94,9 @@ class ReferenceConfig:
     # Confluence detection
     confluence_tolerance_pct: float = 0.001  # 0.1% — percentage-based
 
+    # Structure Panel: "currently active" threshold (levels within striking distance)
+    active_level_distance_pct: float = 0.005  # 0.5% — levels within this % are "active"
+
     @classmethod
     def default(cls) -> "ReferenceConfig":
         """Create a config with default values."""
@@ -123,6 +126,7 @@ class ReferenceConfig:
             small_recency_weight=data.get("small_recency_weight", 0.5),
             use_depth_instead_of_scale=data.get("use_depth_instead_of_scale", False),
             confluence_tolerance_pct=data.get("confluence_tolerance_pct", 0.001),
+            active_level_distance_pct=data.get("active_level_distance_pct", 0.005),
         )
 
     def with_scale_thresholds(
@@ -158,6 +162,7 @@ class ReferenceConfig:
             small_recency_weight=self.small_recency_weight,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
+            active_level_distance_pct=self.active_level_distance_pct,
         )
 
     def with_formation_threshold(self, formation_fib_threshold: float) -> "ReferenceConfig":
@@ -186,6 +191,7 @@ class ReferenceConfig:
             small_recency_weight=self.small_recency_weight,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
+            active_level_distance_pct=self.active_level_distance_pct,
         )
 
     def with_tolerance(
@@ -221,6 +227,7 @@ class ReferenceConfig:
             small_recency_weight=self.small_recency_weight,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
+            active_level_distance_pct=self.active_level_distance_pct,
         )
 
     def with_salience_weights(
@@ -263,6 +270,7 @@ class ReferenceConfig:
             small_recency_weight=small_recency_weight if small_recency_weight is not None else self.small_recency_weight,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
+            active_level_distance_pct=self.active_level_distance_pct,
         )
 
     def with_depth_mode(self, use_depth_instead_of_scale: bool) -> "ReferenceConfig":
@@ -292,6 +300,7 @@ class ReferenceConfig:
             small_recency_weight=self.small_recency_weight,
             use_depth_instead_of_scale=use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
+            active_level_distance_pct=self.active_level_distance_pct,
         )
 
     def with_confluence_tolerance(self, confluence_tolerance_pct: float) -> "ReferenceConfig":
@@ -321,4 +330,5 @@ class ReferenceConfig:
             small_recency_weight=self.small_recency_weight,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=confluence_tolerance_pct,
+            active_level_distance_pct=self.active_level_distance_pct,
         )

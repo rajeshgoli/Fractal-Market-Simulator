@@ -1,22 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 1
 
-**Last Review:** 2025-12-31
+**Last Review:** 2026-01-01
 
 ---
 
 ## Pending Changes
 
-- #400 — Reference Observation Mode: Backend filter status API (FilterReason enum, FilteredLeg dataclass, get_all_with_status method, extended /api/reference-state with filtered_legs and filter_stats) + Frontend UI (Show Filtered toggle in telemetry panel, dashed filtered leg rendering in overlay, filter reason badges)
-- #403 — Router cleanup: removed duplicate helper functions from replay.py, updated to use helpers/ imports
-- #404 — DAG cleanup epic: simplified config (removed enable_engulfed_prune, min_branch_ratio, turn_ratio_mode; added max_turns), symmetric engulfed_breach_threshold, discrete Fib slider, rebuilt DetectionConfigPanel with tooltips, dynamic column layout, Followed Legs panel as last column
-- #408 — Dead code cleanup: removed replay mode infrastructure, SWING_* events, 'formed' field vestiges, fixed follow leg state machine ('forming'/'formed' → 'active')
-- #409 — View switch state restoration: added /api/dag/events endpoint to return cached lifecycle events, DAGView fetches events on mount when returning to existing session, header shows currentPlaybackPosition+1 for accurate bar count
-- #410 — Cache consolidation and API namespace restructure: consolidated three parallel cache entities to single dict in cache.py, restructured API endpoints (/api/replay/* → /api/dag/*, /api/playback/feedback → /api/feedback/submit, /api/reference-state → /api/reference/state), deleted replay.py and config.py routers, simplified init endpoint (removed dead batch warmup code)
-- #412 — Lazy DAG init: removed CalibrationPhase state machine from FE, added _ensure_initialized() lazy init to /api/dag/advance, /state, /reverse endpoints, added /api/dag/reset endpoint, simplified FE startup flow
-- #411 — Reference View bug fixes: Renamed DAG View to Structural Legs, disabled Linger button in Reference mode with tooltip, fixed source bars count persistence, made fib level hover/click target leg lines instead of overlapping badge icons
-- #414 — Show Filtered UX inversion: filtered legs highlighted with direction colors and hover interactivity, valid legs faded to 8% and non-interactive
+1. **#415** — Reference Layer P3: Structure Panel + Confluence Zones backend + Telemetry updates
 
 ---
 
@@ -24,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 1 | #400, #403, #404, #408, #409, #410, #411, #412, #414 — Reference Observation, router cleanup, DAG cleanup, cache consolidation, lazy init, view fixes (9 issues) | All Accepted; Reference Phase 2 complete, P3 ready |
 | Dec 31 | #398 — Schema unification, router split, naming cleanup | Accepted with notes; #403 filed for incomplete split |
 | Dec 31 | #395, #396, #397 — Pivot fix, arch cleanup (Phases 1-2d), warmup preservation | All Accepted; #398 filed for remaining work |
 | Dec 31 | #394 — DAG cleanup review + architectural investigation | Accepted with notes; vestiges identified in `architect_fixes.md`; epic filed |

@@ -21,6 +21,13 @@ from ..schemas import (
     ActiveLevelsResponse,
     FilteredLegResponse,
     FilterStatsResponse,
+    ConfluenceZoneLevelResponse,
+    ConfluenceZoneResponse,
+    ConfluenceZonesResponse,
+    LevelTouchResponse,
+    StructurePanelResponse,
+    TopReferenceResponse,
+    TelemetryPanelResponse,
 )
 from .cache import get_replay_cache, is_initialized
 
@@ -40,6 +47,7 @@ def _reference_swing_to_response(ref_swing) -> ReferenceSwingResponse:
         origin_index=ref_swing.leg.origin_index,
         pivot_price=float(ref_swing.leg.pivot_price),
         pivot_index=ref_swing.leg.pivot_index,
+        impulsiveness=ref_swing.leg.impulsiveness,
     )
 
 
@@ -335,3 +343,312 @@ async def untrack_leg_for_crossing(leg_id: str):
         "leg_id": leg_id,
         "tracked_count": len(ref_layer.get_tracked_leg_ids()),
     }
+
+
+@router.get("/api/reference/confluence", response_model=ConfluenceZonesResponse)
+async def get_confluence_zones(
+    bar_index: Optional[int] = Query(None),
+    tolerance_pct: Optional[float] = Query(None, description="Clustering tolerance (0.001 = 0.1%)"),
+):
+    """
+    Get confluence zones - clustered fib levels from multiple references.
+
+    When levels from different references fall within the tolerance, they form
+    a confluence zone - an area of increased significance.
+
+    Args:
+        bar_index: Optional bar index for state. Uses current playback position if not provided.
+        tolerance_pct: Optional tolerance override (default 0.001 = 0.1%).
+
+    Returns:
+        ConfluenceZonesResponse with all detected confluence zones.
+    """
+    from ..api import get_state
+    from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceState
+
+    cache = get_replay_cache()
+
+    try:
+        state = get_state()
+    except Exception:
+        return ConfluenceZonesResponse(zones=[], tolerance_pct=0.001)
+
+    if not is_initialized():
+        return ConfluenceZonesResponse(zones=[], tolerance_pct=0.001)
+
+    if cache.get("reference_layer") is None:
+        cache["reference_layer"] = ReferenceLayer()
+
+    target_index = bar_index
+    if target_index is None:
+        target_index = cache.get("last_bar_index", 0)
+
+    if target_index >= 0 and target_index < len(state.source_bars):
+        bar = state.source_bars[target_index]
+    elif len(state.source_bars) > 0:
+        bar = state.source_bars[-1]
+    else:
+        return ConfluenceZonesResponse(zones=[], tolerance_pct=0.001)
+
+    detector = cache["detector"]
+    active_legs = detector.state.active_legs
+    ref_layer = cache["reference_layer"]
+    ref_state: ReferenceState = ref_layer.update(active_legs, bar)
+
+    # Get confluence zones
+    zones = ref_layer.get_confluence_zones(ref_state, tolerance_pct=tolerance_pct)
+    actual_tolerance = tolerance_pct if tolerance_pct is not None else ref_layer.reference_config.confluence_tolerance_pct
+
+    # Convert to response format
+    zone_responses = []
+    for zone in zones:
+        levels = [
+            ConfluenceZoneLevelResponse(
+                price=lvl.price,
+                ratio=lvl.ratio,
+                leg_id=lvl.reference.leg.leg_id,
+                scale=lvl.reference.scale,
+                direction=lvl.reference.leg.direction,
+            )
+            for lvl in zone.levels
+        ]
+        zone_responses.append(ConfluenceZoneResponse(
+            center_price=zone.center_price,
+            min_price=zone.min_price,
+            max_price=zone.max_price,
+            levels=levels,
+            reference_count=zone.reference_count,
+            reference_ids=list(zone.reference_ids),
+        ))
+
+    return ConfluenceZonesResponse(zones=zone_responses, tolerance_pct=actual_tolerance)
+
+
+@router.get("/api/reference/structure", response_model=StructurePanelResponse)
+async def get_structure_panel(bar_index: Optional[int] = Query(None)):
+    """
+    Get Structure Panel data - level touch history and active levels.
+
+    Three sections per spec:
+    1. Touched this session - Historical record of which levels were hit
+    2. Currently active - Levels within striking distance of current price
+    3. Current bar - Levels touched on most recent bar
+
+    Args:
+        bar_index: Optional bar index for state. Uses current playback position if not provided.
+
+    Returns:
+        StructurePanelResponse with all three sections populated.
+    """
+    from ..api import get_state
+    from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceState
+
+    cache = get_replay_cache()
+
+    empty_response = StructurePanelResponse(
+        touched_this_session=[],
+        currently_active=[],
+        current_bar_touches=[],
+        current_price=0.0,
+        active_level_distance_pct=0.005,
+    )
+
+    try:
+        state = get_state()
+    except Exception:
+        return empty_response
+
+    if not is_initialized():
+        return empty_response
+
+    if cache.get("reference_layer") is None:
+        cache["reference_layer"] = ReferenceLayer()
+
+    target_index = bar_index
+    if target_index is None:
+        target_index = cache.get("last_bar_index", 0)
+
+    if target_index >= 0 and target_index < len(state.source_bars):
+        bar = state.source_bars[target_index]
+    elif len(state.source_bars) > 0:
+        bar = state.source_bars[-1]
+    else:
+        return empty_response
+
+    detector = cache["detector"]
+    active_legs = detector.state.active_legs
+    ref_layer = cache["reference_layer"]
+    ref_state: ReferenceState = ref_layer.update(active_legs, bar)
+
+    # Get structure panel data
+    panel_data = ref_layer.get_structure_panel_data(ref_state, bar)
+
+    # Convert to response format
+    def touch_to_response(touch) -> LevelTouchResponse:
+        return LevelTouchResponse(
+            price=touch.level.price,
+            ratio=touch.level.ratio,
+            leg_id=touch.level.reference.leg.leg_id,
+            scale=touch.level.reference.scale,
+            direction=touch.level.reference.leg.direction,
+            bar_index=touch.bar_index,
+            touch_price=touch.touch_price,
+            cross_direction=touch.cross_direction,
+        )
+
+    def level_to_response(level) -> FibLevelResponse:
+        return FibLevelResponse(
+            price=level.price,
+            ratio=level.ratio,
+            leg_id=level.reference.leg.leg_id,
+            scale=level.reference.scale,
+            direction=level.reference.leg.direction,
+        )
+
+    return StructurePanelResponse(
+        touched_this_session=[touch_to_response(t) for t in panel_data.touched_this_session],
+        currently_active=[level_to_response(l) for l in panel_data.currently_active],
+        current_bar_touches=[touch_to_response(t) for t in panel_data.current_bar_touches],
+        current_price=panel_data.current_price,
+        active_level_distance_pct=ref_layer.reference_config.active_level_distance_pct,
+    )
+
+
+@router.post("/api/reference/structure/clear")
+async def clear_session_touches():
+    """
+    Clear the session level touch history.
+
+    Call this when starting a new session or restarting playback.
+
+    Returns:
+        Success message.
+    """
+    from ...swing_analysis.reference_layer import ReferenceLayer
+
+    cache = get_replay_cache()
+
+    if cache.get("reference_layer") is None:
+        return {"success": True, "message": "No session touches to clear"}
+
+    ref_layer = cache["reference_layer"]
+    ref_layer.clear_session_touches()
+
+    return {"success": True, "message": "Session touches cleared"}
+
+
+@router.get("/api/reference/telemetry", response_model=TelemetryPanelResponse)
+async def get_telemetry_panel(bar_index: Optional[int] = Query(None)):
+    """
+    Get Telemetry Panel data - reference stats, top references.
+
+    Shows real-time reference state like DAG's market structure panel:
+    - Reference counts by scale
+    - Direction imbalance
+    - Top references (biggest, most impulsive)
+
+    Args:
+        bar_index: Optional bar index for state. Uses current playback position if not provided.
+
+    Returns:
+        TelemetryPanelResponse with all telemetry data.
+    """
+    from ..api import get_state
+    from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceState
+
+    cache = get_replay_cache()
+
+    empty_response = TelemetryPanelResponse(
+        counts_by_scale={'S': 0, 'M': 0, 'L': 0, 'XL': 0},
+        total_count=0,
+        bull_count=0,
+        bear_count=0,
+        direction_imbalance=None,
+        imbalance_ratio=None,
+        biggest_reference=None,
+        most_impulsive=None,
+    )
+
+    try:
+        state = get_state()
+    except Exception:
+        return empty_response
+
+    if not is_initialized():
+        return empty_response
+
+    if cache.get("reference_layer") is None:
+        cache["reference_layer"] = ReferenceLayer()
+
+    target_index = bar_index
+    if target_index is None:
+        target_index = cache.get("last_bar_index", 0)
+
+    if target_index >= 0 and target_index < len(state.source_bars):
+        bar = state.source_bars[target_index]
+    elif len(state.source_bars) > 0:
+        bar = state.source_bars[-1]
+    else:
+        return empty_response
+
+    detector = cache["detector"]
+    active_legs = detector.state.active_legs
+    ref_layer = cache["reference_layer"]
+    ref_state: ReferenceState = ref_layer.update(active_legs, bar)
+
+    # Counts by scale
+    counts_by_scale = {scale: len(refs) for scale, refs in ref_state.by_scale.items()}
+    total_count = len(ref_state.references)
+
+    # Direction counts
+    bull_refs = ref_state.by_direction.get('bull', [])
+    bear_refs = ref_state.by_direction.get('bear', [])
+    bull_count = len(bull_refs)
+    bear_count = len(bear_refs)
+
+    # Imbalance ratio
+    imbalance_ratio = None
+    if ref_state.direction_imbalance == 'bull' and bear_count > 0:
+        ratio = bull_count / bear_count
+        imbalance_ratio = f"{ratio:.1f}:1"
+    elif ref_state.direction_imbalance == 'bear' and bull_count > 0:
+        ratio = bear_count / bull_count
+        imbalance_ratio = f"{ratio:.1f}:1"
+
+    # Biggest reference (by range)
+    biggest_reference = None
+    if ref_state.references:
+        biggest = max(ref_state.references, key=lambda r: float(r.leg.range))
+        biggest_reference = TopReferenceResponse(
+            leg_id=biggest.leg.leg_id,
+            scale=biggest.scale,
+            direction=biggest.leg.direction,
+            range_value=float(biggest.leg.range),
+            impulsiveness=biggest.leg.impulsiveness,
+            salience_score=biggest.salience_score,
+        )
+
+    # Most impulsive reference
+    most_impulsive = None
+    refs_with_impulse = [r for r in ref_state.references if r.leg.impulsiveness is not None]
+    if refs_with_impulse:
+        impulsive = max(refs_with_impulse, key=lambda r: r.leg.impulsiveness)
+        most_impulsive = TopReferenceResponse(
+            leg_id=impulsive.leg.leg_id,
+            scale=impulsive.scale,
+            direction=impulsive.leg.direction,
+            range_value=float(impulsive.leg.range),
+            impulsiveness=impulsive.leg.impulsiveness,
+            salience_score=impulsive.salience_score,
+        )
+
+    return TelemetryPanelResponse(
+        counts_by_scale=counts_by_scale,
+        total_count=total_count,
+        bull_count=bull_count,
+        bear_count=bear_count,
+        direction_imbalance=ref_state.direction_imbalance,
+        imbalance_ratio=imbalance_ratio,
+        biggest_reference=biggest_reference,
+        most_impulsive=most_impulsive,
+    )
