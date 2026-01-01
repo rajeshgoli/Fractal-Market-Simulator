@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2025-12-31
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - #403 — Router cleanup: removed duplicate helper functions from replay.py, updated to use helpers/ imports
+- #404 — DAG cleanup epic: simplified config (removed enable_engulfed_prune, min_branch_ratio, turn_ratio_mode; added max_turns), rebuilt DetectionConfigPanel with tooltips, dynamic column layout
 
 ---
 
