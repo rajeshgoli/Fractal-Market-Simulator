@@ -1030,7 +1030,14 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
 ```
 
 **Key files:**
-- `src/replay_server/routers/replay.py` - API endpoints
+- `src/replay_server/routers/` - API endpoints (modularized #398)
+  - `replay.py` - Core advance/reverse/calibrate endpoints
+  - `dag.py` - DAG state, lineage, followed-legs endpoints
+  - `reference.py` - Reference Layer state and levels
+  - `config.py` - Detection config endpoints
+  - `feedback.py` - Playback feedback endpoint
+  - `cache.py` - Shared ReplayCache state
+  - `helpers/` - Conversion and builder functions
 - `src/swing_analysis/reference_layer.py` - Filtering logic
 - `src/swing_analysis/dag/` - DAG algorithm (modularized)
   - `leg_detector.py` - LegDetector main class
