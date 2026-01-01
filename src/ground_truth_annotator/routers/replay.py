@@ -23,14 +23,10 @@ from ...swing_analysis.dag import (
     HierarchicalDetector,  # Backward compatibility alias
     calibrate,
 )
+from ...swing_analysis.dag.leg import Leg
 from ...swing_analysis.swing_config import SwingConfig
-from ...swing_analysis.swing_node import SwingNode
 from ...swing_analysis.events import (
     SwingEvent,
-    SwingFormedEvent,
-    SwingInvalidatedEvent,
-    SwingCompletedEvent,
-    LevelCrossEvent,
     LegCreatedEvent,
     LegPrunedEvent,
     OriginBreachedEvent,
@@ -38,7 +34,7 @@ from ...swing_analysis.events import (
 )
 from ...swing_analysis.types import Bar
 from ...swing_analysis.reference_frame import ReferenceFrame
-from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceSwingInfo
+from ...swing_analysis.reference_layer import ReferenceLayer, ReferenceSwing
 from ...swing_analysis.bar_aggregator import BarAggregator
 from ..schemas import (
     BarResponse,
@@ -132,26 +128,36 @@ def _size_to_scale(size: float, scale_thresholds: Dict[str, float]) -> str:
     return "S"
 
 
-def _swing_node_to_calibration_response(
-    swing: SwingNode,
+def _leg_to_calibration_response(
+    leg: Leg,
     is_active: bool,
     rank: int = 1,
     scale_thresholds: Optional[Dict[str, float]] = None,
 ) -> CalibrationSwingResponse:
     """
-    Convert SwingNode to CalibrationSwingResponse.
+    Convert Leg to CalibrationSwingResponse.
 
     Args:
-        swing: SwingNode from LegDetector.
-        is_active: Whether swing is currently active.
-        rank: Swing rank by size.
+        leg: Leg from LegDetector.
+        is_active: Whether leg is currently active.
+        rank: Leg rank by size.
         scale_thresholds: Optional thresholds for scale assignment.
 
     Returns:
         CalibrationSwingResponse for API response.
     """
-    high = float(swing.high_price)
-    low = float(swing.low_price)
+    # Derive high/low from origin/pivot based on direction
+    if leg.direction == "bull":
+        high = float(leg.pivot_price)
+        low = float(leg.origin_price)
+        high_bar_index = leg.pivot_index
+        low_bar_index = leg.origin_index
+    else:
+        high = float(leg.origin_price)
+        low = float(leg.pivot_price)
+        high_bar_index = leg.origin_index
+        low_bar_index = leg.pivot_index
+
     size = high - low
 
     # Determine scale - use size-based thresholds if available, otherwise "M"
@@ -161,27 +167,27 @@ def _swing_node_to_calibration_response(
         scale = "M"
 
     # Calculate Fib levels based on direction
-    if swing.direction == "bull":
-        # Bull: defending low
+    if leg.direction == "bull":
+        # Bull: defending low (origin)
         fib_0 = low
         fib_0382 = low + size * 0.382
         fib_1 = high
         fib_2 = low + size * 2.0
     else:
-        # Bear: defending high
+        # Bear: defending high (origin)
         fib_0 = high
         fib_0382 = high - size * 0.382
         fib_1 = low
         fib_2 = high - size * 2.0
 
     return CalibrationSwingResponse(
-        id=swing.swing_id,
+        id=leg.leg_id,
         scale=scale,
-        direction=swing.direction,
+        direction=leg.direction,
         high_price=high,
-        high_bar_index=swing.high_bar_index,
+        high_bar_index=high_bar_index,
         low_price=low,
-        low_bar_index=swing.low_bar_index,
+        low_bar_index=low_bar_index,
         size=size,
         rank=rank,
         is_active=is_active,
@@ -196,7 +202,7 @@ def _swing_node_to_calibration_response(
 
 def _event_to_response(
     event: SwingEvent,
-    swing: Optional[SwingNode] = None,
+    leg: Optional[Leg] = None,
     scale_thresholds: Optional[Dict[str, float]] = None,
 ) -> ReplayEventResponse:
     """
@@ -204,7 +210,7 @@ def _event_to_response(
 
     Args:
         event: SwingEvent from LegDetector.
-        swing: Optional SwingNode for context.
+        leg: Optional Leg for context.
         scale_thresholds: Optional thresholds for scale assignment.
 
     Returns:
@@ -212,28 +218,16 @@ def _event_to_response(
     """
     # Determine event type string
     # Swing hierarchy removed in #301 - depth always 0, parent_ids always empty
-    if isinstance(event, SwingFormedEvent):
-        event_type = "SWING_FORMED"
-        direction = event.direction
-    elif isinstance(event, SwingInvalidatedEvent):
-        event_type = "SWING_INVALIDATED"
-        direction = swing.direction if swing else "bull"
-    elif isinstance(event, SwingCompletedEvent):
-        event_type = "SWING_COMPLETED"
-        direction = swing.direction if swing else "bull"
-    elif isinstance(event, LevelCrossEvent):
-        event_type = "LEVEL_CROSS"
-        direction = swing.direction if swing else "bull"
     # Leg events (#309, #345)
-    elif isinstance(event, LegCreatedEvent):
+    if isinstance(event, LegCreatedEvent):
         event_type = "LEG_CREATED"
         direction = event.direction
     elif isinstance(event, LegPrunedEvent):
         event_type = "LEG_PRUNED"
-        direction = swing.direction if swing else "bull"
+        direction = leg.direction if leg else "bull"
     elif isinstance(event, OriginBreachedEvent):
         event_type = "ORIGIN_BREACHED"  # #345: replaces LEG_INVALIDATED
-        direction = swing.direction if swing else "bull"
+        direction = leg.direction if leg else "bull"
     else:
         event_type = "UNKNOWN"
         direction = "bull"
@@ -242,39 +236,39 @@ def _event_to_response(
     parent_ids: List[str] = []  # Swing hierarchy removed (#301)
 
     # Determine scale from size or default to "M"
-    if swing and scale_thresholds:
-        size = float(swing.high_price - swing.low_price)
+    if leg and scale_thresholds:
+        size = float(leg.range)
         scale = _size_to_scale(size, scale_thresholds)
     else:
         scale = "M"
 
-    # Build swing response if we have swing data
+    # Build swing response if we have leg data
     swing_response = None
-    if swing:
-        swing_response = _swing_node_to_calibration_response(
-            swing,
-            is_active=swing.status == "active",
+    if leg:
+        swing_response = _leg_to_calibration_response(
+            leg,
+            is_active=leg.status == "active",
             scale_thresholds=scale_thresholds,
         )
 
     # Build trigger explanation
-    trigger_explanation = _format_trigger_explanation(event, swing)
+    trigger_explanation = _format_trigger_explanation(event, leg)
 
-    # Get level info for level cross events
+    # Level cross events removed (#394 - LevelCrossEvent no longer exists)
     level = None
     previous_level = None
-    if isinstance(event, LevelCrossEvent):
-        level = event.level
-        previous_level = event.previous_level
-    elif isinstance(event, SwingCompletedEvent):
-        level = 2.0
+
+    # Get swing_id from event if it has one, otherwise from leg
+    swing_id = getattr(event, 'swing_id', None) or getattr(event, 'leg_id', None)
+    if swing_id is None and leg:
+        swing_id = leg.leg_id
 
     return ReplayEventResponse(
         type=event_type,
         bar_index=event.bar_index,
         scale=scale,
         direction=direction,
-        swing_id=event.swing_id,
+        swing_id=swing_id,
         swing=swing_response,
         level=level,
         previous_level=previous_level,
@@ -286,19 +280,19 @@ def _event_to_response(
 
 def _format_trigger_explanation(
     event: SwingEvent,
-    swing: Optional[SwingNode],
+    leg: Optional[Leg],
 ) -> str:
     """
     Generate human-readable explanation for an event.
 
     Args:
         event: The swing event.
-        swing: Optional swing node for context.
+        leg: Optional leg for context.
 
     Returns:
         Human-readable explanation string.
     """
-    # Handle leg events first - they don't require swing context (#309)
+    # Handle leg events first - they don't require leg context (#309)
     if isinstance(event, LegCreatedEvent):
         pivot_price = float(event.pivot_price)
         origin_price = float(event.origin_price)
@@ -319,57 +313,24 @@ def _format_trigger_explanation(
         breach_price = float(event.breach_price)
         return f"Origin breached at {breach_price:.2f}"
 
-    # Swing events require swing context
-    if swing is None:
+    # Leg-based events require leg context
+    if leg is None:
         return ""
 
-    high = float(swing.high_price)
-    low = float(swing.low_price)
+    # Derive high/low from leg
+    if leg.direction == "bull":
+        high = float(leg.pivot_price)
+        low = float(leg.origin_price)
+    else:
+        high = float(leg.origin_price)
+        low = float(leg.pivot_price)
+
     size = high - low
 
     if size <= 0:
         return ""
 
-    if isinstance(event, SwingFormedEvent):
-        if swing.direction == "bull":
-            fib_0382 = low + size * 0.382
-            fib_2 = low + size * 2.0
-            return (
-                f"Bull swing formed: defending {low:.2f}\n"
-                f"Active range: {fib_0382:.2f} -> {fib_2:.2f}"
-            )
-        else:
-            fib_0382 = high - size * 0.382
-            fib_2 = high - size * 2.0
-            return (
-                f"Bear swing formed: defending {high:.2f}\n"
-                f"Active range: {fib_0382:.2f} -> {fib_2:.2f}"
-            )
-
-    elif isinstance(event, SwingInvalidatedEvent):
-        pivot = low if swing.direction == "bull" else high
-        pivot_type = "low" if swing.direction == "bull" else "high"
-        return (
-            f"Pivot {pivot_type} ({pivot:.2f}) violated\n"
-            f"Excess: {float(event.excess_amount):.2f}"
-        )
-
-    elif isinstance(event, SwingCompletedEvent):
-        if swing.direction == "bull":
-            fib_2 = low + size * 2.0
-        else:
-            fib_2 = high - size * 2.0
-        return f"Reached 2.0 target ({fib_2:.2f})"
-
-    elif isinstance(event, LevelCrossEvent):
-        level = event.level
-        prev = event.previous_level
-        if swing.direction == "bull":
-            level_price = low + size * level
-        else:
-            level_price = high - size * level
-        return f"Crossed {level} ({level_price:.2f}): {prev} -> {level}"
-
+    # LevelCrossEvent removed (#394)
     return ""
 
 
@@ -395,24 +356,24 @@ def _event_to_lifecycle_event(
         LifecycleEvent or None if event type not tracked.
     """
     # Map leg events to lifecycle events
-    if isinstance(event, SwingFormedEvent):
-        # SwingFormedEvent means a leg transitioned to formed state
-        # The swing_id is the leg's swing_id
+    if isinstance(event, LegCreatedEvent):
+        # LegCreatedEvent means a new leg was created
         return LifecycleEvent(
-            leg_id=event.swing_id,
-            event_type="formed",
+            leg_id=event.leg_id,
+            event_type="created",
             bar_index=bar_index,
             csv_index=csv_index,
             timestamp=timestamp,
-            explanation=f"Leg formed with pivot at {float(event.high_price):.2f}, "
-                        f"range {abs(float(event.high_price) - float(event.low_price)):.2f} points"
+            explanation=f"Leg created: {event.direction}, "
+                        f"origin {float(event.origin_price):.2f}, "
+                        f"pivot {float(event.pivot_price):.2f}"
         )
 
-    elif isinstance(event, OriginBreachedEvent):  # #345: replaces LegInvalidatedEvent
+    elif isinstance(event, OriginBreachedEvent):
         # Leg's origin was breached
         return LifecycleEvent(
             leg_id=event.leg_id,
-            event_type="origin_breached",  # #345: replaces "invalidated"
+            event_type="origin_breached",
             bar_index=bar_index,
             csv_index=csv_index,
             timestamp=timestamp,
@@ -446,20 +407,8 @@ def _event_to_lifecycle_event(
             explanation=explanation
         )
 
-    elif isinstance(event, OriginBreachedEvent):
-        # First time price crossed the leg's origin
-        return LifecycleEvent(
-            leg_id=event.leg_id,
-            event_type="origin_breached",
-            bar_index=bar_index,
-            csv_index=csv_index,
-            timestamp=timestamp,
-            explanation=f"Origin breached at {float(event.breach_price):.2f} "
-                        f"({float(event.breach_amount):.2f} past origin)"
-        )
-
     elif isinstance(event, PivotBreachedEvent):
-        # First time price crossed the leg's pivot (formed legs only)
+        # First time price crossed the leg's pivot
         return LifecycleEvent(
             leg_id=event.leg_id,
             event_type="pivot_breached",
@@ -470,12 +419,11 @@ def _event_to_lifecycle_event(
                         f"({float(event.breach_amount):.2f} past pivot)"
         )
 
-    # Skip SwingInvalidatedEvent, SwingCompletedEvent, LevelCrossEvent for lifecycle
-    # These are swing-level events, not leg-level events
+    # Other events not tracked for lifecycle
     return None
 
 
-def _calculate_scale_thresholds(swings: List[SwingNode]) -> Dict[str, float]:
+def _calculate_scale_thresholds(legs: List[Leg]) -> Dict[str, float]:
     """
     Calculate size thresholds for S/M/L/XL scale assignment.
 
@@ -486,15 +434,15 @@ def _calculate_scale_thresholds(swings: List[SwingNode]) -> Dict[str, float]:
     - S: Everything else
 
     Args:
-        swings: List of SwingNode objects.
+        legs: List of Leg objects.
 
     Returns:
         Dict mapping scale to minimum size threshold.
     """
-    if not swings:
+    if not legs:
         return {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
 
-    sizes = sorted([float(s.high_price - s.low_price) for s in swings], reverse=True)
+    sizes = sorted([float(leg.range) for leg in legs], reverse=True)
     n = len(sizes)
 
     # Calculate percentile thresholds
@@ -510,16 +458,16 @@ def _calculate_scale_thresholds(swings: List[SwingNode]) -> Dict[str, float]:
     }
 
 
-def _group_swings_by_scale(
-    swings: List[SwingNode],
+def _group_legs_by_scale(
+    legs: List[Leg],
     scale_thresholds: Dict[str, float],
     current_price: float,
 ) -> Dict[str, List[CalibrationSwingResponse]]:
     """
-    Group swings by scale for API response.
+    Group legs by scale for API response.
 
     Args:
-        swings: List of SwingNode objects.
+        legs: List of Leg objects.
         scale_thresholds: Size thresholds for scale assignment.
         current_price: Current price for activity check.
 
@@ -531,16 +479,16 @@ def _group_swings_by_scale(
     }
 
     # Sort by size descending for ranking
-    sorted_swings = sorted(
-        swings,
-        key=lambda s: float(s.high_price - s.low_price),
+    sorted_legs = sorted(
+        legs,
+        key=lambda leg: float(leg.range),
         reverse=True
     )
 
-    for rank, swing in enumerate(sorted_swings, start=1):
-        is_active = swing.status == "active"
-        response = _swing_node_to_calibration_response(
-            swing,
+    for rank, leg in enumerate(sorted_legs, start=1):
+        is_active = leg.status == "active"
+        response = _leg_to_calibration_response(
+            leg,
             is_active=is_active,
             rank=rank,
             scale_thresholds=scale_thresholds,
@@ -556,8 +504,8 @@ def _group_swings_by_scale(
 
 
 def _compute_tree_statistics(
-    all_swings: List[SwingNode],
-    active_swings: List[SwingNode],
+    all_legs: List[Leg],
+    active_legs: List[Leg],
     calibration_bar_count: int,
     recent_lookback: int = 10,
 ) -> TreeStatistics:
@@ -569,8 +517,8 @@ def _compute_tree_statistics(
     (parent_leg_id) is separate and still functional.
 
     Args:
-        all_swings: All swings from the DAG.
-        active_swings: Currently active (defended) swings.
+        all_legs: All legs from the DAG.
+        active_legs: Currently active legs.
         calibration_bar_count: Total bars in calibration window.
         recent_lookback: Number of bars to look back for "recently invalidated".
 
@@ -579,7 +527,7 @@ def _compute_tree_statistics(
     """
     import statistics
 
-    if not all_swings:
+    if not all_legs:
         return TreeStatistics(
             root_swings=0,
             root_bull=0,
@@ -598,56 +546,50 @@ def _compute_tree_statistics(
             no_orphaned_nodes=True,
         )
 
-    # Swing hierarchy removed (#301) - all swings are now roots
-    root_bull = sum(1 for s in all_swings if s.direction == "bull")
-    root_bear = sum(1 for s in all_swings if s.direction == "bear")
+    # All legs are now roots since swing hierarchy was removed (#301)
+    root_bull = sum(1 for leg in all_legs if leg.direction == "bull")
+    root_bear = sum(1 for leg in all_legs if leg.direction == "bear")
 
-    # All swings at depth 0 since hierarchy removed
+    # All legs at depth 0 since hierarchy removed
     max_depth = 0
     avg_children = 0.0
 
-    # All active swings are at depth 1 (roots)
+    # All active legs are at depth 1 (roots)
     defended_by_depth = {
-        "1": len(active_swings),
+        "1": len(active_legs),
         "2": 0,
         "3": 0,
         "deeper": 0
     }
 
     # Range distribution
-    ranges = [float(s.high_price - s.low_price) for s in all_swings]
+    ranges = [float(leg.range) for leg in all_legs]
     sorted_ranges = sorted(ranges, reverse=True)
     largest_range = sorted_ranges[0] if sorted_ranges else 0.0
     median_range = statistics.median(ranges) if ranges else 0.0
     smallest_range = sorted_ranges[-1] if sorted_ranges else 0.0
 
-    # Find the largest swing ID
+    # Find the largest leg ID
     largest_swing_id = None
-    for swing in all_swings:
-        if float(swing.high_price - swing.low_price) == largest_range:
-            largest_swing_id = swing.swing_id
+    for leg in all_legs:
+        if float(leg.range) == largest_range:
+            largest_swing_id = leg.leg_id
             break
 
-    # Recently invalidated (swings invalidated after calibration_bar_count - recent_lookback)
-    recent_threshold = max(0, calibration_bar_count - recent_lookback)
-    recently_invalidated = sum(
-        1 for s in all_swings
-        if s.status == "invalidated"
-        and hasattr(s, 'invalidated_at_bar')
-        and s.invalidated_at_bar is not None
-        and s.invalidated_at_bar >= recent_threshold
-    )
+    # Recently invalidated (legs invalidated after calibration_bar_count - recent_lookback)
+    # Note: Legs don't track invalidated_at_bar anymore, so this returns 0
+    recently_invalidated = 0
 
     # Validation checks simplified (swing hierarchy removed #301)
     roots_have_children = True  # No hierarchy to validate
-    siblings_detected = _check_siblings_exist(all_swings)
+    siblings_detected = _check_siblings_exist(all_legs)
     no_orphaned_nodes = True  # No hierarchy to validate
 
     return TreeStatistics(
-        root_swings=len(all_swings),  # All swings are roots now
+        root_swings=len(all_legs),  # All legs are roots now
         root_bull=root_bull,
         root_bear=root_bear,
-        total_nodes=len(all_swings),
+        total_nodes=len(all_legs),
         max_depth=max_depth,
         avg_children=round(avg_children, 1),
         defended_by_depth=defended_by_depth,
@@ -662,81 +604,71 @@ def _compute_tree_statistics(
     )
 
 
-def _check_siblings_exist(swings: List[SwingNode]) -> bool:
+def _check_siblings_exist(legs: List[Leg]) -> bool:
     """
-    Check if sibling swings exist (same defended pivot, different origins).
+    Check if sibling legs exist (same defended pivot, different origins).
 
-    Siblings share the same anchor0 (defended pivot) but have different
-    anchor1 (origin) values.
+    Siblings share the same pivot but have different origin values.
 
     Args:
-        swings: List of all swings.
+        legs: List of all legs.
 
     Returns:
         True if siblings are detected.
     """
-    # Group swings by defended pivot (anchor0) and direction
-    pivot_groups: Dict[tuple, List[SwingNode]] = {}
-    for swing in swings:
-        if swing.direction == "bull":
-            pivot = float(swing.low_price)  # defended pivot for bull
-        else:
-            pivot = float(swing.high_price)  # defended pivot for bear
-
-        key = (pivot, swing.direction)
+    # Group legs by pivot price and direction
+    pivot_groups: Dict[tuple, List[Leg]] = {}
+    for leg in legs:
+        pivot = float(leg.pivot_price)
+        key = (pivot, leg.direction)
         if key not in pivot_groups:
             pivot_groups[key] = []
-        pivot_groups[key].append(swing)
+        pivot_groups[key].append(leg)
 
-    # Check if any group has multiple swings with different origins
-    for swings_in_group in pivot_groups.values():
-        if len(swings_in_group) >= 2:
+    # Check if any group has multiple legs with different origins
+    for legs_in_group in pivot_groups.values():
+        if len(legs_in_group) >= 2:
             # Get unique origins
-            origins = set()
-            for s in swings_in_group:
-                if s.direction == "bull":
-                    origins.add(float(s.high_price))
-                else:
-                    origins.add(float(s.low_price))
+            origins = set(float(leg.origin_price) for leg in legs_in_group)
             if len(origins) >= 2:
                 return True
 
     return False
 
 
-def _group_swings_by_depth(
-    swings: List[SwingNode],
+def _group_legs_by_depth(
+    legs: List[Leg],
     scale_thresholds: Dict[str, float],
 ) -> SwingsByDepth:
     """
-    Group swings by hierarchy depth for the new UI.
+    Group legs by hierarchy depth for the new UI.
 
     Args:
-        swings: List of SwingNode objects.
+        legs: List of Leg objects.
         scale_thresholds: Size thresholds for scale assignment (backward compat).
 
     Returns:
-        SwingsByDepth with swings grouped by depth level.
+        SwingsByDepth with legs grouped by depth level.
     """
     result = SwingsByDepth()
 
     # Sort by size descending for ranking
-    sorted_swings = sorted(
-        swings,
-        key=lambda s: float(s.high_price - s.low_price),
+    sorted_legs = sorted(
+        legs,
+        key=lambda leg: float(leg.range),
         reverse=True
     )
 
-    for rank, swing in enumerate(sorted_swings, start=1):
-        is_active = swing.status == "active"
-        response = _swing_node_to_calibration_response(
-            swing,
+    for rank, leg in enumerate(sorted_legs, start=1):
+        is_active = leg.status == "active"
+        response = _leg_to_calibration_response(
+            leg,
             is_active=is_active,
             rank=rank,
             scale_thresholds=scale_thresholds,
         )
 
-        # Swing hierarchy removed (#301) - all swings go to depth_1
+        # Swing hierarchy removed (#301) - all legs go to depth_1
         result.depth_1.append(response)
 
     return result
@@ -822,52 +754,39 @@ async def calibrate_replay(
     logger.info(f"Running calibration on {actual_bar_count} bars...")
     calibrate_start = time.time()
 
-    # Run calibration using LegDetector with Reference layer (#175)
-    # This ensures tolerance-based invalidation and completion are applied
-    # during calibration, not just at response time.
+    # Run calibration using LegDetector
     calibration_bars = s.source_bars[:actual_bar_count]
     config = SwingConfig.default()
     ref_layer = ReferenceLayer(config)
-    detector, events = calibrate(calibration_bars, config, ref_layer=ref_layer)
+    detector, events = calibrate(calibration_bars, config)
 
     logger.info(f"Calibration processing took {time.time() - calibrate_start:.2f}s")
 
     current_price = calibration_bars[-1].close
 
-    # Get all swings from DAG
-    all_dag_swings = detector.state.active_swings
-    active_dag_swings = detector.get_active_swings()
-
-    # Apply Reference layer filtering (fixes #160)
-    # Note: ref_layer was created above and passed to calibrate() for
-    # tolerance-based invalidation/completion during calibration (#175)
-    reference_swing_infos = ref_layer.get_reference_swings(active_dag_swings)
-
-    # Extract the filtered SwingNode objects
-    active_swings = [info.swing for info in reference_swing_infos if info.is_reference]
-
-    # For "all swings" stat, use DAG output but note filtering
-    all_swings = all_dag_swings
+    # Get all legs from DAG
+    all_legs = detector.state.active_legs
+    active_legs = [leg for leg in all_legs if leg.status == "active"]
 
     logger.info(
-        f"Reference layer: {len(active_dag_swings)} DAG swings -> "
-        f"{len(active_swings)} reference swings"
+        f"Calibration complete: {len(all_legs)} legs, "
+        f"{len(active_legs)} active"
     )
 
     # Calculate scale thresholds for compatibility
-    scale_thresholds = _calculate_scale_thresholds(all_swings)
+    scale_thresholds = _calculate_scale_thresholds(all_legs)
 
     # Compute tree statistics
     tree_stats = _compute_tree_statistics(
-        all_swings=all_swings,
-        active_swings=active_swings,
+        all_legs=all_legs,
+        active_legs=active_legs,
         calibration_bar_count=actual_bar_count,
         recent_lookback=10,
     )
 
-    # Group swings by depth
-    swings_by_depth = _group_swings_by_depth(all_swings, scale_thresholds)
-    active_swings_by_depth = _group_swings_by_depth(active_swings, scale_thresholds)
+    # Group legs by depth
+    swings_by_depth = _group_legs_by_depth(all_legs, scale_thresholds)
+    active_swings_by_depth = _group_legs_by_depth(active_legs, scale_thresholds)
 
     # Update app state
     s.playback_index = actual_bar_count - 1
@@ -886,7 +805,7 @@ async def calibrate_replay(
     total_time = time.time() - start_time
     logger.info(
         f"Calibration complete: {actual_bar_count} bars, "
-        f"{len(active_swings)} active swings, "
+        f"{len(active_legs)} active legs, "
         f"tree: {tree_stats.root_swings} roots, depth {tree_stats.max_depth}, "
         f"total time: {total_time:.2f}s"
     )
@@ -948,16 +867,8 @@ async def advance_replay(request: ReplayAdvanceRequest):
             # Process bar
             events = detector.process_bar(bar)
 
-            # Apply Reference layer invalidation/completion
-            active_swings = detector.get_active_swings()
-
-            invalidated = ref_layer.update_invalidation_on_bar(active_swings, bar)
-            for swing, result in invalidated:
-                swing.invalidate()
-
-            completed = ref_layer.update_completion_on_bar(active_swings, bar)
-            for swing, result in completed:
-                swing.complete()
+            # Update Reference layer state
+            ref_layer.update(detector.state.active_legs, bar)
 
             # Capture lifecycle events during replay
             csv_index = s.window_offset + bar.index
@@ -992,16 +903,8 @@ async def advance_replay(request: ReplayAdvanceRequest):
     if start_idx >= len(s.source_bars):
         # End of data
         current_bar = s.source_bars[-1]
-        active_dag_swings = detector.get_active_swings()
+        active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
         scale_thresholds = _replay_cache.get("scale_thresholds", {})
-
-        # Apply Reference layer filtering
-        ref_layer = _replay_cache.get("reference_layer")
-        if ref_layer:
-            ref_infos = ref_layer.get_reference_swings(active_dag_swings)
-            active_swings = [info.swing for info in ref_infos if info.is_reference]
-        else:
-            active_swings = active_dag_swings
 
         # Build optional fields
         aggregated_bars = None
@@ -1015,7 +918,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
         return ReplayAdvanceResponse(
             new_bars=[],
             events=[],
-            swing_state=_build_swing_state(active_swings, scale_thresholds),
+            swing_state=_build_swing_state(active_legs, scale_thresholds),
             current_bar_index=len(s.source_bars) - 1,
             current_price=current_bar.close,
             end_of_data=True,
@@ -1041,33 +944,10 @@ async def advance_replay(request: ReplayAdvanceRequest):
         # 1. Process bar with detector (DAG events)
         events = detector.process_bar(bar)
 
-        # 2. Apply Reference layer invalidation/completion (#175)
+        # 2. Update Reference layer state (#394 - SwingNode removed)
+        # Reference layer now uses update() API to compute formed legs
         if ref_layer is not None:
-            from datetime import datetime
-            timestamp = datetime.fromtimestamp(bar.timestamp) if bar.timestamp else datetime.now()
-            active_swings = detector.get_active_swings()
-
-            # Check invalidation (tolerance-based rules)
-            invalidated = ref_layer.update_invalidation_on_bar(active_swings, bar)
-            for swing, result in invalidated:
-                swing.invalidate()
-                events.append(SwingInvalidatedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id=swing.swing_id,
-                    reason=f"reference_layer:{result.reason}",
-                ))
-
-            # Check completion (2× for small swings, big swings never complete)
-            completed = ref_layer.update_completion_on_bar(active_swings, bar)
-            for swing, result in completed:
-                swing.complete()
-                events.append(SwingCompletedEvent(
-                    bar_index=bar.index,
-                    timestamp=timestamp,
-                    swing_id=swing.swing_id,
-                    completion_price=result.completion_price,
-                ))
+            ref_layer.update(detector.state.active_legs, bar)
 
         # Add bar to response
         new_bars.append(ReplayBarResponse(
@@ -1082,14 +962,16 @@ async def advance_replay(request: ReplayAdvanceRequest):
 
         # Convert events to responses
         for event in events:
-            # Find the swing associated with this event
-            swing = None
-            for s_node in detector.state.active_swings:
-                if s_node.swing_id == event.swing_id:
-                    swing = s_node
-                    break
+            # Find the leg associated with this event
+            leg = None
+            leg_id = getattr(event, 'leg_id', None) or getattr(event, 'swing_id', None)
+            if leg_id:
+                for l in detector.state.active_legs:
+                    if l.leg_id == leg_id:
+                        leg = l
+                        break
 
-            event_response = _event_to_response(event, swing, scale_thresholds)
+            event_response = _event_to_response(event, leg, scale_thresholds)
             all_events.append(event_response)
 
         # Capture lifecycle events for Follow Leg feature (#267)
@@ -1108,16 +990,9 @@ async def advance_replay(request: ReplayAdvanceRequest):
     _replay_cache["last_bar_index"] = end_idx - 1
     s.playback_index = end_idx - 1
 
-    # Build current swing state with Reference layer filtering
-    active_dag_swings = detector.get_active_swings()
-    ref_layer = _replay_cache.get("reference_layer")
-    if ref_layer:
-        ref_infos = ref_layer.get_reference_swings(active_dag_swings)
-        active_swings = [info.swing for info in ref_infos if info.is_reference]
-    else:
-        active_swings = active_dag_swings
-
-    swing_state = _build_swing_state(active_swings, scale_thresholds)
+    # Build current swing state from active legs
+    active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
+    swing_state = _build_swing_state(active_legs, scale_thresholds)
 
     current_bar = s.source_bars[end_idx - 1]
     end_of_data = end_idx >= len(s.source_bars)
@@ -1196,22 +1071,15 @@ async def reverse_replay(request: ReplayReverseRequest):
             raise HTTPException(status_code=400, detail="No bars loaded")
 
         detector = _replay_cache["detector"]
-        active_dag_swings = detector.get_active_swings()
+        active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
         scale_thresholds = _replay_cache.get("scale_thresholds", {})
-
-        ref_layer = _replay_cache.get("reference_layer")
-        if ref_layer:
-            ref_infos = ref_layer.get_reference_swings(active_dag_swings)
-            active_swings = [info.swing for info in ref_infos if info.is_reference]
-        else:
-            active_swings = active_dag_swings
 
         dag_state = _build_dag_state(detector, s.window_offset) if request.include_dag_state else None
 
         return ReplayAdvanceResponse(
             new_bars=[],
             events=[],
-            swing_state=_build_swing_state(active_swings, scale_thresholds),
+            swing_state=_build_swing_state(active_legs, scale_thresholds),
             current_bar_index=0,
             current_price=current_bar.close,
             end_of_data=False,
@@ -1244,16 +1112,8 @@ async def reverse_replay(request: ReplayReverseRequest):
         # Process bar
         events = detector.process_bar(bar)
 
-        # Apply Reference layer invalidation/completion
-        active_swings = detector.get_active_swings()
-
-        invalidated = ref_layer.update_invalidation_on_bar(active_swings, bar)
-        for swing, result in invalidated:
-            swing.invalidate()
-
-        completed = ref_layer.update_completion_on_bar(active_swings, bar)
-        for swing, result in completed:
-            swing.complete()
+        # Update Reference layer state
+        ref_layer.update(detector.state.active_legs, bar)
 
         # Capture lifecycle events during replay (#299)
         # This ensures Follow Leg feature works correctly after step-back
@@ -1275,16 +1135,9 @@ async def reverse_replay(request: ReplayReverseRequest):
 
     # Build response
     current_bar = s.source_bars[target_idx]
-    active_dag_swings = detector.get_active_swings()
+    active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
     scale_thresholds = _replay_cache.get("scale_thresholds", {})
-
-    if ref_layer:
-        ref_infos = ref_layer.get_reference_swings(active_dag_swings)
-        active_swings = [info.swing for info in ref_infos if info.is_reference]
-    else:
-        active_swings = active_dag_swings
-
-    swing_state = _build_swing_state(active_swings, scale_thresholds)
+    swing_state = _build_swing_state(active_legs, scale_thresholds)
 
     # Build optional aggregated bars
     aggregated_bars = None
@@ -1314,14 +1167,14 @@ async def reverse_replay(request: ReplayReverseRequest):
 
 
 def _build_swing_state(
-    active_swings: List[SwingNode],
+    active_legs: List[Leg],
     scale_thresholds: Dict[str, float],
 ) -> ReplaySwingState:
     """
-    Build ReplaySwingState from active swings.
+    Build ReplaySwingState from active legs.
 
     Args:
-        active_swings: List of active SwingNode objects.
+        active_legs: List of active Leg objects.
         scale_thresholds: Size thresholds for scale assignment (for compatibility).
 
     Returns:
@@ -1331,20 +1184,20 @@ def _build_swing_state(
         "depth_1": [], "depth_2": [], "depth_3": [], "deeper": []
     }
 
-    sorted_swings = sorted(
-        active_swings,
-        key=lambda x: float(x.high_price - x.low_price),
+    sorted_legs = sorted(
+        active_legs,
+        key=lambda leg: float(leg.range),
         reverse=True
     )
 
-    for rank, swing in enumerate(sorted_swings, start=1):
-        response = _swing_node_to_calibration_response(
-            swing,
+    for rank, leg in enumerate(sorted_legs, start=1):
+        response = _leg_to_calibration_response(
+            leg,
             is_active=True,
             rank=rank,
             scale_thresholds=scale_thresholds,
         )
-        # Swing hierarchy removed (#301) - all swings go to depth_1
+        # Swing hierarchy removed (#301) - all legs go to depth_1
         by_depth["depth_1"].append(response)
 
     return ReplaySwingState(
@@ -1443,7 +1296,7 @@ def _build_dag_state(detector: LegDetector, window_offset: int = 0) -> DagStateR
             origin_price=float(leg.origin_price),
             origin_index=window_offset + leg.origin_index,  # Convert to csv_index (#300)
             retracement_pct=float(leg.retracement_pct),
-            formed=leg.formed,
+            formed=False,  # Formation computed by Reference Layer at runtime (#394)
             status=leg.status,
             bar_count=leg.bar_count,
             origin_breached=leg.max_origin_breach is not None,  # #345: structural gate
@@ -1452,7 +1305,7 @@ def _build_dag_state(detector: LegDetector, window_offset: int = 0) -> DagStateR
             spikiness=leg.spikiness,
             # Hierarchy fields for exploration (#250, #251)
             parent_leg_id=leg.parent_leg_id,
-            swing_id=leg.swing_id,
+            swing_id=None,  # Swing ID removed (#394)
             # Segment impulse tracking (#307)
             impulse_to_deepest=leg.impulse_to_deepest,
             impulse_back=leg.impulse_back,
@@ -1582,7 +1435,7 @@ async def get_dag_state():
             origin_price=float(leg.origin_price),
             origin_index=window_offset + leg.origin_index,  # Convert to csv_index (#300)
             retracement_pct=float(leg.retracement_pct),
-            formed=leg.formed,
+            formed=False,  # Formation computed by Reference Layer at runtime (#394)
             status=leg.status,
             bar_count=leg.bar_count,
             origin_breached=leg.max_origin_breach is not None,  # #345: structural gate
@@ -1591,7 +1444,7 @@ async def get_dag_state():
             spikiness=leg.spikiness,
             # Hierarchy fields for exploration (#250, #251)
             parent_leg_id=leg.parent_leg_id,
-            swing_id=leg.swing_id,
+            swing_id=None,  # Swing ID removed (#394)
             # Segment impulse tracking (#307)
             impulse_to_deepest=leg.impulse_to_deepest,
             impulse_back=leg.impulse_back,
@@ -1861,7 +1714,7 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
 
     logger.info(
         f"Config updated (continuing from current position): "
-        f"{len(detector.get_active_swings())} active swings"
+        f"{len([leg for leg in detector.state.active_legs if leg.status == 'active'])} active legs"
     )
 
     # Build response with current config values (#345: invalidation_threshold removed)
