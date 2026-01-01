@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2025-12-31
 
@@ -14,6 +14,7 @@
 - #408 — Dead code cleanup: removed replay mode infrastructure, SWING_* events, 'formed' field vestiges, fixed follow leg state machine ('forming'/'formed' → 'active')
 - #409 — View switch state restoration: added /api/dag/events endpoint to return cached lifecycle events, DAGView fetches events on mount when returning to existing session, header shows currentPlaybackPosition+1 for accurate bar count
 - #410 — Cache consolidation and API namespace restructure: consolidated three parallel cache entities to single dict in cache.py, restructured API endpoints (/api/replay/* → /api/dag/*, /api/playback/feedback → /api/feedback/submit, /api/reference-state → /api/reference/state), deleted replay.py and config.py routers, simplified init endpoint (removed dead batch warmup code)
+- #412 — Lazy DAG init: removed CalibrationPhase state machine from FE, added _ensure_initialized() lazy init to /api/dag/advance, /state, /reverse endpoints, added /api/dag/reset endpoint, simplified FE startup flow
 
 ---
 
