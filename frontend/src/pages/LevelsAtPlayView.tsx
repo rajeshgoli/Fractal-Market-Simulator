@@ -41,8 +41,17 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   // Session settings (persisted to localStorage)
   const sessionSettings = useSessionSettings();
 
-  // Reference state hook (Phase 2: includes sticky leg support)
-  const { referenceState, fetchReferenceState, fadingRefs, stickyLegIds, toggleStickyLeg } = useReferenceState();
+  // Reference state hook (Phase 2: includes sticky leg support, Phase 4: level crossing)
+  const {
+    referenceState,
+    fetchReferenceState,
+    fadingRefs,
+    stickyLegIds,
+    toggleStickyLeg,
+    crossingEvents,
+    trackError,
+    clearTrackError,
+  } = useReferenceState();
 
   // Core state (#412: simplified from CalibrationData)
   const [isLoading, setIsLoading] = useState(true);
@@ -693,6 +702,10 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               referenceState={referenceState}
               showFiltered={showFiltered}
               onToggleShowFiltered={() => setShowFiltered(prev => !prev)}
+              crossingEvents={crossingEvents}
+              trackError={trackError}
+              onClearTrackError={clearTrackError}
+              trackedCount={stickyLegIds.size}
             />
           </div>
         </main>

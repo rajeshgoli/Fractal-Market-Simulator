@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import {
   fetchReferenceState as fetchReferenceStateApi,
   ReferenceStateResponseExtended,
+  LevelCrossEvent,
   trackLegForCrossing,
   untrackLegForCrossing,
 } from '../lib/api';
@@ -14,8 +15,12 @@ interface UseReferenceStateReturn {
   fadingRefs: Set<string>;
   // Sticky leg tracking (Phase 2)
   stickyLegIds: Set<string>;
-  toggleStickyLeg: (legId: string) => Promise<void>;
+  toggleStickyLeg: (legId: string) => Promise<{ success: boolean; error?: string }>;
   isStickyLeg: (legId: string) => boolean;
+  // Level crossing (Issue #416)
+  crossingEvents: LevelCrossEvent[];
+  trackError: string | null;
+  clearTrackError: () => void;
 }
 
 export function useReferenceState(): UseReferenceStateReturn {
@@ -24,6 +29,8 @@ export function useReferenceState(): UseReferenceStateReturn {
   const [error, setError] = useState<string | null>(null);
   const [fadingRefs, setFadingRefs] = useState<Set<string>>(new Set());
   const [stickyLegIds, setStickyLegIds] = useState<Set<string>>(new Set());
+  const [crossingEvents, setCrossingEvents] = useState<LevelCrossEvent[]>([]);
+  const [trackError, setTrackError] = useState<string | null>(null);
 
   // Track previous reference IDs for fade-out detection
   const prevRefIdsRef = useRef<Set<string>>(new Set());
@@ -67,6 +74,11 @@ export function useReferenceState(): UseReferenceStateReturn {
         setStickyLegIds(new Set(state.tracked_leg_ids));
       }
 
+      // Capture crossing events from this update
+      if (state.crossing_events && state.crossing_events.length > 0) {
+        setCrossingEvents(state.crossing_events);
+      }
+
       setReferenceState(state);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch reference state');
@@ -75,23 +87,42 @@ export function useReferenceState(): UseReferenceStateReturn {
     }
   }, []);
 
-  const toggleStickyLeg = useCallback(async (legId: string) => {
+  const toggleStickyLeg = useCallback(async (legId: string): Promise<{ success: boolean; error?: string }> => {
     try {
       if (stickyLegIds.has(legId)) {
-        await untrackLegForCrossing(legId);
-        setStickyLegIds(prev => {
-          const next = new Set(prev);
-          next.delete(legId);
-          return next;
-        });
+        const result = await untrackLegForCrossing(legId);
+        if (result.success) {
+          setStickyLegIds(prev => {
+            const next = new Set(prev);
+            next.delete(legId);
+            return next;
+          });
+        }
+        return { success: result.success, error: result.error || undefined };
       } else {
-        await trackLegForCrossing(legId);
-        setStickyLegIds(prev => new Set([...prev, legId]));
+        const result = await trackLegForCrossing(legId);
+        if (result.success) {
+          setStickyLegIds(prev => new Set([...prev, legId]));
+        } else if (result.error) {
+          // Max limit reached
+          setTrackError(result.error);
+          // Auto-clear after 3 seconds
+          setTimeout(() => setTrackError(null), 3000);
+        }
+        return { success: result.success, error: result.error || undefined };
       }
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to toggle sticky leg';
       console.error('Failed to toggle sticky leg:', err);
+      setTrackError(errorMsg);
+      setTimeout(() => setTrackError(null), 3000);
+      return { success: false, error: errorMsg };
     }
   }, [stickyLegIds]);
+
+  const clearTrackError = useCallback(() => {
+    setTrackError(null);
+  }, []);
 
   const isStickyLeg = useCallback((legId: string) => {
     return stickyLegIds.has(legId);
@@ -106,5 +137,8 @@ export function useReferenceState(): UseReferenceStateReturn {
     stickyLegIds,
     toggleStickyLeg,
     isStickyLeg,
+    crossingEvents,
+    trackError,
+    clearTrackError,
   };
 }

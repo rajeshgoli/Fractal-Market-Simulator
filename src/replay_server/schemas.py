@@ -606,6 +606,8 @@ class ReferenceStateApiResponse(BaseModel):
     # Reference Observation Mode (Issue #400)
     filtered_legs: List['FilteredLegResponse'] = []  # All non-valid legs with reasons
     filter_stats: Optional['FilterStatsResponse'] = None  # Filter breakdown statistics
+    # Level Crossing Events (Issue #416, #417)
+    crossing_events: List['LevelCrossEventResponse'] = []  # Events from this bar
 
 
 class FibLevelResponse(BaseModel):
@@ -744,3 +746,42 @@ class TelemetryPanelResponse(BaseModel):
     imbalance_ratio: Optional[str]  # e.g., "3:1"
     biggest_reference: Optional[TopReferenceResponse]
     most_impulsive: Optional[TopReferenceResponse]
+
+
+# ============================================================================
+# Level Crossing Models (Issue #416, #417 - Reference Layer P4)
+# ============================================================================
+
+
+class LevelCrossEventResponse(BaseModel):
+    """
+    API response for a level crossing event.
+
+    Emitted when price crosses a fib level for a tracked leg.
+    """
+    leg_id: str
+    direction: str  # "bull" or "bear"
+    level_crossed: float  # The fib level (0, 0.382, 0.5, etc.)
+    cross_direction: str  # "up" or "down"
+    bar_index: int
+    timestamp: str  # ISO format
+
+
+class CrossingEventsResponse(BaseModel):
+    """
+    API response for level crossing events.
+
+    Contains all crossing events detected since last retrieval.
+    """
+    events: List[LevelCrossEventResponse]
+    tracked_count: int  # Number of legs being tracked
+
+
+class TrackLegResponse(BaseModel):
+    """
+    API response for track/untrack leg operations.
+    """
+    success: bool
+    leg_id: str
+    tracked_count: int
+    error: Optional[str] = None  # Error message if success is False

@@ -28,6 +28,9 @@ from ..schemas import (
     StructurePanelResponse,
     TopReferenceResponse,
     TelemetryPanelResponse,
+    LevelCrossEventResponse,
+    CrossingEventsResponse,
+    TrackLegResponse,
 )
 from .cache import get_replay_cache, is_initialized
 
@@ -94,6 +97,18 @@ def _compute_filter_stats(all_statuses, valid_leg_ids: set) -> FilterStatsRespon
     )
 
 
+def _level_cross_event_to_response(event) -> LevelCrossEventResponse:
+    """Convert LevelCrossEvent to API response."""
+    return LevelCrossEventResponse(
+        leg_id=event.leg_id,
+        direction=event.direction,
+        level_crossed=event.level_crossed,
+        cross_direction=event.cross_direction,
+        bar_index=event.bar_index,
+        timestamp=event.timestamp.isoformat(),
+    )
+
+
 def _empty_response() -> ReferenceStateApiResponse:
     """Return an empty reference state response."""
     return ReferenceStateApiResponse(
@@ -111,6 +126,7 @@ def _empty_response() -> ReferenceStateApiResponse:
             pass_rate=0.0,
             by_reason={'not_formed': 0, 'pivot_breached': 0, 'origin_breached': 0, 'completed': 0, 'cold_start': 0},
         ),
+        crossing_events=[],
     )
 
 
@@ -183,6 +199,9 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
     # Compute filter statistics
     filter_stats = _compute_filter_stats(all_statuses, valid_leg_ids)
 
+    # Detect level crossings for tracked legs
+    crossing_events = ref_layer.detect_level_crossings(active_legs, bar)
+
     # Convert to API response
     refs_response = [_reference_swing_to_response(r) for r in ref_state.references]
 
@@ -201,6 +220,10 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
         for direction, refs in ref_state.by_direction.items()
     }
 
+    crossing_events_response = [
+        _level_cross_event_to_response(e) for e in crossing_events
+    ]
+
     return ReferenceStateApiResponse(
         references=refs_response,
         by_scale=by_scale_response,
@@ -212,6 +235,7 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
         tracked_leg_ids=list(ref_layer.get_tracked_leg_ids()),
         filtered_legs=filtered_legs,
         filter_stats=filter_stats,
+        crossing_events=crossing_events_response,
     )
 
 
@@ -282,19 +306,23 @@ async def get_reference_levels(bar_index: Optional[int] = Query(None)):
     return ActiveLevelsResponse(levels_by_ratio=levels_by_ratio)
 
 
-@router.post("/api/reference/track/{leg_id}")
+@router.post("/api/reference/track/{leg_id}", response_model=TrackLegResponse)
 async def track_leg_for_crossing(leg_id: str):
     """
     Add a leg to level crossing tracking.
 
     When tracked, the leg's fib levels become "sticky" - they persist
-    on the chart even when the mouse moves away.
+    on the chart even when the mouse moves away. Additionally, level
+    crossing events will be emitted when price crosses fib levels for
+    this leg.
+
+    A maximum of 10 legs can be tracked at once for performance reasons.
 
     Args:
         leg_id: The leg_id to start tracking.
 
     Returns:
-        Success message with current tracked leg count.
+        TrackLegResponse with success status and tracked count.
     """
     from ...swing_analysis.reference_layer import ReferenceLayer
 
@@ -304,45 +332,80 @@ async def track_leg_for_crossing(leg_id: str):
         cache["reference_layer"] = ReferenceLayer()
 
     ref_layer = cache["reference_layer"]
-    ref_layer.add_crossing_tracking(leg_id)
+    success, error = ref_layer.add_crossing_tracking(leg_id)
 
-    return {
-        "success": True,
-        "leg_id": leg_id,
-        "tracked_count": len(ref_layer.get_tracked_leg_ids()),
-    }
+    return TrackLegResponse(
+        success=success,
+        leg_id=leg_id,
+        tracked_count=len(ref_layer.get_tracked_leg_ids()),
+        error=error,
+    )
 
 
-@router.delete("/api/reference/track/{leg_id}")
+@router.delete("/api/reference/track/{leg_id}", response_model=TrackLegResponse)
 async def untrack_leg_for_crossing(leg_id: str):
     """
     Remove a leg from level crossing tracking.
 
     The leg's fib levels will no longer be sticky and will only appear on hover.
+    Level crossing events will no longer be emitted for this leg.
 
     Args:
         leg_id: The leg_id to stop tracking.
 
     Returns:
-        Success message with current tracked leg count.
+        TrackLegResponse with success status and tracked count.
     """
     cache = get_replay_cache()
 
     if cache.get("reference_layer") is None:
-        return {
-            "success": True,
-            "leg_id": leg_id,
-            "tracked_count": 0,
-        }
+        return TrackLegResponse(
+            success=True,
+            leg_id=leg_id,
+            tracked_count=0,
+            error=None,
+        )
 
     ref_layer = cache["reference_layer"]
     ref_layer.remove_crossing_tracking(leg_id)
 
-    return {
-        "success": True,
-        "leg_id": leg_id,
-        "tracked_count": len(ref_layer.get_tracked_leg_ids()),
-    }
+    return TrackLegResponse(
+        success=True,
+        leg_id=leg_id,
+        tracked_count=len(ref_layer.get_tracked_leg_ids()),
+        error=None,
+    )
+
+
+@router.get("/api/reference/crossings", response_model=CrossingEventsResponse)
+async def get_crossing_events():
+    """
+    Get pending level crossing events.
+
+    Returns all crossing events that have accumulated since the last call.
+    Events are cleared after retrieval to prevent duplicates.
+
+    Use this endpoint for polling-based crossing detection, or rely on
+    the crossing_events field in the /api/reference/state response for
+    per-bar crossing detection.
+
+    Returns:
+        CrossingEventsResponse with all pending events and tracked count.
+    """
+    from ...swing_analysis.reference_layer import ReferenceLayer
+
+    cache = get_replay_cache()
+
+    if cache.get("reference_layer") is None:
+        return CrossingEventsResponse(events=[], tracked_count=0)
+
+    ref_layer = cache["reference_layer"]
+    pending_events = ref_layer.get_pending_cross_events(clear=True)
+
+    return CrossingEventsResponse(
+        events=[_level_cross_event_to_response(e) for e in pending_events],
+        tracked_count=len(ref_layer.get_tracked_leg_ids()),
+    )
 
 
 @router.get("/api/reference/confluence", response_model=ConfluenceZonesResponse)

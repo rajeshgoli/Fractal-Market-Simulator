@@ -215,3 +215,43 @@ class PivotBreachedEvent(DetectionEvent):
     leg_id: str = ""
     breach_price: Decimal = field(default_factory=lambda: Decimal("0"))
     breach_amount: Decimal = field(default_factory=lambda: Decimal("0"))
+
+
+@dataclass
+class LevelCrossEvent(DetectionEvent):
+    """
+    Emitted when a tracked leg's price crosses a fib level.
+
+    This event is emitted by the Reference Layer for legs that are being
+    tracked for level crossings (opt-in via add_crossing_tracking).
+
+    Standard fib levels: 0, 0.382, 0.5, 0.618, 1.0, 1.382, 1.5, 1.618, 2.0
+
+    Attributes:
+        event_type: Always "LEVEL_CROSS".
+        leg_id: Unique identifier for the tracked leg.
+        direction: "bull" or "bear" (the leg's direction).
+        level_crossed: The fib level that was crossed (e.g., 0.618).
+        cross_direction: "up" if price crossed from below, "down" if from above.
+
+    Example:
+        >>> from datetime import datetime
+        >>> event = LevelCrossEvent(
+        ...     bar_index=100,
+        ...     timestamp=datetime.now(),
+        ...     leg_id="leg_bear_5000.00_50",
+        ...     direction="bear",
+        ...     level_crossed=0.618,
+        ...     cross_direction="up",
+        ... )
+        >>> event.event_type
+        'LEVEL_CROSS'
+        >>> event.level_crossed
+        0.618
+    """
+
+    event_type: Literal["LEVEL_CROSS"] = field(default="LEVEL_CROSS", init=False)
+    leg_id: str = ""
+    direction: str = ""  # 'bull' or 'bear'
+    level_crossed: float = 0.0  # The fib level (0, 0.382, 0.5, etc.)
+    cross_direction: str = ""  # 'up' or 'down'

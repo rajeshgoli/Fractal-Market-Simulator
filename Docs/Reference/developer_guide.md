@@ -1046,6 +1046,8 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # - is_warming_up: True if in cold start (insufficient swings for scale classification)
 # - warmup_progress: [current_count, required_count] (e.g., [35, 50])
 # - tracked_leg_ids: List of leg IDs tracked for level crossing (sticky legs)
+# - crossing_events: Level crossings detected this bar (Issue #416)
+#   LevelCrossEvent: {leg_id, direction, level_crossed, cross_direction, bar_index, timestamp}
 
 # Fib Levels: GET /api/reference/levels?bar_index=NNN (#388)
 # Returns all fib levels from valid references for hover preview and sticky display:
@@ -1053,13 +1055,19 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 #   - Each ratio maps to list of FibLevel: {price, ratio, leg_id, scale, direction}
 # Used for computing horizontal level lines on chart
 
-# Track Leg: POST /api/reference/track/{leg_id} (#388)
+# Track Leg: POST /api/reference/track/{leg_id} (#388, #416)
 # Add a leg to level crossing tracking (makes its fib levels "sticky")
-# Returns: {success: bool, leg_id: string, tracked_count: int}
+# Max 10 legs can be tracked at once for performance reasons
+# Returns: {success: bool, leg_id: string, tracked_count: int, error: string|null}
 
-# Untrack Leg: DELETE /api/reference/track/{leg_id} (#388)
+# Untrack Leg: DELETE /api/reference/track/{leg_id} (#388, #416)
 # Remove a leg from level crossing tracking
-# Returns: {success: bool, leg_id: string, tracked_count: int}
+# Returns: {success: bool, leg_id: string, tracked_count: int, error: null}
+
+# Get Crossing Events: GET /api/reference/crossings (#416)
+# Get pending level crossing events (cleared after retrieval)
+# Returns: {events: LevelCrossEvent[], tracked_count: int}
+# LevelCrossEvent: {leg_id, direction, level_crossed, cross_direction, bar_index, timestamp}
 ```
 
 **Reference Layer Integration:**

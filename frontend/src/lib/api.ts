@@ -604,10 +604,21 @@ export interface FilterStats {
   by_reason: Record<string, number>;
 }
 
+// Level crossing event type (Issue #416, #417)
+export interface LevelCrossEvent {
+  leg_id: string;
+  direction: 'bull' | 'bear';
+  level_crossed: number;
+  cross_direction: 'up' | 'down';
+  bar_index: number;
+  timestamp: string;
+}
+
 export interface ReferenceStateResponseExtended extends ReferenceStateResponse {
   tracked_leg_ids: string[];
   filtered_legs: FilteredLeg[];
   filter_stats: FilterStats | null;
+  crossing_events: LevelCrossEvent[];
 }
 
 export async function fetchReferenceState(barIndex?: number): Promise<ReferenceStateResponseExtended> {
@@ -650,7 +661,15 @@ export async function fetchActiveLevels(barIndex?: number): Promise<ActiveLevels
   return response.json();
 }
 
-export async function trackLegForCrossing(legId: string): Promise<{ success: boolean; leg_id: string; tracked_count: number }> {
+// Track leg response type (Issue #416 - includes error for max limit)
+export interface TrackLegResponse {
+  success: boolean;
+  leg_id: string;
+  tracked_count: number;
+  error: string | null;
+}
+
+export async function trackLegForCrossing(legId: string): Promise<TrackLegResponse> {
   const response = await fetch(`${API_BASE}/reference/track/${encodeURIComponent(legId)}`, {
     method: 'POST',
   });
@@ -661,7 +680,7 @@ export async function trackLegForCrossing(legId: string): Promise<{ success: boo
   return response.json();
 }
 
-export async function untrackLegForCrossing(legId: string): Promise<{ success: boolean; leg_id: string; tracked_count: number }> {
+export async function untrackLegForCrossing(legId: string): Promise<TrackLegResponse> {
   const response = await fetch(`${API_BASE}/reference/track/${encodeURIComponent(legId)}`, {
     method: 'DELETE',
   });

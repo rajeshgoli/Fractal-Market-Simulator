@@ -1,11 +1,15 @@
 import React from 'react';
-import { ReferenceStateResponseExtended } from '../lib/api';
-import { TrendingUp, TrendingDown, Layers, Activity, Filter, Eye, EyeOff } from 'lucide-react';
+import { ReferenceStateResponseExtended, LevelCrossEvent } from '../lib/api';
+import { TrendingUp, TrendingDown, Layers, Activity, Filter, Eye, EyeOff, Crosshair, AlertCircle, X } from 'lucide-react';
 
 interface ReferenceTelemetryPanelProps {
   referenceState: ReferenceStateResponseExtended | null;
   showFiltered: boolean;
   onToggleShowFiltered: () => void;
+  crossingEvents: LevelCrossEvent[];
+  trackError: string | null;
+  onClearTrackError: () => void;
+  trackedCount: number;
 }
 
 // Filter reason display names and colors
@@ -21,6 +25,10 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
   referenceState,
   showFiltered,
   onToggleShowFiltered,
+  crossingEvents,
+  trackError,
+  onClearTrackError,
+  trackedCount,
 }) => {
   if (!referenceState) {
     return (
@@ -80,7 +88,23 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
 
   return (
     <div className="h-full bg-app-secondary p-4 overflow-y-auto border-t border-app-border">
-      <div className="grid grid-cols-4 gap-4">
+      {/* Track error notification */}
+      {trackError && (
+        <div className="mb-3 px-3 py-2 bg-red-500/20 border border-red-500/40 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={14} className="text-red-400" />
+            <span className="text-xs text-red-400">{trackError}</span>
+          </div>
+          <button
+            onClick={onClearTrackError}
+            className="p-1 hover:bg-red-500/20 rounded"
+          >
+            <X size={12} className="text-red-400" />
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-5 gap-4">
         {/* References by Scale */}
         <div className="bg-app-card rounded-lg p-3 border border-app-border">
           <div className="flex items-center gap-2 mb-3">
@@ -249,6 +273,44 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
               No filter data
             </div>
           )}
+        </div>
+
+        {/* Level Crossings (Issue #416) */}
+        <div className="bg-app-card rounded-lg p-3 border border-app-border">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Crosshair size={14} className="text-trading-blue" />
+              <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">Crossings</h3>
+            </div>
+            <span className="text-[10px] text-app-muted">
+              {trackedCount}/10 tracked
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {crossingEvents.length > 0 ? (
+              crossingEvents.slice(-4).map((event, idx) => (
+                <div key={`${event.leg_id}-${event.bar_index}-${idx}`} className="text-[10px] flex items-center gap-1.5">
+                  <span className={event.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
+                    {event.direction === 'bull' ? '▲' : '▼'}
+                  </span>
+                  <span className="font-mono text-app-text">
+                    {event.level_crossed.toFixed(3)}
+                  </span>
+                  <span className={`px-1 py-0.5 rounded ${
+                    event.cross_direction === 'up'
+                      ? 'bg-trading-bull/20 text-trading-bull'
+                      : 'bg-trading-bear/20 text-trading-bear'
+                  }`}>
+                    {event.cross_direction === 'up' ? '↑' : '↓'}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-app-muted text-center py-2">
+                {trackedCount > 0 ? 'No crossings yet' : 'Click a leg to track'}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

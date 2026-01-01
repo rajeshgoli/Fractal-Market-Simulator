@@ -23,15 +23,24 @@ See Docs/Reference/valid_swings.md for the canonical rules.
 
 import bisect
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import List, Optional, Dict, Tuple, Set
 
 from .detection_config import DetectionConfig
+from .events import LevelCrossEvent
 from .reference_frame import ReferenceFrame
 from .reference_config import ReferenceConfig
 from .types import Bar
 from .dag.leg import Leg
+
+
+# Standard fib levels used for level crossing detection
+STANDARD_FIB_LEVELS = [0.0, 0.382, 0.5, 0.618, 1.0, 1.382, 1.5, 1.618, 2.0]
+
+# Maximum number of legs that can be tracked for level crossing (performance limit)
+MAX_TRACKED_LEGS = 10
 
 
 class FilterReason(Enum):
@@ -407,12 +416,16 @@ class ReferenceLayer:
         self._formed_refs: Set[str] = set()
         # Track which legs are monitored for level crossings (opt-in per leg)
         self._tracked_for_crossing: Set[str] = set()
+        # Track last known fib level for each tracked leg (for cross detection)
+        self._last_level: Dict[str, float] = {}
         # Track which leg_ids have been added to range distribution (to avoid duplicates)
         self._seen_leg_ids: Set[str] = set()
         # Structure Panel: level touches recorded during the session
         self._session_level_touches: List[LevelTouch] = []
         # Track last known price to detect touch directions
         self._last_price: Optional[float] = None
+        # Accumulated level crossing events (cleared after retrieval)
+        self._pending_cross_events: List[LevelCrossEvent] = []
 
     def copy_state_from(self, other: 'ReferenceLayer') -> None:
         """
@@ -428,9 +441,11 @@ class ReferenceLayer:
         self._range_distribution = other._range_distribution.copy()
         self._formed_refs = other._formed_refs.copy()
         self._tracked_for_crossing = other._tracked_for_crossing.copy()
+        self._last_level = other._last_level.copy()
         self._seen_leg_ids = other._seen_leg_ids.copy()
         self._session_level_touches = other._session_level_touches.copy()
         self._last_price = other._last_price
+        self._pending_cross_events = other._pending_cross_events.copy()
 
     def track_formation(self, legs: List[Leg], bar: Bar) -> None:
         """
@@ -1038,26 +1053,44 @@ class ReferenceLayer:
         self._session_level_touches.clear()
         self._last_price = None
 
-    def add_crossing_tracking(self, leg_id: str) -> None:
+    def add_crossing_tracking(self, leg_id: str) -> Tuple[bool, Optional[str]]:
         """
         Add a leg to level crossing monitoring.
 
         When a leg is tracked, level crossing events can be detected
         for that specific leg. Use remove_crossing_tracking() to stop.
 
+        A maximum of MAX_TRACKED_LEGS (10) can be tracked at once.
+        If the limit is reached, this call will fail.
+
         Args:
             leg_id: The leg_id to start tracking.
+
+        Returns:
+            Tuple of (success: bool, error_message: Optional[str]).
+            If success is False, error_message contains the reason.
         """
+        if leg_id in self._tracked_for_crossing:
+            return (True, None)  # Already tracked
+
+        if len(self._tracked_for_crossing) >= MAX_TRACKED_LEGS:
+            return (False, f"Maximum of {MAX_TRACKED_LEGS} tracked legs reached")
+
         self._tracked_for_crossing.add(leg_id)
+        return (True, None)
 
     def remove_crossing_tracking(self, leg_id: str) -> None:
         """
         Remove a leg from level crossing monitoring.
 
+        Also cleans up the last level tracking state for that leg.
+
         Args:
             leg_id: The leg_id to stop tracking.
         """
         self._tracked_for_crossing.discard(leg_id)
+        # Clean up last level tracking
+        self._last_level.pop(leg_id, None)
 
     def is_tracked_for_crossing(self, leg_id: str) -> bool:
         """
@@ -1079,6 +1112,175 @@ class ReferenceLayer:
             Set of leg_ids that are tracked.
         """
         return self._tracked_for_crossing.copy()
+
+    def _quantize_to_fib_level(self, location: float) -> float:
+        """
+        Quantize a location to the nearest standard fib level.
+
+        Standard fib levels: 0, 0.382, 0.5, 0.618, 1.0, 1.382, 1.5, 1.618, 2.0
+
+        If location is beyond the standard range, returns the nearest boundary.
+
+        Args:
+            location: Current price location in reference frame (0-2+ range).
+
+        Returns:
+            The nearest standard fib level.
+        """
+        if location < 0:
+            return 0.0
+        if location > 2.0:
+            return 2.0
+
+        # Find the nearest standard fib level
+        min_diff = float('inf')
+        nearest_level = 0.0
+        for level in STANDARD_FIB_LEVELS:
+            diff = abs(location - level)
+            if diff < min_diff:
+                min_diff = diff
+                nearest_level = level
+
+        return nearest_level
+
+    def _detect_fib_levels_between(
+        self,
+        prev_location: float,
+        curr_location: float,
+    ) -> List[Tuple[float, str]]:
+        """
+        Detect which fib levels were crossed between two locations.
+
+        Args:
+            prev_location: Previous location in reference frame.
+            curr_location: Current location in reference frame.
+
+        Returns:
+            List of (level, cross_direction) tuples for each crossed level.
+            cross_direction is 'up' if price moved from below to above,
+            'down' if price moved from above to below.
+        """
+        if prev_location == curr_location:
+            return []
+
+        crossed_levels: List[Tuple[float, str]] = []
+        direction = 'up' if curr_location > prev_location else 'down'
+
+        # Get levels in the range between previous and current
+        min_loc = min(prev_location, curr_location)
+        max_loc = max(prev_location, curr_location)
+
+        for level in STANDARD_FIB_LEVELS:
+            # A level is crossed if it's strictly between prev and curr
+            # (inclusive on one side to catch the case where we landed exactly on it)
+            if min_loc < level <= max_loc or min_loc <= level < max_loc:
+                # Check if actually crossed (not just touched from same side)
+                if prev_location < level <= curr_location:
+                    crossed_levels.append((level, 'up'))
+                elif curr_location < level <= prev_location:
+                    crossed_levels.append((level, 'down'))
+                elif prev_location <= level < curr_location:
+                    crossed_levels.append((level, 'up'))
+                elif curr_location <= level < prev_location:
+                    crossed_levels.append((level, 'down'))
+
+        return crossed_levels
+
+    def detect_level_crossings(
+        self,
+        legs: List[Leg],
+        bar: Bar,
+    ) -> List[LevelCrossEvent]:
+        """
+        Detect level crossings for all tracked legs on the current bar.
+
+        For each tracked leg, computes the current location and compares
+        to the last known level. If the location crossed one or more fib
+        levels, emits LevelCrossEvent for each crossing.
+
+        Args:
+            legs: Active legs from DAG.
+            bar: Current bar with OHLC.
+
+        Returns:
+            List of LevelCrossEvent for all crossings detected this bar.
+        """
+        if not self._tracked_for_crossing:
+            return []
+
+        events: List[LevelCrossEvent] = []
+        current_price = Decimal(str(bar.close))
+
+        # Build leg lookup for tracked legs
+        leg_by_id = {leg.leg_id: leg for leg in legs}
+
+        for leg_id in list(self._tracked_for_crossing):
+            leg = leg_by_id.get(leg_id)
+            if leg is None:
+                # Leg no longer exists, remove from tracking
+                self.remove_crossing_tracking(leg_id)
+                continue
+
+            # Compute current location
+            location = self._compute_location(leg, current_price)
+
+            # Get previous level (or None if first time tracking)
+            prev_level = self._last_level.get(leg_id)
+
+            if prev_level is not None:
+                # Detect crossings between previous quantized level and current location
+                prev_quantized = prev_level
+                crossings = self._detect_fib_levels_between(prev_quantized, location)
+
+                for level_crossed, cross_direction in crossings:
+                    event = LevelCrossEvent(
+                        bar_index=bar.index,
+                        timestamp=datetime.now(),
+                        leg_id=leg_id,
+                        direction=leg.direction,
+                        level_crossed=level_crossed,
+                        cross_direction=cross_direction,
+                    )
+                    events.append(event)
+                    self._pending_cross_events.append(event)
+
+            # Update last level to current quantized level
+            self._last_level[leg_id] = self._quantize_to_fib_level(location)
+
+        return events
+
+    def get_pending_cross_events(self, clear: bool = True) -> List[LevelCrossEvent]:
+        """
+        Get all pending level crossing events.
+
+        Events accumulate from detect_level_crossings() calls. Use this method
+        to retrieve and optionally clear them.
+
+        Args:
+            clear: If True (default), clears pending events after returning.
+
+        Returns:
+            List of LevelCrossEvent that have been emitted since last clear.
+        """
+        events = self._pending_cross_events.copy()
+        if clear:
+            self._pending_cross_events.clear()
+        return events
+
+    def clear_crossing_state(self) -> None:
+        """
+        Clear all level crossing tracking state.
+
+        Clears:
+        - All tracked legs
+        - Last level history
+        - Pending crossing events
+
+        Use this when resetting playback or starting a new session.
+        """
+        self._tracked_for_crossing.clear()
+        self._last_level.clear()
+        self._pending_cross_events.clear()
 
     def update(self, legs: List[Leg], bar: Bar) -> ReferenceState:
         """
