@@ -2,7 +2,7 @@
 
 **Status:** Audit needed
 **Created:** 2025-12-31
-**Related:** `Docs/Working/formed_analysis.md`
+**Related:** `Docs/Archive/Investigations/formed_analysis.md` (archived after #394 completion)
 
 ## Problem Statement
 
