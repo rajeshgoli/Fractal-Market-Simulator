@@ -16,13 +16,13 @@ For full specification, see [Product North Star](Docs/Reference/product_north_st
 
 ## Current State
 
-**Phase:** User Testing — validating swing detection with real ES data.
+**Phase:** Reference Layer exploration — tuning salience formulas, building toward rule discovery.
 
-The system uses a **hierarchical DAG model** where swings form a tree structure with parent-child relationships, replacing the previous S/M/L/XL scale buckets.
+The system uses a **hierarchical DAG model** where swings form a tree structure with parent-child relationships. The Reference Layer filters these into valid trading references with scale classification, formation tracking, and level analysis.
 
-### Market Structure View
+### Two Views
 
-The primary tool for understanding swing detection. Watch the hierarchical DAG build incrementally from bar 0.
+**Structural Legs** — Watch the hierarchical DAG build incrementally from bar 0. Primary tool for understanding swing detection.
 
 ```bash
 # Setup
@@ -38,13 +38,17 @@ python -m src.replay_server.main --data test_data/es-5m.csv --window 10000
 open http://127.0.0.1:8000
 ```
 
+**Levels at Play** — Reference Layer view showing valid trading references with fib levels, confluence zones, and level crossing events.
+
 **Features:**
 - **Incremental build**: Watch legs form as each bar is processed
 - **Dual-chart view**: Independent timeframe aggregation (1m to 1W)
 - **Hierarchy exploration**: Visualize parent-child relationships between legs
 - **Follow leg**: Track specific legs through their lifecycle with event markers
 - **Detection config panel**: Adjust thresholds at runtime without restart
-- **Hover/click interaction**: Highlight legs on chart, inspect in panel
+- **Reference Layer**: Scale classification (S/M/L/XL), formation tracking, fib level interaction
+- **Confluence zones**: Clustered levels from multiple references
+- **Level crossing**: Opt-in tracking for specific legs
 
 See [User Guide](Docs/Reference/user_guide.md) for detailed documentation.
 
