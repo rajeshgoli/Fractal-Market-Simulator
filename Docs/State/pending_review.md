@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-31
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(None — all reviewed)
+- #394 — DAG cleanup: Remove SwingNode, swing_id, formed; formation now Reference Layer concern
 
 ---
 
