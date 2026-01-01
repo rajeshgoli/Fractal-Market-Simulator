@@ -123,16 +123,16 @@ class TestReferenceConfigWithSalienceWeights:
 class TestReferenceConfigEndpoints:
     """Test reference config API endpoints."""
 
-    @pytest.mark.asyncio
-    async def test_get_config_returns_defaults(self):
+    def test_get_config_returns_defaults(self):
         """GET /api/reference/config should return defaults when no layer exists."""
+        import asyncio
         from src.replay_server.routers.reference import get_reference_config
         from src.replay_server.routers.cache import get_replay_cache
 
         cache = get_replay_cache()
         cache.clear()  # Ensure no reference layer
 
-        response = await get_reference_config()
+        response = asyncio.get_event_loop().run_until_complete(get_reference_config())
 
         assert response.big_range_weight == 0.5
         assert response.big_impulse_weight == 0.4
@@ -142,9 +142,9 @@ class TestReferenceConfigEndpoints:
         assert response.small_recency_weight == 0.5
         assert response.formation_fib_threshold == 0.382
 
-    @pytest.mark.asyncio
-    async def test_update_config_partial(self):
+    def test_update_config_partial(self):
         """POST /api/reference/config should apply partial updates."""
+        import asyncio
         from src.replay_server.routers.reference import update_reference_config
         from src.replay_server.schemas import ReferenceConfigUpdateRequest
         from src.replay_server.routers.cache import get_replay_cache
@@ -153,15 +153,15 @@ class TestReferenceConfigEndpoints:
         cache.clear()
 
         request = ReferenceConfigUpdateRequest(big_range_weight=0.7)
-        response = await update_reference_config(request)
+        response = asyncio.get_event_loop().run_until_complete(update_reference_config(request))
 
         assert response.big_range_weight == 0.7
         assert response.big_impulse_weight == 0.4  # unchanged
         assert response.formation_fib_threshold == 0.382  # unchanged
 
-    @pytest.mark.asyncio
-    async def test_update_config_persists(self):
+    def test_update_config_persists(self):
         """Config updates should persist in replay cache."""
+        import asyncio
         from src.replay_server.routers.reference import (
             get_reference_config,
             update_reference_config,
@@ -177,17 +177,17 @@ class TestReferenceConfigEndpoints:
             big_range_weight=0.6,
             formation_fib_threshold=0.5,
         )
-        await update_reference_config(request)
+        asyncio.get_event_loop().run_until_complete(update_reference_config(request))
 
         # Get config should return updated values
-        response = await get_reference_config()
+        response = asyncio.get_event_loop().run_until_complete(get_reference_config())
 
         assert response.big_range_weight == 0.6
         assert response.formation_fib_threshold == 0.5
 
-    @pytest.mark.asyncio
-    async def test_round_trip(self):
+    def test_round_trip(self):
         """Config should round-trip through API correctly."""
+        import asyncio
         from src.replay_server.routers.reference import (
             get_reference_config,
             update_reference_config,
@@ -208,10 +208,10 @@ class TestReferenceConfigEndpoints:
             small_recency_weight=0.25,
             formation_fib_threshold=0.45,
         )
-        await update_reference_config(request)
+        asyncio.get_event_loop().run_until_complete(update_reference_config(request))
 
         # Get and verify all values
-        response = await get_reference_config()
+        response = asyncio.get_event_loop().run_until_complete(get_reference_config())
 
         assert response.big_range_weight == 0.8
         assert response.big_impulse_weight == 0.15

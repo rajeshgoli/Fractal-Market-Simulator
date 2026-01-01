@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2026-01-01
 
@@ -12,6 +12,7 @@
 2. **#416** — Reference Layer P4: Opt-in Level Crossing Detection (backend #417, frontend #418)
 3. **#420** — P3/P4 Frontend: Structure Panel component + Telemetry Events section
 4. **#421** — P3/P4 Frontend: Track button (confluence zones removed due to visual clutter)
+5. **#423, #424** — ReferenceConfig API endpoints + ReferenceSidebar component
 
 ---
 
