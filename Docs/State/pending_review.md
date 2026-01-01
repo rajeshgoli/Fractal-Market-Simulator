@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-31
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(none)
+- #396 (addendum) — Naming cleanup: SwingConfig → DetectionConfig, SwingEvent → DetectionEvent
 
 ---
 
