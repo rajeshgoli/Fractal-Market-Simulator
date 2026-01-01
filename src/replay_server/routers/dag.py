@@ -65,6 +65,8 @@ def _ensure_initialized() -> None:
 
     This enables lazy initialization - endpoints that need a detector
     can call this instead of requiring explicit /api/dag/init first.
+    On first call, processes all available source bars so the DAG has
+    initial state (#412 follow-up fix).
     """
     from ..api import get_state
 
@@ -75,25 +77,31 @@ def _ensure_initialized() -> None:
 
     s = get_state()
 
-    logger.info("Lazy-initializing detector for DAG mode")
+    logger.info("Lazy-initializing detector for DAG mode with %d source bars", len(s.source_bars))
 
     config = DetectionConfig.default()
     ref_layer = ReferenceLayer(config)
     detector = LegDetector(config)
 
-    # Initialize cache for incremental advance
+    # Process all available source bars so we have initial DAG state
+    # This replaces the old CalibrationPhase that processed bars upfront
+    for bar in s.source_bars:
+        detector.process_bar(bar)
+
+    # Initialize cache for incremental advance (starting from end of processed bars)
     cache["detector"] = detector
-    cache["last_bar_index"] = -1
+    cache["last_bar_index"] = len(s.source_bars) - 1  # Already processed all bars
     cache["reference_layer"] = ref_layer
     cache["source_resolution"] = s.resolution_minutes
     cache["lifecycle_events"] = []
 
-    # Update app state
-    s.playback_index = -1
-    s.calibration_bar_count = 0
+    # Update app state to reflect processed position
+    s.playback_index = len(s.source_bars) - 1
+    s.calibration_bar_count = len(s.source_bars)
     s.hierarchical_detector = detector
 
-    logger.info("Lazy init complete: detector ready for incremental advance")
+    logger.info("Lazy init complete: processed %d bars, %d active legs",
+                len(s.source_bars), len(detector.state.active_legs))
 
 
 # ============================================================================
