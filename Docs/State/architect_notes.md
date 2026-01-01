@@ -29,10 +29,12 @@ Read in order:
 - **Origin breach as single gate:** No 'invalidated' status — use `max_origin_breach is not None` (#345)
 - **Branch ratio domination:** Creation-time filter prevents insignificant child legs (#337)
 - **Turn ratio pruning:** Horizontal sibling filter at shared pivots (threshold or top-k) (#341, #342, #344)
+- **Tiered Reference Layer updates:** Per-bar `track_formation()` for stateful ops only; full `update()` on-demand for display. Salience is stable (ranking rarely changes bar-to-bar), so per-bar recomputation is wasteful. See `Docs/Archive/reference_update_perf.md`.
 
 **Known debt:**
 - #240 — TODO: Empirically determine engulfed retention threshold based on impulse
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
+- #399 — TODO: Salience optimization if needed (periodic refresh, event-driven, or lazy with TTL)
 
 **Completed cleanup (#394):**
 - ✅ SwingNode class deleted
