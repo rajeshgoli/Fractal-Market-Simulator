@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 8
+**Unreviewed Change Count:** 9
 
 **Last Review:** 2025-12-31
 
@@ -16,6 +16,7 @@
 - #410 — Cache consolidation and API namespace restructure: consolidated three parallel cache entities to single dict in cache.py, restructured API endpoints (/api/replay/* → /api/dag/*, /api/playback/feedback → /api/feedback/submit, /api/reference-state → /api/reference/state), deleted replay.py and config.py routers, simplified init endpoint (removed dead batch warmup code)
 - #412 — Lazy DAG init: removed CalibrationPhase state machine from FE, added _ensure_initialized() lazy init to /api/dag/advance, /state, /reverse endpoints, added /api/dag/reset endpoint, simplified FE startup flow
 - #411 — Reference View bug fixes: Renamed DAG View to Structural Legs, disabled Linger button in Reference mode with tooltip, fixed source bars count persistence, made fib level hover/click target leg lines instead of overlapping badge icons
+- #414 — Show Filtered UX inversion: filtered legs highlighted with direction colors and hover interactivity, valid legs faded to 8% and non-interactive
 
 ---
 
