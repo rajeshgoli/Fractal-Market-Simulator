@@ -69,6 +69,20 @@ from ..schemas import (
     DirectionConfigResponse,
 )
 
+from .helpers import (
+    size_to_scale,
+    leg_to_response,
+    event_to_response,
+    format_trigger_explanation,
+    event_to_lifecycle_event,
+    calculate_scale_thresholds,
+    build_swing_state,
+    build_aggregated_bars,
+    build_dag_state,
+    compute_tree_statistics,
+    group_legs_by_depth,
+)
+
 if TYPE_CHECKING:
     from ..api import AppState
 
@@ -77,17 +91,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["replay"])
 
 
-# Scale to timeframe mapping (matches api.py) - standard timeframes
-SCALE_TO_MINUTES = {
-    "1M": 1, "1m": 1,
-    "5M": 5, "5m": 5,
-    "15M": 15, "15m": 15,
-    "30M": 30, "30m": 30,
-    "1H": 60, "1h": 60,
-    "4H": 240, "4h": 240,
-    "1D": 1440, "1d": 1440,
-    "1W": 10080, "1w": 10080,
-}
 
 # Global cache for replay state
 _replay_cache: Dict[str, Any] = {
@@ -100,581 +103,6 @@ _replay_cache: Dict[str, Any] = {
     "source_resolution": 5,  # Source resolution in minutes
     "lifecycle_events": [],  # Lifecycle events for followed legs (#267)
 }
-
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
-
-def _size_to_scale(size: float, scale_thresholds: Dict[str, float]) -> str:
-    """
-    Map swing size to scale based on thresholds.
-
-    Used during calibration when we need to group swings by size.
-
-    Args:
-        size: Swing size (high - low).
-        scale_thresholds: Dict mapping scale to minimum size.
-
-    Returns:
-        Scale string (XL, L, M, or S).
-    """
-    if size >= scale_thresholds["XL"]:
-        return "XL"
-    elif size >= scale_thresholds["L"]:
-        return "L"
-    elif size >= scale_thresholds["M"]:
-        return "M"
-    return "S"
-
-
-def _leg_to_response(
-    leg: Leg,
-    is_active: bool,
-    rank: int = 1,
-    scale_thresholds: Optional[Dict[str, float]] = None,
-    include_fib_levels: bool = True,
-) -> 'LegResponse':
-    """
-    Convert Leg to LegResponse (unified schema).
-
-    Args:
-        leg: Leg from LegDetector.
-        is_active: Whether leg is currently active.
-        rank: Leg rank by size.
-        scale_thresholds: Optional thresholds for scale assignment.
-        include_fib_levels: Whether to compute and include fib levels.
-
-    Returns:
-        LegResponse for API response.
-    """
-    from ..schemas import LegResponse
-
-    origin_price = float(leg.origin_price)
-    pivot_price = float(leg.pivot_price)
-    range_size = abs(pivot_price - origin_price)
-
-    # Determine scale - use size-based thresholds if available, otherwise "M"
-    scale = None
-    if scale_thresholds:
-        scale = _size_to_scale(range_size, scale_thresholds)
-
-    # Calculate Fib levels if requested
-    fib_levels = None
-    if include_fib_levels and range_size > 0:
-        if leg.direction == "bull":
-            # Bull: origin=low, pivot=high
-            fib_levels = {
-                "0": origin_price,
-                "0.382": origin_price + range_size * 0.382,
-                "0.5": origin_price + range_size * 0.5,
-                "0.618": origin_price + range_size * 0.618,
-                "1": pivot_price,
-                "1.382": origin_price + range_size * 1.382,
-                "1.618": origin_price + range_size * 1.618,
-                "2": origin_price + range_size * 2.0,
-            }
-        else:
-            # Bear: origin=high, pivot=low
-            fib_levels = {
-                "0": origin_price,
-                "0.382": origin_price - range_size * 0.382,
-                "0.5": origin_price - range_size * 0.5,
-                "0.618": origin_price - range_size * 0.618,
-                "1": pivot_price,
-                "1.382": origin_price - range_size * 1.382,
-                "1.618": origin_price - range_size * 1.618,
-                "2": origin_price - range_size * 2.0,
-            }
-
-    return LegResponse(
-        leg_id=leg.leg_id,
-        direction=leg.direction,
-        origin_price=origin_price,
-        origin_index=leg.origin_index,
-        pivot_price=pivot_price,
-        pivot_index=leg.pivot_index,
-        range=range_size,
-        rank=rank,
-        is_active=is_active,
-        depth=leg.depth,
-        parent_leg_id=leg.parent_leg_id,
-        fib_levels=fib_levels,
-        scale=scale,
-    )
-
-
-# Legacy alias for backward compatibility during migration
-def _leg_to_calibration_response(
-    leg: Leg,
-    is_active: bool,
-    rank: int = 1,
-    scale_thresholds: Optional[Dict[str, float]] = None,
-) -> 'LegResponse':
-    """Legacy alias - use _leg_to_response instead."""
-    return _leg_to_response(leg, is_active, rank, scale_thresholds)
-
-
-def _event_to_response(
-    event: DetectionEvent,
-    leg: Optional[Leg] = None,
-    scale_thresholds: Optional[Dict[str, float]] = None,
-) -> ReplayEventResponse:
-    """
-    Convert DetectionEvent to ReplayEventResponse.
-
-    Args:
-        event: DetectionEvent from LegDetector.
-        leg: Optional Leg for context.
-        scale_thresholds: Optional thresholds for scale assignment.
-
-    Returns:
-        ReplayEventResponse for API response.
-    """
-    # Determine event type string
-    # Leg events (#309, #345)
-    if isinstance(event, LegCreatedEvent):
-        event_type = "LEG_CREATED"
-        direction = event.direction
-    elif isinstance(event, LegPrunedEvent):
-        event_type = "LEG_PRUNED"
-        direction = leg.direction if leg else "bull"
-    elif isinstance(event, OriginBreachedEvent):
-        event_type = "ORIGIN_BREACHED"  # #345: replaces LEG_INVALIDATED
-        direction = leg.direction if leg else "bull"
-    else:
-        event_type = "UNKNOWN"
-        direction = "bull"
-
-    # Get hierarchy info from leg
-    depth = leg.depth if leg else 0
-    parent_leg_id = leg.parent_leg_id if leg else None
-
-    # Determine scale from size or default to "M"
-    if leg and scale_thresholds:
-        size = float(leg.range)
-        scale = _size_to_scale(size, scale_thresholds)
-    else:
-        scale = "M"
-
-    # Build swing response if we have leg data
-    swing_response = None
-    if leg:
-        swing_response = _leg_to_calibration_response(
-            leg,
-            is_active=leg.status == "active",
-            scale_thresholds=scale_thresholds,
-        )
-
-    # Build trigger explanation
-    trigger_explanation = _format_trigger_explanation(event, leg)
-
-    # Get leg_id from event
-    leg_id = getattr(event, 'leg_id', None)
-    if leg_id is None and leg:
-        leg_id = leg.leg_id
-
-    return ReplayEventResponse(
-        type=event_type,
-        bar_index=event.bar_index,
-        scale=scale,
-        direction=direction,
-        leg_id=leg_id or "",
-        swing=swing_response,
-        trigger_explanation=trigger_explanation,
-        depth=depth,
-        parent_leg_id=parent_leg_id,
-    )
-
-
-def _format_trigger_explanation(
-    event: DetectionEvent,
-    leg: Optional[Leg],
-) -> str:
-    """
-    Generate human-readable explanation for an event.
-
-    Args:
-        event: The swing event.
-        leg: Optional leg for context.
-
-    Returns:
-        Human-readable explanation string.
-    """
-    # Handle leg events first - they don't require leg context (#309)
-    if isinstance(event, LegCreatedEvent):
-        pivot_price = float(event.pivot_price)
-        origin_price = float(event.origin_price)
-        range_size = abs(origin_price - pivot_price)
-        return (
-            f"Leg created: {event.direction}\n"
-            f"Pivot: {pivot_price:.2f}, Origin: {origin_price:.2f}, Range: {range_size:.2f}"
-        )
-
-    if isinstance(event, LegPrunedEvent):
-        # Pass through reason and explanation from the event
-        reason = event.reason.replace("_", " ").title()
-        if event.explanation:
-            return f"Pruned ({reason}): {event.explanation}"
-        return f"Pruned: {reason}"
-
-    if isinstance(event, OriginBreachedEvent):  # #345: replaces LegInvalidatedEvent
-        breach_price = float(event.breach_price)
-        return f"Origin breached at {breach_price:.2f}"
-
-    # Leg-based events require leg context
-    if leg is None:
-        return ""
-
-    # Derive high/low from leg
-    if leg.direction == "bull":
-        high = float(leg.pivot_price)
-        low = float(leg.origin_price)
-    else:
-        high = float(leg.origin_price)
-        low = float(leg.pivot_price)
-
-    size = high - low
-
-    if size <= 0:
-        return ""
-
-    return ""
-
-
-def _event_to_lifecycle_event(
-    event: DetectionEvent,
-    bar_index: int,
-    csv_index: int,
-    timestamp: str,
-) -> Optional[LifecycleEvent]:
-    """
-    Convert a DetectionEvent to a LifecycleEvent for Follow Leg tracking.
-
-    Only converts relevant leg lifecycle events. Returns None for events
-    that aren't tracked.
-
-    Args:
-        event: The swing event.
-        bar_index: The bar index where event occurred.
-        csv_index: The CSV row index.
-        timestamp: ISO format timestamp.
-
-    Returns:
-        LifecycleEvent or None if event type not tracked.
-    """
-    # Map leg events to lifecycle events
-    if isinstance(event, LegCreatedEvent):
-        # LegCreatedEvent means a new leg was created
-        return LifecycleEvent(
-            leg_id=event.leg_id,
-            event_type="created",
-            bar_index=bar_index,
-            csv_index=csv_index,
-            timestamp=timestamp,
-            explanation=f"Leg created: {event.direction}, "
-                        f"origin {float(event.origin_price):.2f}, "
-                        f"pivot {float(event.pivot_price):.2f}"
-        )
-
-    elif isinstance(event, OriginBreachedEvent):
-        # Leg's origin was breached
-        return LifecycleEvent(
-            leg_id=event.leg_id,
-            event_type="origin_breached",
-            bar_index=bar_index,
-            csv_index=csv_index,
-            timestamp=timestamp,
-            explanation=f"Origin breached at price {float(event.breach_price):.2f}"
-        )
-
-    elif isinstance(event, LegPrunedEvent):
-        # Map prune reasons to lifecycle event types
-        reason = event.reason
-        if reason == "engulfed":
-            event_type = "engulfed"
-            explanation = "Leg engulfed: both origin and pivot breached"
-        elif reason == "pivot_breach":
-            event_type = "pivot_breached"
-            explanation = "Leg pruned: pivot breached"
-        elif reason in ("turn_prune", "proximity_prune", "dominated_in_turn",
-                       "extension_prune", "inner_structure"):
-            event_type = "pruned"
-            # Use event's explanation if provided, otherwise build generic one
-            explanation = event.explanation if event.explanation else f"Pruned: {reason.replace('_', ' ')}"
-        else:
-            event_type = "pruned"
-            explanation = event.explanation if event.explanation else f"Pruned: {reason}"
-
-        return LifecycleEvent(
-            leg_id=event.leg_id,
-            event_type=event_type,
-            bar_index=bar_index,
-            csv_index=csv_index,
-            timestamp=timestamp,
-            explanation=explanation
-        )
-
-    elif isinstance(event, PivotBreachedEvent):
-        # First time price crossed the leg's pivot
-        return LifecycleEvent(
-            leg_id=event.leg_id,
-            event_type="pivot_breached",
-            bar_index=bar_index,
-            csv_index=csv_index,
-            timestamp=timestamp,
-            explanation=f"Pivot breached at {float(event.breach_price):.2f} "
-                        f"({float(event.breach_amount):.2f} past pivot)"
-        )
-
-    # Other events not tracked for lifecycle
-    return None
-
-
-def _calculate_scale_thresholds(legs: List[Leg]) -> Dict[str, float]:
-    """
-    Calculate size thresholds for S/M/L/XL scale assignment.
-
-    Uses percentile-based thresholds:
-    - XL: Top 10% (90th percentile)
-    - L: Top 25% (75th percentile)
-    - M: Top 50% (50th percentile)
-    - S: Everything else
-
-    Args:
-        legs: List of Leg objects.
-
-    Returns:
-        Dict mapping scale to minimum size threshold.
-    """
-    if not legs:
-        return {"XL": 100.0, "L": 40.0, "M": 15.0, "S": 0.0}
-
-    sizes = sorted([float(leg.range) for leg in legs], reverse=True)
-    n = len(sizes)
-
-    # Calculate percentile thresholds
-    xl_idx = max(0, int(n * 0.10) - 1)
-    l_idx = max(0, int(n * 0.25) - 1)
-    m_idx = max(0, int(n * 0.50) - 1)
-
-    return {
-        "XL": sizes[xl_idx] if xl_idx < n else 100.0,
-        "L": sizes[l_idx] if l_idx < n else 40.0,
-        "M": sizes[m_idx] if m_idx < n else 15.0,
-        "S": 0.0,
-    }
-
-
-def _group_legs_by_scale(
-    legs: List[Leg],
-    scale_thresholds: Dict[str, float],
-    current_price: float,
-) -> Dict[str, List[CalibrationSwingResponse]]:
-    """
-    Group legs by scale for API response.
-
-    Args:
-        legs: List of Leg objects.
-        scale_thresholds: Size thresholds for scale assignment.
-        current_price: Current price for activity check.
-
-    Returns:
-        Dict mapping scale to list of CalibrationSwingResponse.
-    """
-    result: Dict[str, List[CalibrationSwingResponse]] = {
-        "XL": [], "L": [], "M": [], "S": []
-    }
-
-    # Sort by size descending for ranking
-    sorted_legs = sorted(
-        legs,
-        key=lambda leg: float(leg.range),
-        reverse=True
-    )
-
-    for rank, leg in enumerate(sorted_legs, start=1):
-        is_active = leg.status == "active"
-        response = _leg_to_calibration_response(
-            leg,
-            is_active=is_active,
-            rank=rank,
-            scale_thresholds=scale_thresholds,
-        )
-        result[response.scale].append(response)
-
-    return result
-
-
-# ============================================================================
-# Tree Statistics Helpers (Issue #166)
-# ============================================================================
-
-
-def _compute_tree_statistics(
-    all_legs: List[Leg],
-    active_legs: List[Leg],
-    calibration_bar_count: int,
-    recent_lookback: int = 10,
-) -> TreeStatistics:
-    """
-    Compute tree structure statistics for hierarchical UI.
-
-    Note: Swing hierarchy was removed in #301. This function now computes
-    simplified statistics without parent/child relationships. The leg hierarchy
-    (parent_leg_id) is separate and still functional.
-
-    Args:
-        all_legs: All legs from the DAG.
-        active_legs: Currently active legs.
-        calibration_bar_count: Total bars in calibration window.
-        recent_lookback: Number of bars to look back for "recently invalidated".
-
-    Returns:
-        TreeStatistics with simplified metrics (swing hierarchy removed).
-    """
-    import statistics
-
-    if not all_legs:
-        return TreeStatistics(
-            root_swings=0,
-            root_bull=0,
-            root_bear=0,
-            total_nodes=0,
-            max_depth=0,
-            avg_children=0.0,
-            defended_by_depth={"1": 0, "2": 0, "3": 0, "deeper": 0},
-            largest_range=0.0,
-            largest_leg_id=None,
-            median_range=0.0,
-            smallest_range=0.0,
-            roots_have_children=True,
-            siblings_detected=False,
-            no_orphaned_nodes=True,
-        )
-
-    # All legs are now roots since swing hierarchy was removed (#301)
-    root_bull = sum(1 for leg in all_legs if leg.direction == "bull")
-    root_bear = sum(1 for leg in all_legs if leg.direction == "bear")
-
-    # All legs at depth 0 since hierarchy removed
-    max_depth = 0
-    avg_children = 0.0
-
-    # All active legs are at depth 1 (roots)
-    defended_by_depth = {
-        "1": len(active_legs),
-        "2": 0,
-        "3": 0,
-        "deeper": 0
-    }
-
-    # Range distribution
-    ranges = [float(leg.range) for leg in all_legs]
-    sorted_ranges = sorted(ranges, reverse=True)
-    largest_range = sorted_ranges[0] if sorted_ranges else 0.0
-    median_range = statistics.median(ranges) if ranges else 0.0
-    smallest_range = sorted_ranges[-1] if sorted_ranges else 0.0
-
-    # Find the largest leg ID
-    largest_leg_id = None
-    for leg in all_legs:
-        if float(leg.range) == largest_range:
-            largest_leg_id = leg.leg_id
-            break
-
-    # Validation checks simplified (swing hierarchy removed #301)
-    roots_have_children = True  # No hierarchy to validate
-    siblings_detected = _check_siblings_exist(all_legs)
-    no_orphaned_nodes = True  # No hierarchy to validate
-
-    return TreeStatistics(
-        root_swings=len(all_legs),  # All legs are roots now
-        root_bull=root_bull,
-        root_bear=root_bear,
-        total_nodes=len(all_legs),
-        max_depth=max_depth,
-        avg_children=round(avg_children, 1),
-        defended_by_depth=defended_by_depth,
-        largest_range=round(largest_range, 2),
-        largest_leg_id=largest_leg_id,
-        median_range=round(median_range, 2),
-        smallest_range=round(smallest_range, 2),
-        roots_have_children=roots_have_children,
-        siblings_detected=siblings_detected,
-        no_orphaned_nodes=no_orphaned_nodes,
-    )
-
-
-def _check_siblings_exist(legs: List[Leg]) -> bool:
-    """
-    Check if sibling legs exist (same defended pivot, different origins).
-
-    Siblings share the same pivot but have different origin values.
-
-    Args:
-        legs: List of all legs.
-
-    Returns:
-        True if siblings are detected.
-    """
-    # Group legs by pivot price and direction
-    pivot_groups: Dict[tuple, List[Leg]] = {}
-    for leg in legs:
-        pivot = float(leg.pivot_price)
-        key = (pivot, leg.direction)
-        if key not in pivot_groups:
-            pivot_groups[key] = []
-        pivot_groups[key].append(leg)
-
-    # Check if any group has multiple legs with different origins
-    for legs_in_group in pivot_groups.values():
-        if len(legs_in_group) >= 2:
-            # Get unique origins
-            origins = set(float(leg.origin_price) for leg in legs_in_group)
-            if len(origins) >= 2:
-                return True
-
-    return False
-
-
-def _group_legs_by_depth(
-    legs: List[Leg],
-    scale_thresholds: Dict[str, float],
-) -> SwingsByDepth:
-    """
-    Group legs by hierarchy depth for the new UI.
-
-    Args:
-        legs: List of Leg objects.
-        scale_thresholds: Size thresholds for scale assignment (backward compat).
-
-    Returns:
-        SwingsByDepth with legs grouped by depth level.
-    """
-    result = SwingsByDepth()
-
-    # Sort by size descending for ranking
-    sorted_legs = sorted(
-        legs,
-        key=lambda leg: float(leg.range),
-        reverse=True
-    )
-
-    for rank, leg in enumerate(sorted_legs, start=1):
-        is_active = leg.status == "active"
-        response = _leg_to_calibration_response(
-            leg,
-            is_active=is_active,
-            rank=rank,
-            scale_thresholds=scale_thresholds,
-        )
-
-        # Swing hierarchy removed (#301) - all legs go to depth_1
-        result.depth_1.append(response)
-
-    return result
 
 
 # ============================================================================
@@ -777,10 +205,10 @@ async def calibrate_replay(
     )
 
     # Calculate scale thresholds for compatibility
-    scale_thresholds = _calculate_scale_thresholds(all_legs)
+    scale_thresholds = calculate_scale_thresholds(all_legs)
 
     # Compute tree statistics
-    tree_stats = _compute_tree_statistics(
+    tree_stats = compute_tree_statistics(
         all_legs=all_legs,
         active_legs=active_legs,
         calibration_bar_count=actual_bar_count,
@@ -788,8 +216,8 @@ async def calibrate_replay(
     )
 
     # Group legs by depth
-    swings_by_depth = _group_legs_by_depth(all_legs, scale_thresholds)
-    active_swings_by_depth = _group_legs_by_depth(active_legs, scale_thresholds)
+    swings_by_depth = group_legs_by_depth(all_legs, scale_thresholds)
+    active_swings_by_depth = group_legs_by_depth(active_legs, scale_thresholds)
 
     # Update app state
     s.playback_index = actual_bar_count - 1
@@ -877,7 +305,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
             csv_index = s.window_offset + bar.index
             ts_iso = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
             for event in events:
-                lifecycle_event = _event_to_lifecycle_event(event, bar.index, csv_index, ts_iso)
+                lifecycle_event = event_to_lifecycle_event(event, bar.index, csv_index, ts_iso)
                 if lifecycle_event:
                     _replay_cache["lifecycle_events"].append(lifecycle_event)
 
@@ -913,15 +341,15 @@ async def advance_replay(request: ReplayAdvanceRequest):
         aggregated_bars = None
         if request.include_aggregated_bars:
             source_resolution = _replay_cache.get("source_resolution", s.resolution_minutes)
-            aggregated_bars = _build_aggregated_bars(
+            aggregated_bars = build_aggregated_bars(
                 s.source_bars, request.include_aggregated_bars, source_resolution
             )
-        dag_state = _build_dag_state(detector, s.window_offset) if request.include_dag_state else None
+        dag_state = build_dag_state(detector, s.window_offset) if request.include_dag_state else None
 
         return ReplayAdvanceResponse(
             new_bars=[],
             events=[],
-            swing_state=_build_swing_state(active_legs, scale_thresholds),
+            swing_state=build_swing_state(active_legs, scale_thresholds),
             current_bar_index=len(s.source_bars) - 1,
             current_price=current_bar.close,
             end_of_data=True,
@@ -975,20 +403,20 @@ async def advance_replay(request: ReplayAdvanceRequest):
                         leg = l
                         break
 
-            event_response = _event_to_response(event, leg, scale_thresholds)
+            event_response = event_to_response(event, leg, scale_thresholds)
             all_events.append(event_response)
 
         # Capture lifecycle events for Follow Leg feature (#267)
         csv_index = s.window_offset + bar.index
         timestamp = datetime.fromtimestamp(bar.timestamp).isoformat()
         for event in events:
-            lifecycle_event = _event_to_lifecycle_event(event, bar.index, csv_index, timestamp)
+            lifecycle_event = event_to_lifecycle_event(event, bar.index, csv_index, timestamp)
             if lifecycle_event:
                 _replay_cache["lifecycle_events"].append(lifecycle_event)
 
         # Snapshot DAG state after each bar for high-speed playback (#283)
         if request.include_per_bar_dag_states:
-            per_bar_dag_states.append(_build_dag_state(detector, s.window_offset))
+            per_bar_dag_states.append(build_dag_state(detector, s.window_offset))
 
     # Update cache state
     _replay_cache["last_bar_index"] = end_idx - 1
@@ -996,7 +424,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
 
     # Build current swing state from active legs
     active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
-    swing_state = _build_swing_state(active_legs, scale_thresholds)
+    swing_state = build_swing_state(active_legs, scale_thresholds)
 
     current_bar = s.source_bars[end_idx - 1]
     end_of_data = end_idx >= len(s.source_bars)
@@ -1005,7 +433,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
     aggregated_bars = None
     if request.include_aggregated_bars:
         source_resolution = _replay_cache.get("source_resolution", s.resolution_minutes)
-        aggregated_bars = _build_aggregated_bars(
+        aggregated_bars = build_aggregated_bars(
             s.source_bars,
             request.include_aggregated_bars,
             source_resolution,
@@ -1015,7 +443,7 @@ async def advance_replay(request: ReplayAdvanceRequest):
     # Build optional DAG state (for batched playback)
     dag_state = None
     if request.include_dag_state:
-        dag_state = _build_dag_state(detector, s.window_offset)
+        dag_state = build_dag_state(detector, s.window_offset)
 
     # Include per-bar DAG states for high-speed playback (#283)
     dag_states = per_bar_dag_states if request.include_per_bar_dag_states else None
@@ -1078,12 +506,12 @@ async def reverse_replay(request: ReplayReverseRequest):
         active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
         scale_thresholds = _replay_cache.get("scale_thresholds", {})
 
-        dag_state = _build_dag_state(detector, s.window_offset) if request.include_dag_state else None
+        dag_state = build_dag_state(detector, s.window_offset) if request.include_dag_state else None
 
         return ReplayAdvanceResponse(
             new_bars=[],
             events=[],
-            swing_state=_build_swing_state(active_legs, scale_thresholds),
+            swing_state=build_swing_state(active_legs, scale_thresholds),
             current_bar_index=0,
             current_price=current_bar.close,
             end_of_data=False,
@@ -1124,7 +552,7 @@ async def reverse_replay(request: ReplayReverseRequest):
         csv_index = s.window_offset + bar.index
         ts_iso = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
         for event in events:
-            lifecycle_event = _event_to_lifecycle_event(event, bar.index, csv_index, ts_iso)
+            lifecycle_event = event_to_lifecycle_event(event, bar.index, csv_index, ts_iso)
             if lifecycle_event:
                 _replay_cache["lifecycle_events"].append(lifecycle_event)
 
@@ -1141,20 +569,20 @@ async def reverse_replay(request: ReplayReverseRequest):
     current_bar = s.source_bars[target_idx]
     active_legs = [leg for leg in detector.state.active_legs if leg.status == "active"]
     scale_thresholds = _replay_cache.get("scale_thresholds", {})
-    swing_state = _build_swing_state(active_legs, scale_thresholds)
+    swing_state = build_swing_state(active_legs, scale_thresholds)
 
     # Build optional aggregated bars
     aggregated_bars = None
     if request.include_aggregated_bars:
         source_resolution = _replay_cache.get("source_resolution", s.resolution_minutes)
-        aggregated_bars = _build_aggregated_bars(
+        aggregated_bars = build_aggregated_bars(
             s.source_bars,
             request.include_aggregated_bars,
             source_resolution,
             limit=target_idx + 1,
         )
 
-    dag_state = _build_dag_state(detector, s.window_offset) if request.include_dag_state else None
+    dag_state = build_dag_state(detector, s.window_offset) if request.include_dag_state else None
 
     return ReplayAdvanceResponse(
         new_bars=[],  # No new bars on reverse
@@ -1167,175 +595,6 @@ async def reverse_replay(request: ReplayReverseRequest):
         aggregated_bars=aggregated_bars,
         dag_state=dag_state,
         dag_states=None,
-    )
-
-
-def _build_swing_state(
-    active_legs: List[Leg],
-    scale_thresholds: Dict[str, float],
-) -> ReplaySwingState:
-    """
-    Build ReplaySwingState from active legs.
-
-    Args:
-        active_legs: List of active Leg objects.
-        scale_thresholds: Size thresholds for scale assignment (for compatibility).
-
-    Returns:
-        ReplaySwingState grouped by depth.
-    """
-    by_depth: Dict[str, List[CalibrationSwingResponse]] = {
-        "depth_1": [], "depth_2": [], "depth_3": [], "deeper": []
-    }
-
-    sorted_legs = sorted(
-        active_legs,
-        key=lambda leg: float(leg.range),
-        reverse=True
-    )
-
-    for rank, leg in enumerate(sorted_legs, start=1):
-        response = _leg_to_calibration_response(
-            leg,
-            is_active=True,
-            rank=rank,
-            scale_thresholds=scale_thresholds,
-        )
-        # Swing hierarchy removed (#301) - all legs go to depth_1
-        by_depth["depth_1"].append(response)
-
-    return ReplaySwingState(
-        depth_1=by_depth["depth_1"],
-        depth_2=by_depth["depth_2"],
-        depth_3=by_depth["depth_3"],
-        deeper=by_depth["deeper"],
-    )
-
-
-def _build_aggregated_bars(
-    source_bars: List[Bar],
-    scales: List[str],
-    source_resolution: int,
-    limit: Optional[int] = None,
-) -> AggregatedBarsResponse:
-    """
-    Build aggregated bars for requested scales.
-
-    Args:
-        source_bars: All source bars.
-        scales: List of scales to aggregate (e.g., ["S", "M"]).
-        source_resolution: Source bar resolution in minutes.
-        limit: Optional limit on number of source bars to use.
-
-    Returns:
-        AggregatedBarsResponse with bars for each requested scale.
-    """
-    bars_to_use = source_bars[:limit] if limit else source_bars
-    if not bars_to_use:
-        return {}
-
-    # Create aggregator for the bars
-    aggregator = BarAggregator(bars_to_use, source_resolution)
-
-    result: AggregatedBarsResponse = {}
-
-    for scale in scales:
-        scale_upper = scale.upper()
-        timeframe = SCALE_TO_MINUTES.get(scale_upper, source_resolution)
-        effective_tf = max(timeframe, source_resolution)
-
-        try:
-            agg_bars = aggregator.get_bars(effective_tf)
-            source_to_agg = aggregator._source_to_agg_mapping.get(effective_tf, {})
-
-            # Build inverse mapping
-            agg_to_source = {}
-            for src_idx, agg_idx in source_to_agg.items():
-                if agg_idx not in agg_to_source:
-                    agg_to_source[agg_idx] = (src_idx, src_idx)
-                else:
-                    min_idx, max_idx = agg_to_source[agg_idx]
-                    agg_to_source[agg_idx] = (min(min_idx, src_idx), max(max_idx, src_idx))
-
-            bar_responses = []
-            for i, agg_bar in enumerate(agg_bars):
-                src_start, src_end = agg_to_source.get(i, (0, 0))
-                bar_responses.append(BarResponse(
-                    index=i,
-                    timestamp=agg_bar.timestamp,
-                    open=agg_bar.open,
-                    high=agg_bar.high,
-                    low=agg_bar.low,
-                    close=agg_bar.close,
-                    source_start_index=src_start,
-                    source_end_index=src_end,
-                ))
-
-            result[scale] = bar_responses  # Use original scale key (preserves case)
-        except Exception as e:
-            logger.warning(f"Failed to aggregate bars for scale {scale}: {e}")
-
-    return result
-
-
-def _build_dag_state(detector: LegDetector, window_offset: int = 0) -> DagStateResponse:
-    """
-    Build DAG state response from detector.
-
-    Args:
-        detector: The LegDetector instance.
-        window_offset: CSV offset to convert bar-relative indices to csv indices (#300).
-
-    Returns:
-        DagStateResponse with current DAG state.
-    """
-    state = detector.state
-
-    active_legs = [
-        DagLegResponse(
-            leg_id=leg.leg_id,
-            direction=leg.direction,
-            pivot_price=float(leg.pivot_price),
-            pivot_index=window_offset + leg.pivot_index,  # Convert to csv_index (#300)
-            origin_price=float(leg.origin_price),
-            origin_index=window_offset + leg.origin_index,  # Convert to csv_index (#300)
-            retracement_pct=float(leg.retracement_pct),
-            formed=False,  # Formation computed by Reference Layer at runtime (#394)
-            status=leg.status,
-            bar_count=leg.bar_count,
-            origin_breached=leg.max_origin_breach is not None,  # #345: structural gate
-            # Impulsiveness and spikiness replace raw impulse (#241)
-            impulsiveness=leg.impulsiveness,
-            spikiness=leg.spikiness,
-            # Hierarchy fields for exploration (#250, #251)
-            parent_leg_id=leg.parent_leg_id,
-            # Segment impulse tracking (#307)
-            impulse_to_deepest=leg.impulse_to_deepest,
-            impulse_back=leg.impulse_back,
-            net_segment_impulse=leg.net_segment_impulse,
-        )
-        for leg in state.active_legs
-    ]
-
-    pending_origins = {
-        direction: DagPendingOrigin(
-            price=float(origin.price),
-            bar_index=window_offset + origin.bar_index,  # Convert to csv_index (#300)
-            direction=origin.direction,
-            source=origin.source,
-        ) if origin else None
-        for direction, origin in state.pending_origins.items()
-    }
-
-    leg_counts = DagLegCounts(
-        bull=sum(1 for leg in state.active_legs if leg.direction == 'bull'),
-        bear=sum(1 for leg in state.active_legs if leg.direction == 'bear'),
-    )
-
-    return DagStateResponse(
-        active_legs=active_legs,
-        pending_origins=pending_origins,
-        leg_counts=leg_counts,
     )
 
 

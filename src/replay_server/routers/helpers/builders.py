@@ -72,7 +72,6 @@ def build_swing_state(
             rank=rank,
             scale_thresholds=scale_thresholds,
         )
-        # Swing hierarchy removed (#301) - all legs go to depth_1
         by_depth["depth_1"].append(response)
 
     return ReplaySwingState(
@@ -363,8 +362,6 @@ def group_legs_by_depth(
             rank=rank,
             scale_thresholds=scale_thresholds,
         )
-
-        # Swing hierarchy removed (#301) - all legs go to depth_1
         result.depth_1.append(response)
 
     return result

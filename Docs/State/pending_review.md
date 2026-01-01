@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2025-12-31
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(none)
+- #403 — Router cleanup: removed duplicate helper functions from replay.py, updated to use helpers/ imports
 
 ---
 
