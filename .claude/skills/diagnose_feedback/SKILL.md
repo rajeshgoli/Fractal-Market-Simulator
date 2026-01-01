@@ -60,9 +60,18 @@ description: Investigate user observations from playback feedback. Use when
 Once investigation is complete and user confirms resolution:
 
 1. Move observation from `ground_truth/playback_feedback.json` to `ground_truth/resolved_feedback.json`
-2. If observation has screenshot attachments:
-   - Move from `screenshots/` to `screenshots/archive/`
+2. Move associated screenshots from `ground_truth/screenshots/` to `ground_truth/screenshots/archive/`
+   - Screenshot filenames contain the observation_id (e.g., `20251231_180331_dag_es-30m-new_000021cd-....png`)
 3. Confirm cleanup: "Observation [id] archived."
+
+**Bulk cleanup**: If user says "clean up feedback" or all observations are stale/fixed:
+```bash
+# Move all observations to resolved
+python3 -c "..." # (see implementation in codebase)
+
+# Move all screenshots to archive
+mv ground_truth/screenshots/*.png ground_truth/screenshots/archive/
+```
 
 ## Trigger Phrases
 
