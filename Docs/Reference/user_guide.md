@@ -376,8 +376,13 @@ The Reference Config panel lets you tune salience weights to control which level
 
 | Parameter | Values | Description |
 |-----------|--------|-------------|
-| Threshold | .236, .382, .5, .618 | Fibonacci level at which a leg becomes a valid reference. Higher = stricter formation (only clear reversals) |
-| Breach Tol. | 0.0-0.5 | How far price can breach origin before leg is invalidated. Higher = more tolerant |
+| Threshold | Off, .236, .382, .5, .618 | Fibonacci level at which a leg becomes a valid reference. "Off" = every leg is formed; higher values = stricter formation (only clear reversals) |
+
+**Origin Breach Section:**
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| Tolerance | 0.0-0.30 | How far price can breach origin before leg is invalidated. Higher = more tolerant. Orange gradient intensifies toward max to signal caution |
 
 **Salience Weights:** Controls how references are scored and ranked. All weights are additive peers — any blend works.
 
@@ -392,9 +397,9 @@ The Reference Config panel lets you tune salience weights to control which level
 
 **Display Section:**
 
-| Parameter | Options | Description |
-|-----------|---------|-------------|
-| Show top | 3, 5, 7, 10, 15, 20 | Maximum number of reference legs to display. Lower = less clutter |
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| Show top | 1-20 | Maximum number of reference legs to display. Continuous slider for fine control |
 
 **Apply button:** Click to send batched changes to the backend. Changes take effect immediately and are persisted to localStorage for future sessions.
 
@@ -419,7 +424,7 @@ Each leg displays:
 - **`<`** button navigates to previous page (disabled on first page)
 - **`>`** button navigates to next page (disabled on last page)
 - Range display shows current window (e.g., "1-5/37", "6-10/37")
-- Page size is controlled by the "Show top" dropdown in Reference Config (3, 5, or 10)
+- Page size is controlled by the "Show top" slider in Reference Config (1-20)
 
 **Selection & Tracking:**
 - **Auto-selection**: The top-ranked leg (by salience) is automatically selected on load and whenever salience weights change. No empty state—you immediately see Fibonacci levels and crossing events.
@@ -429,7 +434,7 @@ Each leg displays:
 - **Hover** over a leg on the chart to highlight it in the sidebar
 - **Click** on a leg to select it (shows Fibonacci levels persistently and tracks it for crossings)
 
-**Show top N dropdown**: In the Reference Config panel, use the "Show top" dropdown to control page size (3, 5, or 10). This setting persists to localStorage.
+**Show top N slider**: In the Reference Config panel, use the "Show top" slider (1-20) to control page size. This setting persists to localStorage.
 
 #### Chart Labels
 
