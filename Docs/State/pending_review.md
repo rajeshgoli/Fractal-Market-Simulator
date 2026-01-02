@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2026-01-02
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- #452 — Fix "Value is null" error during chart series cleanup (chart validity checks)
 - #450 — Persist view mode to localStorage so it survives page refresh
 - #449 — Levels at Play: filter legs by currentPosition to prevent rendering ahead of candles
 - #448 — Pivot extension nullifies formation: track pivot at formation, clear when extended
