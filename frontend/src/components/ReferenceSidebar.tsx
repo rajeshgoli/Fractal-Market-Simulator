@@ -1,5 +1,5 @@
 import React, { useState, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Settings, RotateCcw, Activity, Loader, Info } from 'lucide-react';
+import { ChevronDown, ChevronRight, Settings, RotateCcw, Activity, Loader } from 'lucide-react';
 import {
   ReferenceConfig,
   ReferenceSwing,
@@ -67,7 +67,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
   // Local state for sliders
   const [localConfig, setLocalConfig] = useState<ReferenceConfig>(config);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [showTooltip, setShowTooltip] = useState<string | null>(null);
   const hasAppliedRef = React.useRef(false);
 
   // Track if config has changes from server config (#436, #442, #444: unified weights)
@@ -114,10 +113,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     }
   };
 
-  const toggleTooltip = (key: string) => {
-    setShowTooltip(showTooltip === key ? null : key);
-  };
-
   // Get orange gradient color for breach tolerance (intensifies toward max)
   const getBreachColor = (value: number, max: number): string => {
     // 0 = blue (safe), max = orange (caution)
@@ -134,19 +129,16 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     const sliderIndex = findNearestIndex(value, FORMATION_FIB_VALUES);
     const displayValue = value === 0 ? 'Off' : value.toFixed(3);
 
+    // Calculate fill percentage for gradient effect
+    const fillPercent = (sliderIndex / (FORMATION_FIB_VALUES.length - 1)) * 100;
+    const trackStyle = {
+      background: `linear-gradient(to right, rgb(59, 130, 246) 0%, rgb(59, 130, 246) ${fillPercent}%, rgb(55, 65, 81) ${fillPercent}%, rgb(55, 65, 81) 100%)`,
+    };
+
     return (
       <div className="space-y-0.5">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 w-[55px] flex-shrink-0">
-            <span className="text-[10px] text-app-muted whitespace-nowrap">Threshold</span>
-            <button
-              onClick={() => toggleTooltip('formation_fib_threshold')}
-              className="text-app-muted hover:text-app-text transition-colors flex-shrink-0"
-              title={TOOLTIPS.formation_fib_threshold}
-            >
-              <Info size={10} />
-            </button>
-          </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-app-muted whitespace-nowrap w-[52px] shrink-0" title={TOOLTIPS.formation_fib_threshold}>Threshold</span>
           <input
             type="range"
             min={0}
@@ -154,26 +146,22 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
             step={1}
             value={sliderIndex}
             onChange={(e) => handleSliderChange('formation_fib_threshold', FORMATION_FIB_VALUES[parseInt(e.target.value)])}
-            className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer accent-trading-blue"
+            className="flex-1 min-w-0 h-1.5 rounded-lg appearance-none cursor-pointer"
+            style={trackStyle}
             disabled={isUpdating}
           />
-          <span className="text-[10px] font-mono w-[50px] text-right text-app-text flex-shrink-0">
+          <span className="text-[10px] font-mono min-w-[36px] text-right text-app-text shrink-0">
             {displayValue}
           </span>
         </div>
-        {/* Endpoint labels only - full labels don't fit in narrow sidebar */}
-        <div className="flex items-center gap-2 text-[8px] text-app-muted">
-          <div className="w-[55px] flex-shrink-0"></div>
+        {/* Endpoint labels */}
+        <div className="flex items-center gap-1 text-[8px] text-app-muted">
+          <div className="w-[52px] shrink-0"></div>
           <span>Off</span>
           <span className="flex-1"></span>
           <span>.618</span>
-          <div className="w-[50px] flex-shrink-0"></div>
+          <div className="min-w-[36px] shrink-0"></div>
         </div>
-        {showTooltip === 'formation_fib_threshold' && (
-          <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded">
-            {TOOLTIPS.formation_fib_threshold}
-          </p>
-        )}
       </div>
     );
   };
@@ -193,42 +181,36 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         {renderFormationSlider()}
       </div>
 
-      {/* ORIGIN BREACH Section (#444) - continuous slider 0-0.3 */}
+      {/* ORIGIN BREACH Section (#444) - continuous slider 0-0.3, orange gradient */}
       <div className="space-y-2">
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Origin Breach</div>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 w-[55px] flex-shrink-0">
-              <span className="text-[10px] text-app-muted whitespace-nowrap">Tolerance</span>
-              <button
-                onClick={() => toggleTooltip('origin_breach_tolerance')}
-                className="text-app-muted hover:text-app-text transition-colors flex-shrink-0"
-                title={TOOLTIPS.origin_breach_tolerance}
-              >
-                <Info size={10} />
-              </button>
+        {(() => {
+          const breachValue = localConfig.origin_breach_tolerance ?? 0;
+          const fillPercent = (breachValue / 0.3) * 100;
+          const fillColor = getBreachColor(breachValue, 0.3);
+          const trackStyle = {
+            background: `linear-gradient(to right, ${fillColor} 0%, ${fillColor} ${fillPercent}%, rgb(55, 65, 81) ${fillPercent}%, rgb(55, 65, 81) 100%)`,
+          };
+          return (
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-app-muted whitespace-nowrap w-[52px] shrink-0" title={TOOLTIPS.origin_breach_tolerance}>Tolerance</span>
+              <input
+                type="range"
+                min={0}
+                max={0.3}
+                step={0.01}
+                value={breachValue}
+                onChange={(e) => handleSliderChange('origin_breach_tolerance', parseFloat(e.target.value))}
+                className="flex-1 min-w-0 h-1.5 rounded-lg appearance-none cursor-pointer"
+                style={trackStyle}
+                disabled={isUpdating}
+              />
+              <span className="text-[10px] font-mono min-w-[36px] text-right text-app-text shrink-0">
+                {breachValue.toFixed(2)}
+              </span>
             </div>
-            <input
-              type="range"
-              min={0}
-              max={0.3}
-              step={0.01}
-              value={localConfig.origin_breach_tolerance ?? 0}
-              onChange={(e) => handleSliderChange('origin_breach_tolerance', parseFloat(e.target.value))}
-              className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer"
-              style={{ accentColor: getBreachColor(localConfig.origin_breach_tolerance ?? 0, 0.3) }}
-              disabled={isUpdating}
-            />
-            <span className="text-[10px] font-mono w-[50px] text-right text-app-text flex-shrink-0">
-              {(localConfig.origin_breach_tolerance ?? 0).toFixed(2)}
-            </span>
-          </div>
-          {showTooltip === 'origin_breach_tolerance' && (
-            <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded">
-              {TOOLTIPS.origin_breach_tolerance}
-            </p>
-          )}
-        </div>
+          );
+        })()}
       </div>
 
       {/* SALIENCE WEIGHTS Section (#436, #442, #444: unified additive formula) */}
@@ -243,8 +225,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           step={0.1}
           disabled={isUpdating}
           tooltip={TOOLTIPS.range_weight}
-          showTooltip={showTooltip === 'range_weight'}
-          onToggleTooltip={() => toggleTooltip('range_weight')}
         />
         <SliderRow
           label="Counter"
@@ -255,8 +235,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           step={0.1}
           disabled={isUpdating}
           tooltip={TOOLTIPS.counter_weight}
-          showTooltip={showTooltip === 'counter_weight'}
-          onToggleTooltip={() => toggleTooltip('counter_weight')}
         />
         <SliderRow
           label="Rng×Ctr"
@@ -267,8 +245,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           step={0.1}
           disabled={isUpdating}
           tooltip={TOOLTIPS.range_counter_weight}
-          showTooltip={showTooltip === 'range_counter_weight'}
-          onToggleTooltip={() => toggleTooltip('range_counter_weight')}
         />
         <SliderRow
           label="Impulse"
@@ -279,8 +255,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           step={0.1}
           disabled={isUpdating}
           tooltip={TOOLTIPS.impulse_weight}
-          showTooltip={showTooltip === 'impulse_weight'}
-          onToggleTooltip={() => toggleTooltip('impulse_weight')}
         />
         <SliderRow
           label="Depth"
@@ -291,8 +265,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           step={0.1}
           disabled={isUpdating}
           tooltip={TOOLTIPS.depth_weight}
-          showTooltip={showTooltip === 'depth_weight'}
-          onToggleTooltip={() => toggleTooltip('depth_weight')}
         />
         <SliderRow
           label="Recency"
@@ -303,8 +275,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           step={0.1}
           disabled={isUpdating}
           tooltip={TOOLTIPS.recency_weight}
-          showTooltip={showTooltip === 'recency_weight'}
-          onToggleTooltip={() => toggleTooltip('recency_weight')}
         />
       </div>
 
@@ -321,8 +291,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           formatValue={(v) => String(Math.round(v))}
           disabled={isUpdating}
           tooltip={TOOLTIPS.top_n}
-          showTooltip={showTooltip === 'top_n'}
-          onToggleTooltip={() => toggleTooltip('top_n')}
         />
       </div>
 
@@ -353,7 +321,7 @@ ReferenceConfigPanelInner.displayName = 'ReferenceConfigPanel';
 
 export const ReferenceConfigPanel = ReferenceConfigPanelInner;
 
-// Slider row component with tooltip support (#444: uniform widths)
+// Slider row component (#444: compact layout, color fill effect)
 interface SliderRowProps {
   label: string;
   value: number;
@@ -364,8 +332,7 @@ interface SliderRowProps {
   formatValue?: (value: number) => string;
   disabled?: boolean;
   tooltip?: string;
-  showTooltip?: boolean;
-  onToggleTooltip?: () => void;
+  color?: string; // Custom color for fill (defaults to trading-blue)
 }
 
 const SliderRow: React.FC<SliderRowProps> = ({
@@ -378,43 +345,36 @@ const SliderRow: React.FC<SliderRowProps> = ({
   formatValue = (v) => v.toFixed(1),
   disabled = false,
   tooltip,
-  showTooltip = false,
-  onToggleTooltip,
+  color = 'rgb(59, 130, 246)', // trading-blue
 }) => {
+  // Calculate fill percentage for gradient effect
+  const fillPercent = ((value - min) / (max - min)) * 100;
+  const trackStyle = {
+    background: `linear-gradient(to right, ${color} 0%, ${color} ${fillPercent}%, rgb(55, 65, 81) ${fillPercent}%, rgb(55, 65, 81) 100%)`,
+  };
+
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 w-[55px] flex-shrink-0">
-          <span className={`text-[10px] whitespace-nowrap ${disabled ? 'text-app-muted/50' : 'text-app-muted'}`}>{label}</span>
-          {tooltip && onToggleTooltip && (
-            <button
-              onClick={onToggleTooltip}
-              className="text-app-muted hover:text-app-text transition-colors flex-shrink-0"
-              title={tooltip}
-            >
-              <Info size={10} />
-            </button>
-          )}
-        </div>
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(e) => onChange(parseFloat(e.target.value))}
-          className={`flex-1 h-1 bg-app-border rounded-lg appearance-none ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} accent-trading-blue`}
-          disabled={disabled}
-        />
-        <span className={`text-[10px] font-mono w-[50px] text-right flex-shrink-0 ${disabled ? 'text-app-muted/50' : 'text-app-text'}`}>
-          {formatValue(value)}
-        </span>
-      </div>
-      {showTooltip && tooltip && (
-        <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded">
-          {tooltip}
-        </p>
-      )}
+    <div className="flex items-center gap-1">
+      <span
+        className={`text-[10px] whitespace-nowrap w-[52px] shrink-0 ${disabled ? 'text-app-muted/50' : 'text-app-muted'}`}
+        title={tooltip}
+      >
+        {label}
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className={`flex-1 min-w-0 h-1.5 rounded-lg appearance-none ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+        style={trackStyle}
+        disabled={disabled}
+      />
+      <span className={`text-[10px] font-mono min-w-[36px] text-right shrink-0 ${disabled ? 'text-app-muted/50' : 'text-app-text'}`}>
+        {formatValue(value)}
+      </span>
     </div>
   );
 };
