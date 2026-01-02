@@ -48,6 +48,10 @@ const STICKY_COLORS = [
   '#f97316', // orange
 ];
 
+// Grid cell size for viewport-based label density limiting (#432)
+// Labels are limited to 1 per cell; zooming in spreads legs across more cells
+const LABEL_GRID_CELL_SIZE = 150; // pixels
+
 // Filter reason badge colors (Issue #400)
 const FILTER_REASON_COLORS: Record<FilterReason, { bg: string; text: string; label: string }> = {
   'valid': { bg: '#22c55e', text: '#ffffff', label: 'Valid' },
@@ -369,7 +373,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       return;
     }
 
-    const labelPos = new Map<string, { x: number; y: number; ref: ReferenceSwing }>();
+    // First pass: collect all candidate labels and line positions
+    const candidateLabels: Array<{ x: number; y: number; ref: ReferenceSwing }> = [];
     const linePos = new Map<string, {
       originX: number; originY: number;
       pivotX: number; pivotY: number;
@@ -392,9 +397,29 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         // Position label at midpoint of leg body for clear ownership (#432)
         const midX = (originX + pivotX) / 2;
         const midY = (originY + pivotY) / 2;
-        labelPos.set(ref.leg_id, { x: midX, y: midY, ref });
+        candidateLabels.push({ x: midX, y: midY, ref });
         linePos.set(ref.leg_id, { originX, originY, pivotX, pivotY, ref });
       }
+    }
+
+    // Second pass: grid-based density limiting (#432)
+    // Group labels by grid cell, keep only the most prominent (highest median_multiple) per cell
+    const gridCells = new Map<string, { x: number; y: number; ref: ReferenceSwing }>();
+    for (const label of candidateLabels) {
+      const cellX = Math.floor(label.x / LABEL_GRID_CELL_SIZE);
+      const cellY = Math.floor(label.y / LABEL_GRID_CELL_SIZE);
+      const cellKey = `${cellX},${cellY}`;
+
+      const existing = gridCells.get(cellKey);
+      if (!existing || label.ref.median_multiple > existing.ref.median_multiple) {
+        gridCells.set(cellKey, label);
+      }
+    }
+
+    // Build final label positions from surviving labels
+    const labelPos = new Map<string, { x: number; y: number; ref: ReferenceSwing }>();
+    for (const label of gridCells.values()) {
+      labelPos.set(label.ref.leg_id, label);
     }
 
     setLabelPositions(labelPos);
@@ -409,7 +434,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       return;
     }
 
-    const labelPositions = new Map<string, { x: number; y: number; leg: FilteredLeg }>();
+    // First pass: collect all candidate labels and line positions
+    const candidateLabels: Array<{ x: number; y: number; leg: FilteredLeg }> = [];
     const linePositions = new Map<string, {
       originX: number; originY: number;
       pivotX: number; pivotY: number;
@@ -430,9 +456,29 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         // Position label at midpoint of leg body for clear ownership (#432)
         const midX = (originX + pivotX) / 2;
         const midY = (originY + pivotY) / 2;
-        labelPositions.set(leg.leg_id, { x: midX, y: midY, leg });
+        candidateLabels.push({ x: midX, y: midY, leg });
         linePositions.set(leg.leg_id, { originX, originY, pivotX, pivotY, leg });
       }
+    }
+
+    // Second pass: grid-based density limiting (#432)
+    // Group labels by grid cell, keep only the most prominent (highest median_multiple) per cell
+    const gridCells = new Map<string, { x: number; y: number; leg: FilteredLeg }>();
+    for (const label of candidateLabels) {
+      const cellX = Math.floor(label.x / LABEL_GRID_CELL_SIZE);
+      const cellY = Math.floor(label.y / LABEL_GRID_CELL_SIZE);
+      const cellKey = `${cellX},${cellY}`;
+
+      const existing = gridCells.get(cellKey);
+      if (!existing || label.leg.median_multiple > existing.leg.median_multiple) {
+        gridCells.set(cellKey, label);
+      }
+    }
+
+    // Build final label positions from surviving labels
+    const labelPositions = new Map<string, { x: number; y: number; leg: FilteredLeg }>();
+    for (const label of gridCells.values()) {
+      labelPositions.set(label.leg.leg_id, label);
     }
 
     setFilteredLabelPositions(labelPositions);
