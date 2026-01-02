@@ -406,7 +406,11 @@ The Reference Config panel lets you tune salience weights to control which level
 
 #### Levels at Play Panel
 
-Shows the top N most salient references ranked by importance. The panel header displays "(N/total)" showing how many are displayed vs total active references.
+Shows references ranked by salience (importance) with pagination. The panel header displays navigation controls and the current range:
+
+```
+LEVELS AT PLAY          < 1-5/37 >
+```
 
 Each leg displays:
 - **Rank**: Position in salience ranking (1., 2., 3., ...)
@@ -415,13 +419,19 @@ Each leg displays:
 - **Price**: The pivot price (key structural level)
 - **Salience bar**: Visual indicator of relative importance
 
+**Pagination:**
+- **`<`** button navigates to previous page (disabled on first page)
+- **`>`** button navigates to next page (disabled on last page)
+- Range display shows current window (e.g., "1-5/37", "6-10/37")
+- Page size is controlled by the "Show top" dropdown in Reference Config (3, 5, or 10)
+
 **Bidirectional Linking:**
 - **Hover** over a leg in the sidebar to highlight it on the chart
 - **Hover** over a leg on the chart to highlight it in the sidebar
 - **Click** on a leg to select it (shows Fibonacci levels persistently)
 - Clicking the same leg again deselects it
 
-**Show top N dropdown**: In the Reference Config panel, use the "Show top" dropdown to control how many legs appear (3, 5, or 10). This setting persists to localStorage.
+**Show top N dropdown**: In the Reference Config panel, use the "Show top" dropdown to control page size (3, 5, or 10). This setting persists to localStorage.
 
 #### Reference Stats Panel
 
