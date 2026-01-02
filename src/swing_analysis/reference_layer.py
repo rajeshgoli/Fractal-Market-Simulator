@@ -32,6 +32,7 @@ from .events import LevelCrossEvent
 from .reference_frame import ReferenceFrame
 from .reference_config import ReferenceConfig
 from .types import Bar
+from .dag import BIN_MULTIPLIERS
 from .dag.leg import Leg
 from .dag.range_distribution import RollingBinDistribution
 
@@ -696,7 +697,7 @@ class ReferenceLayer:
         """
         if self._bin_distribution.total_count == 0:
             return 1.0
-        max_range = self._bin_distribution.median * 25  # Bin 10 edge
+        max_range = self._bin_distribution.median * BIN_MULTIPLIERS[-2]  # Bin 10 edge
         return max_range if max_range > 0 else 1.0
 
     def _compute_salience(self, leg: Leg, current_bar_index: int) -> float:
