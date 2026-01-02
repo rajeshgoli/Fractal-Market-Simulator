@@ -366,7 +366,7 @@ Levels at Play View provides a reference-focused interface for observing how str
 
 ### Reference Sidebar
 
-The Reference Sidebar on the left side contains panels for configuring and observing the reference layer. Toggle it using the hamburger menu (≡) in the header.
+The Reference Sidebar on the left side contains panels for configuring the reference layer and viewing structure. Toggle it using the hamburger menu (≡) in the header.
 
 #### Reference Config Panel
 
@@ -403,6 +403,19 @@ Displays aggregate statistics about active references:
 - Direction imbalance indicator
 - Total reference count
 
+### Bottom Panel: Reference Telemetry
+
+The bottom panel displays real-time telemetry about references:
+
+- **References**: Active reference counts by scale and direction
+- **Detection**: Current detection status
+- **Top References**: Most salient references at the current bar
+- **Filter**: Show/hide filtered (invalid) references toggle
+- **Events**: Recent reference lifecycle events
+- **Crossings**: Level crossing events for tracked references
+
+The bottom panel height is adjustable via the resize handle.
+
 ### Sidebar Toggle
 
 - Click the hamburger menu (≡) in the header to toggle the sidebar
@@ -416,6 +429,7 @@ Displays aggregate statistics about active references:
 |---------|----------------------|---------------------|
 | Focus | Leg formation & lifecycle | Reference significance |
 | Sidebar | Detection Config, Linger Events | Reference Config, Structure, Stats |
+| Bottom Panel | Current Structure | Reference Telemetry |
 | Overlay | Diagonal leg lines | Reference level zones |
 | Use case | Algorithm debugging | Level interaction observation |
 

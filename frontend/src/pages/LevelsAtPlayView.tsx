@@ -2,6 +2,8 @@ import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react'
 import { Header } from '../components/Header';
 import { ChartArea } from '../components/ChartArea';
 import { PlaybackControls } from '../components/PlaybackControls';
+import { ResizeHandle } from '../components/ResizeHandle';
+import { ReferenceTelemetryPanel } from '../components/ReferenceTelemetryPanel';
 import { ReferenceLegOverlay } from '../components/ReferenceLegOverlay';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { ReferenceSidebar } from '../components/ReferenceSidebar';
@@ -51,6 +53,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     fadingRefs,
     stickyLegIds,
     toggleStickyLeg,
+    crossingEvents,
+    trackError,
+    clearTrackError,
     // P3/P4 frontend (Issue #420)
     structureData,
   } = useReferenceState();
@@ -69,9 +74,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [sessionInfo, setSessionInfo] = useState<{ windowOffset: number; totalSourceBars: number } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProcessingTill, setIsProcessingTill] = useState(false);
-  // Reference Observation mode - currently always off since toggle was in ReferenceTelemetryPanel
-  // Can be re-enabled when UI toggle is added to sidebar
-  const showFiltered = false;
+  const [showFiltered, setShowFiltered] = useState(false);  // Reference Observation mode
 
   // Reference Config state (Issue #425)
   const [referenceConfig, setReferenceConfig] = useState<ReferenceConfig>(
@@ -586,6 +589,13 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     loadData();
   }, [sessionSettings.isLoaded]);
 
+  // Handle panel resize
+  const handlePanelResize = useCallback((deltaY: number) => {
+    chartPrefs.setExplanationPanelHeight(
+      Math.max(100, Math.min(600, chartPrefs.explanationPanelHeight + deltaY))
+    );
+  }, [chartPrefs.explanationPanelHeight, chartPrefs.setExplanationPanelHeight]);
+
   // Get current timestamp for header
   const currentTimestamp = sourceBars[currentPlaybackPosition]?.timestamp
     ? new Date(sourceBars[currentPlaybackPosition].timestamp * 1000).toISOString()
@@ -759,6 +769,21 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               resolutionMinutes={sourceResolutionMinutes}
               onProcessTill={handleProcessTill}
               isProcessingTill={isProcessingTill}
+            />
+          </div>
+
+          <ResizeHandle onResize={handlePanelResize} />
+
+          {/* Bottom Panel: Telemetry (references, detection, top references, filter, events, crossings) */}
+          <div className="shrink-0" style={{ height: chartPrefs.explanationPanelHeight }}>
+            <ReferenceTelemetryPanel
+              referenceState={referenceState}
+              showFiltered={showFiltered}
+              onToggleShowFiltered={() => setShowFiltered(prev => !prev)}
+              crossingEvents={crossingEvents}
+              trackError={trackError}
+              onClearTrackError={clearTrackError}
+              trackedCount={stickyLegIds.size}
             />
           </div>
         </main>

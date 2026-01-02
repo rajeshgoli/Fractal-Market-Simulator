@@ -826,7 +826,8 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `HierarchyModeOverlay.tsx` | Hierarchy exploration mode (exit button, connection lines, status) |
 | `PlaybackControls.tsx` | Play/pause/step transport |
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |
-| `ReferenceSidebar.tsx` | Collapsible sidebar for Levels at Play view (#424, #426) |
+| `ReferenceSidebar.tsx` | Collapsible sidebar with Config/Structure panels for Levels at Play view (#424, #426) |
+| `ReferenceTelemetryPanel.tsx` | Bottom panel telemetry (references, detection, events, crossings) |
 | `ReferenceConfigPanel.tsx` | Salience weight sliders + Apply button (#425) |
 | `Sidebar.tsx` | Event filters, feedback input, attachment display |
 | `useForwardPlayback.ts` | Forward-only playback (step back via backend API) |
