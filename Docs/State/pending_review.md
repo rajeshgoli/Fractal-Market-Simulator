@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2026-01-02
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(none)
+1. **#442** — Unified salience formula: add counter_weight and range×counter as normalized knobs (removed standalone mode)
 
 ---
 
