@@ -188,11 +188,20 @@ class TestReferenceSwingDataclass:
 
 
 class TestScaleClassificationPercentiles:
-    """Tests for _classify_scale method (#365)."""
+    """Tests for _classify_scale method (#365).
+
+    These tests verify the legacy percentile-based classification behavior.
+    With bin distribution disabled, scale is based on percentile thresholds.
+    """
 
     def _create_layer_with_distribution(self, ranges: list) -> ReferenceLayer:
-        """Create a ReferenceLayer with a pre-populated range distribution."""
-        layer = ReferenceLayer(reference_config=ReferenceConfig.default())
+        """Create a ReferenceLayer with a pre-populated range distribution.
+
+        Uses use_bin_distribution=False to test the legacy percentile behavior.
+        """
+        # Disable bin distribution to test legacy percentile classification
+        config = ReferenceConfig.from_dict({"use_bin_distribution": False})
+        layer = ReferenceLayer(reference_config=config)
         # Populate the sorted distribution
         for r in ranges:
             layer._add_to_range_distribution(Decimal(str(r)))
@@ -272,7 +281,9 @@ class TestScaleClassificationPercentiles:
 
     def test_empty_distribution_returns_middle(self):
         """Empty distribution should return 50th percentile (M)."""
-        layer = ReferenceLayer(reference_config=ReferenceConfig.default())
+        # Disable bin distribution to test legacy percentile classification
+        config = ReferenceConfig.from_dict({"use_bin_distribution": False})
+        layer = ReferenceLayer(reference_config=config)
         # No distribution populated
 
         # With no data, percentile defaults to 50 (middle)
@@ -369,11 +380,19 @@ class TestAddToRangeDistribution:
 
 
 class TestScaleClassificationWithCustomConfig:
-    """Tests for scale classification with custom config thresholds."""
+    """Tests for scale classification with custom config thresholds.
+
+    Tests verify the legacy percentile-based classification with custom thresholds.
+    Use use_bin_distribution=False to test percentile behavior.
+    """
 
     def test_custom_xl_threshold(self):
         """Custom XL threshold should be respected."""
-        config = ReferenceConfig.default().with_scale_thresholds(xl_threshold=0.95)
+        # Disable bin distribution to test legacy percentile classification
+        config = ReferenceConfig.from_dict({
+            "use_bin_distribution": False,
+            "xl_threshold": 0.95,
+        })
         layer = ReferenceLayer(reference_config=config)
 
         # Populate with 100 values
@@ -387,11 +406,13 @@ class TestScaleClassificationWithCustomConfig:
 
     def test_custom_all_thresholds(self):
         """All custom thresholds should work together."""
-        config = ReferenceConfig(
-            xl_threshold=0.80,  # Top 20%
-            l_threshold=0.50,   # Top 50%
-            m_threshold=0.20,   # Top 80%
-        )
+        # Disable bin distribution to test legacy percentile classification
+        config = ReferenceConfig.from_dict({
+            "use_bin_distribution": False,
+            "xl_threshold": 0.80,  # Top 20%
+            "l_threshold": 0.50,   # Top 50%
+            "m_threshold": 0.20,   # Top 80%
+        })
         layer = ReferenceLayer(reference_config=config)
 
         for i in range(1, 101):

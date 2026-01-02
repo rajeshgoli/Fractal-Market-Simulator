@@ -30,6 +30,7 @@ from .leg import Leg, PendingOrigin
 from .state import DetectorState, BarType
 from .leg_pruner import LegPruner
 from .calibrate import calibrate, calibrate_from_dataframe, dataframe_to_bars
+from .range_distribution import RollingBinDistribution, BIN_MULTIPLIERS, NUM_BINS
 
 __all__ = [
     # Main detector
@@ -46,4 +47,8 @@ __all__ = [
     "calibrate",
     "calibrate_from_dataframe",
     "dataframe_to_bars",
+    # Range distribution (#434)
+    "RollingBinDistribution",
+    "BIN_MULTIPLIERS",
+    "NUM_BINS",
 ]

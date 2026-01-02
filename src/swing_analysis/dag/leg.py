@@ -97,6 +97,9 @@ class Leg:
     # Stored at leg creation for O(1) lookup (avoiding O(depth) traversal).
     # Used by Reference Layer for A/B testing scale vs hierarchy classification.
     depth: int = 0
+    # Range bin index (#434): Index into RollingBinDistribution bins.
+    # Updated when pivot extends. Used for O(1) scale classification.
+    range_bin_index: Optional[int] = None
 
     def __post_init__(self) -> None:
         """Compute deterministic leg_id if not provided."""

@@ -30,17 +30,23 @@ class TestReferenceConfigSchemas:
             small_impulse_weight=config.small_impulse_weight,
             small_recency_weight=config.small_recency_weight,
             range_counter_weight=config.range_counter_weight,
+            depth_weight=config.depth_weight,
+            top_n=config.top_n,
             formation_fib_threshold=config.formation_fib_threshold,
+            origin_breach_tolerance=config.small_origin_tolerance,
         )
 
         assert response.big_range_weight == 0.5
         assert response.range_counter_weight == 0.0
+        assert response.depth_weight == 0.0
+        assert response.top_n == 5
         assert response.big_impulse_weight == 0.4
         assert response.big_recency_weight == 0.1
         assert response.small_range_weight == 0.2
         assert response.small_impulse_weight == 0.3
         assert response.small_recency_weight == 0.5
         assert response.formation_fib_threshold == 0.382
+        assert response.origin_breach_tolerance == 0.0
 
     def test_update_request_partial_fields(self):
         """ReferenceConfigUpdateRequest should support partial updates."""

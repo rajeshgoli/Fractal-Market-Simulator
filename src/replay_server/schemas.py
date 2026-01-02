@@ -813,8 +813,17 @@ class ReferenceConfigUpdateRequest(BaseModel):
     # When > 0, uses range × origin_counter_trend_range instead of weighted sum
     range_counter_weight: Optional[float] = None
 
+    # Depth weight for salience calculation
+    depth_weight: Optional[float] = None
+
+    # Display limit: how many references to show
+    top_n: Optional[int] = None
+
     # Formation threshold
     formation_fib_threshold: Optional[float] = None
+
+    # Origin breach tolerance (simplified - applies to all scales)
+    origin_breach_tolerance: Optional[float] = None
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -822,6 +831,8 @@ class ReferenceConfigUpdateRequest(BaseModel):
                 "big_range_weight": 0.6,
                 "formation_fib_threshold": 0.5,
                 "range_counter_weight": 0.0,
+                "depth_weight": 0.0,
+                "top_n": 5,
             }
         }
     )
@@ -846,8 +857,17 @@ class ReferenceConfigResponse(BaseModel):
     # Standalone salience mode: Range×Counter
     range_counter_weight: float
 
+    # Depth weight for salience calculation
+    depth_weight: float
+
+    # Display limit: how many references to show
+    top_n: int
+
     # Formation threshold
     formation_fib_threshold: float
+
+    # Origin breach tolerance (simplified)
+    origin_breach_tolerance: float
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -859,7 +879,10 @@ class ReferenceConfigResponse(BaseModel):
                 "small_impulse_weight": 0.3,
                 "small_recency_weight": 0.5,
                 "range_counter_weight": 0.0,
+                "depth_weight": 0.0,
+                "top_n": 5,
                 "formation_fib_threshold": 0.382,
+                "origin_breach_tolerance": 0.0,
             }
         }
     )

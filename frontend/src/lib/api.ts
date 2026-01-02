@@ -823,14 +823,23 @@ export async function fetchTelemetryPanel(barIndex?: number): Promise<TelemetryP
 // ============================================================================
 
 export interface ReferenceConfig {
+  // Per-scale weights (backend)
   big_range_weight: number;
   big_impulse_weight: number;
   big_recency_weight: number;
   small_range_weight: number;
   small_impulse_weight: number;
   small_recency_weight: number;
-  range_counter_weight: number;  // Standalone mode: when > 0, uses range × counter instead of weighted sum
+  // Standalone mode: when > 0, uses range × counter instead of weighted sum
+  range_counter_weight: number;
+  // Depth weight for salience calculation
+  depth_weight: number;
+  // Display limit
+  top_n: number;
+  // Formation threshold
   formation_fib_threshold: number;
+  // Origin breach tolerance
+  origin_breach_tolerance: number;
 }
 
 export interface ReferenceConfigUpdateRequest {
@@ -841,7 +850,10 @@ export interface ReferenceConfigUpdateRequest {
   small_impulse_weight?: number;
   small_recency_weight?: number;
   range_counter_weight?: number;
+  depth_weight?: number;
+  top_n?: number;
   formation_fib_threshold?: number;
+  origin_breach_tolerance?: number;
 }
 
 export const DEFAULT_REFERENCE_CONFIG: ReferenceConfig = {
@@ -852,7 +864,10 @@ export const DEFAULT_REFERENCE_CONFIG: ReferenceConfig = {
   small_impulse_weight: 0.3,
   small_recency_weight: 0.5,
   range_counter_weight: 0.0,
+  depth_weight: 0.0,
+  top_n: 5,
   formation_fib_threshold: 0.382,
+  origin_breach_tolerance: 0.0,
 };
 
 export async function fetchReferenceConfig(): Promise<ReferenceConfig> {

@@ -754,7 +754,10 @@ async def get_reference_config():
         small_impulse_weight=config.small_impulse_weight,
         small_recency_weight=config.small_recency_weight,
         range_counter_weight=config.range_counter_weight,
+        depth_weight=config.depth_weight,
+        top_n=config.top_n,
         formation_fib_threshold=config.formation_fib_threshold,
+        origin_breach_tolerance=config.small_origin_tolerance,  # Use small as default
     )
 
 
@@ -796,11 +799,19 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
         small_impulse_weight=request.small_impulse_weight,
         small_recency_weight=request.small_recency_weight,
         range_counter_weight=request.range_counter_weight,
+        depth_weight=request.depth_weight,
+        top_n=request.top_n,
     )
 
     # Apply formation threshold update
     if request.formation_fib_threshold is not None:
         new_config = new_config.with_formation_threshold(request.formation_fib_threshold)
+
+    # Apply origin breach tolerance update (applies to small_origin_tolerance)
+    if request.origin_breach_tolerance is not None:
+        new_config = new_config.with_tolerance(
+            small_origin_tolerance=request.origin_breach_tolerance
+        )
 
     # Update reference layer config (preserves accumulated state)
     ref_layer.reference_config = new_config
@@ -813,5 +824,8 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
         small_impulse_weight=new_config.small_impulse_weight,
         small_recency_weight=new_config.small_recency_weight,
         range_counter_weight=new_config.range_counter_weight,
+        depth_weight=new_config.depth_weight,
+        top_n=new_config.top_n,
         formation_fib_threshold=new_config.formation_fib_threshold,
+        origin_breach_tolerance=new_config.small_origin_tolerance,
     )

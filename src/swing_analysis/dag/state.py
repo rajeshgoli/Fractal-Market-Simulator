@@ -124,6 +124,8 @@ class DetectorState:
                 "origin_counter_trend_range": leg.origin_counter_trend_range,
                 # Hierarchy depth (#361)
                 "depth": leg.depth,
+                # Range bin index (#434)
+                "range_bin_index": leg.range_bin_index,
             })
 
         # Serialize pending origins
@@ -216,6 +218,8 @@ class DetectorState:
                 origin_counter_trend_range=leg_data.get("origin_counter_trend_range"),
                 # Hierarchy depth (#361)
                 depth=leg_data.get("depth", 0),
+                # Range bin index (#434)
+                range_bin_index=leg_data.get("range_bin_index"),
             )
             active_legs.append(leg)
 

@@ -95,6 +95,14 @@ class ReferenceConfig:
     # 0.0 = disabled (use weighted components), > 0 = enabled (use Range×Counter)
     range_counter_weight: float = 0.0
 
+    # Depth weight for salience calculation — UI TUNABLE
+    # Ranks by hierarchy level: root legs (major structure) score higher than nested children.
+    # Applied to both big and small swings.
+    depth_weight: float = 0.0
+
+    # Display limit: how many references to show in UI — UI TUNABLE
+    top_n: int = 5
+
     # Classification mode (for A/B testing)
     use_depth_instead_of_scale: bool = False
 
@@ -103,6 +111,14 @@ class ReferenceConfig:
 
     # Structure Panel: "currently active" threshold (levels within striking distance)
     active_level_distance_pct: float = 0.005  # 0.5% — levels within this % are "active"
+
+    # Bin distribution configuration (#434)
+    # When True, use median-normalized bins instead of sorted list for scale classification
+    use_bin_distribution: bool = True
+    # Rolling window duration for bin distribution (in days)
+    bin_window_duration_days: int = 90
+    # Recompute median every N legs added
+    bin_recompute_interval: int = 100
 
     @classmethod
     def default(cls) -> "ReferenceConfig":
@@ -132,9 +148,15 @@ class ReferenceConfig:
             small_impulse_weight=data.get("small_impulse_weight", 0.3),
             small_recency_weight=data.get("small_recency_weight", 0.5),
             range_counter_weight=data.get("range_counter_weight", 0.0),
+            depth_weight=data.get("depth_weight", 0.0),
+            top_n=data.get("top_n", 5),
             use_depth_instead_of_scale=data.get("use_depth_instead_of_scale", False),
             confluence_tolerance_pct=data.get("confluence_tolerance_pct", 0.001),
             active_level_distance_pct=data.get("active_level_distance_pct", 0.005),
+            # Bin distribution config (#434)
+            use_bin_distribution=data.get("use_bin_distribution", True),
+            bin_window_duration_days=data.get("bin_window_duration_days", 90),
+            bin_recompute_interval=data.get("bin_recompute_interval", 100),
         )
 
     def with_scale_thresholds(
@@ -169,9 +191,14 @@ class ReferenceConfig:
             small_impulse_weight=self.small_impulse_weight,
             small_recency_weight=self.small_recency_weight,
             range_counter_weight=self.range_counter_weight,
+            depth_weight=self.depth_weight,
+            top_n=self.top_n,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,
+            use_bin_distribution=self.use_bin_distribution,
+            bin_window_duration_days=self.bin_window_duration_days,
+            bin_recompute_interval=self.bin_recompute_interval,
         )
 
     def with_formation_threshold(self, formation_fib_threshold: float) -> "ReferenceConfig":
@@ -199,9 +226,14 @@ class ReferenceConfig:
             small_impulse_weight=self.small_impulse_weight,
             small_recency_weight=self.small_recency_weight,
             range_counter_weight=self.range_counter_weight,
+            depth_weight=self.depth_weight,
+            top_n=self.top_n,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,
+            use_bin_distribution=self.use_bin_distribution,
+            bin_window_duration_days=self.bin_window_duration_days,
+            bin_recompute_interval=self.bin_recompute_interval,
         )
 
     def with_tolerance(
@@ -236,9 +268,14 @@ class ReferenceConfig:
             small_impulse_weight=self.small_impulse_weight,
             small_recency_weight=self.small_recency_weight,
             range_counter_weight=self.range_counter_weight,
+            depth_weight=self.depth_weight,
+            top_n=self.top_n,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,
+            use_bin_distribution=self.use_bin_distribution,
+            bin_window_duration_days=self.bin_window_duration_days,
+            bin_recompute_interval=self.bin_recompute_interval,
         )
 
     def with_salience_weights(
@@ -250,6 +287,8 @@ class ReferenceConfig:
         small_impulse_weight: float = None,
         small_recency_weight: float = None,
         range_counter_weight: float = None,
+        depth_weight: float = None,
+        top_n: int = None,
     ) -> "ReferenceConfig":
         """
         Create a new config with modified salience weights.
@@ -266,6 +305,8 @@ class ReferenceConfig:
             small_recency_weight: Recency weight for S/M (default 0.5).
             range_counter_weight: Range×Counter weight (default 0.0). When > 0,
                 uses range × origin_counter_trend_range for salience (standalone mode).
+            depth_weight: Depth weight (default 0.0). Higher values favor root legs.
+            top_n: Display limit (default 5). How many references to show in UI.
         """
         return ReferenceConfig(
             xl_threshold=self.xl_threshold,
@@ -283,9 +324,14 @@ class ReferenceConfig:
             small_impulse_weight=small_impulse_weight if small_impulse_weight is not None else self.small_impulse_weight,
             small_recency_weight=small_recency_weight if small_recency_weight is not None else self.small_recency_weight,
             range_counter_weight=range_counter_weight if range_counter_weight is not None else self.range_counter_weight,
+            depth_weight=depth_weight if depth_weight is not None else self.depth_weight,
+            top_n=top_n if top_n is not None else self.top_n,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,
+            use_bin_distribution=self.use_bin_distribution,
+            bin_window_duration_days=self.bin_window_duration_days,
+            bin_recompute_interval=self.bin_recompute_interval,
         )
 
     def with_depth_mode(self, use_depth_instead_of_scale: bool) -> "ReferenceConfig":
@@ -314,9 +360,14 @@ class ReferenceConfig:
             small_impulse_weight=self.small_impulse_weight,
             small_recency_weight=self.small_recency_weight,
             range_counter_weight=self.range_counter_weight,
+            depth_weight=self.depth_weight,
+            top_n=self.top_n,
             use_depth_instead_of_scale=use_depth_instead_of_scale,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,
+            use_bin_distribution=self.use_bin_distribution,
+            bin_window_duration_days=self.bin_window_duration_days,
+            bin_recompute_interval=self.bin_recompute_interval,
         )
 
     def with_confluence_tolerance(self, confluence_tolerance_pct: float) -> "ReferenceConfig":
@@ -345,7 +396,12 @@ class ReferenceConfig:
             small_impulse_weight=self.small_impulse_weight,
             small_recency_weight=self.small_recency_weight,
             range_counter_weight=self.range_counter_weight,
+            depth_weight=self.depth_weight,
+            top_n=self.top_n,
             use_depth_instead_of_scale=self.use_depth_instead_of_scale,
             confluence_tolerance_pct=confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,
+            use_bin_distribution=self.use_bin_distribution,
+            bin_window_duration_days=self.bin_window_duration_days,
+            bin_recompute_interval=self.bin_recompute_interval,
         )

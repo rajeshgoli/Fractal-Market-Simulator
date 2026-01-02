@@ -34,6 +34,7 @@ from .reference_frame import ReferenceFrame
 from .reference_config import ReferenceConfig
 from .types import Bar
 from .dag.leg import Leg
+from .dag.range_distribution import RollingBinDistribution
 
 
 # Standard fib levels used for level crossing detection
@@ -411,6 +412,12 @@ class ReferenceLayer:
         # Range distribution for scale classification (sorted for O(log n) percentile)
         # All-time distribution; DAG pruning handles recency per spec
         self._range_distribution: List[Decimal] = []
+        # Median-normalized bin distribution (#434) for O(1) scale classification
+        # Uses rolling window with periodic median recomputation
+        self._bin_distribution: RollingBinDistribution = RollingBinDistribution(
+            window_duration_days=self.reference_config.bin_window_duration_days,
+            recompute_interval_legs=self.reference_config.bin_recompute_interval,
+        )
         # Track which legs have formed as references (price reached formation threshold)
         # Once formed, stays formed until fatally breached
         self._formed_refs: Set[str] = set()
@@ -439,6 +446,10 @@ class ReferenceLayer:
             other: The ReferenceLayer to copy state from.
         """
         self._range_distribution = other._range_distribution.copy()
+        # Copy bin distribution state (#434)
+        self._bin_distribution = RollingBinDistribution.from_dict(
+            other._bin_distribution.to_dict()
+        )
         self._formed_refs = other._formed_refs.copy()
         self._tracked_for_crossing = other._tracked_for_crossing.copy()
         self._last_level = other._last_level.copy()
@@ -460,13 +471,20 @@ class ReferenceLayer:
         update() is called (in Levels at Play view), missing many legs that
         formed and got pruned while in DAG view.
 
+        Also updates bin distribution for formed legs' extended ranges (#434).
+
         Args:
             legs: Active legs from DAG.
             bar: Current bar with OHLC.
         """
         current_price = Decimal(str(bar.close))
+        timestamp = bar.timestamp if bar.timestamp else 0.0
         for leg in legs:
-            self._is_formed_for_reference(leg, current_price)
+            was_already_formed = leg.leg_id in self._formed_refs
+            self._is_formed_for_reference(leg, current_price, timestamp)
+            # Update bin distribution on pivot extension for already-formed legs (#434)
+            if was_already_formed and leg.leg_id in self._seen_leg_ids:
+                self._update_bin_distribution(leg.leg_id, float(leg.range))
 
     @property
     def is_cold_start(self) -> bool:
@@ -522,9 +540,15 @@ class ReferenceLayer:
 
     def _classify_scale(self, leg_range: Decimal) -> str:
         """
-        Classify leg into S/M/L/XL based on range percentile.
+        Classify leg into S/M/L/XL based on range percentile or bin distribution.
 
-        Scale thresholds from ReferenceConfig:
+        When use_bin_distribution is enabled (#434), uses median-normalized bins:
+        - Bins 0-7 (< 5× median) → S
+        - Bin 8 (5-10× median) → M
+        - Bin 9 (10-25× median) → L
+        - Bin 10 (25×+ median) → XL
+
+        When disabled, uses percentile-based thresholds from ReferenceConfig:
         - XL: Top 10% (percentile >= 90)
         - L:  60-90% (percentile >= 60)
         - M:  30-60% (percentile >= 30)
@@ -539,10 +563,15 @@ class ReferenceLayer:
         Example:
             >>> config = ReferenceConfig.default()
             >>> ref_layer = ReferenceLayer(reference_config=config)
-            >>> # After populating _range_distribution with 100 values...
+            >>> # After populating distribution with 100 values...
             >>> ref_layer._classify_scale(Decimal("95"))  # Top 10%
             'XL'
         """
+        # Use bin distribution if enabled (#434)
+        if self.reference_config.use_bin_distribution:
+            return self._bin_distribution.get_scale(float(leg_range))
+
+        # Legacy percentile-based classification
         percentile = self._compute_percentile(leg_range)
 
         # Convert threshold ratios to percentiles (e.g., 0.90 -> 90.0)
@@ -559,17 +588,56 @@ class ReferenceLayer:
         else:
             return 'S'
 
-    def _add_to_range_distribution(self, leg_range: Decimal) -> None:
+    def _add_to_range_distribution(
+        self,
+        leg_range: Decimal,
+        leg_id: str = "",
+        timestamp: float = 0.0,
+    ) -> None:
         """
-        Add a leg range to the sorted distribution.
+        Add a leg range to the distribution.
 
-        Uses bisect.insort for O(log n) insertion while maintaining sorted order.
+        For legacy sorted list: Uses bisect.insort for O(log n) insertion.
+        For bin distribution (#434): Uses O(1) bin count update.
+
         The distribution is all-time; DAG pruning handles recency per spec.
 
         Args:
             leg_range: Absolute range of the leg to add.
+            leg_id: Unique leg identifier (for bin distribution tracking).
+            timestamp: Leg creation timestamp (for bin distribution window).
         """
+        # Legacy sorted list (always maintained for backwards compatibility)
         bisect.insort(self._range_distribution, leg_range)
+
+        # Bin distribution (#434)
+        if self.reference_config.use_bin_distribution and leg_id:
+            self._bin_distribution.add_leg(leg_id, float(leg_range), timestamp)
+
+    def _update_bin_distribution(self, leg_id: str, new_range: float) -> None:
+        """
+        Update a leg's range in the bin distribution when pivot extends (#434).
+
+        O(1) operation: decrement old bin, increment new bin.
+
+        Args:
+            leg_id: Unique leg identifier.
+            new_range: New range value after pivot extension.
+        """
+        if self.reference_config.use_bin_distribution:
+            self._bin_distribution.update_leg(leg_id, new_range)
+
+    def _remove_from_bin_distribution(self, leg_id: str) -> None:
+        """
+        Remove a leg from the bin distribution (#434).
+
+        Called when a leg is pruned.
+
+        Args:
+            leg_id: Unique leg identifier.
+        """
+        if self.reference_config.use_bin_distribution:
+            self._bin_distribution.remove_leg(leg_id)
 
     def _compute_location(self, leg: Leg, current_price: Decimal) -> float:
         """
@@ -606,7 +674,12 @@ class ReferenceLayer:
         )
         return float(frame.ratio(current_price))
 
-    def _is_formed_for_reference(self, leg: Leg, current_price: Decimal) -> bool:
+    def _is_formed_for_reference(
+        self,
+        leg: Leg,
+        current_price: Decimal,
+        timestamp: float = 0.0,
+    ) -> bool:
         """
         Check if leg has reached formation threshold.
 
@@ -623,6 +696,7 @@ class ReferenceLayer:
         Args:
             leg: The leg to check
             current_price: Current price
+            timestamp: Bar timestamp for bin distribution tracking (#434)
 
         Returns:
             True if formed (or was previously formed)
@@ -643,7 +717,7 @@ class ReferenceLayer:
             # Add to range distribution on first formation (#372)
             if leg.leg_id not in self._seen_leg_ids:
                 self._seen_leg_ids.add(leg.leg_id)
-                self._add_to_range_distribution(leg.range)
+                self._add_to_range_distribution(leg.range, leg.leg_id, timestamp)
             return True
 
         return False
@@ -771,7 +845,12 @@ class ReferenceLayer:
         age = current_bar_index - leg.origin_index
         recency_score = 1 / (1 + age / 1000)
 
-        # Scale-dependent weights
+        # Depth score: root legs (depth 0) score higher
+        # Use inverse depth with decay: 1 / (1 + depth * 0.5)
+        depth = leg.depth if hasattr(leg, 'depth') and leg.depth is not None else 0
+        depth_score = 1.0 / (1.0 + depth * 0.5)
+
+        # Scale-dependent weights for range, impulse, recency
         if scale in ('L', 'XL'):
             weights = {
                 'range': self.reference_config.big_range_weight,
@@ -785,17 +864,22 @@ class ReferenceLayer:
                 'recency': self.reference_config.small_recency_weight
             }
 
+        # Add depth weight (same for all scales)
+        weights['depth'] = self.reference_config.depth_weight
+
         # Normalize weights if impulse is missing
         if not use_impulse:
-            total = weights['range'] + weights['recency']
+            total = weights['range'] + weights['recency'] + weights['depth']
             if total > 0:
                 weights['range'] /= total
                 weights['recency'] /= total
+                weights['depth'] /= total
             weights['impulse'] = 0
 
         return (weights['range'] * range_score +
                 weights['impulse'] * impulse_score +
-                weights['recency'] * recency_score)
+                weights['recency'] * recency_score +
+                weights['depth'] * depth_score)
 
     def _group_by_scale(
         self,
@@ -1309,11 +1393,16 @@ class ReferenceLayer:
             ReferenceState with all valid references.
         """
         current_price = Decimal(str(bar.close))
+        timestamp = bar.timestamp if bar.timestamp else 0.0
 
         # Check formation for all legs first (this updates range distribution
         # for newly formed legs, which affects cold start progress)
         for leg in legs:
-            self._is_formed_for_reference(leg, current_price)
+            was_already_formed = leg.leg_id in self._formed_refs
+            self._is_formed_for_reference(leg, current_price, timestamp)
+            # Update bin distribution on pivot extension for already-formed legs (#434)
+            if was_already_formed and leg.leg_id in self._seen_leg_ids:
+                self._update_bin_distribution(leg.leg_id, float(leg.range))
 
         # Cold start check: not enough swings for meaningful scale classification
         if self.is_cold_start:
@@ -1428,11 +1517,16 @@ class ReferenceLayer:
         current_price = Decimal(str(bar.close))
         bar_high = Decimal(str(bar.high))
         bar_low = Decimal(str(bar.low))
+        timestamp = bar.timestamp if bar.timestamp else 0.0
         results: List[FilteredLeg] = []
 
         # Check formation for all legs first (populates _formed_refs)
         for leg in legs:
-            self._is_formed_for_reference(leg, current_price)
+            was_already_formed = leg.leg_id in self._formed_refs
+            self._is_formed_for_reference(leg, current_price, timestamp)
+            # Update bin distribution on pivot extension for already-formed legs (#434)
+            if was_already_formed and leg.leg_id in self._seen_leg_ids:
+                self._update_bin_distribution(leg.leg_id, float(leg.range))
 
         for leg in legs:
             scale = self._classify_scale(leg.range)

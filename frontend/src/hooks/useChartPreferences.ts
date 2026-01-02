@@ -37,7 +37,10 @@ function mergeReferenceConfig(saved: Partial<ReferenceConfig> | null): Reference
     small_impulse_weight: saved.small_impulse_weight ?? DEFAULT_REFERENCE_CONFIG.small_impulse_weight,
     small_recency_weight: saved.small_recency_weight ?? DEFAULT_REFERENCE_CONFIG.small_recency_weight,
     range_counter_weight: saved.range_counter_weight ?? DEFAULT_REFERENCE_CONFIG.range_counter_weight,
+    depth_weight: saved.depth_weight ?? DEFAULT_REFERENCE_CONFIG.depth_weight,
+    top_n: saved.top_n ?? DEFAULT_REFERENCE_CONFIG.top_n,
     formation_fib_threshold: saved.formation_fib_threshold ?? DEFAULT_REFERENCE_CONFIG.formation_fib_threshold,
+    origin_breach_tolerance: saved.origin_breach_tolerance ?? DEFAULT_REFERENCE_CONFIG.origin_breach_tolerance,
   };
 }
 

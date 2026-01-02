@@ -299,6 +299,7 @@ class TestLevelCrossingTracking:
         bar.low = 95.0
         bar.close = 102.0
         bar.index = 10
+        bar.timestamp = 1000.0  # Added for bin distribution tracking (#434)
 
         # Update shouldn't affect tracking state
         layer.update([leg], bar)
