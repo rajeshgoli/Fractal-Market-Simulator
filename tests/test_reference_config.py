@@ -48,6 +48,12 @@ class TestReferenceConfigDefaults:
         assert config.recency_weight == 0.1
         assert config.depth_weight == 0.1
 
+    def test_default_salience_decay_parameters(self):
+        """Salience decay parameters should match spec (#438)."""
+        config = ReferenceConfig.default()
+        assert config.recency_decay_bars == 1000
+        assert config.depth_decay_factor == 0.5
+
     def test_default_range_counter_weight(self):
         """Range×Counter standalone mode should be disabled by default."""
         config = ReferenceConfig.default()
@@ -111,6 +117,8 @@ class TestReferenceConfigSerialization:
         assert data["impulse_weight"] == 0.4
         assert data["recency_weight"] == 0.1
         assert data["depth_weight"] == 0.1
+        assert data["recency_decay_bars"] == 1000
+        assert data["depth_decay_factor"] == 0.5
         assert data["range_counter_weight"] == 0.0
         assert data["confluence_tolerance_pct"] == 0.001
 
@@ -127,6 +135,8 @@ class TestReferenceConfigSerialization:
             "impulse_weight": 0.5,
             "recency_weight": 0.1,
             "depth_weight": 0.1,
+            "recency_decay_bars": 500,
+            "depth_decay_factor": 0.3,
             "range_counter_weight": 0.5,
             "confluence_tolerance_pct": 0.002,
         }
@@ -143,6 +153,8 @@ class TestReferenceConfigSerialization:
         assert config.impulse_weight == 0.5
         assert config.recency_weight == 0.1
         assert config.depth_weight == 0.1
+        assert config.recency_decay_bars == 500
+        assert config.depth_decay_factor == 0.3
         assert config.range_counter_weight == 0.5
         assert config.confluence_tolerance_pct == 0.002
 
@@ -155,6 +167,8 @@ class TestReferenceConfigSerialization:
         assert config.significant_bin_threshold == 8
         assert config.formation_fib_threshold == 0.382
         assert config.range_weight == 0.4
+        assert config.recency_decay_bars == 1000
+        assert config.depth_decay_factor == 0.5
 
     def test_round_trip_serialization(self):
         """to_dict -> from_dict should preserve all values."""
@@ -169,6 +183,8 @@ class TestReferenceConfigSerialization:
             impulse_weight=0.45,
             recency_weight=0.10,
             depth_weight=0.10,
+            recency_decay_bars=500,
+            depth_decay_factor=0.3,
             range_counter_weight=0.5,
             confluence_tolerance_pct=0.0015,
         )
@@ -223,6 +239,27 @@ class TestReferenceConfigBuilders:
         assert modified.recency_weight == 0.2
         # Unspecified values preserved
         assert modified.impulse_weight == 0.4
+        assert modified.depth_weight == 0.1
+
+    def test_with_salience_decay_parameters(self):
+        """with_salience_weights should modify decay parameters (#438)."""
+        original = ReferenceConfig.default()
+        modified = original.with_salience_weights(
+            recency_decay_bars=500,
+            depth_decay_factor=0.3,
+        )
+
+        # Original unchanged
+        assert original.recency_decay_bars == 1000
+        assert original.depth_decay_factor == 0.5
+
+        # Modified has new values
+        assert modified.recency_decay_bars == 500
+        assert modified.depth_decay_factor == 0.3
+        # Other salience weights preserved
+        assert modified.range_weight == 0.4
+        assert modified.impulse_weight == 0.4
+        assert modified.recency_weight == 0.1
         assert modified.depth_weight == 0.1
 
     def test_with_confluence_tolerance(self):
@@ -297,3 +334,13 @@ class TestReferenceConfigUsage:
         )
 
         assert config.range_counter_weight == 1.0
+
+    def test_custom_decay_parameters(self):
+        """Create config with custom salience decay parameters (#438)."""
+        config = ReferenceConfig.default().with_salience_weights(
+            recency_decay_bars=2000,  # Slower recency decay (double default)
+            depth_decay_factor=0.25,  # Slower depth decay (half default)
+        )
+
+        assert config.recency_decay_bars == 2000
+        assert config.depth_decay_factor == 0.25

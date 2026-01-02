@@ -813,14 +813,16 @@ class ReferenceLayer:
         use_impulse = leg.impulsiveness is not None
         impulse_score = leg.impulsiveness / 100 if use_impulse else 0
 
-        # Recency score: fixed decay
+        # Recency score: configurable decay (#438)
         age = current_bar_index - leg.origin_index
-        recency_score = 1 / (1 + age / 1000)
+        recency_decay = self.reference_config.recency_decay_bars
+        recency_score = 1 / (1 + age / recency_decay)
 
         # Depth score: root legs (depth 0) score higher
-        # Use inverse depth with decay: 1 / (1 + depth * 0.5)
+        # Use inverse depth with configurable decay (#438)
         depth = leg.depth if hasattr(leg, 'depth') and leg.depth is not None else 0
-        depth_score = 1.0 / (1.0 + depth * 0.5)
+        depth_decay = self.reference_config.depth_decay_factor
+        depth_score = 1.0 / (1.0 + depth * depth_decay)
 
         # Unified weights (#436) - no scale-dependent weights
         weights = {

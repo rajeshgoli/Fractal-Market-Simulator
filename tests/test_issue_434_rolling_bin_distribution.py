@@ -70,18 +70,6 @@ class TestRollingBinDistributionBasics:
         assert dist.window_duration_days == 30
         assert dist.recompute_interval_legs == 50
 
-    def test_is_cold_start_initially(self):
-        """Should be in cold start with no data."""
-        dist = RollingBinDistribution()
-        assert dist.is_cold_start is True
-
-    def test_not_cold_start_with_enough_legs(self):
-        """Should exit cold start after 50 legs."""
-        dist = RollingBinDistribution()
-        for i in range(50):
-            dist.add_leg(f"leg_{i}", float(i + 1))
-        assert dist.is_cold_start is False
-
 
 class TestBinIndexCalculation:
     """Test bin index calculation from range values."""

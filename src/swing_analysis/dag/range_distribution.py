@@ -110,11 +110,6 @@ class RollingBinDistribution:
         """Total number of legs in the distribution."""
         return sum(self.bin_counts)
 
-    @property
-    def is_cold_start(self) -> bool:
-        """True if not enough data for reliable classification."""
-        return self.total_count < 50
-
     def get_bin_index(self, range_val: float) -> int:
         """
         Get bin index for a range value.

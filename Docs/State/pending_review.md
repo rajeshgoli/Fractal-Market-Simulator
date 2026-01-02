@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2026-01-02
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 1. **#437** — Replace track_formation() with update(build_response=False) in bulk advances for continuous breach tracking without performance regression
+2. **#438** — Add configurable decay factors (recency_decay_bars, depth_decay_factor) to ReferenceConfig for salience calculation; remove dead is_cold_start from RollingBinDistribution
 
 ---
 
