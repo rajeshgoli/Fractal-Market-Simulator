@@ -12,7 +12,11 @@
  * Get the display color for a bin value.
  * Returns CSS classes for background and text color.
  */
-export function getBinBadgeColor(bin: number): { bg: string; text: string } {
+export function getBinBadgeColor(bin: number | undefined | null): { bg: string; text: string } {
+  // Default to gray for undefined/null
+  if (bin === undefined || bin === null) {
+    return { bg: 'bg-gray-600/20', text: 'text-gray-400' };
+  }
   if (bin <= 7) {
     // Small legs - gray
     return { bg: 'bg-gray-600/20', text: 'text-gray-400' };
@@ -31,7 +35,11 @@ export function getBinBadgeColor(bin: number): { bg: string; text: string } {
 /**
  * Get hex colors for a bin value (for SVG/canvas rendering).
  */
-export function getBinHexColors(bin: number): { bg: string; text: string } {
+export function getBinHexColors(bin: number | undefined | null): { bg: string; text: string } {
+  // Default to gray for undefined/null
+  if (bin === undefined || bin === null) {
+    return { bg: '#4b5563', text: '#9ca3af' };
+  }
   if (bin <= 7) {
     return { bg: '#4b5563', text: '#9ca3af' };  // gray
   } else if (bin === 8) {
@@ -50,7 +58,11 @@ export function getBinHexColors(bin: number): { bg: string; text: string } {
  * @param medianMultiple The ratio to running median
  * @returns Formatted string like "2.5x" or "25x+"
  */
-export function formatMedianMultiple(medianMultiple: number): string {
+export function formatMedianMultiple(medianMultiple: number | undefined | null): string {
+  // Handle undefined/null values (can happen during cold start or API mismatch)
+  if (medianMultiple === undefined || medianMultiple === null) {
+    return '—';
+  }
   if (medianMultiple >= 25) {
     return '25x+';
   } else if (medianMultiple >= 10) {
