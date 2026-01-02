@@ -426,12 +426,12 @@ Each leg displays:
 - Page size is controlled by the "Show top" dropdown in Reference Config (3, 5, or 10)
 
 **Selection & Tracking:**
-- **Auto-selection**: On load, the top-ranked leg (by salience) is automatically selected. No empty state—you immediately see Fibonacci levels and crossing events.
+- **Auto-selection**: The top-ranked leg (by salience) is automatically selected on load and whenever salience weights change. No empty state—you immediately see Fibonacci levels and crossing events.
 - **Single selection model**: Only one leg can be selected at a time. Selecting a new leg replaces the previous selection.
+- **Manual override**: Clicking a leg locks your selection—changing salience weights won't auto-switch. Click the same leg again to deselect and re-enable auto-selection.
 - **Hover** over a leg in the sidebar to highlight it on the chart
 - **Hover** over a leg on the chart to highlight it in the sidebar
 - **Click** on a leg to select it (shows Fibonacci levels persistently and tracks it for crossings)
-- Clicking the same leg again deselects it
 
 **Show top N dropdown**: In the Reference Config panel, use the "Show top" dropdown to control page size (3, 5, or 10). This setting persists to localStorage.
 
