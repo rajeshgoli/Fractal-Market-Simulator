@@ -261,8 +261,8 @@ async def advance_dag(request: ReplayAdvanceRequest):
             # Process bar
             events = detector.process_bar(bar)
 
-            # Track formation for reference layer warmup (#397)
-            ref_layer.track_formation(detector.state.active_legs, bar)
+            # Full reference layer update - O(1) bin classification makes this cheap (#437)
+            ref_layer.update(detector.state.active_legs, bar)
 
             # Capture lifecycle events during replay
             csv_index = s.window_offset + bar.index
@@ -340,9 +340,9 @@ async def advance_dag(request: ReplayAdvanceRequest):
         # Process bar with detector (DAG events)
         events = detector.process_bar(bar)
 
-        # Track formation for reference layer warmup (#397)
+        # Full reference layer update - O(1) bin classification makes this cheap (#437)
         if ref_layer is not None:
-            ref_layer.track_formation(detector.state.active_legs, bar)
+            ref_layer.update(detector.state.active_legs, bar)
 
         # Add bar to response
         new_bars.append(ReplayBarResponse(
@@ -503,8 +503,8 @@ async def reverse_dag(request: ReplayReverseRequest):
         # Process bar
         events = detector.process_bar(bar)
 
-        # Track formation for reference layer warmup (#397)
-        ref_layer.track_formation(detector.state.active_legs, bar)
+        # Full reference layer update - O(1) bin classification makes this cheap (#437)
+        ref_layer.update(detector.state.active_legs, bar)
 
         # Capture lifecycle events during replay (#299)
         csv_index = s.window_offset + bar.index
