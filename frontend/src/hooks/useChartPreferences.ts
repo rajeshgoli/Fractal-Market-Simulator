@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { AggregationScale, DetectionConfig, DEFAULT_DETECTION_CONFIG } from '../types';
 import { LogicalRange } from 'lightweight-charts';
 import { ReferenceConfig, DEFAULT_REFERENCE_CONFIG } from '../lib/api';
+import { ViewMode } from '../App';
 
 const STORAGE_KEY = 'chart-preferences';
 const ZOOM_DEBOUNCE_MS = 500; // Debounce zoom saves to avoid performance issues
@@ -72,6 +73,8 @@ interface ChartPreferences {
   referenceConfig: ReferenceConfig | null; // null = use server defaults
   // Sidebar open/closed state - Issue #426
   levelsAtPlaySidebarOpen: boolean;
+  // Current view mode - persists across page refreshes
+  currentView: ViewMode;
 }
 
 const DEFAULT_PREFERENCES: ChartPreferences = {
@@ -88,6 +91,7 @@ const DEFAULT_PREFERENCES: ChartPreferences = {
   dagLingerEvents: {},
   referenceConfig: null, // null = use server defaults (#425)
   levelsAtPlaySidebarOpen: true, // Sidebar open by default (#426)
+  currentView: 'dag', // Default to DAG view
 };
 
 function loadPreferences(): ChartPreferences {
@@ -132,6 +136,7 @@ interface UseChartPreferencesReturn {
   dagLingerEvents: LingerEventStates;
   referenceConfig: ReferenceConfig | null;
   levelsAtPlaySidebarOpen: boolean;
+  currentView: ViewMode;
   setChart1Aggregation: (value: AggregationScale) => void;
   setChart2Aggregation: (value: AggregationScale) => void;
   setSpeedMultiplier: (value: number) => void;
@@ -145,6 +150,7 @@ interface UseChartPreferencesReturn {
   setDagLingerEvents: (value: LingerEventStates) => void;
   setReferenceConfig: (value: ReferenceConfig | null) => void;
   setLevelsAtPlaySidebarOpen: (value: boolean) => void;
+  setCurrentView: (value: ViewMode) => void;
 }
 
 export function useChartPreferences(): UseChartPreferencesReturn {
@@ -229,6 +235,10 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setPreferences(prev => ({ ...prev, levelsAtPlaySidebarOpen: value }));
   }, []);
 
+  const setCurrentView = useCallback((value: ViewMode) => {
+    setPreferences(prev => ({ ...prev, currentView: value }));
+  }, []);
+
   return {
     chart1Aggregation: preferences.chart1Aggregation,
     chart2Aggregation: preferences.chart2Aggregation,
@@ -243,6 +253,7 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     dagLingerEvents: preferences.dagLingerEvents,
     referenceConfig: preferences.referenceConfig,
     levelsAtPlaySidebarOpen: preferences.levelsAtPlaySidebarOpen,
+    currentView: preferences.currentView,
     setChart1Aggregation,
     setChart2Aggregation,
     setSpeedMultiplier,
@@ -256,5 +267,6 @@ export function useChartPreferences(): UseChartPreferencesReturn {
     setDagLingerEvents,
     setReferenceConfig,
     setLevelsAtPlaySidebarOpen,
+    setCurrentView,
   };
 }
