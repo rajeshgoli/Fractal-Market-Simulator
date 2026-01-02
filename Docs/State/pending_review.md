@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 8
+**Unreviewed Change Count:** 9
 
 **Last Review:** 2026-01-01
 
@@ -16,6 +16,7 @@
 6. **#425** — ReferenceConfigPanel component with salience weight sliders + localStorage persistence
 7. **#426, #427** — ReferenceSidebar integration into LevelsAtPlayView + documentation updates
 8. **#429** — Range×Counter standalone mode + info tooltips for ReferenceConfigPanel
+9. **#434** — Rolling bin distribution for median-normalized scale classification
 
 ---
 
