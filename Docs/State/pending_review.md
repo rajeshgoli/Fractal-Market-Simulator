@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2026-01-02
 
@@ -9,8 +9,7 @@
 ## Pending Changes
 
 1. **#437** — Replace track_formation() with update(build_response=False) in bulk advances for continuous breach tracking without performance regression
-2. **#438** — Add configurable decay factors (recency_decay_bars, depth_decay_factor) to ReferenceConfig for salience calculation; remove dead is_cold_start from RollingBinDistribution
-3. **#439** — Remove stale _range_distribution and related methods from ReferenceLayer in favor of bin distribution; update cold start checks and normalization to use _bin_distribution exclusively
+2. **#440** — Hook up evict_old_legs() in update() side effects for rolling 90-day window; remove dead remove_leg() and _remove_from_bin_distribution() methods
 
 ---
 
@@ -18,6 +17,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 2 | #438, #439 — Configurable decay factors, remove stale _range_distribution in favor of bin distribution | Accepted |
 | Jan 2 | #415, #416, #420, #421, #423, #424, #425, #426, #427, #429, #434, #436 — Reference Layer P3/P4, Config Panel redesign, bin-based classification (10 issues) | All Accepted; Reference Layer Phase 4 complete, bin-based classification deployed |
 | Jan 1 | #400, #403, #404, #408, #409, #410, #411, #412, #414 — Reference Observation, router cleanup, DAG cleanup, cache consolidation, lazy init, view fixes (9 issues) | All Accepted; Reference Phase 2 complete, P3 ready |
 | Dec 31 | #398 — Schema unification, router split, naming cleanup | Accepted with notes; #403 filed for incomplete split |

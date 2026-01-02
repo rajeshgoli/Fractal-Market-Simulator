@@ -221,21 +221,6 @@ class TestAddUpdateRemove:
         assert dist.bin_counts[4] == 0
         assert dist.bin_counts[5] == 1
 
-    def test_remove_leg(self):
-        """Removing a leg should decrement bin count."""
-        dist = RollingBinDistribution()
-        dist.median = 10.0
-
-        dist.add_leg("leg_1", 10.0)
-        dist.add_leg("leg_2", 15.0)
-        assert dist.total_count == 2
-
-        dist.remove_leg("leg_1")
-        assert dist.total_count == 1
-        assert "leg_1" not in dist.leg_ranges
-        assert "leg_2" in dist.leg_ranges
-
-
 class TestMedianRecomputation:
     """Test median recomputation logic."""
 

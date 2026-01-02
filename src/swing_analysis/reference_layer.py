@@ -546,17 +546,6 @@ class ReferenceLayer:
         """
         self._bin_distribution.update_leg(leg_id, new_range)
 
-    def _remove_from_bin_distribution(self, leg_id: str) -> None:
-        """
-        Remove a leg from the bin distribution (#434).
-
-        Called when a leg is pruned.
-
-        Args:
-            leg_id: Unique leg identifier.
-        """
-        self._bin_distribution.remove_leg(leg_id)
-
     def _compute_location(self, leg: Leg, current_price: Decimal) -> float:
         """
         Compute location in reference frame.
@@ -1378,6 +1367,9 @@ class ReferenceLayer:
 
             # Side effect: removes from _formed_refs if fatally breached
             self._is_fatally_breached(leg, bin_index, extreme_location, bar_close_location)
+
+        # Time-based eviction - keeps distribution fresh (rolling 90-day window)
+        self._bin_distribution.evict_old_legs(timestamp)
 
         # Early return for bulk advances - side effects done, skip response building
         if not build_response:

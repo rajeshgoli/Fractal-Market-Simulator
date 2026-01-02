@@ -39,7 +39,7 @@ class RollingBinDistribution:
     Replaces the sorted list approach in ReferenceLayer with O(1) updates:
     - add_leg(): Add a new leg's range to the distribution
     - update_leg(): Update a leg's range when pivot extends (O(1) bin count update)
-    - remove_leg(): Remove a leg from the distribution (on pruning)
+    - evict_old_legs(): Remove legs older than window duration (rolling window)
 
     Bins are defined as multiples of the rolling median:
     - Bin 0: 0 - 0.3× median (tiny)
@@ -252,32 +252,6 @@ class RollingBinDistribution:
             if lid == leg_id:
                 self.window[i] = (leg_id, new_range, ts)
                 break
-
-    def remove_leg(self, leg_id: str) -> None:
-        """
-        Remove a leg from the distribution (on pruning).
-
-        O(1) for bin count update, O(window) for deque removal.
-
-        Args:
-            leg_id: Unique leg identifier.
-        """
-        if leg_id not in self.leg_ranges:
-            return
-
-        old_range = self.leg_ranges[leg_id]
-        old_bin = self.get_bin_index(old_range)
-
-        # Update bin count
-        self.bin_counts[old_bin] -= 1
-
-        # Remove from tracking
-        del self.leg_ranges[leg_id]
-
-        # Remove from window (O(n) but infrequent)
-        self.window = deque(
-            (lid, r, ts) for lid, r, ts in self.window if lid != leg_id
-        )
 
     def _recompute_median(self) -> None:
         """
