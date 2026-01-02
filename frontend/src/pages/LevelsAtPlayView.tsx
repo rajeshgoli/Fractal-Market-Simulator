@@ -82,6 +82,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [chartHoveredLegId, setChartHoveredLegId] = useState<string | null>(null);
   const [selectedLegId, setSelectedLegId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
+  // Track whether we've done initial auto-selection (Issue #433)
+  const hasAutoSelectedRef = useRef(false);
 
   // Reference Config state (Issue #425)
   const [referenceConfig, setReferenceConfig] = useState<ReferenceConfig>(
@@ -159,13 +161,24 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     setChartHoveredLegId(legId);
   }, []);
 
-  // Sidebar select handler (Issue #430) - clicking a leg selects it (shows fibs persistently)
-  const handleSidebarSelectLeg = useCallback((legId: string) => {
-    // Toggle selection - clicking same leg deselects it
-    setSelectedLegId(prev => prev === legId ? null : legId);
-    // Also toggle sticky state for the chart overlay
-    toggleStickyLeg(legId);
-  }, [toggleStickyLeg]);
+  // Sidebar select handler (Issue #430, #433) - clicking a leg selects it exclusively
+  // Single selection model: only one leg is selected/tracked at a time
+  const handleSidebarSelectLeg = useCallback(async (legId: string) => {
+    if (selectedLegId === legId) {
+      // Clicking same leg - deselect and untrack
+      setSelectedLegId(null);
+      toggleStickyLeg(legId); // Untrack since it's already tracked
+    } else {
+      // Clicking different leg - untrack old (if any), then track new
+      if (selectedLegId !== null && stickyLegIds.has(selectedLegId)) {
+        await toggleStickyLeg(selectedLegId); // Untrack old
+      }
+      setSelectedLegId(legId);
+      if (!stickyLegIds.has(legId)) {
+        toggleStickyLeg(legId); // Track new
+      }
+    }
+  }, [selectedLegId, stickyLegIds, toggleStickyLeg]);
 
   // Effective hovered leg for sidebar (combine sidebar and chart hover)
   const effectiveSidebarHoveredLegId = useMemo(() => {
@@ -299,6 +312,23 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       fetchReferenceState(currentPlaybackPosition);
     }
   }, [currentPlaybackPosition, calibrationBarCount, fetchReferenceState]);
+
+  // Auto-select top-ranked leg on initial load (Issue #433)
+  // This ensures the Level Crossings section shows data immediately instead of "Click a leg to track"
+  useEffect(() => {
+    // Only auto-select once, when references first become available
+    if (
+      !hasAutoSelectedRef.current &&
+      referenceState?.references &&
+      referenceState.references.length > 0 &&
+      selectedLegId === null
+    ) {
+      const topLeg = referenceState.references[0]; // Already sorted by salience
+      hasAutoSelectedRef.current = true;
+      setSelectedLegId(topLeg.leg_id);
+      toggleStickyLeg(topLeg.leg_id); // Track for level crossing detection
+    }
+  }, [referenceState?.references, selectedLegId, toggleStickyLeg]);
 
   // Reference Config update handler (Issue #425)
   const handleReferenceConfigUpdate = useCallback(async (newConfig: ReferenceConfig) => {

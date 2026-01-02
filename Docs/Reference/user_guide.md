@@ -425,10 +425,12 @@ Each leg displays:
 - Range display shows current window (e.g., "1-5/37", "6-10/37")
 - Page size is controlled by the "Show top" dropdown in Reference Config (3, 5, or 10)
 
-**Bidirectional Linking:**
+**Selection & Tracking:**
+- **Auto-selection**: On load, the top-ranked leg (by salience) is automatically selected. No empty state—you immediately see Fibonacci levels and crossing events.
+- **Single selection model**: Only one leg can be selected at a time. Selecting a new leg replaces the previous selection.
 - **Hover** over a leg in the sidebar to highlight it on the chart
 - **Hover** over a leg on the chart to highlight it in the sidebar
-- **Click** on a leg to select it (shows Fibonacci levels persistently)
+- **Click** on a leg to select it (shows Fibonacci levels persistently and tracks it for crossings)
 - Clicking the same leg again deselects it
 
 **Show top N dropdown**: In the Reference Config panel, use the "Show top" dropdown to control page size (3, 5, or 10). This setting persists to localStorage.
@@ -465,7 +467,7 @@ The bottom panel displays real-time telemetry about references:
 - **Top References**: Most salient references at the current bar
 - **Filter**: Show/hide filtered (invalid) references toggle
 - **Events**: Recent reference lifecycle events
-- **Crossings**: Level crossing events for tracked references
+- **Crossings**: Level crossing events for the selected reference. Shows "tracking" when a leg is selected, or "no selection" otherwise. Auto-selection ensures this panel is populated from the start.
 
 The bottom panel height is adjustable via the resize handle.
 

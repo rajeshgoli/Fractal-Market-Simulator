@@ -349,15 +349,15 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
           })()}
         </div>
 
-        {/* Level Crossings (Issue #416) */}
+        {/* Level Crossings (Issue #416, #433) */}
         <div className="bg-app-card rounded-lg p-3 border border-app-border">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Crosshair size={14} className="text-trading-blue" />
               <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">Crossings</h3>
             </div>
-            <span className="text-[10px] text-app-muted">
-              {trackedCount}/10 tracked
+            <span className={`text-[10px] ${trackedCount > 0 ? 'text-trading-blue' : 'text-app-muted'}`}>
+              {trackedCount > 0 ? 'tracking' : 'no selection'}
             </span>
           </div>
           <div className="space-y-1.5">
@@ -381,7 +381,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
               ))
             ) : (
               <div className="text-xs text-app-muted text-center py-2">
-                {trackedCount > 0 ? 'No crossings yet' : 'Click a leg to track'}
+                {trackedCount > 0 ? 'No crossings yet' : 'Loading...'}
               </div>
             )}
           </div>

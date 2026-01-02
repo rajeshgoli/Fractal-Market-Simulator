@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2026-01-02
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(none)
+1. **#433** — Auto-track most relevant leg by default (auto-select top-ranked leg on load, single selection model, updated crossings UI)
 
 ---
 
