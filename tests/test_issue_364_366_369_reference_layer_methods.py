@@ -383,35 +383,54 @@ class TestNormalizeRange:
         ref_layer = ReferenceLayer()
         assert ref_layer._normalize_range(10.0) == 0.5
 
-    def test_max_range(self):
-        """Range equal to max should return 1.0."""
+    def test_max_range_normalization(self):
+        """Range at max (median × 25) should return 1.0."""
         ref_layer = ReferenceLayer()
-        ref_layer._range_distribution = [Decimal("5"), Decimal("10"), Decimal("20")]
+        # Add ranges to establish a median around 10
+        for i, r in enumerate([5.0, 10.0, 15.0, 20.0, 25.0]):
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", r, 1000.0 + i)
 
-        assert ref_layer._normalize_range(20.0) == 1.0
+        # median is around 15, so max = 15 * 25 = 375
+        median = ref_layer._bin_distribution.median
+        max_range = median * 25
 
-    def test_half_max_range(self):
-        """Range equal to half max should return 0.5."""
+        assert ref_layer._normalize_range(max_range) == 1.0
+
+    def test_partial_range_normalization(self):
+        """Range proportional to max (median × 25)."""
         ref_layer = ReferenceLayer()
-        ref_layer._range_distribution = [Decimal("5"), Decimal("10"), Decimal("20")]
+        # Add ranges to establish a median around 10
+        for i, r in enumerate([8.0, 10.0, 12.0]):
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", r, 1000.0 + i)
 
-        assert ref_layer._normalize_range(10.0) == 0.5
+        # median is 10, so max = 10 * 25 = 250
+        median = ref_layer._bin_distribution.median
+        # Range = half of max should give 0.5
+        half_max = median * 12.5
+        assert ref_layer._normalize_range(half_max) == pytest.approx(0.5, abs=0.01)
 
     def test_above_max_capped(self):
-        """Range above max should be capped at 1.0."""
+        """Range above max (median × 25) should be capped at 1.0."""
         ref_layer = ReferenceLayer()
-        ref_layer._range_distribution = [Decimal("5"), Decimal("10"), Decimal("20")]
+        for i, r in enumerate([5.0, 10.0, 15.0]):
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", r, 1000.0 + i)
 
-        assert ref_layer._normalize_range(30.0) == 1.0
+        # median is 10, max = 250, so 500 is above max
+        assert ref_layer._normalize_range(500.0) == 1.0
 
 
 class TestComputeSalience:
-    """Tests for _compute_salience() method (#369)."""
+    """Tests for _compute_salience() method (#369, #439)."""
+
+    def _populate_distribution(self, ref_layer: ReferenceLayer, count: int = 5):
+        """Helper to populate bin distribution."""
+        for i in range(count):
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", 10.0, 1000.0 + i)
 
     def test_unified_weighting(self):
         """Salience uses unified weights (no scale-dependent weights)."""
         ref_layer = ReferenceLayer()
-        ref_layer._range_distribution = [Decimal("10")]  # Max = 10
+        self._populate_distribution(ref_layer)
 
         leg = make_leg(origin_index=0)
 
@@ -424,7 +443,7 @@ class TestComputeSalience:
     def test_missing_impulse_handling(self):
         """Missing impulse should renormalize remaining weights."""
         ref_layer = ReferenceLayer()
-        ref_layer._range_distribution = [Decimal("10")]
+        self._populate_distribution(ref_layer)
 
         # Leg without impulsiveness
         leg = make_leg(impulsiveness=None, origin_index=0)
@@ -437,7 +456,7 @@ class TestComputeSalience:
     def test_with_impulsiveness(self):
         """Impulse score should be included when available."""
         ref_layer = ReferenceLayer()
-        ref_layer._range_distribution = [Decimal("10")]
+        self._populate_distribution(ref_layer)
 
         # Leg with impulsiveness = 80 (80th percentile)
         leg = make_leg(impulsiveness=80.0, origin_index=0)
@@ -455,7 +474,7 @@ class TestComputeSalience:
     def test_age_decay_function(self):
         """Recency score should decay with age."""
         ref_layer = ReferenceLayer()
-        ref_layer._range_distribution = [Decimal("10")]
+        self._populate_distribution(ref_layer)
 
         # Same leg at different "ages"
         leg = make_leg(origin_index=0)
@@ -469,11 +488,9 @@ class TestComputeSalience:
     def test_range_score_impact(self):
         """Larger range should increase salience."""
         ref_layer = ReferenceLayer()
-        ref_layer._range_distribution = [
-            Decimal("5"),
-            Decimal("10"),
-            Decimal("20"),
-        ]
+        # Add varied ranges to establish meaningful normalization
+        for i, r in enumerate([5.0, 10.0, 20.0]):
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", r, 1000.0 + i)
 
         small_leg = make_leg(origin_price=105, pivot_price=100, origin_index=0)  # range = 5
         large_leg = make_leg(origin_price=120, pivot_price=100, origin_index=0)  # range = 20
@@ -516,7 +533,7 @@ class TestReferenceLayerIntegration:
     def test_salience_computed_without_scale(self):
         """Salience computation uses unified weights (no scale param)."""
         ref_layer = ReferenceLayer()
-        ref_layer._range_distribution = [Decimal("10")]
+        ref_layer._bin_distribution.add_leg("leg_0", 10.0, 1000.0)
 
         leg = make_leg(origin_index=0, impulsiveness=50.0)
 

@@ -3,7 +3,7 @@ Tests for issue #397: Warmup count resets when switching views.
 
 The bug was that switching from Levels at Play to DAG view triggered
 a detection config sync, which created a new ReferenceLayer and reset
-the _range_distribution (warmup progress).
+the bin distribution (warmup progress).
 
 The fix adds:
 1. copy_state_from() method to preserve state across config updates
@@ -45,15 +45,17 @@ class MockLeg:
 class TestCopyStateFrom:
     """Tests for ReferenceLayer.copy_state_from() method."""
 
-    def test_copy_state_from_preserves_range_distribution(self):
-        """Range distribution should be copied to new instance."""
+    def test_copy_state_from_preserves_bin_distribution(self):
+        """Bin distribution should be copied to new instance."""
         old_layer = ReferenceLayer()
-        old_layer._range_distribution = [Decimal("10"), Decimal("20"), Decimal("30")]
+        old_layer._bin_distribution.add_leg("leg_1", 10.0, 1000.0)
+        old_layer._bin_distribution.add_leg("leg_2", 20.0, 1001.0)
+        old_layer._bin_distribution.add_leg("leg_3", 30.0, 1002.0)
 
         new_layer = ReferenceLayer()
         new_layer.copy_state_from(old_layer)
 
-        assert new_layer._range_distribution == [Decimal("10"), Decimal("20"), Decimal("30")]
+        assert new_layer._bin_distribution.total_count == 3
 
     def test_copy_state_from_preserves_formed_refs(self):
         """Formed refs set should be copied to new instance."""
@@ -88,7 +90,8 @@ class TestCopyStateFrom:
     def test_copy_state_from_creates_independent_copies(self):
         """Copied state should be independent (mutations don't affect original)."""
         old_layer = ReferenceLayer()
-        old_layer._range_distribution = [Decimal("10"), Decimal("20")]
+        old_layer._bin_distribution.add_leg("leg_1", 10.0, 1000.0)
+        old_layer._bin_distribution.add_leg("leg_2", 20.0, 1001.0)
         old_layer._formed_refs = {"leg_1"}
         old_layer._seen_leg_ids = {"id_1"}
 
@@ -96,12 +99,12 @@ class TestCopyStateFrom:
         new_layer.copy_state_from(old_layer)
 
         # Mutate new layer
-        new_layer._range_distribution.append(Decimal("30"))
+        new_layer._bin_distribution.add_leg("leg_3", 30.0, 1002.0)
         new_layer._formed_refs.add("leg_2")
         new_layer._seen_leg_ids.add("id_2")
 
         # Original should be unchanged
-        assert old_layer._range_distribution == [Decimal("10"), Decimal("20")]
+        assert old_layer._bin_distribution.total_count == 2
         assert old_layer._formed_refs == {"leg_1"}
         assert old_layer._seen_leg_ids == {"id_1"}
 
@@ -112,7 +115,7 @@ class TestCopyStateFrom:
 
         # Simulate having collected 43 swings
         for i in range(43):
-            old_layer._range_distribution.append(Decimal(str(10 + i)))
+            old_layer._bin_distribution.add_leg(f"leg_{i}", 10.0 + i, 1000.0 + i)
             old_layer._seen_leg_ids.add(f"leg_{i}")
 
         assert old_layer.cold_start_progress == (43, 50)
@@ -134,7 +137,7 @@ class TestCopyStateFrom:
         # Should not raise
         new_layer.copy_state_from(old_layer)
 
-        assert new_layer._range_distribution == []
+        assert new_layer._bin_distribution.total_count == 0
         assert new_layer._formed_refs == set()
         assert new_layer._tracked_for_crossing == set()
         assert new_layer._seen_leg_ids == set()
@@ -149,7 +152,7 @@ class TestWarmupStatePreservation:
 
         # Simulate having collected 55 swings (past the 50 threshold)
         for i in range(55):
-            old_layer._range_distribution.append(Decimal(str(10 + i)))
+            old_layer._bin_distribution.add_leg(f"leg_{i}", 10.0 + i, 1000.0 + i)
             old_layer._seen_leg_ids.add(f"leg_{i}")
             old_layer._formed_refs.add(f"leg_{i}")
 
@@ -170,7 +173,7 @@ class TestTrackFormation:
     """Tests for ReferenceLayer.track_formation() method."""
 
     def test_track_formation_adds_formed_legs_to_distribution(self):
-        """track_formation should add formed legs to range distribution."""
+        """track_formation should add formed legs to bin distribution."""
         ref_layer = ReferenceLayer()
 
         # Create a bear leg (high to low) - price at 38.2% retracement = formed
@@ -194,15 +197,15 @@ class TestTrackFormation:
             close=104.0,
         )
 
-        assert len(ref_layer._range_distribution) == 0
+        assert ref_layer._bin_distribution.total_count == 0
         assert "leg_1" not in ref_layer._formed_refs
 
         ref_layer.track_formation([leg], bar)
 
         # Leg should be formed and added to distribution
         assert "leg_1" in ref_layer._formed_refs
-        assert len(ref_layer._range_distribution) == 1
-        assert ref_layer._range_distribution[0] == Decimal("10")
+        assert ref_layer._bin_distribution.total_count == 1
+        assert ref_layer._bin_distribution.leg_ranges["leg_1"] == 10.0
 
     def test_track_formation_ignores_unformed_legs(self):
         """track_formation should not add legs that haven't formed yet."""
@@ -231,7 +234,7 @@ class TestTrackFormation:
 
         # Leg should NOT be formed
         assert "leg_1" not in ref_layer._formed_refs
-        assert len(ref_layer._range_distribution) == 0
+        assert ref_layer._bin_distribution.total_count == 0
 
     def test_track_formation_doesnt_duplicate_legs(self):
         """track_formation should not add same leg twice to distribution."""
@@ -259,7 +262,7 @@ class TestTrackFormation:
         ref_layer.track_formation([leg], bar)
 
         # Should only be added once
-        assert len(ref_layer._range_distribution) == 1
+        assert ref_layer._bin_distribution.total_count == 1
 
     def test_track_formation_tracks_multiple_legs(self):
         """track_formation should track multiple legs in one call."""
@@ -300,4 +303,4 @@ class TestTrackFormation:
 
         assert "leg_1" in ref_layer._formed_refs
         assert "leg_2" in ref_layer._formed_refs
-        assert len(ref_layer._range_distribution) == 2
+        assert ref_layer._bin_distribution.total_count == 2

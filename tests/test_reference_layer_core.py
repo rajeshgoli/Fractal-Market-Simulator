@@ -3,8 +3,9 @@ Comprehensive test suite for Reference Layer core functionality.
 
 Covers:
 - #371: Cold start handling (is_cold_start, cold_start_progress)
-- #372: Range distribution tracking (formed legs only)
+- #372: Bin distribution tracking (formed legs only)
 - #373: Integration tests for update() and end-to-end workflows
+- #439: Removal of stale _range_distribution, use bin distribution only
 
 This suite complements existing tests in:
 - test_reference_config.py (ReferenceConfig)
@@ -85,9 +86,9 @@ class TestColdStartProperty:
 
         # Add 49 swings (just under threshold)
         for i in range(49):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
-        assert len(ref_layer._range_distribution) == 49
+        assert ref_layer._bin_distribution.total_count == 49
         assert ref_layer.is_cold_start is True
 
     def test_cold_start_ends_at_50_swings(self):
@@ -96,9 +97,9 @@ class TestColdStartProperty:
 
         # Add exactly 50 swings
         for i in range(50):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
-        assert len(ref_layer._range_distribution) == 50
+        assert ref_layer._bin_distribution.total_count == 50
         assert ref_layer.is_cold_start is False
 
     def test_cold_start_custom_threshold(self):
@@ -110,12 +111,12 @@ class TestColdStartProperty:
 
         # Add 99 swings
         for i in range(99):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
         assert ref_layer.is_cold_start is True
 
         # Add one more
-        ref_layer._add_to_range_distribution(Decimal("100"))
+        ref_layer._bin_distribution.add_leg("leg_99", 100.0, 1099.0)
         assert ref_layer.is_cold_start is False
 
 
@@ -135,7 +136,7 @@ class TestColdStartProgress:
         ref_layer = ReferenceLayer()
 
         for i in range(25):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
         current, required = ref_layer.cold_start_progress
         assert current == 25
@@ -146,7 +147,7 @@ class TestColdStartProgress:
         ref_layer = ReferenceLayer()
 
         for i in range(50):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
         current, required = ref_layer.cold_start_progress
         assert current == 50
@@ -157,7 +158,7 @@ class TestColdStartProgress:
         ref_layer = ReferenceLayer()
 
         for i in range(75):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
         current, required = ref_layer.cold_start_progress
         assert current == 75
@@ -196,7 +197,7 @@ class TestReferenceStateWarmupInfo:
 
         # Pre-populate distribution to exit cold start
         for i in range(50):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
         leg = make_leg()
         bar = make_bar(close=105)
@@ -212,7 +213,7 @@ class TestReferenceStateWarmupInfo:
 
         # Add 30 legs to distribution manually
         for i in range(30):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
         leg = make_leg()
         bar = make_bar(close=105)
@@ -225,7 +226,7 @@ class TestReferenceStateWarmupInfo:
 
 
 class TestRangeDistributionFormedLegsOnly:
-    """Tests for range distribution tracking formed legs only (#372).
+    """Tests for bin distribution tracking formed legs only (#372, #439).
 
     Formation is now determined by price position, not a flag.
     For bear leg (origin 110, pivot 100, range 10):
@@ -249,7 +250,7 @@ class TestRangeDistributionFormedLegsOnly:
         bar = make_bar(close=101)
         ref_layer.update(unformed_legs, bar)
 
-        assert len(ref_layer._range_distribution) == 0
+        assert ref_layer._bin_distribution.total_count == 0
 
     def test_formed_legs_added_to_distribution(self):
         """Legs with price at/above formation threshold should be added to distribution."""
@@ -264,10 +265,7 @@ class TestRangeDistributionFormedLegsOnly:
         bar = make_bar(close=105)
         ref_layer.update(formed_legs, bar)
 
-        assert len(ref_layer._range_distribution) == 2
-        # Ranges should be 5 and 10
-        assert Decimal("5") in ref_layer._range_distribution
-        assert Decimal("10") in ref_layer._range_distribution
+        assert ref_layer._bin_distribution.total_count == 2
 
     def test_mixed_formed_unformed(self):
         """Only formed legs should be added from a mixed set based on price position."""
@@ -284,10 +282,7 @@ class TestRangeDistributionFormedLegsOnly:
         ref_layer.update(mixed_legs, bar)
 
         # First (range=5) and third (range=15) legs should be formed
-        assert len(ref_layer._range_distribution) == 2
-        assert Decimal("5") in ref_layer._range_distribution
-        assert Decimal("15") in ref_layer._range_distribution
-        assert Decimal("20") not in ref_layer._range_distribution
+        assert ref_layer._bin_distribution.total_count == 2
 
     def test_no_duplicate_entries(self):
         """Same leg should not be added twice on subsequent updates."""
@@ -299,29 +294,11 @@ class TestRangeDistributionFormedLegsOnly:
 
         # First update
         ref_layer.update([leg], bar)
-        assert len(ref_layer._range_distribution) == 1
+        assert ref_layer._bin_distribution.total_count == 1
 
         # Second update with same leg
         ref_layer.update([leg], bar)
-        assert len(ref_layer._range_distribution) == 1
-
-    def test_distribution_stays_sorted(self):
-        """Distribution should remain sorted after multiple updates."""
-        ref_layer = ReferenceLayer()
-
-        legs = [
-            make_leg(origin_price=150, pivot_price=100, origin_index=1),  # range=50
-            make_leg(origin_price=110, pivot_price=100, origin_index=2),  # range=10
-            make_leg(origin_price=130, pivot_price=100, origin_index=3),  # range=30
-        ]
-
-        # close=120 forms all legs (all have location > 0.382)
-        bar = make_bar(close=120)
-        ref_layer.update(legs, bar)
-
-        # Should be sorted
-        expected = [Decimal("10"), Decimal("30"), Decimal("50")]
-        assert ref_layer._range_distribution == expected
+        assert ref_layer._bin_distribution.total_count == 1
 
 
 class TestUpdateMethodIntegration:
@@ -330,7 +307,7 @@ class TestUpdateMethodIntegration:
     def _populate_distribution(self, ref_layer: ReferenceLayer, count: int = 50):
         """Pre-populate distribution to exit cold start."""
         for i in range(count):
-            ref_layer._add_to_range_distribution(Decimal(str((i + 1) * 10)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float((i + 1) * 10), 1000.0 + i)
 
     def test_update_returns_empty_during_cold_start(self):
         """update() should return empty references during cold start."""
@@ -437,7 +414,7 @@ class TestUpdateMethodIntegration:
             assert state.direction_imbalance == 'bull'
 
     def test_update_populates_groupings(self):
-        """update() should populate by_scale, by_depth, by_direction groupings."""
+        """update() should populate by_bin, by_depth, by_direction groupings."""
         ref_layer = ReferenceLayer()
         self._populate_distribution(ref_layer)
 
@@ -451,8 +428,8 @@ class TestUpdateMethodIntegration:
 
         if len(state.references) > 0:
             ref = state.references[0]
-            # Should be in by_scale
-            assert ref in state.by_scale.get(ref.scale, [])
+            # Should be in by_bin
+            assert ref in state.by_bin.get(ref.bin, [])
             # Should be in by_depth
             assert ref in state.by_depth.get(ref.depth, [])
             # Should be in by_direction
@@ -486,7 +463,7 @@ class TestUpdateMethodBreaching:
     def _populate_distribution(self, ref_layer: ReferenceLayer, count: int = 50):
         """Pre-populate distribution to exit cold start."""
         for i in range(count):
-            ref_layer._add_to_range_distribution(Decimal(str((i + 1) * 10)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float((i + 1) * 10), 1000.0 + i)
 
     def test_pivot_breach_removes_reference(self):
         """Leg with pivot breach should not appear in references."""
@@ -529,32 +506,33 @@ class TestUpdateMethodBreaching:
 class TestScaleClassificationIntegration:
     """Integration tests for scale classification in update()."""
 
-    def test_xl_classification_in_update(self):
-        """Large legs should be classified as XL."""
+    def test_high_bin_classification_in_update(self):
+        """Large legs should be classified with high bin index."""
         ref_layer = ReferenceLayer()
 
         # Add 100 ranges from 1-100
         for i in range(100):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
-        # Large leg (range=100, should be XL)
+        # Large leg (range=100, should have high bin)
         leg = make_leg(direction='bear', origin_price=200, pivot_price=100)
         bar = make_bar(close=104, index=1)
 
         state = ref_layer.update([leg], bar)
 
         if len(state.references) > 0:
-            assert state.references[0].scale == 'XL'
+            # Bin >= 8 for significant range
+            assert state.references[0].bin >= 7
 
-    def test_small_classification_in_update(self):
-        """Small legs should be classified as S."""
+    def test_low_bin_classification_in_update(self):
+        """Small legs should be classified with low bin index."""
         ref_layer = ReferenceLayer()
 
         # Add 100 ranges from 1-100
         for i in range(100):
-            ref_layer._add_to_range_distribution(Decimal(str(i + 1)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float(i + 1), 1000.0 + i)
 
-        # Small leg (range=2, should be S)
+        # Small leg (range=2, should have low bin)
         leg = make_leg(direction='bear', origin_price=102, pivot_price=100)
 
         # Form at location 0.5 (price 101)
@@ -563,7 +541,8 @@ class TestScaleClassificationIntegration:
         state = ref_layer.update([leg], bar)
 
         if len(state.references) > 0:
-            assert state.references[0].scale == 'S'
+            # Bin should be low for small range
+            assert state.references[0].bin < 5
 
 
 class TestEndToEndWorkflow:
@@ -600,7 +579,7 @@ class TestEndToEndWorkflow:
 
         # Pre-populate to exit cold start
         for i in range(50):
-            ref_layer._add_to_range_distribution(Decimal(str((i + 1) * 10)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float((i + 1) * 10), 1000.0 + i)
 
         # Create multiple legs
         legs = [
@@ -626,7 +605,7 @@ class TestEndToEndWorkflow:
 
         # Pre-populate
         for i in range(50):
-            ref_layer._add_to_range_distribution(Decimal(str((i + 1) * 10)))
+            ref_layer._bin_distribution.add_leg(f"leg_{i}", float((i + 1) * 10), 1000.0 + i)
 
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
@@ -650,7 +629,7 @@ class TestReferenceLayerReset:
         """New ReferenceLayer should have empty internal state."""
         ref_layer = ReferenceLayer()
 
-        assert len(ref_layer._range_distribution) == 0
+        assert ref_layer._bin_distribution.total_count == 0
         assert len(ref_layer._formed_refs) == 0
         assert len(ref_layer._seen_leg_ids) == 0
         assert ref_layer.is_cold_start is True
@@ -670,5 +649,5 @@ class TestReferenceLayerReset:
             ref_layer.update([leg], bar)
 
         # Should have accumulated 10 legs in distribution
-        assert len(ref_layer._range_distribution) == 10
+        assert ref_layer._bin_distribution.total_count == 10
         assert len(ref_layer._seen_leg_ids) == 10

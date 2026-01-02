@@ -119,13 +119,18 @@ class TestSalienceCalculationWithConfig:
         leg.impulsiveness = impulsiveness
         return leg
 
+    def _populate_distribution(self, layer: ReferenceLayer):
+        """Helper to populate bin distribution for normalization."""
+        for i, r in enumerate([5.0, 10.0, 15.0, 20.0]):
+            layer._bin_distribution.add_leg(f"range_leg_{i}", r, 1000.0 + i)
+
     def test_salience_with_default_config(self):
         """Salience calculation should use default decay values."""
         config = ReferenceConfig.default()
         layer = ReferenceLayer(reference_config=config)
 
         # Add some range data for normalization
-        layer._range_distribution = [5.0, 10.0, 15.0, 20.0]
+        self._populate_distribution(layer)
 
         # Test with leg at index 0, depth 0, current_bar at 1000
         leg = self._create_mock_leg(origin_index=0, range_val=10.0, depth=0)
@@ -145,14 +150,14 @@ class TestSalienceCalculationWithConfig:
             recency_decay_bars=500
         )
         fast_layer = ReferenceLayer(reference_config=fast_config)
-        fast_layer._range_distribution = [5.0, 10.0, 15.0, 20.0]
+        self._populate_distribution(fast_layer)
 
         # Slow decay config
         slow_config = ReferenceConfig.default().with_salience_weights(
             recency_decay_bars=2000
         )
         slow_layer = ReferenceLayer(reference_config=slow_config)
-        slow_layer._range_distribution = [5.0, 10.0, 15.0, 20.0]
+        self._populate_distribution(slow_layer)
 
         # Same leg for both
         leg = self._create_mock_leg(origin_index=0, range_val=10.0, depth=0)
@@ -173,14 +178,14 @@ class TestSalienceCalculationWithConfig:
             depth_decay_factor=1.0
         )
         fast_layer = ReferenceLayer(reference_config=fast_config)
-        fast_layer._range_distribution = [5.0, 10.0, 15.0, 20.0]
+        self._populate_distribution(fast_layer)
 
         # Slow decay config
         slow_config = ReferenceConfig.default().with_salience_weights(
             depth_decay_factor=0.25
         )
         slow_layer = ReferenceLayer(reference_config=slow_config)
-        slow_layer._range_distribution = [5.0, 10.0, 15.0, 20.0]
+        self._populate_distribution(slow_layer)
 
         # Deep leg (depth=4)
         leg = self._create_mock_leg(origin_index=0, range_val=10.0, depth=4)

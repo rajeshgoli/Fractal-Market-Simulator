@@ -21,7 +21,6 @@ Design: Option A (post-filter DAG output) per DAG spec.
 See Docs/Reference/valid_swings.md for the canonical rules.
 """
 
-import bisect
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -413,9 +412,6 @@ class ReferenceLayer:
         """
         self.config = config or DetectionConfig.default()
         self.reference_config = reference_config or ReferenceConfig.default()
-        # Range distribution for scale classification (sorted for O(log n) percentile)
-        # All-time distribution; DAG pruning handles recency per spec
-        self._range_distribution: List[Decimal] = []
         # Median-normalized bin distribution (#434) for O(1) scale classification
         # Uses rolling window with periodic median recomputation
         self._bin_distribution: RollingBinDistribution = RollingBinDistribution(
@@ -449,7 +445,6 @@ class ReferenceLayer:
         Args:
             other: The ReferenceLayer to copy state from.
         """
-        self._range_distribution = other._range_distribution.copy()
         # Copy bin distribution state (#434)
         self._bin_distribution = RollingBinDistribution.from_dict(
             other._bin_distribution.to_dict()
@@ -501,7 +496,7 @@ class ReferenceLayer:
         Returns:
             True if distribution has fewer than min_swings_for_classification legs.
         """
-        return len(self._range_distribution) < self.reference_config.min_swings_for_classification
+        return self._bin_distribution.total_count < self.reference_config.min_swings_for_classification
 
     @property
     def cold_start_progress(self) -> Tuple[int, int]:
@@ -513,34 +508,7 @@ class ReferenceLayer:
         Returns:
             Tuple of (current swings in distribution, required minimum).
         """
-        return (len(self._range_distribution), self.reference_config.min_swings_for_classification)
-
-    def _compute_percentile(self, leg_range: Decimal) -> float:
-        """
-        Compute percentile rank of leg_range in the range distribution.
-
-        Uses bisect for O(log n) lookup in the sorted distribution.
-        The percentile indicates what fraction of historical ranges are
-        smaller than the given range.
-
-        Args:
-            leg_range: Absolute range of the leg to classify.
-
-        Returns:
-            Percentile value from 0 to 100. Returns 50.0 if distribution
-            is empty (default to middle).
-
-        Example:
-            >>> ref_layer._range_distribution = [Decimal("5"), Decimal("10"), Decimal("15"), Decimal("20")]
-            >>> ref_layer._compute_percentile(Decimal("12"))  # 2 of 4 are below
-            50.0
-        """
-        if not self._range_distribution:
-            return 50.0  # Default to middle
-
-        # Use bisect_left for count of values strictly less than leg_range
-        count_below = bisect.bisect_left(self._range_distribution, leg_range)
-        return (count_below / len(self._range_distribution)) * 100
+        return (self._bin_distribution.total_count, self.reference_config.min_swings_for_classification)
 
     def _get_bin_index(self, leg_range: Decimal) -> int:
         """
@@ -565,31 +533,6 @@ class ReferenceLayer:
             9
         """
         return self._bin_distribution.get_bin_index(float(leg_range))
-
-    def _add_to_range_distribution(
-        self,
-        leg_range: Decimal,
-        leg_id: str = "",
-        timestamp: float = 0.0,
-    ) -> None:
-        """
-        Add a leg range to the distribution.
-
-        Uses both:
-        - Legacy sorted list for cold start checking
-        - Bin distribution (#434, #436) for median-normalized classification
-
-        Args:
-            leg_range: Absolute range of the leg to add.
-            leg_id: Unique leg identifier (for bin distribution tracking).
-            timestamp: Leg creation timestamp (for bin distribution window).
-        """
-        # Sorted list (for cold start progress tracking)
-        bisect.insort(self._range_distribution, leg_range)
-
-        # Bin distribution (#434, #436)
-        if leg_id:
-            self._bin_distribution.add_leg(leg_id, float(leg_range), timestamp)
 
     def _update_bin_distribution(self, leg_id: str, new_range: float) -> None:
         """
@@ -689,10 +632,10 @@ class ReferenceLayer:
         # This means location must be >= threshold
         if location >= threshold:
             self._formed_refs.add(leg.leg_id)
-            # Add to range distribution on first formation (#372)
+            # Add to bin distribution on first formation (#372, #439)
             if leg.leg_id not in self._seen_leg_ids:
                 self._seen_leg_ids.add(leg.leg_id)
-                self._add_to_range_distribution(leg.range, leg.leg_id, timestamp)
+                self._bin_distribution.add_leg(leg.leg_id, float(leg.range), timestamp)
             return True
 
         return False
@@ -757,7 +700,11 @@ class ReferenceLayer:
 
     def _normalize_range(self, leg_range: float) -> float:
         """
-        Normalize range to 0-1 based on distribution.
+        Normalize range to 0-1 based on bin distribution median (#439).
+
+        Uses median * 25 as the max range (bin 10 edge), which represents
+        exceptional ranges. This ensures consistent normalization that tracks
+        with the current distribution state.
 
         Args:
             leg_range: Absolute range of the leg
@@ -765,9 +712,9 @@ class ReferenceLayer:
         Returns:
             Normalized score from 0 to 1. Returns 0.5 if distribution is empty.
         """
-        if not self._range_distribution:
+        if self._bin_distribution.total_count == 0:
             return 0.5
-        max_range = float(max(self._range_distribution))
+        max_range = self._bin_distribution.median * 25  # Bin 10 edge
         if max_range == 0:
             return 0.5
         return min(leg_range / max_range, 1.0)
@@ -798,8 +745,8 @@ class ReferenceLayer:
             # Standalone mode: use range × origin_counter_trend_range
             counter_range = leg.origin_counter_trend_range or 0.0
             raw_score = float(leg.range) * counter_range
-            # Normalize by max observed (use range distribution as proxy)
-            max_range = float(max(self._range_distribution)) if self._range_distribution else 1.0
+            # Normalize by max range (median × 25, bin 10 edge) (#439)
+            max_range = self._bin_distribution.median * 25 if self._bin_distribution.total_count > 0 else 1.0
             # Normalize: divide by max_range² to keep in reasonable 0-1 range
             if max_range > 0:
                 return min(raw_score / (max_range * max_range), 1.0)

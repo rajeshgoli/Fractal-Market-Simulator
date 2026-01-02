@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2026-01-02
 
@@ -10,6 +10,7 @@
 
 1. **#437** — Replace track_formation() with update(build_response=False) in bulk advances for continuous breach tracking without performance regression
 2. **#438** — Add configurable decay factors (recency_decay_bars, depth_decay_factor) to ReferenceConfig for salience calculation; remove dead is_cold_start from RollingBinDistribution
+3. **#439** — Remove stale _range_distribution and related methods from ReferenceLayer in favor of bin distribution; update cold start checks and normalization to use _bin_distribution exclusively
 
 ---
 

@@ -137,11 +137,11 @@ class TestUpdateColdStart:
         assert len(state.references) > 0
 
 
-class TestUpdateRangeDistribution:
-    """Tests for range distribution updates."""
+class TestUpdateBinDistribution:
+    """Tests for bin distribution updates (#439)."""
 
-    def test_range_distribution_updated_with_new_legs(self):
-        """Range distribution should be updated with new legs."""
+    def test_bin_distribution_updated_with_new_legs(self):
+        """Bin distribution should be updated with new legs."""
         config = ReferenceConfig(min_swings_for_classification=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
@@ -154,16 +154,16 @@ class TestUpdateRangeDistribution:
         bar = make_bar(close=105.0)
         ref_layer.update(legs1, bar)
 
-        assert len(ref_layer._range_distribution) == 2
+        assert ref_layer._bin_distribution.total_count == 2
 
         # Second update with same legs - should not add duplicates
         ref_layer.update(legs1, bar)
-        assert len(ref_layer._range_distribution) == 2
+        assert ref_layer._bin_distribution.total_count == 2
 
         # Third update with one new leg
         legs2 = legs1 + [make_leg(origin_price=110, pivot_price=100, origin_index=75)]
         ref_layer.update(legs2, bar)
-        assert len(ref_layer._range_distribution) == 3
+        assert ref_layer._bin_distribution.total_count == 3
 
 
 class TestUpdateFormation:

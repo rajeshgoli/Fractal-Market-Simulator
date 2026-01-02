@@ -104,14 +104,14 @@ class TestFilteredLegDataclass:
 
 def _populate_distribution(ref_layer: ReferenceLayer, count: int = 55):
     """
-    Helper to populate the range distribution to exit cold start.
+    Helper to populate the bin distribution to exit cold start.
 
     Creates dummy legs and directly adds them to the distribution to ensure
     we have enough formed legs for bin classification.
     """
     for i in range(count):
-        # Add ranges directly to the distribution
-        ref_layer._add_to_range_distribution(Decimal(str(10 + i)))
+        # Add ranges directly to the bin distribution
+        ref_layer._bin_distribution.add_leg(f"dummy_{i}", float(10 + i), 1000.0 + i)
         # Also track as seen
         ref_layer._seen_leg_ids.add(f"dummy_{i}")
 
@@ -207,7 +207,7 @@ class TestGetAllWithStatus:
 
         # Populate with small ranges (2-10) so our leg ends up with small bin
         for i in range(55):
-            ref_layer._add_to_range_distribution(Decimal(str(2 + i % 8)))
+            ref_layer._bin_distribution.add_leg(f"dummy_{i}", float(2 + i % 8), 1000.0 + i)
             ref_layer._seen_leg_ids.add(f"dummy_{i}")
 
         # Small bear leg: origin=102, pivot=100 (range=2)

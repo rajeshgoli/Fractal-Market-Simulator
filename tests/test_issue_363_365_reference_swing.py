@@ -1,5 +1,5 @@
 """
-Tests for ReferenceSwing dataclass (#363) and bin classification (#436).
+Tests for ReferenceSwing dataclass (#363) and bin classification (#436, #439).
 
 Issue #363: ReferenceSwing dataclass that wraps a DAG Leg with reference-layer
 specific annotations (bin, depth, location, salience_score).
@@ -9,6 +9,9 @@ Issue #436: Bin classification using median-normalized bins:
 - Bin 8: 5-10× median (significant)
 - Bin 9: 10-25× median (large)
 - Bin 10: 25×+ median (exceptional)
+
+Issue #439: Removed stale _range_distribution, _compute_percentile, and
+_add_to_range_distribution in favor of _bin_distribution.
 """
 
 import pytest
@@ -186,18 +189,18 @@ class TestReferenceSwingDataclass:
 
 
 class TestBinClassification:
-    """Tests for _get_bin_index method (#436).
+    """Tests for _get_bin_index method (#436, #439).
 
     Bin classification uses median-normalized bins from RollingBinDistribution.
     """
 
     def _create_layer_with_ranges(self, ranges: list) -> ReferenceLayer:
-        """Create a ReferenceLayer with a pre-populated range distribution."""
+        """Create a ReferenceLayer with a pre-populated bin distribution."""
         config = ReferenceConfig.default()
         layer = ReferenceLayer(reference_config=config)
-        # Populate the distribution with leg IDs
+        # Populate the bin distribution directly
         for i, r in enumerate(ranges):
-            layer._add_to_range_distribution(Decimal(str(r)), leg_id=f"leg_{i}")
+            layer._bin_distribution.add_leg(f"leg_{i}", float(r), 1000.0 + i)
         return layer
 
     def test_bin_index_with_median_normalization(self):
@@ -231,67 +234,59 @@ class TestBinClassification:
         assert bin_idx >= 8
 
 
-class TestComputePercentile:
-    """Tests for _compute_percentile method."""
+class TestBinDistributionPercentile:
+    """Tests for bin distribution percentile estimation (#439).
+
+    RollingBinDistribution provides get_percentile() for approximate percentile
+    calculation based on bin counts.
+    """
 
     def test_percentile_empty_distribution(self):
         """Empty distribution returns 50% (middle)."""
         layer = ReferenceLayer()
-        assert layer._compute_percentile(Decimal("100")) == 50.0
+        percentile = layer._bin_distribution.get_percentile(100.0)
+        assert percentile == 50.0
 
     def test_percentile_basic(self):
-        """Basic percentile calculation."""
+        """Basic percentile calculation through bins."""
         layer = ReferenceLayer()
-        for i, r in enumerate([Decimal("10"), Decimal("20"), Decimal("30"), Decimal("40")]):
-            layer._add_to_range_distribution(r, leg_id=f"leg_{i}")
+        for i, r in enumerate([10.0, 20.0, 30.0, 40.0]):
+            layer._bin_distribution.add_leg(f"leg_{i}", r, 1000.0 + i)
 
-        # 0 values below 10
-        assert layer._compute_percentile(Decimal("10")) == 0.0
-        # 1 value below 20
-        assert layer._compute_percentile(Decimal("20")) == 25.0
-        # 2 values below 30
-        assert layer._compute_percentile(Decimal("30")) == 50.0
-        # 3 values below 40
-        assert layer._compute_percentile(Decimal("40")) == 75.0
-        # 4 values below 100
-        assert layer._compute_percentile(Decimal("100")) == 100.0
+        # After adding values, percentile should work
+        # Note: bin-based percentile is approximate, not exact
+        percentile_small = layer._bin_distribution.get_percentile(5.0)
+        percentile_large = layer._bin_distribution.get_percentile(100.0)
 
-    def test_percentile_value_not_in_distribution(self):
-        """Percentile for value between existing entries."""
-        layer = ReferenceLayer()
-        for i, r in enumerate([Decimal("10"), Decimal("30"), Decimal("50")]):
-            layer._add_to_range_distribution(r, leg_id=f"leg_{i}")
-
-        # 20 is between 10 and 30: 1 value below it
-        assert layer._compute_percentile(Decimal("20")) == pytest.approx(33.33, rel=0.01)
-        # 40 is between 30 and 50: 2 values below it
-        assert layer._compute_percentile(Decimal("40")) == pytest.approx(66.67, rel=0.01)
+        # Small values should have low percentile
+        assert percentile_small < 50
+        # Large values should have high percentile
+        assert percentile_large > 50
 
 
-class TestAddToRangeDistribution:
-    """Tests for _add_to_range_distribution method."""
+class TestBinDistributionAddLeg:
+    """Tests for bin distribution add_leg method (#439)."""
 
-    def test_maintains_sorted_order(self):
-        """Distribution should remain sorted after insertions."""
+    def test_adds_leg_to_distribution(self):
+        """add_leg should add a leg to the bin distribution."""
         layer = ReferenceLayer()
 
-        # Add in random order
-        for i, r in enumerate([Decimal("50"), Decimal("10"), Decimal("90"), Decimal("30"), Decimal("70")]):
-            layer._add_to_range_distribution(r, leg_id=f"leg_{i}")
+        layer._bin_distribution.add_leg("leg_0", 50.0, 1000.0)
+        layer._bin_distribution.add_leg("leg_1", 10.0, 1001.0)
+        layer._bin_distribution.add_leg("leg_2", 90.0, 1002.0)
 
-        # Should be sorted
-        expected = [Decimal("10"), Decimal("30"), Decimal("50"), Decimal("70"), Decimal("90")]
-        assert layer._range_distribution == expected
+        assert layer._bin_distribution.total_count == 3
 
-    def test_handles_duplicates(self):
-        """Distribution should handle duplicate values."""
+    def test_handles_duplicates_gracefully(self):
+        """Duplicate leg_ids should be ignored."""
         layer = ReferenceLayer()
 
-        for i in range(3):
-            layer._add_to_range_distribution(Decimal("50"), leg_id=f"leg_{i}")
+        layer._bin_distribution.add_leg("leg_0", 50.0, 1000.0)
+        layer._bin_distribution.add_leg("leg_0", 50.0, 1001.0)  # Same ID
+        layer._bin_distribution.add_leg("leg_0", 50.0, 1002.0)  # Same ID
 
-        assert len(layer._range_distribution) == 3
-        assert all(r == Decimal("50") for r in layer._range_distribution)
+        # Should only count as 1 leg
+        assert layer._bin_distribution.total_count == 1
 
 
 class TestSignificantBinThreshold:
