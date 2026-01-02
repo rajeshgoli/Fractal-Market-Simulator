@@ -62,6 +62,7 @@ Docs/
 ├── Comms/      # Inter-role questions: questions.md, archive.md
 ├── Reference/  # Long-lived: user_guide.md, developer_guide.md, interview_notes.md
 ├── Working/    # Active one-off artifacts (proposals, explorations) → Archive when done
+├── Pitch/      # The story: pitch.md, refresh.md
 ├── Prompts/    # Agent prompt templates (reusable)
 └── Archive/    # Historical content by topic
 
@@ -260,6 +261,7 @@ Docs/
 ├── Comms/       # Cross-role questions
 ├── Reference/   # Long-lived docs (north star, user guide, interviews)
 ├── Working/     # Active one-off artifacts → Archive when done
+├── Pitch/       # The story: pitch.md, refresh.md
 ├── Prompts/     # Agent prompt templates (reusable)
 └── Archive/     # Historical content by topic
 ```

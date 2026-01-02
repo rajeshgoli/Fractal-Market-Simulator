@@ -24,10 +24,13 @@ Docs/
 ├── Comms/              # Cross-role communication
 │   ├── questions.md    # Active questions (From, To, Status)
 │   └── archive.md      # Resolved questions
-└── Reference/          # Long-lived documents
-    ├── product_north_star.md
-    ├── user_guide.md
-    └── interview_notes.md
+├── Reference/          # Long-lived documents
+│   ├── product_north_star.md
+│   ├── user_guide.md
+│   └── interview_notes.md
+└── Pitch/              # The story
+    ├── pitch.md        # Three-audience pitch scripts
+    └── refresh.md      # Prompt to refresh pitch
 
 .archive/               # Local only (not in git) - historical content
 ```
