@@ -31,7 +31,6 @@ interface ReferenceConfigPanelProps {
 // 0 = "Off" (least restrictive - every leg is formed)
 // Higher values = more restrictive (need more retracement to form)
 const FORMATION_FIB_VALUES = [0, 0.236, 0.382, 0.5, 0.618];
-const FORMATION_FIB_LABELS = ['Off', '.236', '.382', '.5', '.618'];
 
 // Find nearest value in array
 function findNearestIndex(value: number, values: number[]): number {
