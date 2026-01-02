@@ -14,7 +14,7 @@ import { AttachableItem } from './DAGStatePanel';
 import { getBinBadgeColor } from '../utils/binUtils';
 
 // ============================================================================
-// Reference Config Panel (Issue #424, #429)
+// Reference Config Panel (Issue #424, #429, #444)
 // ============================================================================
 
 export interface ReferenceConfigPanelHandle {
@@ -27,21 +27,27 @@ interface ReferenceConfigPanelProps {
   hideHeader?: boolean;
 }
 
-// Discrete Fib values for formation threshold slider
-const FORMATION_FIB_VALUES = [0.236, 0.382, 0.5, 0.618];
+// Discrete Fib values for formation threshold slider (0, .236, .382, .5, .618, Off)
+// "Off" = Infinity (no formation threshold)
+const FORMATION_FIB_VALUES = [0, 0.236, 0.382, 0.5, 0.618, Infinity];
+const FORMATION_FIB_LABELS = ['0', '.236', '.382', '.5', '.618', 'Off'];
 
-// Find nearest Fib value
-function nearestFib(value: number): number {
-  let nearest = FORMATION_FIB_VALUES[0];
-  let minDiff = Math.abs(value - nearest);
-  for (const fib of FORMATION_FIB_VALUES) {
-    const diff = Math.abs(value - fib);
+// Discrete Fib values for breach tolerance slider (0, .236, .382, .5, .618, 1)
+const BREACH_FIB_VALUES = [0, 0.236, 0.382, 0.5, 0.618, 1];
+const BREACH_FIB_LABELS = ['0', '.236', '.382', '.5', '.618', '1'];
+
+// Find nearest value in array
+function findNearestIndex(value: number, values: number[]): number {
+  let nearestIndex = 0;
+  let minDiff = Math.abs(value - values[0]);
+  for (let i = 1; i < values.length; i++) {
+    const diff = Math.abs(value - values[i]);
     if (diff < minDiff) {
       minDiff = diff;
-      nearest = fib;
+      nearestIndex = i;
     }
   }
-  return nearest;
+  return nearestIndex;
 }
 
 // Tooltip definitions for each parameter
@@ -68,7 +74,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
   const [showTooltip, setShowTooltip] = useState<string | null>(null);
   const hasAppliedRef = React.useRef(false);
 
-  // Track if config has changes from server config (#436, #442: unified weights)
+  // Track if config has changes from server config (#436, #442, #444: unified weights)
   const hasChanges = useMemo(() => {
     return (
       localConfig.range_weight !== config.range_weight ||
@@ -102,15 +108,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     setLocalConfig(prev => ({ ...prev, [key]: value }));
   };
 
-  // Handle weight change (#436: unified weights - no more big_*/small_* split)
-  const handleWeightChange = (weightType: 'range' | 'impulse' | 'recency' | 'depth', value: number) => {
-    const key = `${weightType}_weight` as keyof ReferenceConfig;
-    setLocalConfig(prev => ({
-      ...prev,
-      [key]: value,
-    }));
-  };
-
   const handleApply = async () => {
     setIsUpdating(true);
     try {
@@ -125,20 +122,38 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     setShowTooltip(showTooltip === key ? null : key);
   };
 
-  // Render formation threshold slider with discrete Fib values
-  const renderFormationFibSlider = () => {
-    const value = localConfig.formation_fib_threshold ?? 0.382;
-    const sliderIndex = FORMATION_FIB_VALUES.indexOf(nearestFib(value));
+  // Get orange gradient color for breach tolerance (intensifies toward 1)
+  const getBreachColor = (value: number): string => {
+    // 0 = blue (safe), 1 = orange (caution)
+    const ratio = value;
+    const r = Math.round(59 + ratio * (249 - 59));
+    const g = Math.round(130 + ratio * (115 - 130));
+    const b = Math.round(246 + ratio * (22 - 246));
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+
+  // Render discrete Fib slider with stop labels (#444)
+  const renderDiscreteFibSlider = (
+    key: 'formation_fib_threshold' | 'origin_breach_tolerance',
+    label: string,
+    values: number[],
+    labels: string[],
+    isOrange: boolean = false
+  ) => {
+    const value = localConfig[key] ?? values[0];
+    const sliderIndex = findNearestIndex(value, values);
+    const displayValue = value === Infinity ? 'Off' : value === 0 ? '0' : value.toFixed(3);
+    const sliderColor = isOrange ? getBreachColor(value) : 'rgb(59, 130, 246)';
 
     return (
       <div className="space-y-1">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 w-24">
-            <span className="text-[10px] text-app-muted">Threshold</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 min-w-[80px]">
+            <span className="text-[10px] text-app-muted whitespace-nowrap">{label}</span>
             <button
-              onClick={() => toggleTooltip('formation_fib_threshold')}
-              className="text-app-muted hover:text-app-text transition-colors"
-              title={TOOLTIPS.formation_fib_threshold}
+              onClick={() => toggleTooltip(key)}
+              className="text-app-muted hover:text-app-text transition-colors flex-shrink-0"
+              title={TOOLTIPS[key]}
             >
               <Info size={10} />
             </button>
@@ -146,26 +161,26 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           <input
             type="range"
             min={0}
-            max={FORMATION_FIB_VALUES.length - 1}
+            max={values.length - 1}
             step={1}
             value={sliderIndex}
-            onChange={(e) => handleSliderChange('formation_fib_threshold', FORMATION_FIB_VALUES[parseInt(e.target.value)])}
-            className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer accent-trading-blue"
+            onChange={(e) => handleSliderChange(key, values[parseInt(e.target.value)])}
+            className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer"
+            style={{ accentColor: sliderColor }}
             disabled={isUpdating}
           />
-          <span className="text-[10px] font-mono w-10 text-right text-app-text">
-            {value.toFixed(3)}
+          <span className="text-[10px] font-mono w-10 text-right text-app-text flex-shrink-0">
+            {displayValue}
           </span>
         </div>
-        <div className="flex justify-between text-[9px] text-app-muted ml-[6.5rem] mr-10">
-          <span>.236</span>
-          <span>.382</span>
-          <span>.5</span>
-          <span>.618</span>
+        <div className="flex justify-between text-[9px] text-app-muted ml-[92px] mr-[52px]">
+          {labels.map((lbl, i) => (
+            <span key={i}>{lbl}</span>
+          ))}
         </div>
-        {showTooltip === 'formation_fib_threshold' && (
-          <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded ml-0">
-            {TOOLTIPS.formation_fib_threshold}
+        {showTooltip === key && (
+          <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded">
+            {TOOLTIPS[key]}
           </p>
         )}
       </div>
@@ -181,32 +196,37 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         </div>
       )}
 
-      {/* Formation Section */}
+      {/* FORMATION Section (#444) */}
       <div className="space-y-2">
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Formation</div>
-        {renderFormationFibSlider()}
-        <SliderRow
-          label="Breach Tol."
-          value={localConfig.origin_breach_tolerance}
-          onChange={(v) => handleSliderChange('origin_breach_tolerance', v)}
-          min={0}
-          max={0.5}
-          step={0.05}
-          formatValue={(v) => v.toFixed(2)}
-          disabled={isUpdating}
-          tooltip={TOOLTIPS.origin_breach_tolerance}
-          showTooltip={showTooltip === 'origin_breach_tolerance'}
-          onToggleTooltip={() => toggleTooltip('origin_breach_tolerance')}
-        />
+        {renderDiscreteFibSlider(
+          'formation_fib_threshold',
+          'Threshold',
+          FORMATION_FIB_VALUES,
+          FORMATION_FIB_LABELS,
+          false
+        )}
       </div>
 
-      {/* Salience Weights (#436, #442: unified additive formula) */}
+      {/* ORIGIN BREACH Section (#444) */}
+      <div className="space-y-2">
+        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Origin Breach</div>
+        {renderDiscreteFibSlider(
+          'origin_breach_tolerance',
+          'Tolerance',
+          BREACH_FIB_VALUES,
+          BREACH_FIB_LABELS,
+          true
+        )}
+      </div>
+
+      {/* SALIENCE WEIGHTS Section (#436, #442, #444: unified additive formula) */}
       <div className="space-y-2">
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Salience Weights</div>
         <SliderRow
           label="Range"
-          value={localConfig.range_weight ?? 0.4}
-          onChange={(v) => handleWeightChange('range', v)}
+          value={localConfig.range_weight ?? 0.8}
+          onChange={(v) => handleSliderChange('range_weight', v)}
           min={0}
           max={1}
           step={0.1}
@@ -228,7 +248,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           onToggleTooltip={() => toggleTooltip('counter_weight')}
         />
         <SliderRow
-          label="Range×Counter"
+          label="Rng×Ctr"
           value={localConfig.range_counter_weight ?? 0.0}
           onChange={(v) => handleSliderChange('range_counter_weight', v)}
           min={0}
@@ -241,8 +261,8 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         />
         <SliderRow
           label="Impulse"
-          value={localConfig.impulse_weight ?? 0.4}
-          onChange={(v) => handleWeightChange('impulse', v)}
+          value={localConfig.impulse_weight ?? 0.0}
+          onChange={(v) => handleSliderChange('impulse_weight', v)}
           min={0}
           max={1}
           step={0.1}
@@ -253,8 +273,8 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         />
         <SliderRow
           label="Depth"
-          value={localConfig.depth_weight ?? 0.1}
-          onChange={(v) => handleWeightChange('depth', v)}
+          value={localConfig.depth_weight ?? 0.0}
+          onChange={(v) => handleSliderChange('depth_weight', v)}
           min={0}
           max={1}
           step={0.1}
@@ -265,8 +285,8 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         />
         <SliderRow
           label="Recency"
-          value={localConfig.recency_weight ?? 0.1}
-          onChange={(v) => handleWeightChange('recency', v)}
+          value={localConfig.recency_weight ?? 0.4}
+          onChange={(v) => handleSliderChange('recency_weight', v)}
           min={0}
           max={1}
           step={0.1}
@@ -277,36 +297,22 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         />
       </div>
 
-      {/* Display Options */}
+      {/* DISPLAY Section (#444) */}
       <div className="space-y-2">
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Display</div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 w-24">
-            <span className="text-[10px] text-app-muted">Show top</span>
-            <button
-              onClick={() => toggleTooltip('top_n')}
-              className="text-app-muted hover:text-app-text transition-colors"
-              title={TOOLTIPS.top_n}
-            >
-              <Info size={10} />
-            </button>
-          </div>
-          <select
-            value={localConfig.top_n}
-            onChange={(e) => handleSliderChange('top_n', parseInt(e.target.value))}
-            className="flex-1 h-6 bg-app-bg border border-app-border rounded text-[10px] text-app-text px-2"
-            disabled={isUpdating}
-          >
-            {[3, 5, 10].map(n => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </div>
-        {showTooltip === 'top_n' && (
-          <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded ml-0">
-            {TOOLTIPS.top_n}
-          </p>
-        )}
+        <SliderRow
+          label="Show top"
+          value={localConfig.top_n ?? 5}
+          onChange={(v) => handleSliderChange('top_n', Math.round(v))}
+          min={1}
+          max={20}
+          step={1}
+          formatValue={(v) => String(Math.round(v))}
+          disabled={isUpdating}
+          tooltip={TOOLTIPS.top_n}
+          showTooltip={showTooltip === 'top_n'}
+          onToggleTooltip={() => toggleTooltip('top_n')}
+        />
       </div>
 
       {/* Apply Button */}
@@ -336,7 +342,7 @@ ReferenceConfigPanelInner.displayName = 'ReferenceConfigPanel';
 
 export const ReferenceConfigPanel = ReferenceConfigPanelInner;
 
-// Slider row component with tooltip support
+// Slider row component with tooltip support (#444: uniform widths)
 interface SliderRowProps {
   label: string;
   value: number;
@@ -366,13 +372,13 @@ const SliderRow: React.FC<SliderRowProps> = ({
 }) => {
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1 w-24">
-          <span className={`text-[10px] ${disabled ? 'text-app-muted/50' : 'text-app-muted'}`}>{label}</span>
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 min-w-[80px]">
+          <span className={`text-[10px] whitespace-nowrap ${disabled ? 'text-app-muted/50' : 'text-app-muted'}`}>{label}</span>
           {tooltip && onToggleTooltip && (
             <button
               onClick={onToggleTooltip}
-              className="text-app-muted hover:text-app-text transition-colors"
+              className="text-app-muted hover:text-app-text transition-colors flex-shrink-0"
               title={tooltip}
             >
               <Info size={10} />
@@ -389,12 +395,12 @@ const SliderRow: React.FC<SliderRowProps> = ({
           className={`flex-1 h-1 bg-app-border rounded-lg appearance-none ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} accent-trading-blue`}
           disabled={disabled}
         />
-        <span className={`text-[10px] font-mono w-10 text-right ${disabled ? 'text-app-muted/50' : 'text-app-text'}`}>
+        <span className={`text-[10px] font-mono w-10 text-right flex-shrink-0 ${disabled ? 'text-app-muted/50' : 'text-app-text'}`}>
           {formatValue(value)}
         </span>
       </div>
       {showTooltip && tooltip && (
-        <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded ml-0">
+        <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded">
           {tooltip}
         </p>
       )}

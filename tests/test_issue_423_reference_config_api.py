@@ -11,6 +11,9 @@ Updated for #436 scale->bin migration:
 - Unified weights (range_weight, impulse_weight, recency_weight, depth_weight)
 - Removed scale-dependent weights (big_*, small_*)
 - Removed use_bin_distribution (bins always used)
+
+Updated for #444:
+- New defaults: range 0.8, impulse 0.0, recency 0.4, depth 0.0, formation 0.236
 """
 
 import pytest
@@ -40,14 +43,15 @@ class TestReferenceConfigSchemas:
             significant_bin_threshold=config.significant_bin_threshold,
         )
 
-        assert response.range_weight == 0.4
-        assert response.impulse_weight == 0.4
-        assert response.recency_weight == 0.1
-        assert response.depth_weight == 0.1
+        # #444: Updated defaults
+        assert response.range_weight == 0.8
+        assert response.impulse_weight == 0.0
+        assert response.recency_weight == 0.4
+        assert response.depth_weight == 0.0
         assert response.counter_weight == 0.0
         assert response.range_counter_weight == 0.0
         assert response.top_n == 5
-        assert response.formation_fib_threshold == 0.382
+        assert response.formation_fib_threshold == 0.236
         assert response.origin_breach_tolerance == 0.0
         assert response.significant_bin_threshold == 8
 
@@ -91,9 +95,10 @@ class TestReferenceConfigWithSalienceWeights:
         updated = config.with_salience_weights(range_weight=0.7)
 
         assert updated.range_weight == 0.7
-        assert updated.impulse_weight == 0.4  # unchanged
-        assert updated.recency_weight == 0.1  # unchanged
-        assert updated.depth_weight == 0.1    # unchanged
+        # #444: Updated defaults
+        assert updated.impulse_weight == 0.0  # unchanged
+        assert updated.recency_weight == 0.4  # unchanged
+        assert updated.depth_weight == 0.0    # unchanged
 
     def test_all_weights_update(self):
         """with_salience_weights should update all provided fields."""
@@ -118,9 +123,9 @@ class TestReferenceConfigWithSalienceWeights:
         updated = config.with_formation_threshold(0.5)
 
         assert updated.formation_fib_threshold == 0.5
-        # Other fields should be unchanged
-        assert updated.range_weight == 0.4
-        assert updated.impulse_weight == 0.4
+        # Other fields should be unchanged (#444 updated defaults)
+        assert updated.range_weight == 0.8
+        assert updated.impulse_weight == 0.0
 
 
 class TestReferenceConfigEndpoints:
@@ -137,11 +142,12 @@ class TestReferenceConfigEndpoints:
 
         response = asyncio.get_event_loop().run_until_complete(get_reference_config())
 
-        assert response.range_weight == 0.4
-        assert response.impulse_weight == 0.4
-        assert response.recency_weight == 0.1
-        assert response.depth_weight == 0.1
-        assert response.formation_fib_threshold == 0.382
+        # #444: Updated defaults
+        assert response.range_weight == 0.8
+        assert response.impulse_weight == 0.0
+        assert response.recency_weight == 0.4
+        assert response.depth_weight == 0.0
+        assert response.formation_fib_threshold == 0.236
         assert response.significant_bin_threshold == 8
 
     def test_update_config_partial(self):
@@ -158,8 +164,9 @@ class TestReferenceConfigEndpoints:
         response = asyncio.get_event_loop().run_until_complete(update_reference_config(request))
 
         assert response.range_weight == 0.7
-        assert response.impulse_weight == 0.4  # unchanged
-        assert response.formation_fib_threshold == 0.382  # unchanged
+        # #444: Updated defaults
+        assert response.impulse_weight == 0.0  # unchanged
+        assert response.formation_fib_threshold == 0.236  # unchanged
 
     def test_update_config_persists(self):
         """Config updates should persist in replay cache."""

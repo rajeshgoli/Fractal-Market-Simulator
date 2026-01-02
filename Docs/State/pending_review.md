@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2026-01-02
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(none)
+- **#444** — Reference Config Panel redesign: 4-section layout (FORMATION, ORIGIN BREACH, SALIENCE WEIGHTS, DISPLAY), discrete Fib sliders, uniform widths, orange gradient for breach tolerance, updated defaults
 
 ---
 

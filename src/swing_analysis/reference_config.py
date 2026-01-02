@@ -64,7 +64,7 @@ class ReferenceConfig:
     Example:
         >>> config = ReferenceConfig.default()
         >>> config.formation_fib_threshold
-        0.382
+        0.236
         >>> config.significant_bin_threshold
         8
     """
@@ -75,8 +75,8 @@ class ReferenceConfig:
     # Cold start
     min_swings_for_classification: int = 50  # Exclude refs until this many legs
 
-    # Formation threshold (fib level)
-    formation_fib_threshold: float = 0.382  # 38.2% retracement
+    # Formation threshold (fib level) — Issue #444: Updated default to 0.236
+    formation_fib_threshold: float = 0.236  # 23.6% retracement
 
     # Origin breach tolerance — bin-based (#436)
     # Bins < significant_bin_threshold: zero tolerance (or configurable)
@@ -85,12 +85,13 @@ class ReferenceConfig:
     significant_trade_breach_tolerance: float = 0.15   # Invalidates if TRADES beyond 15%
     significant_close_breach_tolerance: float = 0.10   # Invalidates if CLOSES beyond 10%
 
-    # Salience weights — unified (no scale-dependent weights) (#436, #442)
+    # Salience weights — unified (no scale-dependent weights) (#436, #442, #444)
     # All weights are additive peers in a unified formula
-    range_weight: float = 0.4
-    impulse_weight: float = 0.4
-    recency_weight: float = 0.1
-    depth_weight: float = 0.1
+    # Issue #444: Updated defaults per issue table
+    range_weight: float = 0.8
+    impulse_weight: float = 0.0
+    recency_weight: float = 0.4
+    depth_weight: float = 0.0
     # Counter-trend range weight (#442) — normalized via median × 25
     counter_weight: float = 0.0
     # Range × Counter product weight (#442) — normalized via (median × 25)²
@@ -127,17 +128,18 @@ class ReferenceConfig:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ReferenceConfig":
         """Create from dictionary."""
+        # Issue #444: Updated defaults per issue table
         return cls(
             significant_bin_threshold=data.get("significant_bin_threshold", 8),
             min_swings_for_classification=data.get("min_swings_for_classification", 50),
-            formation_fib_threshold=data.get("formation_fib_threshold", 0.382),
+            formation_fib_threshold=data.get("formation_fib_threshold", 0.236),
             origin_breach_tolerance=data.get("origin_breach_tolerance", 0.0),
             significant_trade_breach_tolerance=data.get("significant_trade_breach_tolerance", 0.15),
             significant_close_breach_tolerance=data.get("significant_close_breach_tolerance", 0.10),
-            range_weight=data.get("range_weight", 0.4),
-            impulse_weight=data.get("impulse_weight", 0.4),
-            recency_weight=data.get("recency_weight", 0.1),
-            depth_weight=data.get("depth_weight", 0.1),
+            range_weight=data.get("range_weight", 0.8),
+            impulse_weight=data.get("impulse_weight", 0.0),
+            recency_weight=data.get("recency_weight", 0.4),
+            depth_weight=data.get("depth_weight", 0.0),
             counter_weight=data.get("counter_weight", 0.0),
             range_counter_weight=data.get("range_counter_weight", 0.0),
             recency_decay_bars=data.get("recency_decay_bars", 1000),

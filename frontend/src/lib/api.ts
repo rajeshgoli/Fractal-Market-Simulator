@@ -856,15 +856,16 @@ export interface ReferenceConfigUpdateRequest {
   significant_bin_threshold?: number;
 }
 
+// Issue #444: Updated defaults per issue table
 export const DEFAULT_REFERENCE_CONFIG: ReferenceConfig = {
-  range_weight: 0.4,
-  impulse_weight: 0.4,
-  recency_weight: 0.1,
-  depth_weight: 0.1,
+  range_weight: 0.8,
+  impulse_weight: 0.0,
+  recency_weight: 0.4,
+  depth_weight: 0.0,
   counter_weight: 0.0,
   range_counter_weight: 0.0,
   top_n: 5,
-  formation_fib_threshold: 0.382,
+  formation_fib_threshold: 0.236,
   origin_breach_tolerance: 0.0,
   significant_bin_threshold: 8,
 };

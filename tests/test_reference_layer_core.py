@@ -271,14 +271,18 @@ class TestRangeDistributionFormedLegsOnly:
         """Only formed legs should be added from a mixed set based on price position."""
         ref_layer = ReferenceLayer()
 
+        # #444: Updated thresholds with new 0.236 default
+        # range=5, needs close>=101.18 (100 + 5*0.236)
+        # range=20, needs close>=104.72 (100 + 20*0.236)
+        # range=15, needs close>=103.54 (100 + 15*0.236)
         mixed_legs = [
-            make_leg(origin_price=105, pivot_price=100, origin_index=1),  # range=5, needs close>=101.91
-            make_leg(origin_price=120, pivot_price=100, origin_index=2),  # range=20, needs close>=107.64
-            make_leg(origin_price=115, pivot_price=100, origin_index=3),  # range=15, needs close>=105.73
+            make_leg(origin_price=105, pivot_price=100, origin_index=1),  # range=5
+            make_leg(origin_price=120, pivot_price=100, origin_index=2),  # range=20
+            make_leg(origin_price=115, pivot_price=100, origin_index=3),  # range=15
         ]
 
-        # close=106 forms first and third, not second
-        bar = make_bar(close=106)
+        # close=104 forms first (range=5) and third (range=15), not second (range=20)
+        bar = make_bar(close=104)
         ref_layer.update(mixed_legs, bar)
 
         # First (range=5) and third (range=15) legs should be formed
@@ -289,7 +293,7 @@ class TestRangeDistributionFormedLegsOnly:
         ref_layer = ReferenceLayer()
 
         leg = make_leg(origin_price=110, pivot_price=100)
-        # close=105 forms the leg (location=0.5 > 0.382)
+        # close=105 forms the leg (location=0.5 > 0.236) - #444: updated default threshold
         bar = make_bar(close=105)
 
         # First update

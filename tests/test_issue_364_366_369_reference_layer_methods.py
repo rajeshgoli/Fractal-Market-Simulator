@@ -227,16 +227,16 @@ class TestIsFormedForReference:
     """Tests for _is_formed_for_reference() method (#367)."""
 
     def test_formation_triggers_at_threshold(self):
-        """Formation should trigger when price reaches 38.2% threshold."""
+        """Formation should trigger when price reaches 23.6% threshold (#444 updated default)."""
         ref_layer = ReferenceLayer()
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
-        # Below threshold (0.3 < 0.382)
-        price_below = Decimal("103")  # location = 0.3
+        # Below threshold (0.2 < 0.236) - #444: new default is 0.236
+        price_below = Decimal("102")  # location = 0.2
         assert ref_layer._is_formed_for_reference(leg, price_below) is False
 
-        # At threshold (0.382)
-        price_at = Decimal("103.82")  # location = 0.382
+        # At threshold (0.236) - #444: new default is 0.236
+        price_at = Decimal("102.36")  # location = 0.236
         assert ref_layer._is_formed_for_reference(leg, price_at) is True
 
     def test_formation_persists_after_price_moves_away(self):

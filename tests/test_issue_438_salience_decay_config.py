@@ -173,15 +173,17 @@ class TestSalienceCalculationWithConfig:
 
     def test_salience_with_custom_depth_decay(self):
         """Salience should change when depth_decay_factor is modified."""
-        # Fast decay config
+        # Fast decay config - #444: must set depth_weight > 0 for decay to matter
         fast_config = ReferenceConfig.default().with_salience_weights(
+            depth_weight=0.5,  # Enable depth contribution to salience
             depth_decay_factor=1.0
         )
         fast_layer = ReferenceLayer(reference_config=fast_config)
         self._populate_distribution(fast_layer)
 
-        # Slow decay config
+        # Slow decay config - #444: must set depth_weight > 0 for decay to matter
         slow_config = ReferenceConfig.default().with_salience_weights(
+            depth_weight=0.5,  # Enable depth contribution to salience
             depth_decay_factor=0.25
         )
         slow_layer = ReferenceLayer(reference_config=slow_config)

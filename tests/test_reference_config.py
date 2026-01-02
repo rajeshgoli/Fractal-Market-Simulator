@@ -1,8 +1,8 @@
 """
-Tests for ReferenceConfig dataclass (#436 bin-based migration).
+Tests for ReferenceConfig dataclass (#436 bin-based migration, #444 updated defaults).
 
 Verifies:
-- Default values match current spec
+- Default values match current spec (#444 updated defaults)
 - Immutability (frozen=True)
 - Serialization to/from dict
 - Builder methods for modification
@@ -27,9 +27,9 @@ class TestReferenceConfigDefaults:
         assert config.min_swings_for_classification == 50
 
     def test_default_formation_threshold(self):
-        """Formation threshold should be 38.2%."""
+        """Formation threshold should be 23.6% (#444)."""
         config = ReferenceConfig.default()
-        assert config.formation_fib_threshold == 0.382
+        assert config.formation_fib_threshold == 0.236
 
     def test_default_origin_tolerances(self):
         """Origin breach tolerances should match spec."""
@@ -41,12 +41,13 @@ class TestReferenceConfigDefaults:
         assert config.significant_close_breach_tolerance == 0.10  # 10% close breach
 
     def test_default_unified_salience_weights(self):
-        """Unified salience weights should match spec (#436)."""
+        """Unified salience weights should match spec (#436, #444)."""
         config = ReferenceConfig.default()
-        assert config.range_weight == 0.4
-        assert config.impulse_weight == 0.4
-        assert config.recency_weight == 0.1
-        assert config.depth_weight == 0.1
+        # Issue #444: Updated defaults - range 0.8, impulse 0.0, recency 0.4, depth 0.0
+        assert config.range_weight == 0.8
+        assert config.impulse_weight == 0.0
+        assert config.recency_weight == 0.4
+        assert config.depth_weight == 0.0
 
     def test_default_salience_decay_parameters(self):
         """Salience decay parameters should match spec (#438)."""
@@ -109,14 +110,14 @@ class TestReferenceConfigSerialization:
 
         assert data["significant_bin_threshold"] == 8
         assert data["min_swings_for_classification"] == 50
-        assert data["formation_fib_threshold"] == 0.382
+        assert data["formation_fib_threshold"] == 0.236  # #444 updated default
         assert data["origin_breach_tolerance"] == 0.0
         assert data["significant_trade_breach_tolerance"] == 0.15
         assert data["significant_close_breach_tolerance"] == 0.10
-        assert data["range_weight"] == 0.4
-        assert data["impulse_weight"] == 0.4
-        assert data["recency_weight"] == 0.1
-        assert data["depth_weight"] == 0.1
+        assert data["range_weight"] == 0.8  # #444 updated default
+        assert data["impulse_weight"] == 0.0  # #444 updated default
+        assert data["recency_weight"] == 0.4  # #444 updated default
+        assert data["depth_weight"] == 0.0  # #444 updated default
         assert data["recency_decay_bars"] == 1000
         assert data["depth_decay_factor"] == 0.5
         assert data["range_counter_weight"] == 0.0
@@ -163,10 +164,10 @@ class TestReferenceConfigSerialization:
         data = {}  # Empty dict
         config = ReferenceConfig.from_dict(data)
 
-        # Should have all defaults
+        # Should have all defaults (#444 updated)
         assert config.significant_bin_threshold == 8
-        assert config.formation_fib_threshold == 0.382
-        assert config.range_weight == 0.4
+        assert config.formation_fib_threshold == 0.236  # #444 updated
+        assert config.range_weight == 0.8  # #444 updated
         assert config.recency_decay_bars == 1000
         assert config.depth_decay_factor == 0.5
 
@@ -203,7 +204,7 @@ class TestReferenceConfigBuilders:
         original = ReferenceConfig.default()
         modified = original.with_formation_threshold(0.5)
 
-        assert original.formation_fib_threshold == 0.382
+        assert original.formation_fib_threshold == 0.236  # #444 updated default
         assert modified.formation_fib_threshold == 0.5
 
     def test_with_breach_tolerance(self):
@@ -230,16 +231,16 @@ class TestReferenceConfigBuilders:
             recency_weight=0.2,
         )
 
-        # Original unchanged
-        assert original.range_weight == 0.4
-        assert original.recency_weight == 0.1
+        # Original unchanged (#444 updated defaults)
+        assert original.range_weight == 0.8
+        assert original.recency_weight == 0.4
 
         # Modified has new values
         assert modified.range_weight == 0.6
         assert modified.recency_weight == 0.2
-        # Unspecified values preserved
-        assert modified.impulse_weight == 0.4
-        assert modified.depth_weight == 0.1
+        # Unspecified values preserved (#444 updated defaults)
+        assert modified.impulse_weight == 0.0
+        assert modified.depth_weight == 0.0
 
     def test_with_salience_decay_parameters(self):
         """with_salience_weights should modify decay parameters (#438)."""
@@ -256,11 +257,11 @@ class TestReferenceConfigBuilders:
         # Modified has new values
         assert modified.recency_decay_bars == 500
         assert modified.depth_decay_factor == 0.3
-        # Other salience weights preserved
-        assert modified.range_weight == 0.4
-        assert modified.impulse_weight == 0.4
-        assert modified.recency_weight == 0.1
-        assert modified.depth_weight == 0.1
+        # Other salience weights preserved (#444 updated defaults)
+        assert modified.range_weight == 0.8
+        assert modified.impulse_weight == 0.0
+        assert modified.recency_weight == 0.4
+        assert modified.depth_weight == 0.0
 
     def test_with_confluence_tolerance(self):
         """with_confluence_tolerance should modify confluence tolerance."""
