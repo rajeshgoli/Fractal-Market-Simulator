@@ -389,7 +389,10 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       const pivotY = series.priceToCoordinate(ref.pivot_price);
 
       if (originX !== null && originY !== null && pivotX !== null && pivotY !== null) {
-        labelPos.set(ref.leg_id, { x: pivotX, y: pivotY, ref });
+        // Position label at midpoint of leg body for clear ownership (#432)
+        const midX = (originX + pivotX) / 2;
+        const midY = (originY + pivotY) / 2;
+        labelPos.set(ref.leg_id, { x: midX, y: midY, ref });
         linePos.set(ref.leg_id, { originX, originY, pivotX, pivotY, ref });
       }
     }
@@ -424,7 +427,10 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       const pivotY = series.priceToCoordinate(leg.pivot_price);
 
       if (originX !== null && originY !== null && pivotX !== null && pivotY !== null) {
-        labelPositions.set(leg.leg_id, { x: pivotX, y: pivotY, leg });
+        // Position label at midpoint of leg body for clear ownership (#432)
+        const midX = (originX + pivotX) / 2;
+        const midY = (originY + pivotY) / 2;
+        labelPositions.set(leg.leg_id, { x: midX, y: midY, leg });
         linePositions.set(leg.leg_id, { originX, originY, pivotX, pivotY, leg });
       }
     }
