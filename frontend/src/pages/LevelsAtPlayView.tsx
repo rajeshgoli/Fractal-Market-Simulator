@@ -82,8 +82,10 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [chartHoveredLegId, setChartHoveredLegId] = useState<string | null>(null);
   const [selectedLegId, setSelectedLegId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
-  // Track whether we've done initial auto-selection (Issue #433)
-  const hasAutoSelectedRef = useRef(false);
+  // Track manual selection vs auto-selection (Issue #433)
+  // When user manually clicks a leg, we lock selection until they clear it
+  // When salience config changes, we re-auto-select unless manually selected
+  const isManualSelectionRef = useRef(false);
 
   // Reference Config state (Issue #425)
   const [referenceConfig, setReferenceConfig] = useState<ReferenceConfig>(
@@ -163,13 +165,16 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
   // Sidebar select handler (Issue #430, #433) - clicking a leg selects it exclusively
   // Single selection model: only one leg is selected/tracked at a time
+  // Manual selection locks the choice until user deselects
   const handleSidebarSelectLeg = useCallback(async (legId: string) => {
     if (selectedLegId === legId) {
-      // Clicking same leg - deselect and untrack
+      // Clicking same leg - deselect and untrack, allow re-auto-selection
       setSelectedLegId(null);
+      isManualSelectionRef.current = false; // Allow auto-selection again
       toggleStickyLeg(legId); // Untrack since it's already tracked
     } else {
       // Clicking different leg - untrack old (if any), then track new
+      isManualSelectionRef.current = true; // Lock to manual selection
       if (selectedLegId !== null && stickyLegIds.has(selectedLegId)) {
         await toggleStickyLeg(selectedLegId); // Untrack old
       }
@@ -313,22 +318,33 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     }
   }, [currentPlaybackPosition, calibrationBarCount, fetchReferenceState]);
 
-  // Auto-select top-ranked leg on initial load (Issue #433)
-  // This ensures the Level Crossings section shows data immediately instead of "Click a leg to track"
+  // Auto-select top-ranked leg when references change (Issue #433)
+  // - On initial load: auto-select top leg
+  // - When salience config changes: re-auto-select new top leg
+  // - When user manually selects: lock selection until they deselect
   useEffect(() => {
-    // Only auto-select once, when references first become available
-    if (
-      !hasAutoSelectedRef.current &&
-      referenceState?.references &&
-      referenceState.references.length > 0 &&
-      selectedLegId === null
-    ) {
-      const topLeg = referenceState.references[0]; // Already sorted by salience
-      hasAutoSelectedRef.current = true;
-      setSelectedLegId(topLeg.leg_id);
-      toggleStickyLeg(topLeg.leg_id); // Track for level crossing detection
+    // Skip if user has manually selected a leg
+    if (isManualSelectionRef.current) return;
+
+    // Skip if no references available
+    if (!referenceState?.references || referenceState.references.length === 0) return;
+
+    const topLeg = referenceState.references[0]; // Sorted by salience
+
+    // Skip if already selected (no change needed)
+    if (selectedLegId === topLeg.leg_id) return;
+
+    // Auto-select the new top leg
+    // First untrack the old selection if any
+    if (selectedLegId !== null && stickyLegIds.has(selectedLegId)) {
+      toggleStickyLeg(selectedLegId); // Untrack old
     }
-  }, [referenceState?.references, selectedLegId, toggleStickyLeg]);
+
+    setSelectedLegId(topLeg.leg_id);
+    if (!stickyLegIds.has(topLeg.leg_id)) {
+      toggleStickyLeg(topLeg.leg_id); // Track new
+    }
+  }, [referenceState?.references, selectedLegId, stickyLegIds, toggleStickyLeg]);
 
   // Reference Config update handler (Issue #425)
   const handleReferenceConfigUpdate = useCallback(async (newConfig: ReferenceConfig) => {
