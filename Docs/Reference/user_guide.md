@@ -405,36 +405,15 @@ The Reference Config panel lets you tune salience weights to control which level
 
 **Reset to Defaults:** Click the rotate icon (↻) next to the panel header or the button at the bottom of the sidebar to reset all weights to their default values.
 
-#### Levels at Play Panel
+#### Filters Panel
 
-Shows references ranked by salience (importance) with pagination. The panel header displays navigation controls and the current range:
+The Filters panel (collapsible) shows the reference filter pipeline status:
 
-```
-LEVELS AT PLAY          < 1-5/37 >
-```
+- **Show Filtered toggle**: Toggle visibility of filtered (invalid) legs on the chart. Uses the same toggle style as DAG linger events.
+- **Pass rate**: Progress bar showing what percentage of legs pass all filters
+- **Filter reasons**: Breakdown of why legs were filtered (Not Formed, Pivot Breached, Origin Breached, etc.)
 
-Each leg displays:
-- **Rank**: Position in salience ranking (1., 2., 3., ...)
-- **Bin badge**: Median multiple (e.g., "5×", "2.5×") with color coding
-- **Direction**: ▲ (bull) or ▼ (bear)
-- **Price**: The pivot price (key structural level)
-- **Salience bar**: Visual indicator of relative importance
-
-**Pagination:**
-- **`<`** button navigates to previous page (disabled on first page)
-- **`>`** button navigates to next page (disabled on last page)
-- Range display shows current window (e.g., "1-5/37", "6-10/37")
-- Page size is controlled by the "Show top" slider in Reference Config (1-20)
-
-**Selection & Tracking:**
-- **Auto-selection**: The top-ranked leg (by salience) is automatically selected on load and whenever salience weights change. No empty state—you immediately see Fibonacci levels and crossing events.
-- **Single selection model**: Only one leg can be selected at a time. Selecting a new leg replaces the previous selection.
-- **Manual override**: Clicking a leg locks your selection—changing salience weights won't auto-switch. Click the same leg again to deselect and re-enable auto-selection.
-- **Hover** over a leg in the sidebar to highlight it on the chart
-- **Hover** over a leg on the chart to highlight it in the sidebar
-- **Click** on a leg to select it (shows Fibonacci levels persistently and tracks it for crossings)
-
-**Show top N slider**: In the Reference Config panel, use the "Show top" slider (1-20) to control page size. This setting persists to localStorage.
+This panel was moved from the bottom panel to the sidebar in #445 for better organization.
 
 #### Chart Labels
 
@@ -459,16 +438,43 @@ Displays aggregate statistics about active references:
 - Total reference count
 - Current rolling median for context
 
-### Bottom Panel: Reference Telemetry
+### Bottom Panel: Levels at Play + Events
 
-The bottom panel displays real-time telemetry about references:
+The bottom panel displays two key sections (#445):
 
-- **References**: Active reference counts by bin (median multiple) and direction
-- **Detection**: Current detection status
-- **Top References**: Most salient references at the current bar
-- **Filter**: Show/hide filtered (invalid) references toggle
-- **Events**: Recent reference lifecycle events
-- **Crossings**: Level crossing events for the selected reference. Shows "tracking" when a leg is selected, or "no selection" otherwise. Auto-selection ensures this panel is populated from the start.
+#### LEVELS AT PLAY
+
+All reference legs displayed in a **column-major grid** (fills top-to-bottom, then left-to-right):
+- Most important legs (by salience) appear on the left
+- Dynamic column count based on available width
+- Fixed height (no vertical scroll)
+- Pagination for overflow columns (`< prev | 1-15/31 | next >`)
+
+```
+Column 1    Column 2    Column 3
+1. 20x+ ▲   6. 10x ▲   11. 5x ▲
+2. 20x+ ▲   7. 10x ▼   12. 5x ▼
+3. 15x ▼    8. 8x ▲    13. 3x ▲
+4. 12x ▲    9. 8x ▼    14. 3x ▼
+5. 11x ▲   10. 6x ▲    15. 2x ▲
+```
+
+Each leg displays: rank, bin badge (median multiple), direction arrow, and pivot price.
+
+**Hover Highlight**: When you hover over a leg in the bottom panel:
+- All other legs **fade** to 15% opacity on the chart
+- The hovered leg is **highlighted** with full opacity and thicker line
+- Labels of non-hovered legs also fade
+- Works bidirectionally: hovering on the chart also highlights in the panel
+
+**Click** on a leg to select it (shows Fibonacci levels persistently and tracks it for crossings).
+
+#### EVENTS
+
+Recent lifecycle and crossing events:
+- Lifecycle events: Formed, Pruned, Invalidated
+- Crossing events: When price crosses a tracked leg's Fib levels
+- Hover over an event to highlight the associated leg on the chart
 
 The bottom panel height is adjustable via the resize handle.
 

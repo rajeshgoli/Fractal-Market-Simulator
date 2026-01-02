@@ -832,13 +832,13 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `LevelsAtPlayView.tsx` | Reference Layer visualization page (#374, #426) |
 | `ChartArea.tsx` | Two stacked lightweight-charts |
 | `LegOverlay.tsx` | Leg visualization (includes tree icon hover) |
-| `ReferenceLegOverlay.tsx` | Reference visualization with labels at leg midpoint, viewport density limiting (#377-#379, #432) |
+| `ReferenceLegOverlay.tsx` | Reference visualization with labels, viewport density limiting, hover fade effect (#377-#379, #432, #445) |
 | `HierarchyModeOverlay.tsx` | Hierarchy exploration mode (exit button, connection lines, status) |
 | `PlaybackControls.tsx` | Play/pause/step transport |
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |
-| `ReferenceSidebar.tsx` | Collapsible sidebar with Config/Levels at Play panels for Levels at Play view (#424, #426, #430) |
-| `LevelsAtPlayPanel.tsx` | Paginated list of top N references by salience with bidirectional hover/click linking (#430) |
-| `ReferenceTelemetryPanel.tsx` | Bottom panel telemetry (references, detection, events, crossings) |
+| `ReferenceSidebar.tsx` | Collapsible sidebar with Config/Filters/Stats panels for Levels at Play view (#424, #426, #445) |
+| `LevelsAtPlayBottomPanel.tsx` | Column-major grid of all references in bottom panel with pagination (#445) |
+| `ReferenceTelemetryPanel.tsx` | Bottom panel with LEVELS AT PLAY + EVENTS columns (#445) |
 | `ReferenceConfigPanel.tsx` | Salience weight sliders + Apply button (#425) |
 | `Sidebar.tsx` | Event filters, feedback input, attachment display |
 | `useForwardPlayback.ts` | Forward-only playback (step back via backend API) |
