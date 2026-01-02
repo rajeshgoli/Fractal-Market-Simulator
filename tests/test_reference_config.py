@@ -1,8 +1,8 @@
 """
-Tests for ReferenceConfig dataclass.
+Tests for ReferenceConfig dataclass (#436 bin-based migration).
 
 Verifies:
-- Default values match reference_layer_spec.md
+- Default values match current spec
 - Immutability (frozen=True)
 - Serialization to/from dict
 - Builder methods for modification
@@ -16,18 +16,15 @@ from src.swing_analysis.reference_config import ReferenceConfig
 class TestReferenceConfigDefaults:
     """Tests for ReferenceConfig default values."""
 
-    def test_default_scale_thresholds(self):
-        """Scale thresholds should match spec defaults."""
+    def test_default_bin_threshold(self):
+        """Significant bin threshold should be 8 (5× median)."""
         config = ReferenceConfig.default()
-
-        assert config.xl_threshold == 0.90  # Top 10%
-        assert config.l_threshold == 0.60   # Top 40%
-        assert config.m_threshold == 0.30   # Top 70%
+        assert config.significant_bin_threshold == 8
 
     def test_default_cold_start(self):
         """Cold start threshold should be 50 swings."""
         config = ReferenceConfig.default()
-        assert config.min_swings_for_scale == 50
+        assert config.min_swings_for_classification == 50
 
     def test_default_formation_threshold(self):
         """Formation threshold should be 38.2%."""
@@ -35,32 +32,26 @@ class TestReferenceConfigDefaults:
         assert config.formation_fib_threshold == 0.382
 
     def test_default_origin_tolerances(self):
-        """Origin breach tolerances should match north star spec."""
+        """Origin breach tolerances should match spec."""
         config = ReferenceConfig.default()
-        # S/M: default zero tolerance per north star
-        assert config.small_origin_tolerance == 0.0   # 0% for S/M per north star
-        # L/XL: two thresholds per north star
-        assert config.big_trade_breach_tolerance == 0.15  # 15% trade breach
-        assert config.big_close_breach_tolerance == 0.10  # 10% close breach
+        # Small bins (< 8): zero tolerance per north star
+        assert config.origin_breach_tolerance == 0.0
+        # Significant bins (>= 8): two thresholds
+        assert config.significant_trade_breach_tolerance == 0.15  # 15% trade breach
+        assert config.significant_close_breach_tolerance == 0.10  # 10% close breach
 
-    def test_default_big_salience_weights(self):
-        """Big swing (L/XL) salience weights should match spec."""
+    def test_default_unified_salience_weights(self):
+        """Unified salience weights should match spec (#436)."""
         config = ReferenceConfig.default()
-        assert config.big_range_weight == 0.5
-        assert config.big_impulse_weight == 0.4
-        assert config.big_recency_weight == 0.1
+        assert config.range_weight == 0.4
+        assert config.impulse_weight == 0.4
+        assert config.recency_weight == 0.1
+        assert config.depth_weight == 0.1
 
-    def test_default_small_salience_weights(self):
-        """Small swing (S/M) salience weights should match spec."""
+    def test_default_range_counter_weight(self):
+        """Range×Counter standalone mode should be disabled by default."""
         config = ReferenceConfig.default()
-        assert config.small_range_weight == 0.2
-        assert config.small_impulse_weight == 0.3
-        assert config.small_recency_weight == 0.5
-
-    def test_default_classification_mode(self):
-        """Default should use scale, not depth."""
-        config = ReferenceConfig.default()
-        assert config.use_depth_instead_of_scale is False
+        assert config.range_counter_weight == 0.0
 
     def test_default_confluence_tolerance(self):
         """Confluence tolerance should be 0.1%."""
@@ -76,7 +67,7 @@ class TestReferenceConfigImmutability:
         config = ReferenceConfig.default()
 
         with pytest.raises(AttributeError):
-            config.xl_threshold = 0.80  # type: ignore
+            config.significant_bin_threshold = 9  # type: ignore
 
     def test_hashable(self):
         """ReferenceConfig should be hashable."""
@@ -110,61 +101,49 @@ class TestReferenceConfigSerialization:
         config = ReferenceConfig.default()
         data = config.to_dict()
 
-        assert data["xl_threshold"] == 0.90
-        assert data["l_threshold"] == 0.60
-        assert data["m_threshold"] == 0.30
-        assert data["min_swings_for_scale"] == 50
+        assert data["significant_bin_threshold"] == 8
+        assert data["min_swings_for_classification"] == 50
         assert data["formation_fib_threshold"] == 0.382
-        assert data["small_origin_tolerance"] == 0.0
-        assert data["big_trade_breach_tolerance"] == 0.15
-        assert data["big_close_breach_tolerance"] == 0.10
-        assert data["big_range_weight"] == 0.5
-        assert data["big_impulse_weight"] == 0.4
-        assert data["big_recency_weight"] == 0.1
-        assert data["small_range_weight"] == 0.2
-        assert data["small_impulse_weight"] == 0.3
-        assert data["small_recency_weight"] == 0.5
-        assert data["use_depth_instead_of_scale"] is False
+        assert data["origin_breach_tolerance"] == 0.0
+        assert data["significant_trade_breach_tolerance"] == 0.15
+        assert data["significant_close_breach_tolerance"] == 0.10
+        assert data["range_weight"] == 0.4
+        assert data["impulse_weight"] == 0.4
+        assert data["recency_weight"] == 0.1
+        assert data["depth_weight"] == 0.1
+        assert data["range_counter_weight"] == 0.0
         assert data["confluence_tolerance_pct"] == 0.001
 
     def test_from_dict(self):
         """from_dict should restore all fields."""
         data = {
-            "xl_threshold": 0.85,
-            "l_threshold": 0.55,
-            "m_threshold": 0.25,
-            "min_swings_for_scale": 100,
+            "significant_bin_threshold": 9,
+            "min_swings_for_classification": 100,
             "formation_fib_threshold": 0.5,
-            "small_origin_tolerance": 0.10,
-            "big_trade_breach_tolerance": 0.20,
-            "big_close_breach_tolerance": 0.15,
-            "big_range_weight": 0.4,
-            "big_impulse_weight": 0.5,
-            "big_recency_weight": 0.1,
-            "small_range_weight": 0.3,
-            "small_impulse_weight": 0.4,
-            "small_recency_weight": 0.3,
-            "use_depth_instead_of_scale": True,
+            "origin_breach_tolerance": 0.05,
+            "significant_trade_breach_tolerance": 0.20,
+            "significant_close_breach_tolerance": 0.15,
+            "range_weight": 0.3,
+            "impulse_weight": 0.5,
+            "recency_weight": 0.1,
+            "depth_weight": 0.1,
+            "range_counter_weight": 0.5,
             "confluence_tolerance_pct": 0.002,
         }
 
         config = ReferenceConfig.from_dict(data)
 
-        assert config.xl_threshold == 0.85
-        assert config.l_threshold == 0.55
-        assert config.m_threshold == 0.25
-        assert config.min_swings_for_scale == 100
+        assert config.significant_bin_threshold == 9
+        assert config.min_swings_for_classification == 100
         assert config.formation_fib_threshold == 0.5
-        assert config.small_origin_tolerance == 0.10
-        assert config.big_trade_breach_tolerance == 0.20
-        assert config.big_close_breach_tolerance == 0.15
-        assert config.big_range_weight == 0.4
-        assert config.big_impulse_weight == 0.5
-        assert config.big_recency_weight == 0.1
-        assert config.small_range_weight == 0.3
-        assert config.small_impulse_weight == 0.4
-        assert config.small_recency_weight == 0.3
-        assert config.use_depth_instead_of_scale is True
+        assert config.origin_breach_tolerance == 0.05
+        assert config.significant_trade_breach_tolerance == 0.20
+        assert config.significant_close_breach_tolerance == 0.15
+        assert config.range_weight == 0.3
+        assert config.impulse_weight == 0.5
+        assert config.recency_weight == 0.1
+        assert config.depth_weight == 0.1
+        assert config.range_counter_weight == 0.5
         assert config.confluence_tolerance_pct == 0.002
 
     def test_from_dict_missing_fields_use_defaults(self):
@@ -173,28 +152,24 @@ class TestReferenceConfigSerialization:
         config = ReferenceConfig.from_dict(data)
 
         # Should have all defaults
-        assert config.xl_threshold == 0.90
+        assert config.significant_bin_threshold == 8
         assert config.formation_fib_threshold == 0.382
-        assert config.use_depth_instead_of_scale is False
+        assert config.range_weight == 0.4
 
     def test_round_trip_serialization(self):
         """to_dict -> from_dict should preserve all values."""
         original = ReferenceConfig(
-            xl_threshold=0.88,
-            l_threshold=0.66,
-            m_threshold=0.33,
-            min_swings_for_scale=75,
+            significant_bin_threshold=9,
+            min_swings_for_classification=75,
             formation_fib_threshold=0.45,
-            small_origin_tolerance=0.08,
-            big_trade_breach_tolerance=0.18,
-            big_close_breach_tolerance=0.12,
-            big_range_weight=0.45,
-            big_impulse_weight=0.45,
-            big_recency_weight=0.10,
-            small_range_weight=0.25,
-            small_impulse_weight=0.35,
-            small_recency_weight=0.40,
-            use_depth_instead_of_scale=True,
+            origin_breach_tolerance=0.08,
+            significant_trade_breach_tolerance=0.18,
+            significant_close_breach_tolerance=0.12,
+            range_weight=0.35,
+            impulse_weight=0.45,
+            recency_weight=0.10,
+            depth_weight=0.10,
+            range_counter_weight=0.5,
             confluence_tolerance_pct=0.0015,
         )
 
@@ -207,24 +182,6 @@ class TestReferenceConfigSerialization:
 class TestReferenceConfigBuilders:
     """Tests for ReferenceConfig builder methods."""
 
-    def test_with_scale_thresholds(self):
-        """with_scale_thresholds should modify scale thresholds."""
-        original = ReferenceConfig.default()
-        modified = original.with_scale_thresholds(
-            xl_threshold=0.95,
-            l_threshold=0.70,
-        )
-
-        # Original unchanged
-        assert original.xl_threshold == 0.90
-        assert original.l_threshold == 0.60
-
-        # Modified has new values
-        assert modified.xl_threshold == 0.95
-        assert modified.l_threshold == 0.70
-        # Unspecified value preserved
-        assert modified.m_threshold == 0.30
-
     def test_with_formation_threshold(self):
         """with_formation_threshold should modify formation threshold."""
         original = ReferenceConfig.default()
@@ -233,48 +190,40 @@ class TestReferenceConfigBuilders:
         assert original.formation_fib_threshold == 0.382
         assert modified.formation_fib_threshold == 0.5
 
-    def test_with_tolerance(self):
-        """with_tolerance should modify origin tolerances."""
+    def test_with_breach_tolerance(self):
+        """with_breach_tolerance should modify origin tolerances."""
         original = ReferenceConfig.default()
-        modified = original.with_tolerance(
-            small_origin_tolerance=0.10,
-            big_trade_breach_tolerance=0.25,
-            big_close_breach_tolerance=0.18,
+        modified = original.with_breach_tolerance(
+            origin_breach_tolerance=0.10,
+            significant_trade_breach_tolerance=0.25,
+            significant_close_breach_tolerance=0.18,
         )
 
-        assert original.small_origin_tolerance == 0.0
-        assert original.big_trade_breach_tolerance == 0.15
-        assert original.big_close_breach_tolerance == 0.10
-        assert modified.small_origin_tolerance == 0.10
-        assert modified.big_trade_breach_tolerance == 0.25
-        assert modified.big_close_breach_tolerance == 0.18
+        assert original.origin_breach_tolerance == 0.0
+        assert original.significant_trade_breach_tolerance == 0.15
+        assert original.significant_close_breach_tolerance == 0.10
+        assert modified.origin_breach_tolerance == 0.10
+        assert modified.significant_trade_breach_tolerance == 0.25
+        assert modified.significant_close_breach_tolerance == 0.18
 
     def test_with_salience_weights(self):
         """with_salience_weights should modify salience weights."""
         original = ReferenceConfig.default()
         modified = original.with_salience_weights(
-            big_range_weight=0.6,
-            small_recency_weight=0.6,
+            range_weight=0.6,
+            recency_weight=0.2,
         )
 
         # Original unchanged
-        assert original.big_range_weight == 0.5
-        assert original.small_recency_weight == 0.5
+        assert original.range_weight == 0.4
+        assert original.recency_weight == 0.1
 
         # Modified has new values
-        assert modified.big_range_weight == 0.6
-        assert modified.small_recency_weight == 0.6
+        assert modified.range_weight == 0.6
+        assert modified.recency_weight == 0.2
         # Unspecified values preserved
-        assert modified.big_impulse_weight == 0.4
-        assert modified.small_impulse_weight == 0.3
-
-    def test_with_depth_mode(self):
-        """with_depth_mode should toggle classification mode."""
-        original = ReferenceConfig.default()
-        modified = original.with_depth_mode(True)
-
-        assert original.use_depth_instead_of_scale is False
-        assert modified.use_depth_instead_of_scale is True
+        assert modified.impulse_weight == 0.4
+        assert modified.depth_weight == 0.1
 
     def test_with_confluence_tolerance(self):
         """with_confluence_tolerance should modify confluence tolerance."""
@@ -289,39 +238,39 @@ class TestReferenceConfigBuilders:
         config = (
             ReferenceConfig.default()
             .with_formation_threshold(0.5)
-            .with_tolerance(small_origin_tolerance=0.08)
-            .with_depth_mode(True)
+            .with_breach_tolerance(origin_breach_tolerance=0.08)
         )
 
         assert config.formation_fib_threshold == 0.5
-        assert config.small_origin_tolerance == 0.08
-        assert config.use_depth_instead_of_scale is True
+        assert config.origin_breach_tolerance == 0.08
         # Other values should be defaults
-        assert config.xl_threshold == 0.90
+        assert config.significant_bin_threshold == 8
 
 
 class TestReferenceConfigUsage:
     """Tests for typical usage patterns."""
 
-    def test_scalping_preset(self):
-        """Create a scalping-focused config (recency-heavy)."""
+    def test_recency_focused_config(self):
+        """Create a recency-focused config (recent swings prioritized)."""
         config = ReferenceConfig.default().with_salience_weights(
-            small_range_weight=0.1,
-            small_impulse_weight=0.2,
-            small_recency_weight=0.7,  # Favor recent swings
+            range_weight=0.1,
+            impulse_weight=0.2,
+            recency_weight=0.6,
+            depth_weight=0.1,
         )
 
-        assert config.small_recency_weight == 0.7
+        assert config.recency_weight == 0.6
 
-    def test_swing_trading_preset(self):
-        """Create a swing-trading config (size-heavy)."""
+    def test_range_focused_config(self):
+        """Create a range-focused config (big swings prioritized)."""
         config = ReferenceConfig.default().with_salience_weights(
-            big_range_weight=0.6,
-            big_impulse_weight=0.3,
-            big_recency_weight=0.1,  # Favor big swings
+            range_weight=0.6,
+            impulse_weight=0.3,
+            recency_weight=0.05,
+            depth_weight=0.05,
         )
 
-        assert config.big_range_weight == 0.6
+        assert config.range_weight == 0.6
 
     def test_strict_formation(self):
         """Create config with stricter formation threshold."""
@@ -331,12 +280,20 @@ class TestReferenceConfigUsage:
 
     def test_loose_tolerance(self):
         """Create config with looser breach tolerance."""
-        config = ReferenceConfig.default().with_tolerance(
-            small_origin_tolerance=0.15,
-            big_trade_breach_tolerance=0.25,
-            big_close_breach_tolerance=0.20,
+        config = ReferenceConfig.default().with_breach_tolerance(
+            origin_breach_tolerance=0.15,
+            significant_trade_breach_tolerance=0.25,
+            significant_close_breach_tolerance=0.20,
         )
 
-        assert config.small_origin_tolerance == 0.15
-        assert config.big_trade_breach_tolerance == 0.25
-        assert config.big_close_breach_tolerance == 0.20
+        assert config.origin_breach_tolerance == 0.15
+        assert config.significant_trade_breach_tolerance == 0.25
+        assert config.significant_close_breach_tolerance == 0.20
+
+    def test_range_counter_standalone_mode(self):
+        """Create config using Range×Counter standalone salience mode."""
+        config = ReferenceConfig.default().with_salience_weights(
+            range_counter_weight=1.0,  # Enable standalone mode
+        )
+
+        assert config.range_counter_weight == 1.0

@@ -39,11 +39,16 @@ from .cache import get_replay_cache, is_initialized
 router = APIRouter(tags=["reference"])
 
 
-def _reference_swing_to_response(ref_swing) -> ReferenceSwingResponse:
-    """Convert ReferenceSwing to API response."""
+def _reference_swing_to_response(ref_swing, ref_layer=None) -> ReferenceSwingResponse:
+    """Convert ReferenceSwing to API response (#436)."""
+    # Get median multiple from bin distribution if available
+    median_multiple = 1.0
+    if ref_layer is not None:
+        median_multiple = ref_layer._bin_distribution.get_median_multiple(float(ref_swing.leg.range))
     return ReferenceSwingResponse(
         leg_id=ref_swing.leg.leg_id,
-        scale=ref_swing.scale,
+        bin=ref_swing.bin,
+        median_multiple=median_multiple,
         depth=ref_swing.leg.depth,
         location=ref_swing.location,
         salience_score=ref_swing.salience_score,
@@ -57,7 +62,7 @@ def _reference_swing_to_response(ref_swing) -> ReferenceSwingResponse:
 
 
 def _filtered_leg_to_response(filtered_leg) -> FilteredLegResponse:
-    """Convert FilteredLeg to API response."""
+    """Convert FilteredLeg to API response (#436)."""
     return FilteredLegResponse(
         leg_id=filtered_leg.leg.leg_id,
         direction=filtered_leg.leg.direction,
@@ -65,7 +70,7 @@ def _filtered_leg_to_response(filtered_leg) -> FilteredLegResponse:
         origin_index=filtered_leg.leg.origin_index,
         pivot_price=float(filtered_leg.leg.pivot_price),
         pivot_index=filtered_leg.leg.pivot_index,
-        scale=filtered_leg.scale,
+        bin=filtered_leg.bin,
         filter_reason=filtered_leg.reason.value,
         location=filtered_leg.location,
         threshold=filtered_leg.threshold,
@@ -112,15 +117,17 @@ def _level_cross_event_to_response(event) -> LevelCrossEventResponse:
 
 
 def _empty_response() -> ReferenceStateApiResponse:
-    """Return an empty reference state response."""
+    """Return an empty reference state response (#436)."""
     return ReferenceStateApiResponse(
         references=[],
-        by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
+        by_bin={},
+        significant=[],
         by_depth={},
         by_direction={'bull': [], 'bear': []},
         direction_imbalance=None,
         is_warming_up=True,
         warmup_progress=[0, 50],
+        median=0.0,
         filtered_legs=[],
         filter_stats=FilterStatsResponse(
             total_legs=0,
@@ -138,7 +145,7 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
     Get reference layer state at a given bar index.
 
     The reference layer filters DAG legs through formation, location, and
-    breach checks, then annotates qualifying legs with scale and salience.
+    breach checks, then annotates qualifying legs with bin and salience.
 
     Args:
         bar_index: Optional bar index for state. Uses current playback position if not provided.
@@ -204,21 +211,23 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
     # Detect level crossings for tracked legs
     crossing_events = ref_layer.detect_level_crossings(active_legs, bar)
 
-    # Convert to API response
-    refs_response = [_reference_swing_to_response(r) for r in ref_state.references]
+    # Convert to API response (#436: pass ref_layer for median_multiple)
+    refs_response = [_reference_swing_to_response(r, ref_layer) for r in ref_state.references]
 
-    by_scale_response = {
-        scale: [_reference_swing_to_response(r) for r in refs]
-        for scale, refs in ref_state.by_scale.items()
+    by_bin_response = {
+        bin_idx: [_reference_swing_to_response(r, ref_layer) for r in refs]
+        for bin_idx, refs in ref_state.by_bin.items()
     }
 
+    significant_response = [_reference_swing_to_response(r, ref_layer) for r in ref_state.significant]
+
     by_depth_response = {
-        depth: [_reference_swing_to_response(r) for r in refs]
+        depth: [_reference_swing_to_response(r, ref_layer) for r in refs]
         for depth, refs in ref_state.by_depth.items()
     }
 
     by_direction_response = {
-        direction: [_reference_swing_to_response(r) for r in refs]
+        direction: [_reference_swing_to_response(r, ref_layer) for r in refs]
         for direction, refs in ref_state.by_direction.items()
     }
 
@@ -228,13 +237,15 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
 
     return ReferenceStateApiResponse(
         references=refs_response,
-        by_scale=by_scale_response,
+        by_bin=by_bin_response,
+        significant=significant_response,
         by_depth=by_depth_response,
         by_direction=by_direction_response,
         direction_imbalance=ref_state.direction_imbalance,
         is_warming_up=ref_state.is_warming_up,
         warmup_progress=list(ref_state.warmup_progress),
         tracked_leg_ids=list(ref_layer.get_tracked_leg_ids()),
+        median=ref_layer._bin_distribution.median,
         filtered_legs=filtered_legs,
         filter_stats=filter_stats,
         crossing_events=crossing_events_response,
@@ -290,7 +301,7 @@ async def get_reference_levels(bar_index: Optional[int] = Query(None)):
     # Get active levels
     levels_dict = ref_layer.get_active_levels(ref_state)
 
-    # Convert to response format
+    # Convert to response format (#436: use bin instead of scale)
     levels_by_ratio: Dict[str, List[FibLevelResponse]] = {}
     for ratio, level_infos in levels_dict.items():
         ratio_key = str(ratio)
@@ -299,7 +310,7 @@ async def get_reference_levels(bar_index: Optional[int] = Query(None)):
                 price=info.price,
                 ratio=info.ratio,
                 leg_id=info.reference.leg.leg_id,
-                scale=info.reference.scale,
+                bin=info.reference.bin,
                 direction=info.reference.leg.direction,
             )
             for info in level_infos
@@ -464,7 +475,7 @@ async def get_confluence_zones(
     zones = ref_layer.get_confluence_zones(ref_state, tolerance_pct=tolerance_pct)
     actual_tolerance = tolerance_pct if tolerance_pct is not None else ref_layer.reference_config.confluence_tolerance_pct
 
-    # Convert to response format
+    # Convert to response format (#436: use bin instead of scale)
     zone_responses = []
     for zone in zones:
         levels = [
@@ -472,7 +483,7 @@ async def get_confluence_zones(
                 price=lvl.price,
                 ratio=lvl.ratio,
                 leg_id=lvl.reference.leg.leg_id,
-                scale=lvl.reference.scale,
+                bin=lvl.reference.bin,
                 direction=lvl.reference.leg.direction,
             )
             for lvl in zone.levels
@@ -548,13 +559,13 @@ async def get_structure_panel(bar_index: Optional[int] = Query(None)):
     # Get structure panel data
     panel_data = ref_layer.get_structure_panel_data(ref_state, bar)
 
-    # Convert to response format
+    # Convert to response format (#436: use bin instead of scale)
     def touch_to_response(touch) -> LevelTouchResponse:
         return LevelTouchResponse(
             price=touch.level.price,
             ratio=touch.level.ratio,
             leg_id=touch.level.reference.leg.leg_id,
-            scale=touch.level.reference.scale,
+            bin=touch.level.reference.bin,
             direction=touch.level.reference.leg.direction,
             bar_index=touch.bar_index,
             touch_price=touch.touch_price,
@@ -566,7 +577,7 @@ async def get_structure_panel(bar_index: Optional[int] = Query(None)):
             price=level.price,
             ratio=level.ratio,
             leg_id=level.reference.leg.leg_id,
-            scale=level.reference.scale,
+            bin=level.reference.bin,
             direction=level.reference.leg.direction,
         )
 
@@ -608,7 +619,7 @@ async def get_telemetry_panel(bar_index: Optional[int] = Query(None)):
     Get Telemetry Panel data - reference stats, top references.
 
     Shows real-time reference state like DAG's market structure panel:
-    - Reference counts by scale
+    - Reference counts by bin
     - Direction imbalance
     - Top references (biggest, most impulsive)
 
@@ -624,12 +635,14 @@ async def get_telemetry_panel(bar_index: Optional[int] = Query(None)):
     cache = get_replay_cache()
 
     empty_response = TelemetryPanelResponse(
-        counts_by_scale={'S': 0, 'M': 0, 'L': 0, 'XL': 0},
+        counts_by_bin={},
+        significant_count=0,
         total_count=0,
         bull_count=0,
         bear_count=0,
         direction_imbalance=None,
         imbalance_ratio=None,
+        median=0.0,
         biggest_reference=None,
         most_impulsive=None,
     )
@@ -661,8 +674,9 @@ async def get_telemetry_panel(bar_index: Optional[int] = Query(None)):
     ref_layer = cache["reference_layer"]
     ref_state: ReferenceState = ref_layer.update(active_legs, bar)
 
-    # Counts by scale
-    counts_by_scale = {scale: len(refs) for scale, refs in ref_state.by_scale.items()}
+    # Counts by bin (#436)
+    counts_by_bin = {bin_idx: len(refs) for bin_idx, refs in ref_state.by_bin.items()}
+    significant_count = len(ref_state.significant)
     total_count = len(ref_state.references)
 
     # Direction counts
@@ -686,7 +700,7 @@ async def get_telemetry_panel(bar_index: Optional[int] = Query(None)):
         biggest = max(ref_state.references, key=lambda r: float(r.leg.range))
         biggest_reference = TopReferenceResponse(
             leg_id=biggest.leg.leg_id,
-            scale=biggest.scale,
+            bin=biggest.bin,
             direction=biggest.leg.direction,
             range_value=float(biggest.leg.range),
             impulsiveness=biggest.leg.impulsiveness,
@@ -700,7 +714,7 @@ async def get_telemetry_panel(bar_index: Optional[int] = Query(None)):
         impulsive = max(refs_with_impulse, key=lambda r: r.leg.impulsiveness)
         most_impulsive = TopReferenceResponse(
             leg_id=impulsive.leg.leg_id,
-            scale=impulsive.scale,
+            bin=impulsive.bin,
             direction=impulsive.leg.direction,
             range_value=float(impulsive.leg.range),
             impulsiveness=impulsive.leg.impulsiveness,
@@ -708,12 +722,14 @@ async def get_telemetry_panel(bar_index: Optional[int] = Query(None)):
         )
 
     return TelemetryPanelResponse(
-        counts_by_scale=counts_by_scale,
+        counts_by_bin=counts_by_bin,
+        significant_count=significant_count,
         total_count=total_count,
         bull_count=bull_count,
         bear_count=bear_count,
         direction_imbalance=ref_state.direction_imbalance,
         imbalance_ratio=imbalance_ratio,
+        median=ref_layer._bin_distribution.median,
         biggest_reference=biggest_reference,
         most_impulsive=most_impulsive,
     )
@@ -747,17 +763,15 @@ async def get_reference_config():
         config = ReferenceConfig.default()
 
     return ReferenceConfigResponse(
-        big_range_weight=config.big_range_weight,
-        big_impulse_weight=config.big_impulse_weight,
-        big_recency_weight=config.big_recency_weight,
-        small_range_weight=config.small_range_weight,
-        small_impulse_weight=config.small_impulse_weight,
-        small_recency_weight=config.small_recency_weight,
-        range_counter_weight=config.range_counter_weight,
+        range_weight=config.range_weight,
+        impulse_weight=config.impulse_weight,
+        recency_weight=config.recency_weight,
         depth_weight=config.depth_weight,
+        range_counter_weight=config.range_counter_weight,
         top_n=config.top_n,
         formation_fib_threshold=config.formation_fib_threshold,
-        origin_breach_tolerance=config.small_origin_tolerance,  # Use small as default
+        origin_breach_tolerance=config.origin_breach_tolerance,
+        significant_bin_threshold=config.significant_bin_threshold,
     )
 
 
@@ -792,14 +806,11 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
 
     # Apply salience weight updates
     new_config = current_config.with_salience_weights(
-        big_range_weight=request.big_range_weight,
-        big_impulse_weight=request.big_impulse_weight,
-        big_recency_weight=request.big_recency_weight,
-        small_range_weight=request.small_range_weight,
-        small_impulse_weight=request.small_impulse_weight,
-        small_recency_weight=request.small_recency_weight,
-        range_counter_weight=request.range_counter_weight,
+        range_weight=request.range_weight,
+        impulse_weight=request.impulse_weight,
+        recency_weight=request.recency_weight,
         depth_weight=request.depth_weight,
+        range_counter_weight=request.range_counter_weight,
         top_n=request.top_n,
     )
 
@@ -807,25 +818,23 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
     if request.formation_fib_threshold is not None:
         new_config = new_config.with_formation_threshold(request.formation_fib_threshold)
 
-    # Apply origin breach tolerance update (applies to small_origin_tolerance)
+    # Apply origin breach tolerance update
     if request.origin_breach_tolerance is not None:
-        new_config = new_config.with_tolerance(
-            small_origin_tolerance=request.origin_breach_tolerance
+        new_config = new_config.with_breach_tolerance(
+            origin_breach_tolerance=request.origin_breach_tolerance
         )
 
     # Update reference layer config (preserves accumulated state)
     ref_layer.reference_config = new_config
 
     return ReferenceConfigResponse(
-        big_range_weight=new_config.big_range_weight,
-        big_impulse_weight=new_config.big_impulse_weight,
-        big_recency_weight=new_config.big_recency_weight,
-        small_range_weight=new_config.small_range_weight,
-        small_impulse_weight=new_config.small_impulse_weight,
-        small_recency_weight=new_config.small_recency_weight,
-        range_counter_weight=new_config.range_counter_weight,
+        range_weight=new_config.range_weight,
+        impulse_weight=new_config.impulse_weight,
+        recency_weight=new_config.recency_weight,
         depth_weight=new_config.depth_weight,
+        range_counter_weight=new_config.range_counter_weight,
         top_n=new_config.top_n,
         formation_fib_threshold=new_config.formation_fib_threshold,
-        origin_breach_tolerance=new_config.small_origin_tolerance,
+        origin_breach_tolerance=new_config.origin_breach_tolerance,
+        significant_bin_threshold=new_config.significant_bin_threshold,
     )

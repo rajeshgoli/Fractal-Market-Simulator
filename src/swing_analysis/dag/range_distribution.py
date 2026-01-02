@@ -432,3 +432,59 @@ class RollingBinDistribution:
             return 'L'
         else:
             return 'XL'
+
+    def get_median_multiple(self, range_val: float) -> float:
+        """
+        Get the median multiple for a range value.
+
+        This is the primary display value for the frontend (#436).
+        Shows how many times larger than median a leg's range is.
+
+        Args:
+            range_val: Leg range value.
+
+        Returns:
+            Median multiple (e.g., 2.5 means 2.5× median).
+        """
+        if self.median <= 0:
+            return 1.0
+        return range_val / self.median
+
+    def format_median_multiple(self, range_val: float) -> str:
+        """
+        Format median multiple for display.
+
+        Args:
+            range_val: Leg range value.
+
+        Returns:
+            Formatted string like "2.5×" or "0.3×".
+        """
+        multiple = self.get_median_multiple(range_val)
+        if multiple >= 10:
+            return f"{multiple:.0f}×"
+        elif multiple >= 1:
+            return f"{multiple:.1f}×"
+        else:
+            return f"{multiple:.2f}×"
+
+    def get_bin_label(self, bin_idx: int) -> str:
+        """
+        Get a human-readable label for a bin index.
+
+        Args:
+            bin_idx: Bin index (0-10).
+
+        Returns:
+            Label like "2-3×" or "25×+".
+        """
+        if bin_idx < 0 or bin_idx >= NUM_BINS:
+            return "?"
+        low = BIN_MULTIPLIERS[bin_idx]
+        high = BIN_MULTIPLIERS[bin_idx + 1]
+        if high == float('inf'):
+            return f"{low:.0f}×+"
+        elif low == 0:
+            return f"<{high}×"
+        else:
+            return f"{low}-{high}×"

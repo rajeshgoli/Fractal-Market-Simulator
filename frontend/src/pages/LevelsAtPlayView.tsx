@@ -716,12 +716,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             trackedLegIds={stickyLegIds}
             onToggleTrack={toggleStickyLeg}
             telemetryData={referenceState ? {
-              counts_by_scale: {
-                S: referenceState.by_scale.S.length,
-                M: referenceState.by_scale.M.length,
-                L: referenceState.by_scale.L.length,
-                XL: referenceState.by_scale.XL.length,
-              },
+              counts_by_bin: Object.fromEntries(
+                Object.entries(referenceState.by_bin).map(([bin, refs]) => [parseInt(bin), refs.length])
+              ) as Record<number, number>,
               total_count: referenceState.references.length,
               bull_count: referenceState.by_direction.bull.length,
               bear_count: referenceState.by_direction.bear.length,
@@ -741,10 +738,13 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               calibrationBarCount: calibrationBarCount,
               currentBarIndex: currentPlaybackPosition,
               swingsFoundByScale: {
-                XL: referenceState?.by_scale.XL.length ?? 0,
-                L: referenceState?.by_scale.L.length ?? 0,
-                M: referenceState?.by_scale.M.length ?? 0,
-                S: referenceState?.by_scale.S.length ?? 0,
+                // Group bins into legacy scale categories for feedback context
+                XL: referenceState?.by_bin[10]?.length ?? 0,
+                L: referenceState?.by_bin[9]?.length ?? 0,
+                M: referenceState?.by_bin[8]?.length ?? 0,
+                S: Object.entries(referenceState?.by_bin ?? {})
+                  .filter(([bin]) => parseInt(bin) <= 7)
+                  .reduce((sum, [, refs]) => sum + refs.length, 0),
               },
               totalEvents: forwardPlayback.allEvents.length,
               swingsInvalidated: 0,

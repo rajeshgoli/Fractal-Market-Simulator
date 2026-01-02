@@ -3,6 +3,11 @@ Tests for Issue #400 - Reference Observation Mode
 
 Tests the new get_all_with_status() method and FilterReason classification
 for the Reference Observation UI.
+
+Updated for #436: scale -> bin migration.
+- FilteredLeg uses bin (0-10) instead of scale (S/M/L/XL)
+- Check bin < 8 for small references (like S/M)
+- Check bin >= 8 for significant references (like L/XL)
 """
 
 import pytest
@@ -75,13 +80,13 @@ class TestFilteredLegDataclass:
         filtered = FilteredLeg(
             leg=leg,
             reason=FilterReason.NOT_FORMED,
-            scale='M',
+            bin=8,  # Using bin instead of scale
             location=0.28,
             threshold=0.382,
         )
         assert filtered.leg == leg
         assert filtered.reason == FilterReason.NOT_FORMED
-        assert filtered.scale == 'M'
+        assert filtered.bin == 8
         assert filtered.location == 0.28
         assert filtered.threshold == 0.382
 
@@ -91,7 +96,7 @@ class TestFilteredLegDataclass:
         filtered = FilteredLeg(
             leg=leg,
             reason=FilterReason.VALID,
-            scale='L',
+            bin=9,  # Significant bin (like L)
             location=0.5,
         )
         assert filtered.threshold is None
@@ -102,7 +107,7 @@ def _populate_distribution(ref_layer: ReferenceLayer, count: int = 55):
     Helper to populate the range distribution to exit cold start.
 
     Creates dummy legs and directly adds them to the distribution to ensure
-    we have enough formed legs for scale classification.
+    we have enough formed legs for bin classification.
     """
     for i in range(count):
         # Add ranges directly to the distribution
@@ -115,7 +120,7 @@ class TestGetAllWithStatus:
     """Test ReferenceLayer.get_all_with_status() method."""
 
     def test_cold_start_classification(self):
-        """All legs should get COLD_START when below min_swings_for_scale."""
+        """All legs should get COLD_START when below min_swings_for_classification."""
         config = ReferenceConfig.default()
         ref_layer = ReferenceLayer(reference_config=config)
 
@@ -195,12 +200,12 @@ class TestGetAllWithStatus:
         assert statuses[0].reason == FilterReason.COMPLETED
         assert statuses[0].threshold == 2.0
 
-    def test_origin_breached_small_scale(self):
-        """S/M legs past origin should get ORIGIN_BREACHED."""
+    def test_origin_breached_small_bin(self):
+        """Small bin refs (< 8) past origin should get ORIGIN_BREACHED."""
         config = ReferenceConfig.default()
         ref_layer = ReferenceLayer(reference_config=config)
 
-        # Populate with small ranges (2-10) so our leg ends up as S/M
+        # Populate with small ranges (2-10) so our leg ends up with small bin
         for i in range(55):
             ref_layer._add_to_range_distribution(Decimal(str(2 + i % 8)))
             ref_layer._seen_leg_ids.add(f"dummy_{i}")
@@ -221,7 +226,8 @@ class TestGetAllWithStatus:
         statuses = ref_layer.get_all_with_status([leg], breach_bar)
         assert len(statuses) == 1
         assert statuses[0].reason == FilterReason.ORIGIN_BREACHED
-        assert statuses[0].scale in ('S', 'M')
+        # Should have small bin (< 8)
+        assert statuses[0].bin < 8
 
     def test_valid_classification(self):
         """Legs passing all filters should get VALID."""

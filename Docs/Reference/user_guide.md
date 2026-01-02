@@ -406,21 +406,23 @@ The Reference Config panel lets you tune salience weights to control which level
 
 #### Structure Panel
 
-Shows the hierarchical structure of currently active references, organized by scale. Click on any reference to toggle tracking—tracked references persist visually on the chart.
+Shows the hierarchical structure of currently active references, organized by bin (median multiple). Click on any reference to toggle tracking—tracked references persist visually on the chart. References display their median multiple (e.g., "2.5×") for quick size assessment.
 
 #### Reference Stats Panel
 
 Displays aggregate statistics about active references:
-- Count by scale (XL, L, M, S)
+- Count by bin (grouped by median multiple: 5×+, 2-5×, 1-2×, <1×)
+- "Significant" count (bin ≥ 8, representing 5× median or larger)
 - Direction breakdown (Bull vs Bear)
 - Direction imbalance indicator
 - Total reference count
+- Current rolling median for context
 
 ### Bottom Panel: Reference Telemetry
 
 The bottom panel displays real-time telemetry about references:
 
-- **References**: Active reference counts by scale and direction
+- **References**: Active reference counts by bin (median multiple) and direction
 - **Detection**: Current detection status
 - **Top References**: Most salient references at the current bar
 - **Filter**: Show/hide filtered (invalid) references toggle

@@ -1,6 +1,7 @@
 import React from 'react';
 import { ReferenceStateResponseExtended, LevelCrossEvent, LifecycleEvent } from '../lib/api';
 import { TrendingUp, TrendingDown, Layers, Activity, Filter, Eye, EyeOff, Crosshair, AlertCircle, X, Zap } from 'lucide-react';
+import { getBinBadgeColor, formatMedianMultiple } from '../utils/binUtils';
 
 interface ReferenceTelemetryPanelProps {
   referenceState: ReferenceStateResponseExtended | null;
@@ -75,7 +76,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
     );
   }
 
-  const { by_scale, by_direction, direction_imbalance, references, filter_stats } = referenceState;
+  const { by_bin, by_direction, direction_imbalance, references, filter_stats } = referenceState;
 
   // Find biggest, most salient, and most impulsive
   const biggestRef = references.length > 0
@@ -117,29 +118,39 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
       )}
 
       <div className="grid grid-cols-6 gap-4">
-        {/* References by Scale */}
+        {/* References by Bin */}
         <div className="bg-app-card rounded-lg p-3 border border-app-border">
           <div className="flex items-center gap-2 mb-3">
             <Layers size={14} className="text-trading-blue" />
             <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">References</h3>
           </div>
           <div className="space-y-1.5">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400">XL</span>
-              <span className="text-sm font-mono text-app-text">{by_scale.XL?.length || 0}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400">L</span>
-              <span className="text-sm font-mono text-app-text">{by_scale.L?.length || 0}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-green-600/20 text-green-400">M</span>
-              <span className="text-sm font-mono text-app-text">{by_scale.M?.length || 0}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-600/20 text-gray-400">S</span>
-              <span className="text-sm font-mono text-app-text">{by_scale.S?.length || 0}</span>
-            </div>
+            {/* Group bins: 0-7 (Small), 8 (Sig), 9 (Large), 10 (XL) */}
+            {(() => {
+              const smallCount = Object.entries(by_bin)
+                .filter(([bin]) => parseInt(bin) <= 7)
+                .reduce((sum, [, refs]) => sum + refs.length, 0);
+              const sigCount = by_bin[8]?.length || 0;
+              const largeCount = by_bin[9]?.length || 0;
+              const xlCount = by_bin[10]?.length || 0;
+
+              const binCategories = [
+                { label: '25x+', count: xlCount, bin: 10 },
+                { label: '10-25x', count: largeCount, bin: 9 },
+                { label: '5-10x', count: sigCount, bin: 8 },
+                { label: '<5x', count: smallCount, bin: 7 },
+              ];
+
+              return binCategories.map(({ label, count, bin }) => {
+                const binColor = getBinBadgeColor(bin);
+                return (
+                  <div key={label} className="flex justify-between items-center">
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${binColor.bg} ${binColor.text}`}>{label}</span>
+                    <span className="text-sm font-mono text-app-text">{count}</span>
+                  </div>
+                );
+              });
+            })()}
             <div className="border-t border-app-border pt-1.5 mt-1.5">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-app-muted">Total</span>
@@ -194,8 +205,8 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
               <div className="text-xs">
                 <div className="text-app-muted mb-0.5">Biggest</div>
                 <div className="flex items-center gap-1.5">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getScaleColor(biggestRef.scale)}`}>
-                    {biggestRef.scale}
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getBinColor(biggestRef.bin)}`}>
+                    {formatMedianMultiple(biggestRef.median_multiple)}
                   </span>
                   <span className={biggestRef.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
                     {biggestRef.direction === 'bull' ? '▲' : '▼'}
@@ -210,8 +221,8 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
               <div className="text-xs">
                 <div className="text-app-muted mb-0.5">Most Impulsive</div>
                 <div className="flex items-center gap-1.5">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getScaleColor(mostImpulsive.scale)}`}>
-                    {mostImpulsive.scale}
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${getBinColor(mostImpulsive.bin)}`}>
+                    {formatMedianMultiple(mostImpulsive.median_multiple)}
                   </span>
                   <span className={mostImpulsive.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
                     {mostImpulsive.direction === 'bull' ? '▲' : '▼'}
@@ -380,12 +391,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
   );
 };
 
-function getScaleColor(scale: string): string {
-  switch (scale) {
-    case 'XL': return 'bg-purple-600/20 text-purple-400';
-    case 'L': return 'bg-blue-600/20 text-blue-400';
-    case 'M': return 'bg-green-600/20 text-green-400';
-    case 'S': return 'bg-gray-600/20 text-gray-400';
-    default: return 'bg-gray-600/20 text-gray-400';
-  }
+function getBinColor(bin: number): string {
+  const colors = getBinBadgeColor(bin);
+  return `${colors.bg} ${colors.text}`;
 }

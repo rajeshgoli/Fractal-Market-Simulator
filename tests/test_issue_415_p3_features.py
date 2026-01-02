@@ -1,10 +1,14 @@
 """
-Tests for Issue #415: Reference Layer P3 — Structure Panel + Confluence
+Tests for Issue #415: Reference Layer P3 - Structure Panel + Confluence
 
 Tests the new features added in P3:
 1. Confluence zone detection (get_confluence_zones)
 2. Structure Panel data (level touch tracking)
 3. Telemetry data structures
+
+Updated for #436: scale -> bin migration.
+- ReferenceSwing uses bin (0-10) instead of scale (S/M/L/XL)
+- ReferenceState uses by_bin and significant instead of by_scale
 """
 
 import pytest
@@ -60,7 +64,7 @@ def make_bar(index: int, open_: float, high: float, low: float, close: float) ->
 
 def make_reference_swing(
     leg: Leg,
-    scale: str = "M",
+    bin: int = 8,  # Default to significant bin
     depth: int = 0,
     location: float = 0.5,
     salience_score: float = 0.5,
@@ -68,7 +72,7 @@ def make_reference_swing(
     """Helper to create a ReferenceSwing for testing."""
     return ReferenceSwing(
         leg=leg,
-        scale=scale,
+        bin=bin,
         depth=depth,
         location=location,
         salience_score=salience_score,
@@ -154,9 +158,10 @@ class TestGetConfluenceZones:
         ref = make_reference_swing(leg)
         state = ReferenceState(
             references=[ref],
-            by_scale={"S": [], "M": [ref], "L": [], "XL": []},
+            by_bin={8: [ref]},
+            significant=[ref],
             by_depth={0: [ref]},
-            by_direction={"bull": [], "bear": [ref]},
+            by_direction={'bull': [], 'bear': [ref]},
             direction_imbalance=None,
         )
 
@@ -175,14 +180,15 @@ class TestGetConfluenceZones:
         # 0.5 fib of leg2 = 100.0, which is close to pivot of leg1
         leg2 = make_leg("leg2", "bear", 105, 10, 95, 15)
 
-        ref1 = make_reference_swing(leg1, scale="M")
-        ref2 = make_reference_swing(leg2, scale="M")
+        ref1 = make_reference_swing(leg1, bin=8)
+        ref2 = make_reference_swing(leg2, bin=8)
 
         state = ReferenceState(
             references=[ref1, ref2],
-            by_scale={"S": [], "M": [ref1, ref2], "L": [], "XL": []},
+            by_bin={8: [ref1, ref2]},
+            significant=[ref1, ref2],
             by_depth={0: [ref1, ref2]},
-            by_direction={"bull": [], "bear": [ref1, ref2]},
+            by_direction={'bull': [], 'bear': [ref1, ref2]},
             direction_imbalance=None,
         )
 
@@ -205,9 +211,10 @@ class TestGetConfluenceZones:
 
         state = ReferenceState(
             references=[ref],
-            by_scale={"S": [], "M": [ref], "L": [], "XL": []},
+            by_bin={8: [ref]},
+            significant=[ref],
             by_depth={0: [ref]},
-            by_direction={"bull": [], "bear": [ref]},
+            by_direction={'bull': [], 'bear': [ref]},
             direction_imbalance=None,
         )
 
@@ -222,9 +229,10 @@ class TestGetConfluenceZones:
 
         state = ReferenceState(
             references=[],
-            by_scale={"S": [], "M": [], "L": [], "XL": []},
+            by_bin={},
+            significant=[],
             by_depth={},
-            by_direction={"bull": [], "bear": []},
+            by_direction={'bull': [], 'bear': []},
             direction_imbalance=None,
         )
 
@@ -240,9 +248,10 @@ class TestGetStructurePanelData:
         layer = ReferenceLayer()
         state = ReferenceState(
             references=[],
-            by_scale={"S": [], "M": [], "L": [], "XL": []},
+            by_bin={},
+            significant=[],
             by_depth={},
-            by_direction={"bull": [], "bear": []},
+            by_direction={'bull': [], 'bear': []},
             direction_imbalance=None,
         )
         bar = make_bar(100, 4150, 4155, 4145, 4152)
@@ -264,9 +273,10 @@ class TestGetStructurePanelData:
 
         state = ReferenceState(
             references=[ref],
-            by_scale={"S": [], "M": [ref], "L": [], "XL": []},
+            by_bin={8: [ref]},
+            significant=[ref],
             by_depth={0: [ref]},
-            by_direction={"bull": [], "bear": [ref]},
+            by_direction={'bull': [], 'bear': [ref]},
             direction_imbalance=None,
         )
 
@@ -290,9 +300,10 @@ class TestGetStructurePanelData:
 
         state = ReferenceState(
             references=[ref],
-            by_scale={"S": [], "M": [ref], "L": [], "XL": []},
+            by_bin={8: [ref]},
+            significant=[ref],
             by_depth={0: [ref]},
-            by_direction={"bull": [], "bear": [ref]},
+            by_direction={'bull': [], 'bear': [ref]},
             direction_imbalance=None,
         )
 
@@ -314,9 +325,10 @@ class TestGetStructurePanelData:
 
         state = ReferenceState(
             references=[ref],
-            by_scale={"S": [], "M": [ref], "L": [], "XL": []},
+            by_bin={8: [ref]},
+            significant=[ref],
             by_depth={0: [ref]},
-            by_direction={"bull": [], "bear": [ref]},
+            by_direction={'bull': [], 'bear': [ref]},
             direction_imbalance=None,
         )
 
@@ -346,9 +358,10 @@ class TestClearSessionTouches:
 
         state = ReferenceState(
             references=[ref],
-            by_scale={"S": [], "M": [ref], "L": [], "XL": []},
+            by_bin={8: [ref]},
+            significant=[ref],
             by_depth={0: [ref]},
-            by_direction={"bull": [], "bear": [ref]},
+            by_direction={'bull': [], 'bear': [ref]},
             direction_imbalance=None,
         )
 
@@ -419,9 +432,10 @@ class TestConfluenceZoneAlgorithm:
 
         state = ReferenceState(
             references=[ref1, ref2],
-            by_scale={"S": [], "M": [ref1, ref2], "L": [], "XL": []},
+            by_bin={8: [ref1, ref2]},
+            significant=[ref1, ref2],
             by_depth={0: [ref1, ref2]},
-            by_direction={"bull": [], "bear": [ref1, ref2]},
+            by_direction={'bull': [], 'bear': [ref1, ref2]},
             direction_imbalance=None,
         )
 

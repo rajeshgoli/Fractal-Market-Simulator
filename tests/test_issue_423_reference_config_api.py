@@ -6,6 +6,11 @@ Validates:
 - POST /api/reference/config accepts partial updates
 - Config persists in replay cache for session
 - Round-trip preserves values
+
+Updated for #436 scale->bin migration:
+- Unified weights (range_weight, impulse_weight, recency_weight, depth_weight)
+- Removed scale-dependent weights (big_*, small_*)
+- Removed use_bin_distribution (bins always used)
 """
 
 import pytest
@@ -23,39 +28,35 @@ class TestReferenceConfigSchemas:
 
         config = ReferenceConfig.default()
         response = ReferenceConfigResponse(
-            big_range_weight=config.big_range_weight,
-            big_impulse_weight=config.big_impulse_weight,
-            big_recency_weight=config.big_recency_weight,
-            small_range_weight=config.small_range_weight,
-            small_impulse_weight=config.small_impulse_weight,
-            small_recency_weight=config.small_recency_weight,
-            range_counter_weight=config.range_counter_weight,
+            range_weight=config.range_weight,
+            impulse_weight=config.impulse_weight,
+            recency_weight=config.recency_weight,
             depth_weight=config.depth_weight,
+            range_counter_weight=config.range_counter_weight,
             top_n=config.top_n,
             formation_fib_threshold=config.formation_fib_threshold,
-            origin_breach_tolerance=config.small_origin_tolerance,
+            origin_breach_tolerance=config.origin_breach_tolerance,
+            significant_bin_threshold=config.significant_bin_threshold,
         )
 
-        assert response.big_range_weight == 0.5
+        assert response.range_weight == 0.4
+        assert response.impulse_weight == 0.4
+        assert response.recency_weight == 0.1
+        assert response.depth_weight == 0.1
         assert response.range_counter_weight == 0.0
-        assert response.depth_weight == 0.0
         assert response.top_n == 5
-        assert response.big_impulse_weight == 0.4
-        assert response.big_recency_weight == 0.1
-        assert response.small_range_weight == 0.2
-        assert response.small_impulse_weight == 0.3
-        assert response.small_recency_weight == 0.5
         assert response.formation_fib_threshold == 0.382
         assert response.origin_breach_tolerance == 0.0
+        assert response.significant_bin_threshold == 8
 
     def test_update_request_partial_fields(self):
         """ReferenceConfigUpdateRequest should support partial updates."""
         from src.replay_server.schemas import ReferenceConfigUpdateRequest
 
-        # Only big_range_weight specified
-        request = ReferenceConfigUpdateRequest(big_range_weight=0.6)
-        assert request.big_range_weight == 0.6
-        assert request.big_impulse_weight is None
+        # Only range_weight specified
+        request = ReferenceConfigUpdateRequest(range_weight=0.6)
+        assert request.range_weight == 0.6
+        assert request.impulse_weight is None
         assert request.formation_fib_threshold is None
 
     def test_update_request_all_fields(self):
@@ -63,21 +64,17 @@ class TestReferenceConfigSchemas:
         from src.replay_server.schemas import ReferenceConfigUpdateRequest
 
         request = ReferenceConfigUpdateRequest(
-            big_range_weight=0.6,
-            big_impulse_weight=0.3,
-            big_recency_weight=0.1,
-            small_range_weight=0.3,
-            small_impulse_weight=0.4,
-            small_recency_weight=0.3,
+            range_weight=0.6,
+            impulse_weight=0.3,
+            recency_weight=0.05,
+            depth_weight=0.05,
             formation_fib_threshold=0.5,
         )
 
-        assert request.big_range_weight == 0.6
-        assert request.big_impulse_weight == 0.3
-        assert request.big_recency_weight == 0.1
-        assert request.small_range_weight == 0.3
-        assert request.small_impulse_weight == 0.4
-        assert request.small_recency_weight == 0.3
+        assert request.range_weight == 0.6
+        assert request.impulse_weight == 0.3
+        assert request.recency_weight == 0.05
+        assert request.depth_weight == 0.05
         assert request.formation_fib_threshold == 0.5
 
 
@@ -88,33 +85,29 @@ class TestReferenceConfigWithSalienceWeights:
         """with_salience_weights should only update provided fields."""
         config = ReferenceConfig.default()
 
-        # Only update big_range_weight
-        updated = config.with_salience_weights(big_range_weight=0.7)
+        # Only update range_weight
+        updated = config.with_salience_weights(range_weight=0.7)
 
-        assert updated.big_range_weight == 0.7
-        assert updated.big_impulse_weight == 0.4  # unchanged
-        assert updated.big_recency_weight == 0.1  # unchanged
-        assert updated.small_range_weight == 0.2  # unchanged
+        assert updated.range_weight == 0.7
+        assert updated.impulse_weight == 0.4  # unchanged
+        assert updated.recency_weight == 0.1  # unchanged
+        assert updated.depth_weight == 0.1    # unchanged
 
     def test_all_weights_update(self):
         """with_salience_weights should update all provided fields."""
         config = ReferenceConfig.default()
 
         updated = config.with_salience_weights(
-            big_range_weight=0.6,
-            big_impulse_weight=0.3,
-            big_recency_weight=0.1,
-            small_range_weight=0.3,
-            small_impulse_weight=0.4,
-            small_recency_weight=0.3,
+            range_weight=0.6,
+            impulse_weight=0.3,
+            recency_weight=0.05,
+            depth_weight=0.05,
         )
 
-        assert updated.big_range_weight == 0.6
-        assert updated.big_impulse_weight == 0.3
-        assert updated.big_recency_weight == 0.1
-        assert updated.small_range_weight == 0.3
-        assert updated.small_impulse_weight == 0.4
-        assert updated.small_recency_weight == 0.3
+        assert updated.range_weight == 0.6
+        assert updated.impulse_weight == 0.3
+        assert updated.recency_weight == 0.05
+        assert updated.depth_weight == 0.05
 
     def test_formation_threshold_update(self):
         """with_formation_threshold should update formation_fib_threshold."""
@@ -124,8 +117,8 @@ class TestReferenceConfigWithSalienceWeights:
 
         assert updated.formation_fib_threshold == 0.5
         # Other fields should be unchanged
-        assert updated.big_range_weight == 0.5
-        assert updated.big_impulse_weight == 0.4
+        assert updated.range_weight == 0.4
+        assert updated.impulse_weight == 0.4
 
 
 class TestReferenceConfigEndpoints:
@@ -142,13 +135,12 @@ class TestReferenceConfigEndpoints:
 
         response = asyncio.get_event_loop().run_until_complete(get_reference_config())
 
-        assert response.big_range_weight == 0.5
-        assert response.big_impulse_weight == 0.4
-        assert response.big_recency_weight == 0.1
-        assert response.small_range_weight == 0.2
-        assert response.small_impulse_weight == 0.3
-        assert response.small_recency_weight == 0.5
+        assert response.range_weight == 0.4
+        assert response.impulse_weight == 0.4
+        assert response.recency_weight == 0.1
+        assert response.depth_weight == 0.1
         assert response.formation_fib_threshold == 0.382
+        assert response.significant_bin_threshold == 8
 
     def test_update_config_partial(self):
         """POST /api/reference/config should apply partial updates."""
@@ -160,11 +152,11 @@ class TestReferenceConfigEndpoints:
         cache = get_replay_cache()
         cache.clear()
 
-        request = ReferenceConfigUpdateRequest(big_range_weight=0.7)
+        request = ReferenceConfigUpdateRequest(range_weight=0.7)
         response = asyncio.get_event_loop().run_until_complete(update_reference_config(request))
 
-        assert response.big_range_weight == 0.7
-        assert response.big_impulse_weight == 0.4  # unchanged
+        assert response.range_weight == 0.7
+        assert response.impulse_weight == 0.4  # unchanged
         assert response.formation_fib_threshold == 0.382  # unchanged
 
     def test_update_config_persists(self):
@@ -182,7 +174,7 @@ class TestReferenceConfigEndpoints:
 
         # Update config
         request = ReferenceConfigUpdateRequest(
-            big_range_weight=0.6,
+            range_weight=0.6,
             formation_fib_threshold=0.5,
         )
         asyncio.get_event_loop().run_until_complete(update_reference_config(request))
@@ -190,7 +182,7 @@ class TestReferenceConfigEndpoints:
         # Get config should return updated values
         response = asyncio.get_event_loop().run_until_complete(get_reference_config())
 
-        assert response.big_range_weight == 0.6
+        assert response.range_weight == 0.6
         assert response.formation_fib_threshold == 0.5
 
     def test_round_trip(self):
@@ -208,12 +200,10 @@ class TestReferenceConfigEndpoints:
 
         # Update with specific values
         request = ReferenceConfigUpdateRequest(
-            big_range_weight=0.8,
-            big_impulse_weight=0.15,
-            big_recency_weight=0.05,
-            small_range_weight=0.4,
-            small_impulse_weight=0.35,
-            small_recency_weight=0.25,
+            range_weight=0.5,
+            impulse_weight=0.3,
+            recency_weight=0.1,
+            depth_weight=0.1,
             formation_fib_threshold=0.45,
         )
         asyncio.get_event_loop().run_until_complete(update_reference_config(request))
@@ -221,10 +211,8 @@ class TestReferenceConfigEndpoints:
         # Get and verify all values
         response = asyncio.get_event_loop().run_until_complete(get_reference_config())
 
-        assert response.big_range_weight == 0.8
-        assert response.big_impulse_weight == 0.15
-        assert response.big_recency_weight == 0.05
-        assert response.small_range_weight == 0.4
-        assert response.small_impulse_weight == 0.35
-        assert response.small_recency_weight == 0.25
+        assert response.range_weight == 0.5
+        assert response.impulse_weight == 0.3
+        assert response.recency_weight == 0.1
+        assert response.depth_weight == 0.1
         assert response.formation_fib_threshold == 0.45

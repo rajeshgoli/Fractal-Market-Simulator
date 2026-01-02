@@ -6,6 +6,7 @@ import {
   ReferenceSwing,
 } from '../lib/api';
 import { Eye, EyeOff, Layers, Target, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { getBinBadgeColor, formatMedianMultiple } from '../utils/binUtils';
 
 interface StructurePanelProps {
   structureData: StructurePanelResponse | null;
@@ -15,13 +16,8 @@ interface StructurePanelProps {
   isLoading?: boolean;
 }
 
-// Scale badge colors
-const SCALE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
-  'XL': { bg: 'bg-purple-600/20', text: 'text-purple-400' },
-  'L': { bg: 'bg-blue-600/20', text: 'text-blue-400' },
-  'M': { bg: 'bg-green-600/20', text: 'text-green-400' },
-  'S': { bg: 'bg-gray-600/20', text: 'text-gray-400' },
-};
+// Bin badge colors helper - uses the shared utility
+const getBinStyle = (bin: number): { bg: string; text: string } => getBinBadgeColor(bin);
 
 // Format level display
 const formatLevel = (level: FibLevel, currentPrice: number): { distance: string; direction: 'above' | 'below' } => {
@@ -161,14 +157,14 @@ export const StructurePanel: React.FC<StructurePanelProps> = ({
 
 // Touch item component
 const TouchItem: React.FC<{ touch: LevelTouch; compact?: boolean }> = ({ touch, compact = false }) => {
-  const scaleStyle = SCALE_BADGE_COLORS[touch.scale] || SCALE_BADGE_COLORS['S'];
+  const binStyle = getBinStyle(touch.bin);
   const crossIcon = touch.cross_direction === 'up' ? <ChevronUp size={10} /> : <ChevronDown size={10} />;
   const crossColor = touch.cross_direction === 'up' ? 'text-trading-bull' : 'text-trading-bear';
 
   return (
     <div className={`flex items-center gap-1.5 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>
-      <span className={`px-1 py-0.5 rounded ${scaleStyle.bg} ${scaleStyle.text} text-[9px] font-medium`}>
-        {touch.scale}
+      <span className={`px-1 py-0.5 rounded ${binStyle.bg} ${binStyle.text} text-[9px] font-medium`}>
+        {formatMedianMultiple(touch.median_multiple)}
       </span>
       <span className={touch.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
         {touch.direction === 'bull' ? '▲' : '▼'}
@@ -195,7 +191,7 @@ const ActiveLevelItem: React.FC<{
   isTracked: boolean;
   onToggleTrack: (legId: string) => Promise<{ success: boolean; error?: string }>;
 }> = ({ level, currentPrice, isTracked, onToggleTrack }) => {
-  const scaleStyle = SCALE_BADGE_COLORS[level.scale] || SCALE_BADGE_COLORS['S'];
+  const binStyle = getBinStyle(level.bin);
   const { distance, direction } = formatLevel(level, currentPrice);
 
   const handleClick = async (e: React.MouseEvent) => {
@@ -216,8 +212,8 @@ const ActiveLevelItem: React.FC<{
       >
         {isTracked ? <Eye size={10} /> : <EyeOff size={10} />}
       </button>
-      <span className={`px-1 py-0.5 rounded ${scaleStyle.bg} ${scaleStyle.text} text-[9px] font-medium`}>
-        {level.scale}
+      <span className={`px-1 py-0.5 rounded ${binStyle.bg} ${binStyle.text} text-[9px] font-medium`}>
+        {formatMedianMultiple(level.median_multiple)}
       </span>
       <span className={level.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
         {level.direction === 'bull' ? '▲' : '▼'}
@@ -241,7 +237,7 @@ const ReferenceItem: React.FC<{
   isTracked: boolean;
   onToggleTrack: (legId: string) => Promise<{ success: boolean; error?: string }>;
 }> = ({ reference, isTracked, onToggleTrack }) => {
-  const scaleStyle = SCALE_BADGE_COLORS[reference.scale] || SCALE_BADGE_COLORS['S'];
+  const binStyle = getBinStyle(reference.bin);
   const range = Math.abs(reference.origin_price - reference.pivot_price).toFixed(2);
 
   const handleClick = async (e: React.MouseEvent) => {
@@ -262,8 +258,8 @@ const ReferenceItem: React.FC<{
       >
         {isTracked ? <Eye size={10} /> : <EyeOff size={10} />}
       </button>
-      <span className={`px-1 py-0.5 rounded ${scaleStyle.bg} ${scaleStyle.text} text-[9px] font-medium`}>
-        {reference.scale}
+      <span className={`px-1 py-0.5 rounded ${binStyle.bg} ${binStyle.text} text-[9px] font-medium`}>
+        {formatMedianMultiple(reference.median_multiple)}
       </span>
       <span className={reference.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
         {reference.direction === 'bull' ? '▲' : '▼'}

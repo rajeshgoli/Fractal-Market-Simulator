@@ -579,11 +579,12 @@ class SwingConfigResponse(BaseModel):
 
 
 class ReferenceSwingResponse(BaseModel):
-    """API response for a single reference swing from the Reference Layer."""
+    """API response for a single reference swing from the Reference Layer (#436)."""
     leg_id: str
-    scale: str  # "S", "M", "L", "XL"
+    bin: int  # 0-10 median-normalized bin index (#436)
+    median_multiple: float  # e.g., 2.5 means 2.5× median range (#436)
     depth: int
-    location: float  # 0.0 - 1.0 (where current price is within leg range)
+    location: float  # 0.0 - 2.0 (where current price is within leg range)
     salience_score: float
     direction: str  # "bull" or "bear"
     origin_price: float
@@ -594,15 +595,17 @@ class ReferenceSwingResponse(BaseModel):
 
 
 class ReferenceStateApiResponse(BaseModel):
-    """API response for reference layer state."""
+    """API response for reference layer state (#436)."""
     references: List[ReferenceSwingResponse]
-    by_scale: Dict[str, List[ReferenceSwingResponse]]
+    by_bin: Dict[int, List[ReferenceSwingResponse]]  # Grouped by bin index (#436)
+    significant: List[ReferenceSwingResponse]  # Bin >= 8 (5× median or larger) (#436)
     by_depth: Dict[int, List[ReferenceSwingResponse]]
     by_direction: Dict[str, List[ReferenceSwingResponse]]
     direction_imbalance: Optional[str]  # "bull", "bear", or None
     is_warming_up: bool
     warmup_progress: List[int]  # [current, target]
     tracked_leg_ids: List[str] = []  # Leg IDs tracked for level crossing
+    median: float = 0.0  # Current rolling median for context (#436)
     # Reference Observation Mode (Issue #400)
     filtered_legs: List['FilteredLegResponse'] = []  # All non-valid legs with reasons
     filter_stats: Optional['FilterStatsResponse'] = None  # Filter breakdown statistics
@@ -611,11 +614,11 @@ class ReferenceStateApiResponse(BaseModel):
 
 
 class FibLevelResponse(BaseModel):
-    """API response for a single fib level from Reference Layer."""
+    """API response for a single fib level from Reference Layer (#436)."""
     price: float
     ratio: float
     leg_id: str
-    scale: str  # "S", "M", "L", "XL"
+    bin: int  # 0-10 median-normalized bin index (#436)
     direction: str  # "bull" or "bear"
 
 
@@ -630,14 +633,14 @@ class ActiveLevelsResponse(BaseModel):
 
 
 class FilteredLegResponse(BaseModel):
-    """API response for a filtered leg with filter reason."""
+    """API response for a filtered leg with filter reason (#436)."""
     leg_id: str
     direction: str  # "bull" or "bear"
     origin_price: float
     origin_index: int
     pivot_price: float
     pivot_index: int
-    scale: str  # "S", "M", "L", "XL"
+    bin: int  # 0-10 median-normalized bin index (#436)
     filter_reason: str  # "valid", "cold_start", "not_formed", "pivot_breached", "completed", "origin_breached"
     location: float  # 0.0 - 2.0 (current price position in reference frame)
     threshold: Optional[float] = None  # Violated threshold (for breach reasons)
@@ -657,11 +660,11 @@ class FilterStatsResponse(BaseModel):
 
 
 class ConfluenceZoneLevelResponse(BaseModel):
-    """A fib level participating in a confluence zone."""
+    """A fib level participating in a confluence zone (#436)."""
     price: float
     ratio: float
     leg_id: str
-    scale: str
+    bin: int  # 0-10 median-normalized bin index (#436)
     direction: str
 
 
@@ -687,11 +690,11 @@ class ConfluenceZonesResponse(BaseModel):
 
 
 class LevelTouchResponse(BaseModel):
-    """API response for a level touch/cross event."""
+    """API response for a level touch/cross event (#436)."""
     price: float
     ratio: float
     leg_id: str
-    scale: str
+    bin: int  # 0-10 median-normalized bin index (#436)
     direction: str
     bar_index: int
     touch_price: float
@@ -720,9 +723,9 @@ class StructurePanelResponse(BaseModel):
 
 
 class TopReferenceResponse(BaseModel):
-    """API response for a top reference (biggest or most impulsive)."""
+    """API response for a top reference (biggest or most impulsive) (#436)."""
     leg_id: str
-    scale: str
+    bin: int  # 0-10 median-normalized bin index (#436)
     direction: str
     range_value: float
     impulsiveness: Optional[float]
@@ -731,19 +734,21 @@ class TopReferenceResponse(BaseModel):
 
 class TelemetryPanelResponse(BaseModel):
     """
-    API response for Telemetry Panel data.
+    API response for Telemetry Panel data (#436).
 
     Shows real-time reference state like DAG's market structure panel:
-    - Reference counts by scale
+    - Reference counts by bin
     - Direction imbalance
     - Top references (biggest, most impulsive)
     """
-    counts_by_scale: Dict[str, int]  # {"S": 5, "M": 10, "L": 3, "XL": 1}
+    counts_by_bin: Dict[int, int]  # {8: 5, 9: 3, 10: 1} (#436)
+    significant_count: int  # Bin >= 8 (#436)
     total_count: int
     bull_count: int
     bear_count: int
     direction_imbalance: Optional[str]  # "bull" | "bear" | None
     imbalance_ratio: Optional[str]  # e.g., "3:1"
+    median: float  # Current rolling median (#436)
     biggest_reference: Optional[TopReferenceResponse]
     most_impulsive: Optional[TopReferenceResponse]
 
@@ -794,27 +799,21 @@ class TrackLegResponse(BaseModel):
 
 class ReferenceConfigUpdateRequest(BaseModel):
     """
-    Request to update reference layer configuration.
+    Request to update reference layer configuration (#436).
 
     All fields are optional - only provided fields are updated.
     Used by POST /api/reference/config to apply partial updates.
+    Uses unified weights (no scale-dependent weights).
     """
-    # Salience weights (L/XL)
-    big_range_weight: Optional[float] = None
-    big_impulse_weight: Optional[float] = None
-    big_recency_weight: Optional[float] = None
-
-    # Salience weights (S/M)
-    small_range_weight: Optional[float] = None
-    small_impulse_weight: Optional[float] = None
-    small_recency_weight: Optional[float] = None
+    # Unified salience weights (#436)
+    range_weight: Optional[float] = None
+    impulse_weight: Optional[float] = None
+    recency_weight: Optional[float] = None
+    depth_weight: Optional[float] = None
 
     # Standalone salience mode: Range×Counter
     # When > 0, uses range × origin_counter_trend_range instead of weighted sum
     range_counter_weight: Optional[float] = None
-
-    # Depth weight for salience calculation
-    depth_weight: Optional[float] = None
 
     # Display limit: how many references to show
     top_n: Optional[int] = None
@@ -822,16 +821,18 @@ class ReferenceConfigUpdateRequest(BaseModel):
     # Formation threshold
     formation_fib_threshold: Optional[float] = None
 
-    # Origin breach tolerance (simplified - applies to all scales)
+    # Origin breach tolerance (for bins < significant_bin_threshold)
     origin_breach_tolerance: Optional[float] = None
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "big_range_weight": 0.6,
+                "range_weight": 0.4,
+                "impulse_weight": 0.4,
+                "recency_weight": 0.1,
+                "depth_weight": 0.1,
                 "formation_fib_threshold": 0.5,
                 "range_counter_weight": 0.0,
-                "depth_weight": 0.0,
                 "top_n": 5,
             }
         }
@@ -840,25 +841,19 @@ class ReferenceConfigUpdateRequest(BaseModel):
 
 class ReferenceConfigResponse(BaseModel):
     """
-    Response with current reference layer configuration.
+    Response with current reference layer configuration (#436).
 
     Returns all current values after an update, or the current defaults.
+    Uses unified weights (no scale-dependent weights).
     """
-    # Salience weights (L/XL)
-    big_range_weight: float
-    big_impulse_weight: float
-    big_recency_weight: float
-
-    # Salience weights (S/M)
-    small_range_weight: float
-    small_impulse_weight: float
-    small_recency_weight: float
+    # Unified salience weights (#436)
+    range_weight: float
+    impulse_weight: float
+    recency_weight: float
+    depth_weight: float
 
     # Standalone salience mode: Range×Counter
     range_counter_weight: float
-
-    # Depth weight for salience calculation
-    depth_weight: float
 
     # Display limit: how many references to show
     top_n: int
@@ -866,23 +861,24 @@ class ReferenceConfigResponse(BaseModel):
     # Formation threshold
     formation_fib_threshold: float
 
-    # Origin breach tolerance (simplified)
+    # Origin breach tolerance (for bins < significant_bin_threshold)
     origin_breach_tolerance: float
+
+    # Bin classification
+    significant_bin_threshold: int  # Bins >= this get breach tolerance (#436)
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "big_range_weight": 0.5,
-                "big_impulse_weight": 0.4,
-                "big_recency_weight": 0.1,
-                "small_range_weight": 0.2,
-                "small_impulse_weight": 0.3,
-                "small_recency_weight": 0.5,
+                "range_weight": 0.4,
+                "impulse_weight": 0.4,
+                "recency_weight": 0.1,
+                "depth_weight": 0.1,
                 "range_counter_weight": 0.0,
-                "depth_weight": 0.0,
                 "top_n": 5,
                 "formation_fib_threshold": 0.382,
                 "origin_breach_tolerance": 0.0,
+                "significant_bin_threshold": 8,
             }
         }
     )

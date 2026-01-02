@@ -8,6 +8,11 @@ Covers:
 - References sorted by salience
 - Groupings are correct
 - Direction imbalance detection
+
+Updated for #436: scale -> bin migration.
+- by_scale -> by_bin (0-10)
+- significant list for bin >= 8
+- min_swings_for_scale -> min_swings_for_classification
 """
 
 import pytest
@@ -81,7 +86,9 @@ class TestUpdateEmptyLegs:
         state = ref_layer.update([], bar)
 
         assert len(state.references) == 0
-        assert state.by_scale == {'S': [], 'M': [], 'L': [], 'XL': []}
+        # by_bin uses integer keys 0-10, but empty state may not have all keys
+        assert state.by_bin == {} or all(v == [] for v in state.by_bin.values())
+        assert state.significant == []
         assert state.by_depth == {}
         assert state.by_direction == {'bull': [], 'bear': []}
         assert state.direction_imbalance is None
@@ -91,8 +98,8 @@ class TestUpdateColdStart:
     """Tests for cold start behavior."""
 
     def test_cold_start_returns_empty_state(self):
-        """Should return empty state when not enough swings for scale."""
-        # min_swings_for_scale defaults to 50
+        """Should return empty state when not enough swings for classification."""
+        # min_swings_for_classification defaults to 50
         config = ReferenceConfig.default()
         ref_layer = ReferenceLayer(reference_config=config)
 
@@ -112,7 +119,7 @@ class TestUpdateColdStart:
 
     def test_past_cold_start_returns_references(self):
         """Should return references once past cold start threshold."""
-        config = ReferenceConfig(min_swings_for_scale=5)  # Lower threshold for test
+        config = ReferenceConfig(min_swings_for_classification=5)  # Lower threshold for test
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Create 10 legs with same range so they all form
@@ -135,7 +142,7 @@ class TestUpdateRangeDistribution:
 
     def test_range_distribution_updated_with_new_legs(self):
         """Range distribution should be updated with new legs."""
-        config = ReferenceConfig(min_swings_for_scale=2)
+        config = ReferenceConfig(min_swings_for_classification=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # First update with 2 legs (same range to ensure consistent formation)
@@ -164,7 +171,7 @@ class TestUpdateFormation:
 
     def test_unformed_legs_excluded(self):
         """Legs that haven't reached formation threshold should be excluded."""
-        config = ReferenceConfig(min_swings_for_scale=1)
+        config = ReferenceConfig(min_swings_for_classification=1)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Leg at pivot 100, origin 110, range 10
@@ -178,7 +185,7 @@ class TestUpdateFormation:
 
     def test_formed_legs_included(self):
         """Legs that have reached formation threshold should be included."""
-        config = ReferenceConfig(min_swings_for_scale=1)
+        config = ReferenceConfig(min_swings_for_classification=1)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Leg at pivot 100, origin 110, range 10
@@ -196,7 +203,7 @@ class TestUpdateBreachDetection:
 
     def test_pivot_breach_removes_reference(self):
         """Leg with pivot breach should be excluded."""
-        config = ReferenceConfig(min_swings_for_scale=1)
+        config = ReferenceConfig(min_swings_for_classification=1)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Bear leg: pivot 100, origin 110
@@ -220,14 +227,14 @@ class TestUpdateSalienceSorting:
 
     def test_references_sorted_by_salience_descending(self):
         """References should be sorted by salience (highest first)."""
-        config = ReferenceConfig(min_swings_for_scale=2)
+        config = ReferenceConfig(min_swings_for_classification=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Create legs with different ranges (affecting salience)
         # Both legs need to form: close must be >= 0.382 * range from pivot
-        # Leg 1: origin=110, pivot=100, range=10 → 0.382*10 = 3.82, needs close >= 103.82
-        # Leg 2: origin=120, pivot=100, range=20 → 0.382*20 = 7.64, needs close >= 107.64
-        # Bar high must not breach origins (S/M have 0% tolerance, so high must be < origin)
+        # Leg 1: origin=110, pivot=100, range=10 -> 0.382*10 = 3.82, needs close >= 103.82
+        # Leg 2: origin=120, pivot=100, range=20 -> 0.382*20 = 7.64, needs close >= 107.64
+        # Bar high must not breach origins (bins < 8 have 0% tolerance, so high must be < origin)
         small_leg = make_leg(origin_price=110, pivot_price=100, origin_index=0)  # range = 10
         large_leg = make_leg(origin_price=120, pivot_price=100, origin_index=50)  # range = 20
 
@@ -247,9 +254,9 @@ class TestUpdateSalienceSorting:
 class TestUpdateGroupings:
     """Tests for grouping in update()."""
 
-    def test_by_scale_grouping(self):
-        """References should be grouped by scale correctly."""
-        config = ReferenceConfig(min_swings_for_scale=2)
+    def test_by_bin_grouping(self):
+        """References should be grouped by bin correctly."""
+        config = ReferenceConfig(min_swings_for_classification=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Create legs
@@ -259,19 +266,33 @@ class TestUpdateGroupings:
         bar = make_bar(close=104.0, index=200)
         state = ref_layer.update([leg1, leg2], bar)
 
-        # by_scale should have all keys
-        assert 'S' in state.by_scale
-        assert 'M' in state.by_scale
-        assert 'L' in state.by_scale
-        assert 'XL' in state.by_scale
+        # by_bin should have integer keys (0-10)
+        # Just verify the structure is correct
+        assert isinstance(state.by_bin, dict)
 
-        # Total across all scales should equal total references
-        total_in_scales = sum(len(refs) for refs in state.by_scale.values())
-        assert total_in_scales == len(state.references)
+        # Total across all bins should equal total references
+        total_in_bins = sum(len(refs) for refs in state.by_bin.values())
+        assert total_in_bins == len(state.references)
+
+    def test_significant_grouping(self):
+        """References with bin >= 8 should appear in significant list."""
+        config = ReferenceConfig(min_swings_for_classification=2)
+        ref_layer = ReferenceLayer(reference_config=config)
+
+        # Create legs with varying ranges
+        leg1 = make_leg(origin_price=105, pivot_price=100, origin_index=0)
+        leg2 = make_leg(origin_price=150, pivot_price=100, origin_index=50)
+
+        bar = make_bar(close=104.0, index=200)
+        state = ref_layer.update([leg1, leg2], bar)
+
+        # Significant should only contain refs with bin >= 8
+        for ref in state.significant:
+            assert ref.bin >= 8
 
     def test_by_depth_grouping(self):
         """References should be grouped by depth correctly."""
-        config = ReferenceConfig(min_swings_for_scale=2)
+        config = ReferenceConfig(min_swings_for_classification=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Create legs with different depths
@@ -287,7 +308,7 @@ class TestUpdateGroupings:
 
     def test_by_direction_grouping(self):
         """References should be grouped by direction correctly."""
-        config = ReferenceConfig(min_swings_for_scale=2)
+        config = ReferenceConfig(min_swings_for_classification=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Create bear and bull legs
@@ -297,7 +318,7 @@ class TestUpdateGroupings:
 
         # Bar at a price that forms both references
         # Bear leg: close at 104 = location 0.4 (formed)
-        # Bull leg: close at 104 → location from pivot (100) to origin (80)
+        # Bull leg: close at 104 -> location from pivot (100) to origin (80)
         #   For bull ref (bear direction in reference frame), location = (100-104)/(100-80) = -0.2
         #   Wait, that's wrong. Let me reconsider.
         # For bull leg: pivot=100 (high), origin=80 (low), range=20
@@ -322,8 +343,8 @@ class TestUpdateDirectionImbalance:
     """Tests for direction imbalance detection."""
 
     def test_bull_imbalance_when_bulls_dominate(self):
-        """direction_imbalance should be 'bull' when bull > 2× bear."""
-        config = ReferenceConfig(min_swings_for_scale=4)
+        """direction_imbalance should be 'bull' when bull > 2x bear."""
+        config = ReferenceConfig(min_swings_for_classification=4)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Create 3 bear legs (become bull references) and 1 bull leg
@@ -351,7 +372,7 @@ class TestUpdateDirectionImbalance:
 
     def test_no_imbalance_when_balanced(self):
         """direction_imbalance should be None when roughly balanced."""
-        config = ReferenceConfig(min_swings_for_scale=2)
+        config = ReferenceConfig(min_swings_for_classification=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Create 1 bear leg and 1 bull leg
@@ -378,7 +399,7 @@ class TestUpdateLocationCapping:
 
     def test_location_capped_at_2(self):
         """Location in ReferenceSwing should be capped at 2.0."""
-        config = ReferenceConfig(min_swings_for_scale=1)
+        config = ReferenceConfig(min_swings_for_classification=1)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Bear leg: pivot 100, origin 110
@@ -390,7 +411,7 @@ class TestUpdateLocationCapping:
 
         # Then get it at high location (but not breached)
         # Location 1.5 = price at origin + 0.5 * range = 110 + 5 = 115
-        # But L/XL can tolerate up to 15% trade breach
+        # But significant bins can tolerate up to 15% trade breach
         bar2 = make_bar(close=114.0, high=114.5, low=113.0, index=200)
         state = ref_layer.update([leg], bar2)
 
@@ -404,7 +425,7 @@ class TestUpdateIntegration:
 
     def test_full_update_flow(self):
         """Test complete update flow with multiple bars."""
-        config = ReferenceConfig(min_swings_for_scale=2)
+        config = ReferenceConfig(min_swings_for_classification=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
         # Create legs
@@ -428,7 +449,7 @@ class TestUpdateIntegration:
 
     def test_update_returns_valid_reference_state(self):
         """update() should always return a valid ReferenceState."""
-        config = ReferenceConfig(min_swings_for_scale=2)
+        config = ReferenceConfig(min_swings_for_classification=2)
         ref_layer = ReferenceLayer(reference_config=config)
 
         legs = [
@@ -442,14 +463,20 @@ class TestUpdateIntegration:
         # Validate structure
         assert isinstance(state, ReferenceState)
         assert isinstance(state.references, list)
-        assert isinstance(state.by_scale, dict)
+        assert isinstance(state.by_bin, dict)
+        assert isinstance(state.significant, list)
         assert isinstance(state.by_depth, dict)
         assert isinstance(state.by_direction, dict)
         assert state.direction_imbalance in (None, 'bull', 'bear')
 
-        # by_scale should have all 4 keys
-        for scale in ['S', 'M', 'L', 'XL']:
-            assert scale in state.by_scale
+        # by_bin uses integer keys (0-10)
+        for key in state.by_bin.keys():
+            assert isinstance(key, int)
+            assert 0 <= key <= 10
+
+        # significant contains only bin >= 8
+        for ref in state.significant:
+            assert ref.bin >= 8
 
         # by_direction should have both directions
         for direction in ['bull', 'bear']:

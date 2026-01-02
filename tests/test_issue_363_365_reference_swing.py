@@ -1,14 +1,14 @@
 """
-Tests for ReferenceSwing dataclass (#363) and scale classification (#365).
+Tests for ReferenceSwing dataclass (#363) and bin classification (#436).
 
 Issue #363: ReferenceSwing dataclass that wraps a DAG Leg with reference-layer
-specific annotations (scale, depth, location, salience_score).
+specific annotations (bin, depth, location, salience_score).
 
-Issue #365: Scale classification using percentile-based buckets:
-- XL: Top 10% (≥ P90)
-- L:  60-90% (P60-P90)
-- M:  30-60% (P30-P60)
-- S:  Bottom 30% (< P30)
+Issue #436: Bin classification using median-normalized bins:
+- Bins 0-7: < 5× median (small)
+- Bin 8: 5-10× median (significant)
+- Bin 9: 10-25× median (large)
+- Bin 10: 25×+ median (exceptional)
 """
 
 import pytest
@@ -20,7 +20,7 @@ from src.swing_analysis.dag.leg import Leg
 
 
 class TestReferenceSwingDataclass:
-    """Tests for ReferenceSwing dataclass (#363)."""
+    """Tests for ReferenceSwing dataclass (#363, updated for #436)."""
 
     def test_create_with_valid_values(self):
         """ReferenceSwing should accept all valid field values."""
@@ -34,20 +34,20 @@ class TestReferenceSwingDataclass:
 
         ref = ReferenceSwing(
             leg=leg,
-            scale='L',
+            bin=9,  # Large bin (10-25× median)
             depth=0,
             location=0.382,
             salience_score=0.75,
         )
 
         assert ref.leg is leg
-        assert ref.scale == 'L'
+        assert ref.bin == 9
         assert ref.depth == 0
         assert ref.location == 0.382
         assert ref.salience_score == 0.75
 
-    def test_create_with_all_scales(self):
-        """ReferenceSwing should accept all valid scale values."""
+    def test_create_with_all_bins(self):
+        """ReferenceSwing should accept all valid bin values (0-10)."""
         leg = Leg(
             direction='bull',
             origin_price=Decimal("100"),
@@ -56,20 +56,18 @@ class TestReferenceSwingDataclass:
             pivot_index=5,
         )
 
-        for scale in ['S', 'M', 'L', 'XL']:
+        for bin_idx in range(11):  # 0-10
             ref = ReferenceSwing(
                 leg=leg,
-                scale=scale,
+                bin=bin_idx,
                 depth=1,
                 location=0.5,
                 salience_score=0.5,
             )
-            assert ref.scale == scale
+            assert ref.bin == bin_idx
 
     def test_location_not_auto_capped(self):
         """ReferenceSwing stores location as-is; capping is caller's responsibility."""
-        # The spec says location is capped at 2.0 in output, but the dataclass
-        # itself doesn't enforce this - it's done during creation
         leg = Leg(
             direction='bear',
             origin_price=Decimal("110"),
@@ -80,7 +78,7 @@ class TestReferenceSwingDataclass:
 
         ref = ReferenceSwing(
             leg=leg,
-            scale='XL',
+            bin=10,  # Exceptional bin
             depth=0,
             location=2.5,  # Caller passed uncapped value
             salience_score=0.9,
@@ -103,7 +101,7 @@ class TestReferenceSwingDataclass:
         raw_location = 2.5
         ref = ReferenceSwing(
             leg=leg,
-            scale='XL',
+            bin=10,
             depth=0,
             location=min(raw_location, 2.0),  # Cap as spec requires
             salience_score=0.9,
@@ -124,7 +122,7 @@ class TestReferenceSwingDataclass:
 
         ref = ReferenceSwing(
             leg=leg,
-            scale='M',
+            bin=8,  # Significant bin
             depth=leg.depth,  # Copy from leg
             location=0.5,
             salience_score=0.6,
@@ -144,7 +142,7 @@ class TestReferenceSwingDataclass:
 
         ref = ReferenceSwing(
             leg=leg,
-            scale='L',
+            bin=9,
             depth=0,
             location=0.5,
             salience_score=0.7,
@@ -169,7 +167,7 @@ class TestReferenceSwingDataclass:
         # Low salience
         ref_low = ReferenceSwing(
             leg=leg,
-            scale='S',
+            bin=3,  # Small bin
             depth=3,
             location=1.5,
             salience_score=0.1,
@@ -179,7 +177,7 @@ class TestReferenceSwingDataclass:
         # High salience
         ref_high = ReferenceSwing(
             leg=leg,
-            scale='XL',
+            bin=10,  # Exceptional bin
             depth=0,
             location=0.3,
             salience_score=0.95,
@@ -187,133 +185,50 @@ class TestReferenceSwingDataclass:
         assert ref_high.salience_score == 0.95
 
 
-class TestScaleClassificationPercentiles:
-    """Tests for _classify_scale method (#365).
+class TestBinClassification:
+    """Tests for _get_bin_index method (#436).
 
-    These tests verify the legacy percentile-based classification behavior.
-    With bin distribution disabled, scale is based on percentile thresholds.
+    Bin classification uses median-normalized bins from RollingBinDistribution.
     """
 
-    def _create_layer_with_distribution(self, ranges: list) -> ReferenceLayer:
-        """Create a ReferenceLayer with a pre-populated range distribution.
-
-        Uses use_bin_distribution=False to test the legacy percentile behavior.
-        """
-        # Disable bin distribution to test legacy percentile classification
-        config = ReferenceConfig.from_dict({"use_bin_distribution": False})
+    def _create_layer_with_ranges(self, ranges: list) -> ReferenceLayer:
+        """Create a ReferenceLayer with a pre-populated range distribution."""
+        config = ReferenceConfig.default()
         layer = ReferenceLayer(reference_config=config)
-        # Populate the sorted distribution
-        for r in ranges:
-            layer._add_to_range_distribution(Decimal(str(r)))
+        # Populate the distribution with leg IDs
+        for i, r in enumerate(ranges):
+            layer._add_to_range_distribution(Decimal(str(r)), leg_id=f"leg_{i}")
         return layer
 
-    def test_xl_classification_top_10_percent(self):
-        """XL should be top 10% (≥ P90)."""
-        # 100 values: 1-100
-        layer = self._create_layer_with_distribution(list(range(1, 101)))
+    def test_bin_index_with_median_normalization(self):
+        """Bin classification should be based on median multiple."""
+        # Create a distribution where median is around 10
+        layer = self._create_layer_with_ranges([5, 8, 10, 12, 15])
 
-        # Range 91 is at P90 (90 values below it)
-        assert layer._classify_scale(Decimal("91")) == 'XL'
-        # Range 95 is clearly in top 10%
-        assert layer._classify_scale(Decimal("95")) == 'XL'
-        # Range 100 is the largest
-        assert layer._classify_scale(Decimal("100")) == 'XL'
+        # Verify the bin distribution has data
+        assert layer._bin_distribution.total_count > 0
 
-    def test_l_classification_60_to_90_percent(self):
-        """L should be 60-90% (P60-P90)."""
-        layer = self._create_layer_with_distribution(list(range(1, 101)))
+    def test_small_leg_gets_low_bin(self):
+        """A leg with range < median should get a low bin (0-3)."""
+        # Create a distribution
+        ranges = [10, 20, 30, 40, 50]  # Median is 30
+        layer = self._create_layer_with_ranges(ranges)
 
-        # Range 61 is at P60 (60 values below it)
-        assert layer._classify_scale(Decimal("61")) == 'L'
-        # Range 70 is in the L range
-        assert layer._classify_scale(Decimal("70")) == 'L'
-        # Range 89 is just below XL threshold
-        assert layer._classify_scale(Decimal("89")) == 'L'
+        # A very small range should get a low bin
+        bin_idx = layer._get_bin_index(Decimal("5"))  # 5/30 ≈ 0.17× median
+        assert bin_idx < 4  # Should be in bins 0-3
 
-    def test_m_classification_30_to_60_percent(self):
-        """M should be 30-60% (P30-P60)."""
-        layer = self._create_layer_with_distribution(list(range(1, 101)))
+    def test_large_leg_gets_high_bin(self):
+        """A leg with range >> median should get a high bin (8+)."""
+        # Create a distribution where median is around 10
+        ranges = [5, 8, 10, 12, 15]
+        layer = self._create_layer_with_ranges(ranges)
 
-        # Range 31 is at P30 (30 values below it)
-        assert layer._classify_scale(Decimal("31")) == 'M'
-        # Range 45 is in the M range
-        assert layer._classify_scale(Decimal("45")) == 'M'
-        # Range 59 is just below L threshold
-        assert layer._classify_scale(Decimal("59")) == 'M'
-
-    def test_s_classification_bottom_30_percent(self):
-        """S should be bottom 30% (< P30)."""
-        layer = self._create_layer_with_distribution(list(range(1, 101)))
-
-        # Range 1 is the smallest
-        assert layer._classify_scale(Decimal("1")) == 'S'
-        # Range 15 is in the S range
-        assert layer._classify_scale(Decimal("15")) == 'S'
-        # Range 29 is just below M threshold
-        assert layer._classify_scale(Decimal("29")) == 'S'
-
-    def test_boundary_at_90_percentile(self):
-        """Value exactly at 90th percentile should be XL."""
-        layer = self._create_layer_with_distribution(list(range(1, 101)))
-
-        # 90 values below 91, so percentile = 90%
-        assert layer._classify_scale(Decimal("91")) == 'XL'
-        # 89 values below 90, so percentile = 89%
-        assert layer._classify_scale(Decimal("90")) == 'L'
-
-    def test_boundary_at_60_percentile(self):
-        """Value exactly at 60th percentile should be L."""
-        layer = self._create_layer_with_distribution(list(range(1, 101)))
-
-        # 60 values below 61
-        assert layer._classify_scale(Decimal("61")) == 'L'
-        # 59 values below 60
-        assert layer._classify_scale(Decimal("60")) == 'M'
-
-    def test_boundary_at_30_percentile(self):
-        """Value exactly at 30th percentile should be M."""
-        layer = self._create_layer_with_distribution(list(range(1, 101)))
-
-        # 30 values below 31
-        assert layer._classify_scale(Decimal("31")) == 'M'
-        # 29 values below 30
-        assert layer._classify_scale(Decimal("30")) == 'S'
-
-    def test_empty_distribution_returns_middle(self):
-        """Empty distribution should return 50th percentile (M)."""
-        # Disable bin distribution to test legacy percentile classification
-        config = ReferenceConfig.from_dict({"use_bin_distribution": False})
-        layer = ReferenceLayer(reference_config=config)
-        # No distribution populated
-
-        # With no data, percentile defaults to 50 (middle)
-        # 50 < 60 (L threshold), so should be M
-        assert layer._classify_scale(Decimal("100")) == 'M'
-
-    def test_single_value_distribution(self):
-        """Single value distribution edge case."""
-        layer = self._create_layer_with_distribution([50])
-
-        # Value smaller than the only entry: P0
-        assert layer._classify_scale(Decimal("25")) == 'S'
-        # Value equal to the only entry: P0 (bisect_left returns 0)
-        assert layer._classify_scale(Decimal("50")) == 'S'
-        # Value larger than the only entry: P100
-        assert layer._classify_scale(Decimal("75")) == 'XL'
-
-    def test_duplicate_values_in_distribution(self):
-        """Distribution with duplicate values."""
-        # 50 values of 10, 50 values of 100
-        layer = self._create_layer_with_distribution([10] * 50 + [100] * 50)
-
-        # 10 is at P0 (no values strictly less)
-        assert layer._classify_scale(Decimal("10")) == 'S'
-        # 50 has 50 values below it (all the 10s) = P50
-        assert layer._classify_scale(Decimal("50")) == 'M'
-        # 100 has 50 values below it = P50
-        assert layer._classify_scale(Decimal("100")) == 'M'
-        # 200 has all 100 values below it = P100
-        assert layer._classify_scale(Decimal("200")) == 'XL'
+        # A range 5× median should get bin 8+
+        median = layer._bin_distribution.median
+        large_range = median * 6  # 6× median
+        bin_idx = layer._get_bin_index(Decimal(str(large_range)))
+        assert bin_idx >= 8
 
 
 class TestComputePercentile:
@@ -327,8 +242,8 @@ class TestComputePercentile:
     def test_percentile_basic(self):
         """Basic percentile calculation."""
         layer = ReferenceLayer()
-        for r in [Decimal("10"), Decimal("20"), Decimal("30"), Decimal("40")]:
-            layer._add_to_range_distribution(r)
+        for i, r in enumerate([Decimal("10"), Decimal("20"), Decimal("30"), Decimal("40")]):
+            layer._add_to_range_distribution(r, leg_id=f"leg_{i}")
 
         # 0 values below 10
         assert layer._compute_percentile(Decimal("10")) == 0.0
@@ -344,8 +259,8 @@ class TestComputePercentile:
     def test_percentile_value_not_in_distribution(self):
         """Percentile for value between existing entries."""
         layer = ReferenceLayer()
-        for r in [Decimal("10"), Decimal("30"), Decimal("50")]:
-            layer._add_to_range_distribution(r)
+        for i, r in enumerate([Decimal("10"), Decimal("30"), Decimal("50")]):
+            layer._add_to_range_distribution(r, leg_id=f"leg_{i}")
 
         # 20 is between 10 and 30: 1 value below it
         assert layer._compute_percentile(Decimal("20")) == pytest.approx(33.33, rel=0.01)
@@ -361,8 +276,8 @@ class TestAddToRangeDistribution:
         layer = ReferenceLayer()
 
         # Add in random order
-        for r in [Decimal("50"), Decimal("10"), Decimal("90"), Decimal("30"), Decimal("70")]:
-            layer._add_to_range_distribution(r)
+        for i, r in enumerate([Decimal("50"), Decimal("10"), Decimal("90"), Decimal("30"), Decimal("70")]):
+            layer._add_to_range_distribution(r, leg_id=f"leg_{i}")
 
         # Should be sorted
         expected = [Decimal("10"), Decimal("30"), Decimal("50"), Decimal("70"), Decimal("90")]
@@ -372,64 +287,22 @@ class TestAddToRangeDistribution:
         """Distribution should handle duplicate values."""
         layer = ReferenceLayer()
 
-        for _ in range(3):
-            layer._add_to_range_distribution(Decimal("50"))
+        for i in range(3):
+            layer._add_to_range_distribution(Decimal("50"), leg_id=f"leg_{i}")
 
         assert len(layer._range_distribution) == 3
         assert all(r == Decimal("50") for r in layer._range_distribution)
 
 
-class TestScaleClassificationWithCustomConfig:
-    """Tests for scale classification with custom config thresholds.
+class TestSignificantBinThreshold:
+    """Tests for significant_bin_threshold configuration (#436)."""
 
-    Tests verify the legacy percentile-based classification with custom thresholds.
-    Use use_bin_distribution=False to test percentile behavior.
-    """
+    def test_default_threshold_is_8(self):
+        """Default significant bin threshold should be 8."""
+        config = ReferenceConfig.default()
+        assert config.significant_bin_threshold == 8
 
-    def test_custom_xl_threshold(self):
-        """Custom XL threshold should be respected."""
-        # Disable bin distribution to test legacy percentile classification
-        config = ReferenceConfig.from_dict({
-            "use_bin_distribution": False,
-            "xl_threshold": 0.95,
-        })
-        layer = ReferenceLayer(reference_config=config)
-
-        # Populate with 100 values
-        for i in range(1, 101):
-            layer._add_to_range_distribution(Decimal(str(i)))
-
-        # With 95% threshold, only top 5% should be XL
-        # P95 = 95 values below = range 96
-        assert layer._classify_scale(Decimal("95")) == 'L'
-        assert layer._classify_scale(Decimal("96")) == 'XL'
-
-    def test_custom_all_thresholds(self):
-        """All custom thresholds should work together."""
-        # Disable bin distribution to test legacy percentile classification
-        config = ReferenceConfig.from_dict({
-            "use_bin_distribution": False,
-            "xl_threshold": 0.80,  # Top 20%
-            "l_threshold": 0.50,   # Top 50%
-            "m_threshold": 0.20,   # Top 80%
-        })
-        layer = ReferenceLayer(reference_config=config)
-
-        for i in range(1, 101):
-            layer._add_to_range_distribution(Decimal(str(i)))
-
-        # S: Bottom 20% (1-20)
-        assert layer._classify_scale(Decimal("10")) == 'S'
-        assert layer._classify_scale(Decimal("19")) == 'S'
-
-        # M: 20-50% (21-50)
-        assert layer._classify_scale(Decimal("21")) == 'M'
-        assert layer._classify_scale(Decimal("49")) == 'M'
-
-        # L: 50-80% (51-80)
-        assert layer._classify_scale(Decimal("51")) == 'L'
-        assert layer._classify_scale(Decimal("79")) == 'L'
-
-        # XL: Top 20% (81-100)
-        assert layer._classify_scale(Decimal("81")) == 'XL'
-        assert layer._classify_scale(Decimal("100")) == 'XL'
+    def test_custom_threshold(self):
+        """Custom significant bin threshold should be respected."""
+        config = ReferenceConfig.from_dict({"significant_bin_threshold": 9})
+        assert config.significant_bin_threshold == 9

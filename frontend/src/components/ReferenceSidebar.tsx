@@ -12,6 +12,7 @@ import type { FeedbackContext, DagContext } from './FeedbackForm';
 import { StructurePanel } from './StructurePanel';
 import { ReplayEvent } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
+import { getBinBadgeColor } from '../utils/binUtils';
 
 // ============================================================================
 // Reference Config Panel (Issue #424, #429)
@@ -424,19 +425,33 @@ const ReferenceStatsPanel: React.FC<ReferenceStatsPanelProps> = ({
     );
   }
 
-  const { counts_by_scale, total_count, bull_count, bear_count, direction_imbalance, imbalance_ratio } = telemetryData;
+  const { counts_by_bin, total_count, bull_count, bear_count, direction_imbalance, imbalance_ratio } = telemetryData;
+
+  // Group bins into categories: 0-7 (Small), 8 (Sig), 9 (Large), 10 (XL)
+  const smallCount = Object.entries(counts_by_bin)
+    .filter(([bin]) => parseInt(bin) <= 7)
+    .reduce((sum, [, count]) => sum + count, 0);
+  const sigCount = counts_by_bin[8] || 0;
+  const largeCount = counts_by_bin[9] || 0;
+  const xlCount = counts_by_bin[10] || 0;
+
+  const binCategories = [
+    { label: '25x+', count: xlCount, bin: 10 },
+    { label: '10-25x', count: largeCount, bin: 9 },
+    { label: '5-10x', count: sigCount, bin: 8 },
+    { label: '<5x', count: smallCount, bin: 7 },
+  ];
 
   return (
     <div className="space-y-3">
-      {/* Counts by Scale */}
+      {/* Counts by Bin Category */}
       <div className="grid grid-cols-4 gap-1">
-        {['XL', 'L', 'M', 'S'].map((scale) => {
-          const count = counts_by_scale[scale] || 0;
-          const scaleColor = getScaleBadgeColor(scale);
+        {binCategories.map(({ label, count, bin }) => {
+          const binColor = getBinBadgeColor(bin);
           return (
-            <div key={scale} className="text-center">
-              <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${scaleColor.bg} ${scaleColor.text}`}>
-                {scale}
+            <div key={label} className="text-center">
+              <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${binColor.bg} ${binColor.text}`}>
+                {label}
               </span>
               <div className="text-xs font-mono text-app-text mt-1">{count}</div>
             </div>
@@ -471,16 +486,6 @@ const ReferenceStatsPanel: React.FC<ReferenceStatsPanelProps> = ({
     </div>
   );
 };
-
-function getScaleBadgeColor(scale: string): { bg: string; text: string } {
-  switch (scale) {
-    case 'XL': return { bg: 'bg-purple-600/20', text: 'text-purple-400' };
-    case 'L': return { bg: 'bg-blue-600/20', text: 'text-blue-400' };
-    case 'M': return { bg: 'bg-green-600/20', text: 'text-green-400' };
-    case 'S': return { bg: 'bg-gray-600/20', text: 'text-gray-400' };
-    default: return { bg: 'bg-gray-600/20', text: 'text-gray-400' };
-  }
-}
 
 // ============================================================================
 // Reference Sidebar (Issue #424)

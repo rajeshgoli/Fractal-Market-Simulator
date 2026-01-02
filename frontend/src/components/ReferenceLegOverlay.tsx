@@ -3,6 +3,7 @@ import type { IChartApi, ISeriesApi, Time, LineData, LineWidth } from 'lightweig
 import { LineSeries, LineStyle } from 'lightweight-charts';
 import { ReferenceSwing, FilteredLeg, FilterReason } from '../lib/api';
 import { BarData } from '../types';
+import { getBinHexColors, getBinLineWidth, formatMedianMultiple } from '../utils/binUtils';
 
 interface ReferenceLegOverlayProps {
   chart: IChartApi | null;
@@ -20,20 +21,13 @@ interface ReferenceLegOverlayProps {
   showFiltered?: boolean;
 }
 
-// Scale to line width mapping
-const SCALE_LINE_WIDTH: Record<string, LineWidth> = {
-  'XL': 3 as LineWidth,
-  'L': 2 as LineWidth,
-  'M': 2 as LineWidth,
-  'S': 1 as LineWidth,
-};
+// Bin to line width mapping - uses shared utility
+const getBinLineWidthForChart = (bin: number): LineWidth => getBinLineWidth(bin) as LineWidth;
 
-// Scale badge colors
-const SCALE_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
-  'XL': { bg: '#9333ea', text: '#ffffff' },
-  'L': { bg: '#2563eb', text: '#ffffff' },
-  'M': { bg: '#16a34a', text: '#ffffff' },
-  'S': { bg: '#6b7280', text: '#ffffff' },
+// Bin badge colors - uses shared utility with white text for SVG
+const getBinBadgeColors = (bin: number): { bg: string; text: string } => {
+  const colors = getBinHexColors(bin);
+  return { bg: colors.bg, text: '#ffffff' };
 };
 
 // Fib ratios for level display
@@ -252,7 +246,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     // Bull reference (bear leg) = green (price went down, looking to go long)
     // Bear reference (bull leg) = red (price went up, looking to go short)
     const color = ref.direction === 'bear' ? '#22c55e' : '#ef4444';
-    const lineWidth = SCALE_LINE_WIDTH[ref.scale] || (2 as LineWidth);
+    const lineWidth = getBinLineWidthForChart(ref.bin);
     // When showFiltered is on, fade valid legs heavily so filtered legs stand out
     const opacity = fadeForFilter ? 0.08 : (isFading ? 0.3 : 0.8);
 
@@ -308,7 +302,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     // Use direction-based color like valid legs, but dashed to indicate filtered
     // Bull reference (bear leg) = green, Bear reference (bull leg) = red
     const color = leg.direction === 'bear' ? '#22c55e' : '#ef4444';
-    const lineWidth = SCALE_LINE_WIDTH[leg.scale] || (2 as LineWidth);
+    const lineWidth = getBinLineWidthForChart(leg.bin);
     const opacity = 0.85;
 
     // Get timestamps for origin and pivot
@@ -631,44 +625,45 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         );
       })}
 
-      {/* Scale/location badges (display only, no pointer events) - hidden when showFiltered is on */}
+      {/* Median multiple/location badges (display only, no pointer events) - hidden when showFiltered is on */}
       {!showFiltered && Array.from(labelPositions.entries()).map(([legId, { x, y, ref }]) => {
-        const scaleBadge = SCALE_BADGE_COLORS[ref.scale] || SCALE_BADGE_COLORS['S'];
+        const binBadge = getBinBadgeColors(ref.bin);
         const color = ref.direction === 'bear' ? '#22c55e' : '#ef4444';
         const isSticky = stickyLegIds.has(legId);
         const isHovered = hoveredLegId === legId;
+        const medianLabel = formatMedianMultiple(ref.median_multiple);
 
         return (
           <g
             key={legId}
             transform={`translate(${x + 8}, ${y})`}
           >
-            {/* Scale badge */}
+            {/* Median multiple badge */}
             <rect
               x={0}
               y={-10}
-              width={22}
+              width={32}
               height={16}
               rx={3}
-              fill={scaleBadge.bg}
+              fill={binBadge.bg}
               stroke={isSticky ? '#fbbf24' : (isHovered ? '#ffffff' : 'none')}
               strokeWidth={isSticky ? 2 : 1}
             />
             <text
-              x={11}
+              x={16}
               y={2}
               textAnchor="middle"
-              fill={scaleBadge.text}
-              fontSize={10}
+              fill={binBadge.text}
+              fontSize={9}
               fontWeight="600"
               fontFamily="system-ui, sans-serif"
             >
-              {ref.scale}
+              {medianLabel}
             </text>
 
             {/* Location indicator */}
             <rect
-              x={26}
+              x={36}
               y={-10}
               width={32}
               height={16}
@@ -678,7 +673,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
               strokeWidth={isSticky ? 2 : 1}
             />
             <text
-              x={42}
+              x={52}
               y={2}
               textAnchor="middle"
               fill={color}
@@ -692,7 +687,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
             {/* Sticky indicator */}
             {isSticky && (
               <circle
-                cx={64}
+                cx={74}
                 cy={-2}
                 r={4}
                 fill="#fbbf24"
@@ -753,6 +748,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         const filterBadge = FILTER_REASON_COLORS[leg.filter_reason] || FILTER_REASON_COLORS['cold_start'];
         const isHovered = hoveredFilteredLegId === legId;
         const directionColor = leg.direction === 'bear' ? '#22c55e' : '#ef4444';
+        const medianLabel = formatMedianMultiple(leg.median_multiple);
 
         return (
           <g
@@ -785,11 +781,11 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
               {filterBadge.label}
             </text>
 
-            {/* Scale badge (smaller, to the right) */}
+            {/* Median multiple badge (smaller, to the right) */}
             <rect
               x={52}
               y={-10}
-              width={18}
+              width={28}
               height={16}
               rx={3}
               fill={isHovered ? 'rgba(75, 85, 99, 0.9)' : 'rgba(75, 85, 99, 0.6)'}
@@ -797,7 +793,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
               strokeWidth={isHovered ? 1 : 0}
             />
             <text
-              x={61}
+              x={66}
               y={2}
               textAnchor="middle"
               fill={isHovered ? directionColor : '#9ca3af'}
@@ -805,14 +801,14 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
               fontWeight="500"
               fontFamily="system-ui, sans-serif"
             >
-              {leg.scale}
+              {medianLabel}
             </text>
 
             {/* Location indicator (only on hover) */}
             {isHovered && (
               <>
                 <rect
-                  x={74}
+                  x={84}
                   y={-10}
                   width={32}
                   height={16}
@@ -822,7 +818,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
                   strokeWidth={1}
                 />
                 <text
-                  x={90}
+                  x={100}
                   y={2}
                   textAnchor="middle"
                   fill={directionColor}

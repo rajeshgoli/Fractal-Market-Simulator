@@ -551,7 +551,8 @@ export async function updateDetectionConfig(
 
 export interface ReferenceSwing {
   leg_id: string;
-  scale: 'S' | 'M' | 'L' | 'XL';
+  bin: number;  // 0-10 bin classification (replaces scale)
+  median_multiple: number;  // Ratio to running median (e.g., 2.5 = 2.5x median)
   depth: number;
   location: number;
   salience_score: number;
@@ -565,12 +566,7 @@ export interface ReferenceSwing {
 
 export interface ReferenceStateResponse {
   references: ReferenceSwing[];
-  by_scale: {
-    S: ReferenceSwing[];
-    M: ReferenceSwing[];
-    L: ReferenceSwing[];
-    XL: ReferenceSwing[];
-  };
+  by_bin: Record<number, ReferenceSwing[]>;  // Bin 0-10 to references (replaces by_scale)
   by_depth: Record<number, ReferenceSwing[]>;
   by_direction: {
     bull: ReferenceSwing[];
@@ -591,7 +587,8 @@ export interface FilteredLeg {
   origin_index: number;
   pivot_price: number;
   pivot_index: number;
-  scale: 'S' | 'M' | 'L' | 'XL';
+  bin: number;  // 0-10 bin classification (replaces scale)
+  median_multiple: number;  // Ratio to running median
   filter_reason: FilterReason;
   location: number;
   threshold: number | null;
@@ -641,7 +638,8 @@ export interface FibLevel {
   price: number;
   ratio: number;
   leg_id: string;
-  scale: 'S' | 'M' | 'L' | 'XL';
+  bin: number;  // 0-10 bin classification (replaces scale)
+  median_multiple: number;  // Ratio to running median
   direction: 'bull' | 'bear';
 }
 
@@ -699,7 +697,8 @@ export interface ConfluenceZoneLevel {
   price: number;
   ratio: number;
   leg_id: string;
-  scale: 'S' | 'M' | 'L' | 'XL';
+  bin: number;  // 0-10 bin classification (replaces scale)
+  median_multiple: number;  // Ratio to running median
   direction: 'bull' | 'bear';
 }
 
@@ -742,7 +741,8 @@ export interface LevelTouch {
   price: number;
   ratio: number;
   leg_id: string;
-  scale: 'S' | 'M' | 'L' | 'XL';
+  bin: number;  // 0-10 bin classification (replaces scale)
+  median_multiple: number;  // Ratio to running median
   direction: 'bull' | 'bear';
   bar_index: number;
   touch_price: number;
@@ -787,7 +787,8 @@ export async function clearSessionTouches(): Promise<{ success: boolean; message
 
 export interface TopReference {
   leg_id: string;
-  scale: 'S' | 'M' | 'L' | 'XL';
+  bin: number;  // 0-10 bin classification (replaces scale)
+  median_multiple: number;  // Ratio to running median
   direction: 'bull' | 'bear';
   range_value: number;
   impulsiveness: number | null;
@@ -795,7 +796,7 @@ export interface TopReference {
 }
 
 export interface TelemetryPanelResponse {
-  counts_by_scale: Record<string, number>;
+  counts_by_bin: Record<number, number>;  // Bin 0-10 to count (replaces counts_by_scale)
   total_count: number;
   bull_count: number;
   bear_count: number;

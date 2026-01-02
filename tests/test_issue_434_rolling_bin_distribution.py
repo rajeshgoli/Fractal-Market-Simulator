@@ -3,6 +3,10 @@ Tests for Rolling Bin Distribution (#434).
 
 Tests the median-normalized bin distribution for scale classification,
 replacing the sorted list approach with O(1) updates.
+
+Updated for #436 scale->bin migration:
+- Bins are always used (no use_bin_distribution toggle)
+- _classify_scale removed, use _get_bin_index or RollingBinDistribution.get_scale
 """
 
 import pytest
@@ -138,7 +142,7 @@ class TestBinIndexCalculation:
 
 
 class TestScaleClassification:
-    """Test S/M/L/XL scale classification."""
+    """Test S/M/L/XL scale classification (backward compatibility)."""
 
     def test_scale_s_for_small_values(self):
         """Small values (bins 0-7) should be S."""
@@ -329,26 +333,14 @@ class TestReferenceLayerIntegration:
     """Test integration with ReferenceLayer."""
 
     def test_reference_layer_uses_bin_distribution(self):
-        """ReferenceLayer should use bin distribution when enabled."""
+        """ReferenceLayer should always use bin distribution."""
         config = ReferenceConfig.default()
-        assert config.use_bin_distribution is True
 
         ref_layer = ReferenceLayer(reference_config=config)
 
         # The bin distribution should be initialized
         assert ref_layer._bin_distribution is not None
         assert ref_layer._bin_distribution.total_count == 0
-
-    def test_reference_layer_can_disable_bin_distribution(self):
-        """ReferenceLayer should fall back to percentile when disabled."""
-        config = ReferenceConfig.from_dict({"use_bin_distribution": False})
-        assert config.use_bin_distribution is False
-
-        ref_layer = ReferenceLayer(reference_config=config)
-
-        # When disabled, _classify_scale uses percentile approach
-        # The bin distribution is still initialized but not used
-        assert ref_layer._bin_distribution is not None
 
     def test_copy_state_preserves_bin_distribution(self):
         """copy_state_from should preserve bin distribution state."""
@@ -362,18 +354,18 @@ class TestReferenceLayerIntegration:
         assert ref2._bin_distribution.total_count == 2
         assert "leg_1" in ref2._bin_distribution.leg_ranges
 
-    def test_scale_classification_with_bin_distribution(self):
-        """Scale classification should use bin distribution thresholds."""
+    def test_bin_index_classification_via_reference_layer(self):
+        """Bin index classification should use bin distribution thresholds."""
         ref_layer = ReferenceLayer()
 
         # Set up a known median
         ref_layer._bin_distribution.median = 10.0
 
-        # Test scale classification
-        assert ref_layer._classify_scale(Decimal("5.0")) == 'S'   # < 5x median
-        assert ref_layer._classify_scale(Decimal("75.0")) == 'M'  # 5-10x median
-        assert ref_layer._classify_scale(Decimal("150.0")) == 'L' # 10-25x median
-        assert ref_layer._classify_scale(Decimal("300.0")) == 'XL' # 25x+ median
+        # Test bin index classification
+        assert ref_layer._get_bin_index(Decimal("5.0")) <= 2   # < 0.75x median
+        assert ref_layer._get_bin_index(Decimal("75.0")) == 8  # 5-10x median
+        assert ref_layer._get_bin_index(Decimal("150.0")) == 9 # 10-25x median
+        assert ref_layer._get_bin_index(Decimal("300.0")) == 10 # 25x+ median
 
 
 class TestLegRangeBinIndex:
@@ -403,7 +395,6 @@ class TestReferenceConfigBinSettings:
         """Default config should have bin distribution settings."""
         config = ReferenceConfig.default()
 
-        assert config.use_bin_distribution is True
         assert config.bin_window_duration_days == 90
         assert config.bin_recompute_interval == 100
 
@@ -412,19 +403,16 @@ class TestReferenceConfigBinSettings:
         config = ReferenceConfig.default()
         data = config.to_dict()
 
-        assert "use_bin_distribution" in data
         assert "bin_window_duration_days" in data
         assert "bin_recompute_interval" in data
 
     def test_config_from_dict_restores_bin_settings(self):
         """Config from_dict should restore bin settings."""
         config = ReferenceConfig.from_dict({
-            "use_bin_distribution": False,
             "bin_window_duration_days": 60,
             "bin_recompute_interval": 50,
         })
 
-        assert config.use_bin_distribution is False
         assert config.bin_window_duration_days == 60
         assert config.bin_recompute_interval == 50
 
@@ -462,10 +450,10 @@ class TestBinStats:
         dist = RollingBinDistribution()
         dist.median = 10.0
 
-        # 5.0 = 0.5x median → bin 2 (edge at 0.5x = 5.0, so bisect puts it there)
+        # 5.0 = 0.5x median -> bin 2 (edge at 0.5x = 5.0, so bisect puts it there)
         dist.add_leg("leg_1", 5.0)   # bin 2 (0.5-0.75x median)
         dist.add_leg("leg_2", 10.0)  # bin 4 (1-1.5x median)
-        # 75.0 = 7.5x median → bin 8 (5-10x median, M scale)
+        # 75.0 = 7.5x median -> bin 8 (5-10x median, M scale)
         dist.add_leg("leg_3", 75.0)  # bin 8 (5-10x median, M scale)
 
         stats = dist.get_bin_stats()

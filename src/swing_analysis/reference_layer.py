@@ -86,7 +86,7 @@ class FilteredLeg:
     Attributes:
         leg: The underlying DAG leg.
         reason: Why this leg was filtered (or VALID if it passed).
-        scale: Size classification ('S', 'M', 'L', 'XL').
+        bin: Median-normalized bin index (0-10). See BIN_MULTIPLIERS for ranges.
         location: Current price position in reference frame (0-2 range).
         threshold: The threshold that was violated (for breach reasons).
             - For NOT_FORMED: formation_fib_threshold (0.382)
@@ -97,7 +97,7 @@ class FilteredLeg:
         >>> status = FilteredLeg(
         ...     leg=leg,
         ...     reason=FilterReason.NOT_FORMED,
-        ...     scale='M',
+        ...     bin=8,
         ...     location=0.28,
         ...     threshold=0.382,
         ... )
@@ -106,7 +106,7 @@ class FilteredLeg:
     """
     leg: Leg
     reason: FilterReason
-    scale: str                        # 'S' | 'M' | 'L' | 'XL'
+    bin: int                          # 0-10 median-normalized bin index (#436)
     location: float                   # Current price in reference frame
     threshold: Optional[float] = None # Violated threshold (for breach reasons)
 
@@ -120,20 +120,20 @@ class ReferenceSwing:
     wraps a Leg from the DAG with reference-layer specific annotations.
 
     The Reference Layer filters DAG legs through formation, location, and
-    breach checks, then annotates qualifying legs with scale and salience.
+    breach checks, then annotates qualifying legs with bin and salience.
 
     Attributes:
         leg: The underlying DAG leg (not a copy).
-        scale: Size classification ('S', 'M', 'L', or 'XL') based on
-            range percentile within historical population.
+        bin: Median-normalized bin index (0-10). See BIN_MULTIPLIERS for ranges.
+            Frontend displays as median multiple (e.g., "2×" for bin 6).
+            Bins 0-7: < 5× median (small), Bin 8: 5-10× (significant),
+            Bin 9: 10-25× (large), Bin 10: 25×+ (exceptional).
         depth: Hierarchy depth from DAG (0 = root, 1+ = nested).
-            Used for A/B testing scale vs hierarchy classification.
         location: Current price position in reference frame (0-2 range).
             0 = at defended pivot, 1 = at origin, 2 = at completion target.
             Capped at 2.0 in output per spec.
         salience_score: Relevance ranking (higher = more relevant).
-            Computed from range, impulse, and recency with scale-dependent
-            weights.
+            Computed from range, impulse, and recency.
 
     Example:
         >>> from swing_analysis.reference_layer import ReferenceSwing
@@ -149,19 +149,19 @@ class ReferenceSwing:
         ... )
         >>> ref = ReferenceSwing(
         ...     leg=leg,
-        ...     scale='L',
+        ...     bin=9,
         ...     depth=0,
         ...     location=0.382,
         ...     salience_score=0.75,
         ... )
-        >>> ref.scale
-        'L'
+        >>> ref.bin
+        9
         >>> ref.location
         0.382
     """
     leg: Leg                      # The underlying DAG leg
-    scale: str                    # 'S' | 'M' | 'L' | 'XL' (percentile-based)
-    depth: int                    # Hierarchy depth from DAG (for A/B testing)
+    bin: int                      # 0-10 median-normalized bin index (#436)
+    depth: int                    # Hierarchy depth from DAG
     location: float               # Current price in reference frame (0-2 range, capped)
     salience_score: float         # Higher = more relevant reference
 
@@ -279,7 +279,8 @@ class ReferenceState:
 
     Attributes:
         references: All valid references, ranked by salience (highest first).
-        by_scale: References grouped by S/M/L/XL scale classification.
+        by_bin: References grouped by bin index (0-10).
+        significant: References with bin >= 8 (5× median or larger).
         by_depth: References grouped by hierarchy depth (0 = root).
         by_direction: References grouped by 'bull' or 'bear'.
         direction_imbalance: 'bull' if bull refs > 2× bear refs,
@@ -289,22 +290,25 @@ class ReferenceState:
         - No internal limit on references (UI can limit display)
         - Grouping dicts are views into the references list (not copies)
         - direction_imbalance highlights when one direction dominates
+        - significant threshold is bin >= 8 (5× median), configurable
 
     Example:
         >>> state = ReferenceState(
         ...     references=[ref1, ref2, ref3],
-        ...     by_scale={'L': [ref1], 'M': [ref2, ref3]},
+        ...     by_bin={9: [ref1], 8: [ref2, ref3]},
+        ...     significant=[ref1, ref2, ref3],
         ...     by_depth={0: [ref1], 1: [ref2, ref3]},
         ...     by_direction={'bull': [ref1, ref2], 'bear': [ref3]},
         ...     direction_imbalance='bull',
         ... )
         >>> len(state.references)
         3
-        >>> state.direction_imbalance
-        'bull'
+        >>> len(state.significant)
+        3
     """
     references: List['ReferenceSwing']              # All valid, ranked by salience
-    by_scale: Dict[str, List['ReferenceSwing']]     # Grouped by S/M/L/XL
+    by_bin: Dict[int, List['ReferenceSwing']]       # Grouped by bin index (0-10)
+    significant: List['ReferenceSwing']             # Bin >= 8 (5× median or larger)
     by_depth: Dict[int, List['ReferenceSwing']]     # Grouped by hierarchy depth
     by_direction: Dict[str, List['ReferenceSwing']] # Grouped by bull/bear
     direction_imbalance: Optional[str]              # 'bull' | 'bear' | None
@@ -489,15 +493,15 @@ class ReferenceLayer:
     @property
     def is_cold_start(self) -> bool:
         """
-        True if not enough data for reliable scale classification.
+        True if not enough data for reliable bin classification.
 
         During cold start, update() returns an empty ReferenceState because
-        scale percentiles are unreliable with insufficient data.
+        median-normalized bins are unreliable with insufficient data.
 
         Returns:
-            True if distribution has fewer than min_swings_for_scale legs.
+            True if distribution has fewer than min_swings_for_classification legs.
         """
-        return len(self._range_distribution) < self.reference_config.min_swings_for_scale
+        return len(self._range_distribution) < self.reference_config.min_swings_for_classification
 
     @property
     def cold_start_progress(self) -> Tuple[int, int]:
@@ -509,7 +513,7 @@ class ReferenceLayer:
         Returns:
             Tuple of (current swings in distribution, required minimum).
         """
-        return (len(self._range_distribution), self.reference_config.min_swings_for_scale)
+        return (len(self._range_distribution), self.reference_config.min_swings_for_classification)
 
     def _compute_percentile(self, leg_range: Decimal) -> float:
         """
@@ -538,55 +542,29 @@ class ReferenceLayer:
         count_below = bisect.bisect_left(self._range_distribution, leg_range)
         return (count_below / len(self._range_distribution)) * 100
 
-    def _classify_scale(self, leg_range: Decimal) -> str:
+    def _get_bin_index(self, leg_range: Decimal) -> int:
         """
-        Classify leg into S/M/L/XL based on range percentile or bin distribution.
+        Get bin index for a leg range using median-normalized bins (#436).
 
-        When use_bin_distribution is enabled (#434), uses median-normalized bins:
-        - Bins 0-7 (< 5× median) → S
-        - Bin 8 (5-10× median) → M
-        - Bin 9 (10-25× median) → L
-        - Bin 10 (25×+ median) → XL
-
-        When disabled, uses percentile-based thresholds from ReferenceConfig:
-        - XL: Top 10% (percentile >= 90)
-        - L:  60-90% (percentile >= 60)
-        - M:  30-60% (percentile >= 30)
-        - S:  Bottom 30% (percentile < 30)
+        Bin ranges (multiples of median):
+        - Bin 0: 0-0.3×, Bin 1: 0.3-0.5×, Bin 2: 0.5-0.75×, Bin 3: 0.75-1×
+        - Bin 4: 1-1.5×, Bin 5: 1.5-2×, Bin 6: 2-3×, Bin 7: 3-5×
+        - Bin 8: 5-10× (significant), Bin 9: 10-25× (large), Bin 10: 25×+ (exceptional)
 
         Args:
             leg_range: Absolute range of the leg to classify.
 
         Returns:
-            Scale string: 'S', 'M', 'L', or 'XL'.
+            Bin index (0-10).
 
         Example:
             >>> config = ReferenceConfig.default()
             >>> ref_layer = ReferenceLayer(reference_config=config)
             >>> # After populating distribution with 100 values...
-            >>> ref_layer._classify_scale(Decimal("95"))  # Top 10%
-            'XL'
+            >>> ref_layer._get_bin_index(Decimal("95"))  # Large range
+            9
         """
-        # Use bin distribution if enabled (#434)
-        if self.reference_config.use_bin_distribution:
-            return self._bin_distribution.get_scale(float(leg_range))
-
-        # Legacy percentile-based classification
-        percentile = self._compute_percentile(leg_range)
-
-        # Convert threshold ratios to percentiles (e.g., 0.90 -> 90.0)
-        xl_pct = self.reference_config.xl_threshold * 100
-        l_pct = self.reference_config.l_threshold * 100
-        m_pct = self.reference_config.m_threshold * 100
-
-        if percentile >= xl_pct:
-            return 'XL'
-        elif percentile >= l_pct:
-            return 'L'
-        elif percentile >= m_pct:
-            return 'M'
-        else:
-            return 'S'
+        return self._bin_distribution.get_bin_index(float(leg_range))
 
     def _add_to_range_distribution(
         self,
@@ -597,21 +575,20 @@ class ReferenceLayer:
         """
         Add a leg range to the distribution.
 
-        For legacy sorted list: Uses bisect.insort for O(log n) insertion.
-        For bin distribution (#434): Uses O(1) bin count update.
-
-        The distribution is all-time; DAG pruning handles recency per spec.
+        Uses both:
+        - Legacy sorted list for cold start checking
+        - Bin distribution (#434, #436) for median-normalized classification
 
         Args:
             leg_range: Absolute range of the leg to add.
             leg_id: Unique leg identifier (for bin distribution tracking).
             timestamp: Leg creation timestamp (for bin distribution window).
         """
-        # Legacy sorted list (always maintained for backwards compatibility)
+        # Sorted list (for cold start progress tracking)
         bisect.insort(self._range_distribution, leg_range)
 
-        # Bin distribution (#434)
-        if self.reference_config.use_bin_distribution and leg_id:
+        # Bin distribution (#434, #436)
+        if leg_id:
             self._bin_distribution.add_leg(leg_id, float(leg_range), timestamp)
 
     def _update_bin_distribution(self, leg_id: str, new_range: float) -> None:
@@ -624,8 +601,7 @@ class ReferenceLayer:
             leg_id: Unique leg identifier.
             new_range: New range value after pivot extension.
         """
-        if self.reference_config.use_bin_distribution:
-            self._bin_distribution.update_leg(leg_id, new_range)
+        self._bin_distribution.update_leg(leg_id, new_range)
 
     def _remove_from_bin_distribution(self, leg_id: str) -> None:
         """
@@ -636,8 +612,7 @@ class ReferenceLayer:
         Args:
             leg_id: Unique leg identifier.
         """
-        if self.reference_config.use_bin_distribution:
-            self._bin_distribution.remove_leg(leg_id)
+        self._bin_distribution.remove_leg(leg_id)
 
     def _compute_location(self, leg: Leg, current_price: Decimal) -> float:
         """
@@ -725,7 +700,7 @@ class ReferenceLayer:
     def _is_fatally_breached(
         self,
         leg: Leg,
-        scale: str,
+        bin_index: int,
         location: float,
         bar_close_location: float
     ) -> bool:
@@ -735,17 +710,17 @@ class ReferenceLayer:
         A reference is fatally breached if ANY of these conditions are met:
         1. Pivot breach: location < 0 (price went past defended pivot)
         2. Completion: location > 2 (price completed 2x target)
-        3. Origin breach: Scale-dependent (see below)
+        3. Origin breach: Bin-dependent (see below)
 
-        Scale-dependent origin breach (per north star):
-        - S/M: Default zero tolerance (configurable via small_origin_tolerance)
-        - L/XL: Two thresholds — trade breach (15%) AND close breach (10%)
+        Bin-dependent origin breach (#436):
+        - Bins < significant_bin_threshold (default 8): zero tolerance (configurable)
+        - Bins >= significant_bin_threshold: two thresholds — trade (15%) AND close (10%)
 
         Args:
             leg: The leg to check
-            scale: Scale classification ('S', 'M', 'L', 'XL')
+            bin_index: Median-normalized bin index (0-10)
             location: Current price location in reference frame (from bar high/low)
-            bar_close_location: Location of bar close (for L/XL close breach)
+            bar_close_location: Location of bar close (for significant close breach)
 
         Returns:
             True if fatally breached (should be removed from references)
@@ -761,20 +736,20 @@ class ReferenceLayer:
             self._formed_refs.discard(leg.leg_id)
             return True
 
-        # Origin breach — scale-dependent per north star
-        if scale in ('S', 'M'):
-            # S/M: Default zero tolerance (configurable)
-            if location > (1.0 + self.reference_config.small_origin_tolerance):
+        # Origin breach — bin-dependent (#436)
+        if bin_index < self.reference_config.significant_bin_threshold:
+            # Small refs: zero tolerance (or configurable)
+            if location > (1.0 + self.reference_config.origin_breach_tolerance):
                 self._formed_refs.discard(leg.leg_id)
                 return True
-        else:  # L, XL
-            # L/XL: Two thresholds
+        else:
+            # Significant refs (bin >= 8): two thresholds
             # Trade breach: invalidates if price TRADES beyond 15%
-            if location > (1.0 + self.reference_config.big_trade_breach_tolerance):
+            if location > (1.0 + self.reference_config.significant_trade_breach_tolerance):
                 self._formed_refs.discard(leg.leg_id)
                 return True
             # Close breach: invalidates if price CLOSES beyond 10%
-            if bar_close_location > (1.0 + self.reference_config.big_close_breach_tolerance):
+            if bar_close_location > (1.0 + self.reference_config.significant_close_breach_tolerance):
                 self._formed_refs.discard(leg.leg_id)
                 return True
 
@@ -797,17 +772,15 @@ class ReferenceLayer:
             return 0.5
         return min(leg_range / max_range, 1.0)
 
-    def _compute_salience(self, leg: Leg, scale: str, current_bar_index: int) -> float:
+    def _compute_salience(self, leg: Leg, current_bar_index: int) -> float:
         """
         Compute salience score for ranking references.
 
         Two modes:
-        1. Combine mode (range_counter_weight == 0): Weighted sum of range, impulse, recency
+        1. Combine mode (range_counter_weight == 0): Weighted sum of range, impulse, recency, depth
         2. Standalone mode (range_counter_weight > 0): Range × Counter (structural importance)
 
-        Combine mode weights (scale-dependent):
-        - L/XL: range=0.5, impulse=0.4, recency=0.1
-        - S/M: range=0.2, impulse=0.3, recency=0.5
+        Combine mode uses unified weights (#436) - no scale-dependent weights.
 
         Standalone mode: range × origin_counter_trend_range
         - Measures structural importance: how big is the leg × how big was the counter-trend
@@ -815,7 +788,6 @@ class ReferenceLayer:
 
         Args:
             leg: The leg to score
-            scale: Scale classification
             current_bar_index: Current bar index for recency calculation
 
         Returns:
@@ -850,22 +822,13 @@ class ReferenceLayer:
         depth = leg.depth if hasattr(leg, 'depth') and leg.depth is not None else 0
         depth_score = 1.0 / (1.0 + depth * 0.5)
 
-        # Scale-dependent weights for range, impulse, recency
-        if scale in ('L', 'XL'):
-            weights = {
-                'range': self.reference_config.big_range_weight,
-                'impulse': self.reference_config.big_impulse_weight,
-                'recency': self.reference_config.big_recency_weight
-            }
-        else:
-            weights = {
-                'range': self.reference_config.small_range_weight,
-                'impulse': self.reference_config.small_impulse_weight,
-                'recency': self.reference_config.small_recency_weight
-            }
-
-        # Add depth weight (same for all scales)
-        weights['depth'] = self.reference_config.depth_weight
+        # Unified weights (#436) - no scale-dependent weights
+        weights = {
+            'range': self.reference_config.range_weight,
+            'impulse': self.reference_config.impulse_weight,
+            'recency': self.reference_config.recency_weight,
+            'depth': self.reference_config.depth_weight,
+        }
 
         # Normalize weights if impulse is missing
         if not use_impulse:
@@ -881,23 +844,41 @@ class ReferenceLayer:
                 weights['recency'] * recency_score +
                 weights['depth'] * depth_score)
 
-    def _group_by_scale(
+    def _group_by_bin(
         self,
         refs: List[ReferenceSwing],
-    ) -> Dict[str, List[ReferenceSwing]]:
+    ) -> Dict[int, List[ReferenceSwing]]:
         """
-        Group references by scale classification.
+        Group references by bin index.
 
         Args:
             refs: List of ReferenceSwing to group.
 
         Returns:
-            Dict mapping scale ('S', 'M', 'L', 'XL') to list of references.
+            Dict mapping bin index (0-10) to list of references.
         """
-        result: Dict[str, List[ReferenceSwing]] = {'S': [], 'M': [], 'L': [], 'XL': []}
+        result: Dict[int, List[ReferenceSwing]] = {}
         for r in refs:
-            result[r.scale].append(r)
+            if r.bin not in result:
+                result[r.bin] = []
+            result[r.bin].append(r)
         return result
+
+    def _filter_significant(
+        self,
+        refs: List[ReferenceSwing],
+    ) -> List[ReferenceSwing]:
+        """
+        Filter references to only significant ones (bin >= significant_bin_threshold).
+
+        Args:
+            refs: List of ReferenceSwing to filter.
+
+        Returns:
+            List of references with bin >= significant_bin_threshold.
+        """
+        threshold = self.reference_config.significant_bin_threshold
+        return [r for r in refs if r.bin >= threshold]
 
     def _group_by_depth(
         self,
@@ -1404,11 +1385,12 @@ class ReferenceLayer:
             if was_already_formed and leg.leg_id in self._seen_leg_ids:
                 self._update_bin_distribution(leg.leg_id, float(leg.range))
 
-        # Cold start check: not enough swings for meaningful scale classification
+        # Cold start check: not enough swings for meaningful bin classification
         if self.is_cold_start:
             return ReferenceState(
                 references=[],
-                by_scale={'S': [], 'M': [], 'L': [], 'XL': []},
+                by_bin={},
+                significant=[],
                 by_depth={},
                 by_direction={'bull': [], 'bear': []},
                 direction_imbalance=None,
@@ -1418,7 +1400,7 @@ class ReferenceLayer:
 
         references: List[ReferenceSwing] = []
         for leg in legs:
-            scale = self._classify_scale(leg.range)
+            bin_index = self._get_bin_index(leg.range)
             location = self._compute_location(leg, current_price)
 
             # Formation check (already computed above, just checking membership)
@@ -1441,15 +1423,15 @@ class ReferenceLayer:
             bar_close_location = location  # location is already computed from close
 
             # Validity check (location + tolerance)
-            if self._is_fatally_breached(leg, scale, extreme_location, bar_close_location):
+            if self._is_fatally_breached(leg, bin_index, extreme_location, bar_close_location):
                 # Already removed from formed refs by _is_fatally_breached
                 continue
 
-            salience = self._compute_salience(leg, scale, bar.index)
+            salience = self._compute_salience(leg, bar.index)
 
             references.append(ReferenceSwing(
                 leg=leg,
-                scale=scale,
+                bin=bin_index,
                 depth=leg.depth,
                 location=min(location, 2.0),  # Cap at 2.0
                 salience_score=salience,
@@ -1458,8 +1440,9 @@ class ReferenceLayer:
         # Sort by salience (descending)
         references.sort(key=lambda r: r.salience_score, reverse=True)
 
-        # Build groupings
-        by_scale = self._group_by_scale(references)
+        # Build groupings (#436)
+        by_bin = self._group_by_bin(references)
+        significant = self._filter_significant(references)
         by_depth = self._group_by_depth(references)
         by_direction = self._group_by_direction(references)
 
@@ -1475,7 +1458,8 @@ class ReferenceLayer:
 
         return ReferenceState(
             references=references,
-            by_scale=by_scale,
+            by_bin=by_bin,
+            significant=significant,
             by_depth=by_depth,
             by_direction=by_direction,
             direction_imbalance=imbalance,
@@ -1491,12 +1475,12 @@ class ReferenceLayer:
         every active leg with its filter reason. Used by the Reference Observation
         UI to show why each leg was filtered.
 
-        Filter evaluation order:
-        1. Cold Start - If < min_swings_for_scale formed, all legs get COLD_START
+        Filter evaluation order (#436):
+        1. Cold Start - If < min_swings_for_classification formed, all legs get COLD_START
         2. Not Formed - Leg hasn't reached formation threshold (38.2%)
         3. Pivot Breached - Location < 0 (past defended pivot)
         4. Completed - Location > 2 (past 2× extension target)
-        5. Origin Breached - Scale-dependent tolerance exceeded
+        5. Origin Breached - Bin-dependent tolerance exceeded
         6. VALID - Passed all filters
 
         Args:
@@ -1529,7 +1513,7 @@ class ReferenceLayer:
                 self._update_bin_distribution(leg.leg_id, float(leg.range))
 
         for leg in legs:
-            scale = self._classify_scale(leg.range)
+            bin_index = self._get_bin_index(leg.range)
             location = self._compute_location(leg, current_price)
 
             # Cold start: return all legs with COLD_START reason
@@ -1537,7 +1521,7 @@ class ReferenceLayer:
                 results.append(FilteredLeg(
                     leg=leg,
                     reason=FilterReason.COLD_START,
-                    scale=scale,
+                    bin=bin_index,
                     location=min(location, 2.0),
                     threshold=None,
                 ))
@@ -1548,7 +1532,7 @@ class ReferenceLayer:
                 results.append(FilteredLeg(
                     leg=leg,
                     reason=FilterReason.NOT_FORMED,
-                    scale=scale,
+                    bin=bin_index,
                     location=min(location, 2.0),
                     threshold=self.reference_config.formation_fib_threshold,
                 ))
@@ -1567,7 +1551,7 @@ class ReferenceLayer:
                 results.append(FilteredLeg(
                     leg=leg,
                     reason=FilterReason.PIVOT_BREACHED,
-                    scale=scale,
+                    bin=bin_index,
                     location=min(location, 2.0),
                     threshold=None,
                 ))
@@ -1579,34 +1563,34 @@ class ReferenceLayer:
                 results.append(FilteredLeg(
                     leg=leg,
                     reason=FilterReason.COMPLETED,
-                    scale=scale,
+                    bin=bin_index,
                     location=min(location, 2.0),
                     threshold=2.0,
                 ))
                 continue
 
-            # Origin breached: scale-dependent tolerance
-            if scale in ('S', 'M'):
-                tolerance = self.reference_config.small_origin_tolerance
+            # Origin breached: bin-dependent tolerance (#436)
+            if bin_index < self.reference_config.significant_bin_threshold:
+                tolerance = self.reference_config.origin_breach_tolerance
                 if extreme_location > (1.0 + tolerance):
                     self._formed_refs.discard(leg.leg_id)
                     results.append(FilteredLeg(
                         leg=leg,
                         reason=FilterReason.ORIGIN_BREACHED,
-                        scale=scale,
+                        bin=bin_index,
                         location=min(location, 2.0),
                         threshold=1.0 + tolerance,
                     ))
                     continue
-            else:  # L, XL
-                trade_tolerance = self.reference_config.big_trade_breach_tolerance
-                close_tolerance = self.reference_config.big_close_breach_tolerance
+            else:  # Significant bins (>= 8)
+                trade_tolerance = self.reference_config.significant_trade_breach_tolerance
+                close_tolerance = self.reference_config.significant_close_breach_tolerance
                 if extreme_location > (1.0 + trade_tolerance):
                     self._formed_refs.discard(leg.leg_id)
                     results.append(FilteredLeg(
                         leg=leg,
                         reason=FilterReason.ORIGIN_BREACHED,
-                        scale=scale,
+                        bin=bin_index,
                         location=min(location, 2.0),
                         threshold=1.0 + trade_tolerance,
                     ))
@@ -1616,7 +1600,7 @@ class ReferenceLayer:
                     results.append(FilteredLeg(
                         leg=leg,
                         reason=FilterReason.ORIGIN_BREACHED,
-                        scale=scale,
+                        bin=bin_index,
                         location=min(location, 2.0),
                         threshold=1.0 + close_tolerance,
                     ))
@@ -1626,7 +1610,7 @@ class ReferenceLayer:
             results.append(FilteredLeg(
                 leg=leg,
                 reason=FilterReason.VALID,
-                scale=scale,
+                bin=bin_index,
                 location=min(location, 2.0),
                 threshold=None,
             ))

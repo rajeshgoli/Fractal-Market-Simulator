@@ -538,10 +538,11 @@ for bar in bars:
 
     # Access references sorted by salience (highest first)
     for ref in state.references:
-        print(f"{ref.scale} {ref.leg.direction} at {ref.location:.2f}")
+        print(f"Bin {ref.bin} {ref.leg.direction} at {ref.location:.2f}")
 
-    # Access groupings
-    xl_refs = state.by_scale['XL']
+    # Access groupings (#436: bin-based)
+    significant_refs = state.significant  # Bin >= 8 (5× median or larger)
+    bin_8_refs = state.by_bin.get(8, [])
     root_refs = state.by_depth.get(0, [])
     bull_refs = state.by_direction['bull']
 
@@ -560,71 +561,70 @@ from src.swing_analysis.reference_config import ReferenceConfig
 # Default configuration
 config = ReferenceConfig.default()
 
-# Customize with builder methods
-config = ReferenceConfig.default().with_tolerance(
-    small_origin_tolerance=0.0,      # S/M: 0% (default per north star)
-    big_trade_breach_tolerance=0.15, # L/XL: 15% trade breach
-    big_close_breach_tolerance=0.10, # L/XL: 10% close breach
+# Customize with builder methods (#436: unified weights)
+config = ReferenceConfig.default().with_breach_tolerance(
+    origin_breach_tolerance=0.0,            # Bins < 8: 0% (default per north star)
+    significant_trade_breach_tolerance=0.15, # Bins >= 8: 15% trade breach
+    significant_close_breach_tolerance=0.10, # Bins >= 8: 10% close breach
 ).with_salience_weights(
-    big_range_weight=0.5,            # L/XL: range-heavy
-    big_impulse_weight=0.4,
-    big_recency_weight=0.1,
-    small_range_weight=0.2,          # S/M: recency-heavy
-    small_impulse_weight=0.3,
-    small_recency_weight=0.5,
+    range_weight=0.4,                       # Unified across all bins
+    impulse_weight=0.4,
+    recency_weight=0.1,
+    depth_weight=0.1,
 )
 ```
 
-**Key ReferenceConfig fields:**
+**Key ReferenceConfig fields (#436: bin-based):**
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `xl_threshold` | 0.90 | Percentile for XL (top 10%) |
-| `l_threshold` | 0.60 | Percentile for L (top 40%) |
-| `m_threshold` | 0.30 | Percentile for M (top 70%) |
-| `min_swings_for_scale` | 50 | Cold start threshold |
+| `significant_bin_threshold` | 8 | Bins >= this are "significant" (5× median) |
+| `min_swings_for_classification` | 50 | Cold start threshold |
 | `formation_fib_threshold` | 0.382 | Price-based formation level |
-| `small_origin_tolerance` | 0.0 | S/M origin breach (0% per north star) |
-| `big_trade_breach_tolerance` | 0.15 | L/XL trade breach (15%) |
-| `big_close_breach_tolerance` | 0.10 | L/XL close breach (10%) |
-| `big_range_weight` | 0.5 | L/XL salience: range weight |
-| `big_impulse_weight` | 0.4 | L/XL salience: impulse weight |
-| `big_recency_weight` | 0.1 | L/XL salience: recency weight |
-| `small_range_weight` | 0.2 | S/M salience: range weight |
-| `small_impulse_weight` | 0.3 | S/M salience: impulse weight |
-| `small_recency_weight` | 0.5 | S/M salience: recency weight |
-| `range_counter_weight` | 0.0 | Standalone mode: when > 0, uses range × counter instead of weighted sum |
+| `origin_breach_tolerance` | 0.0 | Small bins: origin breach tolerance |
+| `significant_trade_breach_tolerance` | 0.15 | Significant bins: trade breach (15%) |
+| `significant_close_breach_tolerance` | 0.10 | Significant bins: close breach (10%) |
+| `range_weight` | 0.4 | Unified salience: range weight |
+| `impulse_weight` | 0.4 | Unified salience: impulse weight |
+| `recency_weight` | 0.1 | Unified salience: recency weight |
+| `depth_weight` | 0.1 | Unified salience: depth weight |
+| `range_counter_weight` | 0.0 | Standalone mode: when > 0, uses range × counter |
+| `confluence_tolerance_pct` | 0.001 | Confluence zone clustering tolerance (0.1%) |
 
 #### Output Dataclasses
 
-**ReferenceState** — Complete output for a bar:
+**ReferenceState** — Complete output for a bar (#436: bin-based):
 | Field | Type | Description |
 |-------|------|-------------|
 | `references` | `List[ReferenceSwing]` | All valid refs, sorted by salience |
-| `by_scale` | `Dict[str, List]` | Grouped by S/M/L/XL |
+| `by_bin` | `Dict[int, List]` | Grouped by bin index (0-10) |
+| `significant` | `List[ReferenceSwing]` | Bin >= 8 (5× median or larger) |
 | `by_depth` | `Dict[int, List]` | Grouped by hierarchy depth |
 | `by_direction` | `Dict[str, List]` | Grouped by bull/bear |
 | `direction_imbalance` | `Optional[str]` | 'bull'/'bear' if >2× imbalance |
 
-**ReferenceSwing** — A qualified trading reference:
+**ReferenceSwing** — A qualified trading reference (#436: bin-based):
 | Field | Type | Description |
 |-------|------|-------------|
 | `leg` | `Leg` | The underlying DAG Leg |
-| `scale` | `str` | 'S', 'M', 'L', or 'XL' |
+| `bin` | `int` | 0-10 median-normalized bin index |
 | `depth` | `int` | Hierarchy depth (0 = root) |
 | `location` | `float` | Price position 0-2 (capped) |
 | `salience_score` | `float` | Relevance ranking |
 
-#### Scale Classification
+#### Bin Classification (#436)
 
-Based on range percentile within all-time distribution:
+Based on median-normalized range using `RollingBinDistribution`:
 
-| Scale | Percentile | Description |
-|-------|------------|-------------|
-| XL | ≥ 90% | Top 10% by range |
-| L | 60-90% | Large swings |
-| M | 30-60% | Medium swings |
-| S | < 30% | Small swings |
+| Bin | Median Multiple | Description |
+|-----|-----------------|-------------|
+| 0-3 | < 1× | Below median range |
+| 4-7 | 1-5× | Above median, below significant |
+| 8 | 5-10× | Significant (threshold default) |
+| 9 | 10-25× | Large |
+| 10 | 25×+ | Exceptional |
+
+The frontend displays median multiples (e.g., "2.5×") instead of bin numbers for user clarity.
 
 #### Formation and Breach
 
@@ -633,12 +633,12 @@ Based on range percentile within all-time distribution:
 **Fatal breach conditions:**
 1. **Pivot breach**: location < 0 (price past defended pivot)
 2. **Completion**: location > 2 (past 2× target)
-3. **Origin breach**: Scale-dependent:
+3. **Origin breach**: Bin-dependent (#436):
 
-| Scale | Trade Breach | Close Breach |
-|-------|--------------|--------------|
-| S, M | 0% (default) | 0% |
-| L, XL | 15% | 10% |
+| Bin | Trade Breach | Close Breach |
+|-----|--------------|--------------|
+| < 8 (small) | 0% (default) | 0% |
+| ≥ 8 (significant) | 15% | 10% |
 
 #### Reference Observation Mode (#400)
 
@@ -655,7 +655,7 @@ statuses: List[FilteredLeg] = ref_layer.get_all_with_status(legs, bar)
 for status in statuses:
     if status.reason != FilterReason.VALID:
         print(f"{status.leg.leg_id}: {status.reason.value}")
-        print(f"  Scale: {status.scale}, Location: {status.location:.2f}")
+        print(f"  Bin: {status.bin}, Location: {status.location:.2f}")
         if status.threshold:
             print(f"  Violated threshold: {status.threshold:.2f}")
 ```
@@ -664,18 +664,18 @@ for status in statuses:
 | Value | Meaning |
 |-------|---------|
 | `VALID` | Passed all filters |
-| `COLD_START` | Not enough swings for scale classification |
+| `COLD_START` | Not enough swings for bin classification |
 | `NOT_FORMED` | Price hasn't reached 38.2% formation |
 | `PIVOT_BREACHED` | Location < 0 (past defended pivot) |
 | `COMPLETED` | Location > 2 (past 2× target) |
-| `ORIGIN_BREACHED` | Scale-dependent tolerance exceeded |
+| `ORIGIN_BREACHED` | Bin-dependent tolerance exceeded |
 
-**FilteredLeg fields:**
+**FilteredLeg fields (#436: bin-based):**
 | Field | Type | Description |
 |-------|------|-------------|
 | `leg` | `Leg` | The underlying DAG Leg |
 | `reason` | `FilterReason` | Why filtered (or VALID) |
-| `scale` | `str` | 'S', 'M', 'L', or 'XL' |
+| `bin` | `int` | 0-10 median-normalized bin index |
 | `location` | `float` | Price position 0-2 (capped) |
 | `threshold` | `Optional[float]` | Violated threshold value |
 
@@ -683,21 +683,22 @@ for status in statuses:
 - `filtered_legs`: Array of non-valid legs with reasons
 - `filter_stats`: `{total_legs, valid_count, pass_rate, by_reason}`
 
-#### Salience Computation
+#### Salience Computation (#436)
 
-Ranks references by relevance. Scale-dependent weights:
+Ranks references by relevance. Unified weights across all bins:
 
-| Component | L/XL Weight | S/M Weight |
-|-----------|-------------|------------|
-| Range | 0.5 | 0.2 |
-| Impulse | 0.4 | 0.3 |
-| Recency | 0.1 | 0.5 |
+| Component | Weight |
+|-----------|--------|
+| Range | 0.4 |
+| Impulse | 0.4 |
+| Recency | 0.1 |
+| Depth | 0.1 |
 
-**Philosophy:** Big swings should be "big, impulsive, and early." Small swings prioritize recency.
+**Philosophy:** Salience is now unified — all references use the same weight formula. Range×Counter standalone mode available via `range_counter_weight`.
 
 #### Cold Start
 
-Returns empty ReferenceState until `min_swings_for_scale` legs (default 50) have been seen. This ensures meaningful percentile classification.
+Returns empty ReferenceState until `min_swings_for_classification` legs (default 50) have been seen. This ensures meaningful median-based bin classification.
 
 #### Legacy SwingNode API
 
@@ -1045,25 +1046,27 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # }
 # Returns updated configuration
 
-# Reference State: GET /api/reference/state?bar_index=NNN (#410)
+# Reference State: GET /api/reference/state?bar_index=NNN (#410, #436)
 # Returns Reference Layer output for Levels at Play view (#374-#382):
 # - references: All valid ReferenceSwings, sorted by salience (highest first)
-#   - leg_id, scale (S/M/L/XL), depth, location (0-2), salience_score
+#   - leg_id, bin (0-10), median_multiple (e.g. 2.5), depth, location (0-2), salience_score
 #   - direction, origin_price, origin_index, pivot_price, pivot_index
-# - by_scale: References grouped by scale {S: [], M: [], L: [], XL: []}
+# - by_bin: References grouped by bin index {0: [], 1: [], ..., 10: []}
+# - significant: References with bin >= 8 (5× median or larger)
 # - by_depth: References grouped by hierarchy depth {0: [], 1: [], ...}
 # - by_direction: References grouped by direction {bull: [], bear: []}
 # - direction_imbalance: 'bull' | 'bear' | null (>2x ratio)
-# - is_warming_up: True if in cold start (insufficient swings for scale classification)
+# - is_warming_up: True if in cold start (insufficient swings for bin classification)
 # - warmup_progress: [current_count, required_count] (e.g., [35, 50])
+# - median: Current rolling median for context
 # - tracked_leg_ids: List of leg IDs tracked for level crossing (sticky legs)
 # - crossing_events: Level crossings detected this bar (Issue #416)
 #   LevelCrossEvent: {leg_id, direction, level_crossed, cross_direction, bar_index, timestamp}
 
-# Fib Levels: GET /api/reference/levels?bar_index=NNN (#388)
+# Fib Levels: GET /api/reference/levels?bar_index=NNN (#388, #436)
 # Returns all fib levels from valid references for hover preview and sticky display:
 # - levels_by_ratio: Dict keyed by ratio string ("0", "0.382", "0.5", etc.)
-#   - Each ratio maps to list of FibLevel: {price, ratio, leg_id, scale, direction}
+#   - Each ratio maps to list of FibLevel: {price, ratio, leg_id, bin, direction}
 # Used for computing horizontal level lines on chart
 
 # Track Leg: POST /api/reference/track/{leg_id} (#388, #416)
@@ -1080,15 +1083,15 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # Returns: {events: LevelCrossEvent[], tracked_count: int}
 # LevelCrossEvent: {leg_id, direction, level_crossed, cross_direction, bar_index, timestamp}
 
-# Get Reference Config: GET /api/reference/config (#423)
+# Get Reference Config: GET /api/reference/config (#423, #436)
 # Returns current salience weights and formation threshold
-# Returns: {big_range_weight, big_impulse_weight, big_recency_weight,
-#           small_range_weight, small_impulse_weight, small_recency_weight,
-#           formation_fib_threshold}
+# Returns: {range_weight, impulse_weight, recency_weight, depth_weight,
+#           range_counter_weight, top_n, formation_fib_threshold,
+#           origin_breach_tolerance, significant_bin_threshold}
 
-# Update Reference Config: POST /api/reference/config (#423)
+# Update Reference Config: POST /api/reference/config (#423, #436)
 # Accepts partial updates, returns full updated config
-# Request: any subset of config fields (e.g., {big_range_weight: 0.6})
+# Request: any subset of config fields (e.g., {range_weight: 0.6})
 # Response: full ReferenceConfig with all values
 ```
 

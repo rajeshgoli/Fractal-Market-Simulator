@@ -27,7 +27,8 @@ export interface FilterState {
 
 export interface SwingData {
   id: string;
-  scale: string;
+  bin?: number;  // 0-10 bin classification (replaces scale)
+  median_multiple?: number;  // Ratio to running median (e.g., 2.5 = 2.5x median)
   direction: string;
   highPrice: number;
   highBar: number;
@@ -37,7 +38,6 @@ export interface SwingData {
   lowTime: string;
   size: number;
   sizePct: number;
-  scaleReason?: string;
   isAnchor?: boolean;
   separation?: {
     distanceFib: number;
@@ -104,8 +104,9 @@ export interface LegResponseType {
   parent_leg_id: string | null;
   // Optional fib levels (computed on request)
   fib_levels?: Record<string, number>;  // e.g., {"0": 100, "0.382": 103.82, ...}
-  // Scale for Reference Layer (computed at runtime)
-  scale?: string;  // "S", "M", "L", "XL"
+  // Bin classification for Reference Layer (computed at runtime, replaces scale)
+  bin?: number;  // 0-10 bin classification
+  median_multiple?: number;  // Ratio to running median (e.g., 2.5 = 2.5x median)
 }
 
 /**

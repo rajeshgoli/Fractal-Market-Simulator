@@ -102,12 +102,9 @@ class TestColdStartProperty:
         assert ref_layer.is_cold_start is False
 
     def test_cold_start_custom_threshold(self):
-        """Cold start threshold should be configurable."""
+        """Cold start threshold should be configurable (#436)."""
         config = ReferenceConfig(
-            xl_threshold=0.90,
-            l_threshold=0.60,
-            m_threshold=0.30,
-            min_swings_for_scale=100,  # Custom: 100 swings required
+            min_swings_for_classification=100,  # Custom: 100 swings required
         )
         ref_layer = ReferenceLayer(reference_config=config)
 
@@ -167,12 +164,9 @@ class TestColdStartProgress:
         assert required == 50
 
     def test_progress_with_custom_threshold(self):
-        """Progress should reflect custom threshold."""
+        """Progress should reflect custom threshold (#436)."""
         config = ReferenceConfig(
-            xl_threshold=0.90,
-            l_threshold=0.60,
-            m_threshold=0.30,
-            min_swings_for_scale=100,
+            min_swings_for_classification=100,
         )
         ref_layer = ReferenceLayer(reference_config=config)
 

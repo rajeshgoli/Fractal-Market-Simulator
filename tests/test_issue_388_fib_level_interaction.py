@@ -2,6 +2,10 @@
 Tests for Issue #388: Reference Layer Phase 2 - Fib Level Interaction.
 
 Tests the new get_active_levels() method and level crossing tracking functionality.
+
+Updated for #436: scale -> bin migration.
+- ReferenceSwing uses bin (0-10) instead of scale (S/M/L/XL)
+- ReferenceState uses by_bin and significant instead of by_scale
 """
 
 import pytest
@@ -51,14 +55,14 @@ class TestGetActiveLevels:
     def _create_reference_swing(
         self,
         leg: Leg,
-        scale: str = 'M',
+        bin: int = 8,  # Default to significant bin
         depth: int = 0,
         location: float = 0.5,
     ) -> ReferenceSwing:
         """Create a ReferenceSwing for testing."""
         return ReferenceSwing(
             leg=leg,
-            scale=scale,
+            bin=bin,
             depth=depth,
             location=location,
             salience_score=0.5,
@@ -75,7 +79,8 @@ class TestGetActiveLevels:
         # Create a state with the reference
         state = ReferenceState(
             references=[ref],
-            by_scale={'M': [ref]},
+            by_bin={8: [ref]},
+            significant=[ref],  # bin >= 8
             by_depth={0: [ref]},
             by_direction={'bull': [ref]},
             direction_imbalance=None,
@@ -102,7 +107,8 @@ class TestGetActiveLevels:
 
         state = ReferenceState(
             references=[ref],
-            by_scale={'M': [ref]},
+            by_bin={8: [ref]},
+            significant=[ref],
             by_depth={0: [ref]},
             by_direction={'bull': [ref]},
             direction_imbalance=None,
@@ -130,7 +136,8 @@ class TestGetActiveLevels:
 
         state = ReferenceState(
             references=[ref],
-            by_scale={'M': [ref]},
+            by_bin={8: [ref]},
+            significant=[ref],
             by_depth={0: [ref]},
             by_direction={'bear': [ref]},
             direction_imbalance=None,
@@ -158,7 +165,8 @@ class TestGetActiveLevels:
 
         state = ReferenceState(
             references=[ref1, ref2],
-            by_scale={'M': [ref1, ref2]},
+            by_bin={8: [ref1, ref2]},
+            significant=[ref1, ref2],
             by_depth={0: [ref1, ref2]},
             by_direction={'bull': [ref1], 'bear': [ref2]},
             direction_imbalance=None,
@@ -178,7 +186,8 @@ class TestGetActiveLevels:
 
         state = ReferenceState(
             references=[],
-            by_scale={},
+            by_bin={},
+            significant=[],
             by_depth={},
             by_direction={},
             direction_imbalance=None,
@@ -199,7 +208,8 @@ class TestGetActiveLevels:
 
         state = ReferenceState(
             references=[ref],
-            by_scale={'M': [ref]},
+            by_bin={8: [ref]},
+            significant=[ref],
             by_depth={0: [ref]},
             by_direction={'bull': [ref]},
             direction_imbalance=None,
@@ -320,7 +330,7 @@ class TestLevelInfoDataclass:
 
         ref = ReferenceSwing(
             leg=leg,
-            scale='M',
+            bin=8,  # Significant bin
             depth=0,
             location=0.5,
             salience_score=0.5,
@@ -344,7 +354,7 @@ class TestLevelInfoDataclass:
 
         ref = ReferenceSwing(
             leg=leg,
-            scale='M',
+            bin=8,
             depth=0,
             location=0.5,
             salience_score=0.5,
