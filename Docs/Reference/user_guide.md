@@ -372,20 +372,33 @@ The Reference Sidebar on the left side contains panels for configuring the refer
 
 The Reference Config panel lets you tune salience weights to control which levels are emphasized during playback. Changes are batched locally until you click Apply.
 
-**Base Weights (L/XL):** Controls how large references (L and XL scale) are scored
+**Formation Section:**
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| Threshold | .236, .382, .5, .618 | Fibonacci level at which a leg becomes a valid reference. Higher = stricter formation (only clear reversals) |
+| Breach Tol. | 0.0-0.5 | How far price can breach origin before leg is invalidated. Higher = more tolerant |
+
+**Standalone Mode:**
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| Range×Counter | 0.0-1.0 | Rank by structural importance: leg size × counter-trend defense. When > 0, disables other salience weights |
+
+**Salience Weights:** Controls how references are scored and ranked. These are unified across all scales.
 
 | Parameter | Range | Description |
 |-----------|-------|-------------|
 | Range | 0.0-1.0 | Higher values emphasize references with larger price ranges |
 | Impulse | 0.0-1.0 | Higher values emphasize references formed by impulsive moves |
+| Depth | 0.0-1.0 | Higher values emphasize root-level (depth 0) references |
 | Recency | 0.0-1.0 | Higher values emphasize more recently formed references |
 
-**Base Weights (S/M):** Controls how small references (S and M scale) are scored. Same parameters as above.
+**Display Section:**
 
-**Formation Threshold:** The Fibonacci level at which a leg becomes a valid reference.
-- Default: 0.382 (38.2% retracement)
-- Lower values = more references (earlier formation)
-- Higher values = fewer references (stricter formation)
+| Parameter | Options | Description |
+|-----------|---------|-------------|
+| Show top | 3, 5, 7, 10, 15, 20 | Maximum number of reference legs to display. Lower = less clutter |
 
 **Apply button:** Click to send batched changes to the backend. Changes take effect immediately and are persisted to localStorage for future sessions.
 

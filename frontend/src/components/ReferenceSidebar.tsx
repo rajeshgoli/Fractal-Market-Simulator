@@ -14,7 +14,7 @@ import { ReplayEvent } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
 
 // ============================================================================
-// Reference Config Panel (Issue #424)
+// Reference Config Panel (Issue #424, #429)
 // ============================================================================
 
 export interface ReferenceConfigPanelHandle {
@@ -27,16 +27,33 @@ interface ReferenceConfigPanelProps {
   hideHeader?: boolean;
 }
 
+// Discrete Fib values for formation threshold slider
+const FORMATION_FIB_VALUES = [0.236, 0.382, 0.5, 0.618];
+
+// Find nearest Fib value
+function nearestFib(value: number): number {
+  let nearest = FORMATION_FIB_VALUES[0];
+  let minDiff = Math.abs(value - nearest);
+  for (const fib of FORMATION_FIB_VALUES) {
+    const diff = Math.abs(value - fib);
+    if (diff < minDiff) {
+      minDiff = diff;
+      nearest = fib;
+    }
+  }
+  return nearest;
+}
+
 // Tooltip definitions for each parameter
 const TOOLTIPS = {
-  big_range_weight: "Rank by leg size. Larger legs score higher.",
-  big_impulse_weight: "Rank by move speed. Fast, impulsive moves score higher.",
-  big_recency_weight: "Rank by age. Recent legs score higher.",
-  small_range_weight: "Rank by leg size. Larger legs score higher.",
-  small_impulse_weight: "Rank by move speed. Fast, impulsive moves score higher.",
-  small_recency_weight: "Rank by age. Recent legs score higher.",
+  range_weight: "Rank by leg size. Larger legs score higher.",
+  impulse_weight: "Rank by move speed. Fast, impulsive moves score higher.",
+  recency_weight: "Rank by age. Recent legs score higher.",
+  depth_weight: "Rank by hierarchy depth. Root-level legs score higher.",
   range_counter_weight: "Rank by structural importance: leg size \u00d7 counter-trend defense. Standalone mode \u2014 disables other components.",
   formation_fib_threshold: "Retracement required before leg forms. Higher = stricter formation (only clear reversals).",
+  origin_breach_tolerance: "How far price can breach origin before leg is invalidated. Higher = more tolerant.",
+  top_n: "Maximum number of reference legs to display. Lower = less clutter.",
 };
 
 const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, ReferenceConfigPanelProps>(({
@@ -59,11 +76,11 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
       localConfig.big_range_weight !== config.big_range_weight ||
       localConfig.big_impulse_weight !== config.big_impulse_weight ||
       localConfig.big_recency_weight !== config.big_recency_weight ||
-      localConfig.small_range_weight !== config.small_range_weight ||
-      localConfig.small_impulse_weight !== config.small_impulse_weight ||
-      localConfig.small_recency_weight !== config.small_recency_weight ||
+      localConfig.depth_weight !== config.depth_weight ||
       localConfig.range_counter_weight !== config.range_counter_weight ||
-      localConfig.formation_fib_threshold !== config.formation_fib_threshold
+      localConfig.formation_fib_threshold !== config.formation_fib_threshold ||
+      localConfig.origin_breach_tolerance !== config.origin_breach_tolerance ||
+      localConfig.top_n !== config.top_n
     );
   }, [localConfig, config]);
 
@@ -86,6 +103,17 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     setLocalConfig(prev => ({ ...prev, [key]: value }));
   };
 
+  // Handle unified weight change - sets both big_* and small_* to same value
+  const handleUnifiedWeightChange = (weightType: 'range' | 'impulse' | 'recency', value: number) => {
+    const bigKey = `big_${weightType}_weight` as keyof ReferenceConfig;
+    const smallKey = `small_${weightType}_weight` as keyof ReferenceConfig;
+    setLocalConfig(prev => ({
+      ...prev,
+      [bigKey]: value,
+      [smallKey]: value,
+    }));
+  };
+
   const handleApply = async () => {
     setIsUpdating(true);
     try {
@@ -100,6 +128,53 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     setShowTooltip(showTooltip === key ? null : key);
   };
 
+  // Render formation threshold slider with discrete Fib values
+  const renderFormationFibSlider = () => {
+    const value = localConfig.formation_fib_threshold;
+    const sliderIndex = FORMATION_FIB_VALUES.indexOf(nearestFib(value));
+
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 w-24">
+            <span className="text-[10px] text-app-muted">Threshold</span>
+            <button
+              onClick={() => toggleTooltip('formation_fib_threshold')}
+              className="text-app-muted hover:text-app-text transition-colors"
+              title={TOOLTIPS.formation_fib_threshold}
+            >
+              <Info size={10} />
+            </button>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={FORMATION_FIB_VALUES.length - 1}
+            step={1}
+            value={sliderIndex}
+            onChange={(e) => handleSliderChange('formation_fib_threshold', FORMATION_FIB_VALUES[parseInt(e.target.value)])}
+            className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer accent-trading-blue"
+            disabled={isUpdating}
+          />
+          <span className="text-[10px] font-mono w-10 text-right text-app-text">
+            {value.toFixed(3)}
+          </span>
+        </div>
+        <div className="flex justify-between text-[9px] text-app-muted ml-[6.5rem] mr-10">
+          <span>.236</span>
+          <span>.382</span>
+          <span>.5</span>
+          <span>.618</span>
+        </div>
+        {showTooltip === 'formation_fib_threshold' && (
+          <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded ml-0">
+            {TOOLTIPS.formation_fib_threshold}
+          </p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {!hideHeader && (
@@ -108,6 +183,25 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">Reference Config</h3>
         </div>
       )}
+
+      {/* Formation Section */}
+      <div className="space-y-2">
+        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Formation</div>
+        {renderFormationFibSlider()}
+        <SliderRow
+          label="Breach Tol."
+          value={localConfig.origin_breach_tolerance}
+          onChange={(v) => handleSliderChange('origin_breach_tolerance', v)}
+          min={0}
+          max={0.5}
+          step={0.05}
+          formatValue={(v) => v.toFixed(2)}
+          disabled={isUpdating}
+          tooltip={TOOLTIPS.origin_breach_tolerance}
+          showTooltip={showTooltip === 'origin_breach_tolerance'}
+          onToggleTooltip={() => toggleTooltip('origin_breach_tolerance')}
+        />
+      </div>
 
       {/* Range×Counter Standalone Mode */}
       <div className="space-y-2">
@@ -126,109 +220,94 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         />
         {isStandaloneMode && (
           <div className="text-[9px] text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">
-            Standalone mode active. Other weight sliders disabled.
+            Standalone mode active. Salience weights disabled.
           </div>
         )}
       </div>
 
-      {/* Base Weights (L/XL) */}
+      {/* Salience Weights (unified) */}
       <div className={`space-y-2 ${isStandaloneMode ? 'opacity-50' : ''}`}>
-        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Base Weights (L/XL)</div>
+        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Salience Weights</div>
         <SliderRow
           label="Range"
           value={localConfig.big_range_weight}
-          onChange={(v) => handleSliderChange('big_range_weight', v)}
+          onChange={(v) => handleUnifiedWeightChange('range', v)}
           min={0}
           max={1}
           step={0.1}
           disabled={isUpdating || isStandaloneMode}
-          tooltip={TOOLTIPS.big_range_weight}
-          showTooltip={showTooltip === 'big_range_weight'}
-          onToggleTooltip={() => toggleTooltip('big_range_weight')}
+          tooltip={TOOLTIPS.range_weight}
+          showTooltip={showTooltip === 'range_weight'}
+          onToggleTooltip={() => toggleTooltip('range_weight')}
         />
         <SliderRow
           label="Impulse"
           value={localConfig.big_impulse_weight}
-          onChange={(v) => handleSliderChange('big_impulse_weight', v)}
+          onChange={(v) => handleUnifiedWeightChange('impulse', v)}
           min={0}
           max={1}
           step={0.1}
           disabled={isUpdating || isStandaloneMode}
-          tooltip={TOOLTIPS.big_impulse_weight}
-          showTooltip={showTooltip === 'big_impulse_weight'}
-          onToggleTooltip={() => toggleTooltip('big_impulse_weight')}
+          tooltip={TOOLTIPS.impulse_weight}
+          showTooltip={showTooltip === 'impulse_weight'}
+          onToggleTooltip={() => toggleTooltip('impulse_weight')}
+        />
+        <SliderRow
+          label="Depth"
+          value={localConfig.depth_weight}
+          onChange={(v) => handleSliderChange('depth_weight', v)}
+          min={0}
+          max={1}
+          step={0.1}
+          disabled={isUpdating || isStandaloneMode}
+          tooltip={TOOLTIPS.depth_weight}
+          showTooltip={showTooltip === 'depth_weight'}
+          onToggleTooltip={() => toggleTooltip('depth_weight')}
         />
         <SliderRow
           label="Recency"
           value={localConfig.big_recency_weight}
-          onChange={(v) => handleSliderChange('big_recency_weight', v)}
+          onChange={(v) => handleUnifiedWeightChange('recency', v)}
           min={0}
           max={1}
           step={0.1}
           disabled={isUpdating || isStandaloneMode}
-          tooltip={TOOLTIPS.big_recency_weight}
-          showTooltip={showTooltip === 'big_recency_weight'}
-          onToggleTooltip={() => toggleTooltip('big_recency_weight')}
+          tooltip={TOOLTIPS.recency_weight}
+          showTooltip={showTooltip === 'recency_weight'}
+          onToggleTooltip={() => toggleTooltip('recency_weight')}
         />
       </div>
 
-      {/* Base Weights (S/M) */}
-      <div className={`space-y-2 ${isStandaloneMode ? 'opacity-50' : ''}`}>
-        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Base Weights (S/M)</div>
-        <SliderRow
-          label="Range"
-          value={localConfig.small_range_weight}
-          onChange={(v) => handleSliderChange('small_range_weight', v)}
-          min={0}
-          max={1}
-          step={0.1}
-          disabled={isUpdating || isStandaloneMode}
-          tooltip={TOOLTIPS.small_range_weight}
-          showTooltip={showTooltip === 'small_range_weight'}
-          onToggleTooltip={() => toggleTooltip('small_range_weight')}
-        />
-        <SliderRow
-          label="Impulse"
-          value={localConfig.small_impulse_weight}
-          onChange={(v) => handleSliderChange('small_impulse_weight', v)}
-          min={0}
-          max={1}
-          step={0.1}
-          disabled={isUpdating || isStandaloneMode}
-          tooltip={TOOLTIPS.small_impulse_weight}
-          showTooltip={showTooltip === 'small_impulse_weight'}
-          onToggleTooltip={() => toggleTooltip('small_impulse_weight')}
-        />
-        <SliderRow
-          label="Recency"
-          value={localConfig.small_recency_weight}
-          onChange={(v) => handleSliderChange('small_recency_weight', v)}
-          min={0}
-          max={1}
-          step={0.1}
-          disabled={isUpdating || isStandaloneMode}
-          tooltip={TOOLTIPS.small_recency_weight}
-          showTooltip={showTooltip === 'small_recency_weight'}
-          onToggleTooltip={() => toggleTooltip('small_recency_weight')}
-        />
-      </div>
-
-      {/* Formation */}
+      {/* Display Options */}
       <div className="space-y-2">
-        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Formation</div>
-        <SliderRow
-          label="Threshold"
-          value={localConfig.formation_fib_threshold}
-          onChange={(v) => handleSliderChange('formation_fib_threshold', v)}
-          min={0.2}
-          max={0.5}
-          step={0.01}
-          formatValue={(v) => v.toFixed(3)}
-          disabled={isUpdating}
-          tooltip={TOOLTIPS.formation_fib_threshold}
-          showTooltip={showTooltip === 'formation_fib_threshold'}
-          onToggleTooltip={() => toggleTooltip('formation_fib_threshold')}
-        />
+        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Display</div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 w-24">
+            <span className="text-[10px] text-app-muted">Show top</span>
+            <button
+              onClick={() => toggleTooltip('top_n')}
+              className="text-app-muted hover:text-app-text transition-colors"
+              title={TOOLTIPS.top_n}
+            >
+              <Info size={10} />
+            </button>
+          </div>
+          <select
+            value={localConfig.top_n}
+            onChange={(e) => handleSliderChange('top_n', parseInt(e.target.value))}
+            className="flex-1 h-6 bg-app-bg border border-app-border rounded text-[10px] text-app-text px-2"
+            disabled={isUpdating}
+          >
+            {[3, 5, 7, 10, 15, 20].map(n => (
+              <option key={n} value={n}>{n} legs</option>
+            ))}
+          </select>
+        </div>
+        {showTooltip === 'top_n' && (
+          <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded ml-0">
+            {TOOLTIPS.top_n}
+          </p>
+        )}
       </div>
 
       {/* Apply Button */}
