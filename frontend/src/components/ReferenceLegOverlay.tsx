@@ -181,6 +181,14 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   const clearLineSeries = useCallback(() => {
     if (!chart) return;
 
+    // Check if chart is still valid (has DOM element) before removing series
+    // This prevents errors when chart is being destroyed during view changes
+    const chartElement = chart.chartElement?.();
+    if (!chartElement || !chartElement.isConnected) {
+      lineSeriesRef.current.clear();
+      return;
+    }
+
     for (const [, lineSeries] of lineSeriesRef.current) {
       try {
         chart.removeSeries(lineSeries);
@@ -194,6 +202,13 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   // Clear all fib level series
   const clearFibSeries = useCallback(() => {
     if (!chart) return;
+
+    // Check if chart is still valid (has DOM element) before removing series
+    const chartElement = chart.chartElement?.();
+    if (!chartElement || !chartElement.isConnected) {
+      fibSeriesRef.current.clear();
+      return;
+    }
 
     for (const [, fibSeries] of fibSeriesRef.current) {
       try {

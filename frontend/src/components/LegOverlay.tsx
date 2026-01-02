@@ -128,6 +128,14 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
   const clearLineSeries = useCallback(() => {
     if (!chart) return;
 
+    // Check if chart is still valid (has DOM element) before removing series
+    // This prevents errors when chart is being destroyed during view changes
+    const chartElement = chart.chartElement?.();
+    if (!chartElement || !chartElement.isConnected) {
+      lineSeriesRef.current.clear();
+      return;
+    }
+
     for (const [, lineSeries] of lineSeriesRef.current) {
       try {
         chart.removeSeries(lineSeries);

@@ -159,40 +159,50 @@ const SingleChart: React.FC<SingleChartProps> = ({ data, onChartReady, savedZoom
 
   // Update data when it changes - preserve zoom level (#125)
   useEffect(() => {
-    if (seriesRef.current && data.length > 0) {
-      // Save current visible range before updating data
-      const chart = chartRef.current;
-      const currentRange = chart?.timeScale().getVisibleLogicalRange();
+    if (!seriesRef.current) return;
 
-      const formattedData: CandlestickData[] = data.map(d => ({
-        time: d.timestamp as Time,
-        open: d.open,
-        high: d.high,
-        low: d.low,
-        close: d.close,
-      }));
-      seriesRef.current.setData(formattedData);
+    // Clear series data when data becomes empty to prevent stale state
+    if (data.length === 0) {
+      try {
+        seriesRef.current.setData([]);
+      } catch {
+        // Chart may be in invalid state during cleanup
+      }
+      return;
+    }
 
-      if (chart) {
-        if (!hasInitialDataRef.current) {
-          // First time loading data
-          hasInitialDataRef.current = true;
+    // Save current visible range before updating data
+    const chart = chartRef.current;
+    const currentRange = chart?.timeScale().getVisibleLogicalRange();
 
-          // Try to restore saved zoom from localStorage
-          if (savedZoom && !hasAppliedSavedZoomRef.current) {
-            hasAppliedSavedZoomRef.current = true;
-            // Use requestAnimationFrame to ensure chart is ready
-            requestAnimationFrame(() => {
-              chart.timeScale().setVisibleLogicalRange(savedZoom);
-            });
-          } else if (data.length <= 200) {
-            // Fit content for small datasets
-            chart.timeScale().fitContent();
-          }
-        } else if (currentRange) {
-          // Subsequent updates - restore the saved visible range to preserve zoom
-          chart.timeScale().setVisibleLogicalRange(currentRange);
+    const formattedData: CandlestickData[] = data.map(d => ({
+      time: d.timestamp as Time,
+      open: d.open,
+      high: d.high,
+      low: d.low,
+      close: d.close,
+    }));
+    seriesRef.current.setData(formattedData);
+
+    if (chart) {
+      if (!hasInitialDataRef.current) {
+        // First time loading data
+        hasInitialDataRef.current = true;
+
+        // Try to restore saved zoom from localStorage
+        if (savedZoom && !hasAppliedSavedZoomRef.current) {
+          hasAppliedSavedZoomRef.current = true;
+          // Use requestAnimationFrame to ensure chart is ready
+          requestAnimationFrame(() => {
+            chart.timeScale().setVisibleLogicalRange(savedZoom);
+          });
+        } else if (data.length <= 200) {
+          // Fit content for small datasets
+          chart.timeScale().fitContent();
         }
+      } else if (currentRange) {
+        // Subsequent updates - restore the saved visible range to preserve zoom
+        chart.timeScale().setVisibleLogicalRange(currentRange);
       }
     }
   }, [data, savedZoom]);
