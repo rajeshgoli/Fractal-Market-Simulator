@@ -25,22 +25,29 @@ function mergeDetectionConfig(saved: Partial<DetectionConfig> | null): Detection
 
 /**
  * Deep merge saved reference config with defaults to ensure all fields exist.
- * Handles schema evolution when new salience weights are added (#425).
+ * Handles schema evolution: #425 (salience weights), #436 (unified weights).
+ * Migrates old per-scale weights (big_xxx/small_xxx) to unified weights.
  */
-function mergeReferenceConfig(saved: Partial<ReferenceConfig> | null): ReferenceConfig | null {
+function mergeReferenceConfig(saved: Partial<ReferenceConfig> & Record<string, unknown> | null): ReferenceConfig | null {
   if (!saved) return null;
+
+  // Migration: if old field names exist, use big_* values as starting point
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const legacy = saved as any;
+  const rangeWeight = saved.range_weight ?? legacy.big_range_weight ?? DEFAULT_REFERENCE_CONFIG.range_weight;
+  const impulseWeight = saved.impulse_weight ?? legacy.big_impulse_weight ?? DEFAULT_REFERENCE_CONFIG.impulse_weight;
+  const recencyWeight = saved.recency_weight ?? legacy.big_recency_weight ?? DEFAULT_REFERENCE_CONFIG.recency_weight;
+
   return {
-    big_range_weight: saved.big_range_weight ?? DEFAULT_REFERENCE_CONFIG.big_range_weight,
-    big_impulse_weight: saved.big_impulse_weight ?? DEFAULT_REFERENCE_CONFIG.big_impulse_weight,
-    big_recency_weight: saved.big_recency_weight ?? DEFAULT_REFERENCE_CONFIG.big_recency_weight,
-    small_range_weight: saved.small_range_weight ?? DEFAULT_REFERENCE_CONFIG.small_range_weight,
-    small_impulse_weight: saved.small_impulse_weight ?? DEFAULT_REFERENCE_CONFIG.small_impulse_weight,
-    small_recency_weight: saved.small_recency_weight ?? DEFAULT_REFERENCE_CONFIG.small_recency_weight,
-    range_counter_weight: saved.range_counter_weight ?? DEFAULT_REFERENCE_CONFIG.range_counter_weight,
+    range_weight: rangeWeight,
+    impulse_weight: impulseWeight,
+    recency_weight: recencyWeight,
     depth_weight: saved.depth_weight ?? DEFAULT_REFERENCE_CONFIG.depth_weight,
+    range_counter_weight: saved.range_counter_weight ?? DEFAULT_REFERENCE_CONFIG.range_counter_weight,
     top_n: saved.top_n ?? DEFAULT_REFERENCE_CONFIG.top_n,
     formation_fib_threshold: saved.formation_fib_threshold ?? DEFAULT_REFERENCE_CONFIG.formation_fib_threshold,
     origin_breach_tolerance: saved.origin_breach_tolerance ?? DEFAULT_REFERENCE_CONFIG.origin_breach_tolerance,
+    significant_bin_threshold: saved.significant_bin_threshold ?? DEFAULT_REFERENCE_CONFIG.significant_bin_threshold,
   };
 }
 

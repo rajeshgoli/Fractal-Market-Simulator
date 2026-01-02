@@ -71,12 +71,12 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
   // Check if Range×Counter standalone mode is active
   const isStandaloneMode = localConfig.range_counter_weight > 0;
 
-  // Track if config has changes from server config
+  // Track if config has changes from server config (#436: unified weights)
   const hasChanges = useMemo(() => {
     return (
-      localConfig.big_range_weight !== config.big_range_weight ||
-      localConfig.big_impulse_weight !== config.big_impulse_weight ||
-      localConfig.big_recency_weight !== config.big_recency_weight ||
+      localConfig.range_weight !== config.range_weight ||
+      localConfig.impulse_weight !== config.impulse_weight ||
+      localConfig.recency_weight !== config.recency_weight ||
       localConfig.depth_weight !== config.depth_weight ||
       localConfig.range_counter_weight !== config.range_counter_weight ||
       localConfig.formation_fib_threshold !== config.formation_fib_threshold ||
@@ -104,14 +104,12 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     setLocalConfig(prev => ({ ...prev, [key]: value }));
   };
 
-  // Handle unified weight change - sets both big_* and small_* to same value
-  const handleUnifiedWeightChange = (weightType: 'range' | 'impulse' | 'recency', value: number) => {
-    const bigKey = `big_${weightType}_weight` as keyof ReferenceConfig;
-    const smallKey = `small_${weightType}_weight` as keyof ReferenceConfig;
+  // Handle weight change (#436: unified weights - no more big_*/small_* split)
+  const handleWeightChange = (weightType: 'range' | 'impulse' | 'recency' | 'depth', value: number) => {
+    const key = `${weightType}_weight` as keyof ReferenceConfig;
     setLocalConfig(prev => ({
       ...prev,
-      [bigKey]: value,
-      [smallKey]: value,
+      [key]: value,
     }));
   };
 
@@ -131,7 +129,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
 
   // Render formation threshold slider with discrete Fib values
   const renderFormationFibSlider = () => {
-    const value = localConfig.formation_fib_threshold;
+    const value = localConfig.formation_fib_threshold ?? 0.382;
     const sliderIndex = FORMATION_FIB_VALUES.indexOf(nearestFib(value));
 
     return (
@@ -226,13 +224,13 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         )}
       </div>
 
-      {/* Salience Weights (unified) */}
+      {/* Salience Weights (#436: unified) */}
       <div className={`space-y-2 ${isStandaloneMode ? 'opacity-50' : ''}`}>
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Salience Weights</div>
         <SliderRow
           label="Range"
-          value={localConfig.big_range_weight}
-          onChange={(v) => handleUnifiedWeightChange('range', v)}
+          value={localConfig.range_weight ?? 0.4}
+          onChange={(v) => handleWeightChange('range', v)}
           min={0}
           max={1}
           step={0.1}
@@ -243,8 +241,8 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         />
         <SliderRow
           label="Impulse"
-          value={localConfig.big_impulse_weight}
-          onChange={(v) => handleUnifiedWeightChange('impulse', v)}
+          value={localConfig.impulse_weight ?? 0.4}
+          onChange={(v) => handleWeightChange('impulse', v)}
           min={0}
           max={1}
           step={0.1}
@@ -255,8 +253,8 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         />
         <SliderRow
           label="Depth"
-          value={localConfig.depth_weight}
-          onChange={(v) => handleSliderChange('depth_weight', v)}
+          value={localConfig.depth_weight ?? 0.1}
+          onChange={(v) => handleWeightChange('depth', v)}
           min={0}
           max={1}
           step={0.1}
@@ -267,8 +265,8 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         />
         <SliderRow
           label="Recency"
-          value={localConfig.big_recency_weight}
-          onChange={(v) => handleUnifiedWeightChange('recency', v)}
+          value={localConfig.recency_weight ?? 0.1}
+          onChange={(v) => handleWeightChange('recency', v)}
           min={0}
           max={1}
           step={0.1}

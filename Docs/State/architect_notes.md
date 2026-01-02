@@ -38,6 +38,7 @@ Read in order:
 - #240 — TODO: Empirically determine engulfed retention threshold based on impulse
 - #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
 - #399 — TODO: Salience optimization if needed (periodic refresh, event-driven, or lazy with TTL)
+- #438 — Hardcoded decay factors in `_compute_salience()` (1000, 0.5) need documentation or config
 - Scaling test `test_scaling_is_not_quadratic` marginally fails (64 vs 60 threshold) — flaky boundary, low priority
 
 **Completed architectural cleanup (#394, #396, #398, #403, #404, #408, #410, #412):**
@@ -319,8 +320,8 @@ All 3 pending changes accepted. Summary:
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| `developer_guide.md` | Needs update | Bin-based classification (#436) not yet documented |
-| `user_guide.md` | Needs update | Levels at Play bin display, Config Panel not documented |
+| `developer_guide.md` | Current | Bin-based classification, ReferenceConfig, API documented |
+| `user_guide.md` | Current | Levels at Play, Config Panel, median multiples documented |
 | `DAG.md` | Current | Updated Dec 31 |
 | `CLAUDE.md` | Current | No changes needed |
 
