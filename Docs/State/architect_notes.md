@@ -388,6 +388,8 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 2 | #442 — Unified salience formula: 6 additive weights, normalized via median×25, standalone mode removed | Accepted |
+| Jan 2 | #432, #433 — Label density limiting, auto-select top leg (2 enhancements) | All Accepted |
 | Jan 2 | #430, #431, #432, #440 — Top N sidebar, bottom panel merge, label midpoint, rolling eviction (4 issues) | All Accepted |
 | Jan 2 | #437, #438, #439 — Bulk advance breach tracking, configurable decay, bin distribution cleanup (3 issues) | All Accepted |
 | Jan 2 | #415, #416, #420, #421, #423, #424, #425, #426, #427, #429, #434, #436 — Reference Layer P3/P4, Config Panel redesign, bin-based classification (10 issues) | All Accepted; Reference Layer complete |

@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2026-01-02
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-1. **#442** — Unified salience formula: add counter_weight and range×counter as normalized knobs (removed standalone mode)
+(none)
 
 ---
 
@@ -16,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 2 | #442 — Unified salience formula: 6 additive weights, normalized via median×25, no standalone mode | Accepted |
 | Jan 2 | #433 — Auto-select top-ranked leg on load, re-auto-select on config change, single selection model | Accepted |
 | Jan 2 | #432 enhancement — Viewport-based label density limiting (grid-based, O(n)) | Accepted |
 | Jan 2 | #430, #431, #432, #440 — Top N sidebar, bottom panel merge, label midpoint, rolling eviction (4 issues) | All Accepted |
