@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2026-01-02
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-1. **#432** — Add viewport-based label density limiting (1 label per 150×150px grid cell, most prominent wins)
+(none)
 
 ---
 
@@ -16,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 2 | #432 enhancement — Viewport-based label density limiting (grid-based, O(n)) | Accepted |
 | Jan 2 | #430, #431, #432, #440 — Top N sidebar, bottom panel merge, label midpoint, rolling eviction (4 issues) | All Accepted |
 | Jan 2 | #437 — Replace track_formation() with update(build_response=False) for continuous breach tracking | Accepted |
 | Jan 2 | #438, #439 — Configurable decay factors, remove stale _range_distribution in favor of bin distribution | Accepted |
