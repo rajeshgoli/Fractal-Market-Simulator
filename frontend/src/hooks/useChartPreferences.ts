@@ -36,6 +36,7 @@ function mergeReferenceConfig(saved: Partial<ReferenceConfig> | null): Reference
     small_range_weight: saved.small_range_weight ?? DEFAULT_REFERENCE_CONFIG.small_range_weight,
     small_impulse_weight: saved.small_impulse_weight ?? DEFAULT_REFERENCE_CONFIG.small_impulse_weight,
     small_recency_weight: saved.small_recency_weight ?? DEFAULT_REFERENCE_CONFIG.small_recency_weight,
+    range_counter_weight: saved.range_counter_weight ?? DEFAULT_REFERENCE_CONFIG.range_counter_weight,
     formation_fib_threshold: saved.formation_fib_threshold ?? DEFAULT_REFERENCE_CONFIG.formation_fib_threshold,
   };
 }
