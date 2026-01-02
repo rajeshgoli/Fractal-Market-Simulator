@@ -587,6 +587,13 @@ config = ReferenceConfig.default().with_tolerance(
 | `small_origin_tolerance` | 0.0 | S/M origin breach (0% per north star) |
 | `big_trade_breach_tolerance` | 0.15 | L/XL trade breach (15%) |
 | `big_close_breach_tolerance` | 0.10 | L/XL close breach (10%) |
+| `big_range_weight` | 0.5 | L/XL salience: range weight |
+| `big_impulse_weight` | 0.4 | L/XL salience: impulse weight |
+| `big_recency_weight` | 0.1 | L/XL salience: recency weight |
+| `small_range_weight` | 0.2 | S/M salience: range weight |
+| `small_impulse_weight` | 0.3 | S/M salience: impulse weight |
+| `small_recency_weight` | 0.5 | S/M salience: recency weight |
+| `range_counter_weight` | 0.0 | Standalone mode: when > 0, uses range × counter instead of weighted sum |
 
 #### Output Dataclasses
 
