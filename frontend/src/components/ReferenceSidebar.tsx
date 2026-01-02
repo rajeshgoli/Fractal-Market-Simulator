@@ -2,7 +2,6 @@ import React, { useState, useRef, useImperativeHandle, forwardRef, useMemo } fro
 import { ChevronDown, ChevronRight, Settings, RotateCcw, Activity, Loader, Info } from 'lucide-react';
 import {
   ReferenceConfig,
-  StructurePanelResponse,
   ReferenceSwing,
   TelemetryPanelResponse,
   DEFAULT_REFERENCE_CONFIG,
@@ -519,11 +518,6 @@ interface ReferenceSidebarProps {
   onHoverLeg?: (legId: string | null) => void;
   onSelectLeg?: (legId: string) => void;
 
-  // Legacy props for backward compatibility (deprecated)
-  structureData?: StructurePanelResponse;
-  trackedLegIds?: Set<string>;
-  onToggleTrack?: (legId: string) => Promise<{ success: boolean; error?: string }>;
-
   // Telemetry (Reference Stats)
   telemetryData?: TelemetryPanelResponse;
 
@@ -555,10 +549,6 @@ export const ReferenceSidebar: React.FC<ReferenceSidebarProps> = ({
   hoveredLegId = null,
   onHoverLeg = () => {},
   onSelectLeg = () => {},
-  // Legacy props (deprecated, unused)
-  structureData: _structureData,
-  trackedLegIds: _trackedLegIds = new Set(),
-  onToggleTrack: _onToggleTrack = async () => ({ success: true }),
   telemetryData,
   onResetDefaults,
   className = '',

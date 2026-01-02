@@ -59,8 +59,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     crossingEvents,
     trackError,
     clearTrackError,
-    // P3/P4 frontend (Issue #420)
-    structureData,
   } = useReferenceState();
 
   // Core state (#412: simplified from CalibrationData)
@@ -756,10 +754,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             hoveredLegId={effectiveSidebarHoveredLegId}
             onHoverLeg={handleSidebarHoverLeg}
             onSelectLeg={handleSidebarSelectLeg}
-            // Legacy props
-            structureData={structureData ?? undefined}
-            trackedLegIds={stickyLegIds}
-            onToggleTrack={toggleStickyLeg}
             telemetryData={referenceState ? {
               counts_by_bin: Object.fromEntries(
                 Object.entries(referenceState.by_bin).map(([bin, refs]) => [parseInt(bin), refs.length])
@@ -920,6 +914,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               trackError={trackError}
               onClearTrackError={clearTrackError}
               trackedCount={stickyLegIds.size}
+              onEventHover={handleSidebarHoverLeg}
             />
           </div>
         </main>
