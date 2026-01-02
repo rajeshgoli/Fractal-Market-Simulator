@@ -81,7 +81,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [sidebarHoveredLegId, setSidebarHoveredLegId] = useState<string | null>(null);
   const [chartHoveredLegId, setChartHoveredLegId] = useState<string | null>(null);
   const [selectedLegId, setSelectedLegId] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(0);
   // Track manual selection vs auto-selection (Issue #433)
   // When user manually clicks a leg, we lock selection until they clear it
   // When salience config changes, we re-auto-select unless manually selected
@@ -190,45 +189,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     return sidebarHoveredLegId || chartHoveredLegId;
   }, [sidebarHoveredLegId, chartHoveredLegId]);
 
-  // Compute total reference count for sidebar display
-  const totalReferenceCount = useMemo(() => {
-    // Count all references from by_bin to get total, not just top N
-    if (!referenceState?.by_bin) return 0;
-    return Object.values(referenceState.by_bin).reduce(
-      (sum, refs) => sum + refs.length,
-      0
-    );
-  }, [referenceState?.by_bin]);
-
-  // Compute page size from config
-  const pageSize = referenceConfig.top_n ?? 5;
-
-  // Compute paginated references for sidebar (Issue #430)
-  const paginatedReferences = useMemo(() => {
-    const allRefs = referenceState?.references ?? [];
-    const startIndex = currentPage * pageSize;
-    return allRefs.slice(startIndex, startIndex + pageSize);
-  }, [referenceState?.references, currentPage, pageSize]);
-
-  // Pagination handlers
-  const handlePrevPage = useCallback(() => {
-    setCurrentPage(prev => Math.max(0, prev - 1));
-  }, []);
-
-  const handleNextPage = useCallback(() => {
-    const allRefs = referenceState?.references ?? [];
-    const maxPage = Math.ceil(allRefs.length / pageSize) - 1;
-    setCurrentPage(prev => Math.min(maxPage, prev + 1));
-  }, [referenceState?.references, pageSize]);
-
-  // Reset page when references change significantly
-  useEffect(() => {
-    const allRefs = referenceState?.references ?? [];
-    const maxPage = Math.max(0, Math.ceil(allRefs.length / pageSize) - 1);
-    if (currentPage > maxPage) {
-      setCurrentPage(maxPage);
-    }
-  }, [referenceState?.references, pageSize, currentPage]);
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -824,18 +784,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
           <ReferenceSidebar
             referenceConfig={referenceConfig}
             onReferenceConfigUpdate={handleReferenceConfigUpdate}
-            // Levels at Play Panel (Issue #430)
-            references={paginatedReferences}
-            totalReferenceCount={totalReferenceCount}
-            selectedLegId={selectedLegId}
-            hoveredLegId={effectiveSidebarHoveredLegId}
-            onHoverLeg={handleSidebarHoverLeg}
-            onSelectLeg={handleSidebarSelectLeg}
-            // Pagination
-            currentPage={currentPage}
-            pageSize={pageSize}
-            onPrevPage={handlePrevPage}
-            onNextPage={handleNextPage}
             telemetryData={referenceState ? {
               counts_by_bin: Object.fromEntries(
                 Object.entries(referenceState.by_bin).map(([bin, refs]) => [parseInt(bin), refs.length])
@@ -848,6 +796,10 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               biggest_reference: null,
               most_impulsive: null,
             } : undefined}
+            // Filters (Issue #445 - moved from bottom panel)
+            filterStats={referenceState?.filter_stats}
+            showFiltered={showFiltered}
+            onToggleShowFiltered={() => setShowFiltered(prev => !prev)}
             onResetDefaults={() => handleReferenceConfigUpdate(DEFAULT_REFERENCE_CONFIG)}
             className="w-64 h-full"
             showFeedback={true}
@@ -986,17 +938,20 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
           <ResizeHandle onResize={handlePanelResize} />
 
-          {/* Bottom Panel: Telemetry (references, detection, top references, filter, events, crossings) */}
+          {/* Bottom Panel: LEVELS AT PLAY + EVENTS (Issue #445) */}
           <div className="shrink-0" style={{ height: chartPrefs.explanationPanelHeight }}>
             <ReferenceTelemetryPanel
               referenceState={referenceState}
-              showFiltered={showFiltered}
-              onToggleShowFiltered={() => setShowFiltered(prev => !prev)}
               crossingEvents={crossingEvents}
               trackError={trackError}
               onClearTrackError={clearTrackError}
-              trackedCount={stickyLegIds.size}
               onEventHover={handleSidebarHoverLeg}
+              // Levels at Play (Issue #445 - moved from sidebar)
+              allReferences={referenceState?.references ?? []}
+              selectedLegId={selectedLegId}
+              hoveredLegId={effectiveSidebarHoveredLegId}
+              onHoverLeg={handleSidebarHoverLeg}
+              onSelectLeg={handleSidebarSelectLeg}
             />
           </div>
         </main>

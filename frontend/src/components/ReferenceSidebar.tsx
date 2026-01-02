@@ -1,17 +1,17 @@
 import React, { useState, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Settings, RotateCcw, Activity, Loader } from 'lucide-react';
+import { ChevronDown, ChevronRight, Settings, RotateCcw, Activity, Loader, Filter, Eye, EyeOff } from 'lucide-react';
 import {
   ReferenceConfig,
-  ReferenceSwing,
   TelemetryPanelResponse,
+  FilterStats,
   DEFAULT_REFERENCE_CONFIG,
 } from '../lib/api';
 import { FeedbackForm } from './FeedbackForm';
 import type { FeedbackContext, DagContext } from './FeedbackForm';
-import { LevelsAtPlayPanel } from './LevelsAtPlayPanel';
 import { ReplayEvent } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
 import { getBinBadgeColor } from '../utils/binUtils';
+import { Toggle } from './ui/Toggle';
 
 // ============================================================================
 // Reference Config Panel (Issue #424, #429, #444)
@@ -463,7 +463,98 @@ const ReferenceStatsPanel: React.FC<ReferenceStatsPanelProps> = ({
 };
 
 // ============================================================================
-// Reference Sidebar (Issue #424)
+// Filters Panel (Issue #445 - moved from bottom panel)
+// ============================================================================
+
+// Filter reason display names and colors
+const FILTER_REASON_LABELS: Record<string, { label: string; color: string }> = {
+  not_formed: { label: 'Not Formed', color: 'text-yellow-400' },
+  pivot_breached: { label: 'Pivot Breached', color: 'text-red-400' },
+  origin_breached: { label: 'Origin Breached', color: 'text-orange-400' },
+  completed: { label: 'Completed', color: 'text-blue-400' },
+  cold_start: { label: 'Cold Start', color: 'text-gray-400' },
+};
+
+interface FiltersPanelProps {
+  filterStats: FilterStats | null;
+  showFiltered: boolean;
+  onToggleShowFiltered: () => void;
+}
+
+const FiltersPanel: React.FC<FiltersPanelProps> = ({
+  filterStats,
+  showFiltered,
+  onToggleShowFiltered,
+}) => {
+  if (!filterStats) {
+    return (
+      <div className="text-xs text-app-muted text-center py-4">
+        No filter data
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Show Filtered Toggle - DAG linger toggle style */}
+      <div className="flex items-center justify-between p-2 bg-app-card rounded-lg border border-app-border">
+        <div className="flex items-center gap-2">
+          {showFiltered ? (
+            <Eye size={14} className="text-trading-blue" />
+          ) : (
+            <EyeOff size={14} className="text-app-muted" />
+          )}
+          <span className={`text-xs ${showFiltered ? 'text-app-text' : 'text-app-muted'}`}>
+            Show Filtered
+          </span>
+        </div>
+        <Toggle
+          checked={showFiltered}
+          onChange={onToggleShowFiltered}
+          id="toggle-show-filtered"
+        />
+      </div>
+
+      {/* Pass Rate */}
+      <div className="space-y-1.5">
+        <div className="flex justify-between items-center">
+          <span className="text-xs text-app-muted">Pass Rate</span>
+          <span className="text-sm font-mono text-app-text">
+            {(filterStats.pass_rate * 100).toFixed(0)}%
+          </span>
+        </div>
+        <div className="w-full bg-app-border rounded-full h-1.5">
+          <div
+            className="bg-trading-bull h-1.5 rounded-full transition-all"
+            style={{ width: `${filterStats.pass_rate * 100}%` }}
+          />
+        </div>
+        <div className="text-[10px] text-app-muted">
+          {filterStats.valid_count} / {filterStats.total_legs} legs passed
+        </div>
+      </div>
+
+      {/* Filter Reasons */}
+      <div className="space-y-1">
+        {Object.entries(filterStats.by_reason)
+          .filter(([, count]) => count > 0)
+          .sort(([, a], [, b]) => b - a)
+          .map(([reason, count]) => {
+            const info = FILTER_REASON_LABELS[reason] || { label: reason, color: 'text-app-muted' };
+            return (
+              <div key={reason} className="flex justify-between items-center text-xs">
+                <span className={info.color}>{info.label}</span>
+                <span className="font-mono text-app-muted">{count}</span>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// Reference Sidebar (Issue #424, #445)
 // ============================================================================
 
 interface ReferenceSidebarProps {
@@ -488,21 +579,13 @@ interface ReferenceSidebarProps {
   lingerEvent?: ReplayEvent;
   dagContext?: DagContext;
 
-  // Levels at Play Panel (Issue #430)
-  references?: ReferenceSwing[];
-  totalReferenceCount?: number;
-  selectedLegId?: string | null;
-  hoveredLegId?: string | null;
-  onHoverLeg?: (legId: string | null) => void;
-  onSelectLeg?: (legId: string) => void;
-  // Pagination
-  currentPage?: number;
-  pageSize?: number;
-  onPrevPage?: () => void;
-  onNextPage?: () => void;
-
   // Telemetry (Reference Stats)
   telemetryData?: TelemetryPanelResponse;
+
+  // Filters (Issue #445 - moved from bottom panel)
+  filterStats?: FilterStats | null;
+  showFiltered?: boolean;
+  onToggleShowFiltered?: () => void;
 
   // Reset
   onResetDefaults?: () => void;
@@ -525,19 +608,11 @@ export const ReferenceSidebar: React.FC<ReferenceSidebarProps> = ({
   isLingering = false,
   lingerEvent,
   dagContext,
-  // Levels at Play Panel (Issue #430)
-  references = [],
-  totalReferenceCount = 0,
-  selectedLegId = null,
-  hoveredLegId = null,
-  onHoverLeg = () => {},
-  onSelectLeg = () => {},
-  // Pagination
-  currentPage = 0,
-  pageSize = 5,
-  onPrevPage = () => {},
-  onNextPage = () => {},
   telemetryData,
+  // Filters (Issue #445)
+  filterStats,
+  showFiltered = false,
+  onToggleShowFiltered = () => {},
   onResetDefaults,
   className = '',
 }) => {
@@ -545,7 +620,7 @@ export const ReferenceSidebar: React.FC<ReferenceSidebarProps> = ({
 
   // Collapse state for sidebar sections
   const [isReferenceConfigCollapsed, setIsReferenceConfigCollapsed] = useState(false);
-  const [isStructureCollapsed, setIsStructureCollapsed] = useState(false);
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
   const [isStatsCollapsed, setIsStatsCollapsed] = useState(false);
 
   return (
@@ -603,30 +678,24 @@ export const ReferenceSidebar: React.FC<ReferenceSidebarProps> = ({
         />
       )}
 
-      {/* Levels at Play Panel (Issue #430) */}
+      {/* Filters Panel (Issue #445 - moved from bottom panel) */}
       <div className="border-t border-app-border">
         <button
           className="w-full p-4 hover:bg-app-card/30 transition-colors text-left"
-          onClick={() => setIsStructureCollapsed(!isStructureCollapsed)}
+          onClick={() => setIsFiltersCollapsed(!isFiltersCollapsed)}
         >
           <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
-            {isStructureCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-            Levels at Play
+            {isFiltersCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+            <Filter size={14} />
+            Filters
           </h3>
         </button>
-        {!isStructureCollapsed && (
+        {!isFiltersCollapsed && (
           <div className="px-4 pb-4">
-            <LevelsAtPlayPanel
-              references={references}
-              totalReferenceCount={totalReferenceCount}
-              selectedLegId={selectedLegId}
-              hoveredLegId={hoveredLegId}
-              onHoverLeg={onHoverLeg}
-              onSelectLeg={onSelectLeg}
-              currentPage={currentPage}
-              pageSize={pageSize}
-              onPrevPage={onPrevPage}
-              onNextPage={onNextPage}
+            <FiltersPanel
+              filterStats={filterStats ?? null}
+              showFiltered={showFiltered}
+              onToggleShowFiltered={onToggleShowFiltered}
             />
           </div>
         )}
