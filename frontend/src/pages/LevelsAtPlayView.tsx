@@ -668,6 +668,24 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             } : undefined}
             onResetDefaults={() => handleReferenceConfigUpdate(DEFAULT_REFERENCE_CONFIG)}
             className="w-64 h-full"
+            showFeedback={true}
+            currentPlaybackBar={currentPlaybackPosition}
+            feedbackContext={{
+              playbackState: isPlaying ? forwardPlayback.playbackState : PlaybackState.STOPPED,
+              calibrationPhase: isPlaying ? 'playing' : 'calibration_complete',
+              csvIndex: currentPlaybackPosition,
+              calibrationBarCount: calibrationBarCount,
+              currentBarIndex: currentPlaybackPosition,
+              swingsFoundByScale: {
+                XL: referenceState?.by_scale.XL.length ?? 0,
+                L: referenceState?.by_scale.L.length ?? 0,
+                M: referenceState?.by_scale.M.length ?? 0,
+                S: referenceState?.by_scale.S.length ?? 0,
+              },
+              totalEvents: forwardPlayback.allEvents.length,
+              swingsInvalidated: 0,
+              swingsCompleted: 0,
+            }}
           />
         </div>
 
