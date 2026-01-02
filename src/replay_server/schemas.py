@@ -802,20 +802,20 @@ class TrackLegResponse(BaseModel):
 
 class ReferenceConfigUpdateRequest(BaseModel):
     """
-    Request to update reference layer configuration (#436).
+    Request to update reference layer configuration (#436, #442).
 
     All fields are optional - only provided fields are updated.
     Used by POST /api/reference/config to apply partial updates.
-    Uses unified weights (no scale-dependent weights).
+    Uses unified additive weights (no special modes).
     """
-    # Unified salience weights (#436)
+    # Unified salience weights (#436, #442)
     range_weight: Optional[float] = None
     impulse_weight: Optional[float] = None
     recency_weight: Optional[float] = None
     depth_weight: Optional[float] = None
-
-    # Standalone salience mode: Range×Counter
-    # When > 0, uses range × origin_counter_trend_range instead of weighted sum
+    # Counter-trend range weight (#442) — normalized via median × 25
+    counter_weight: Optional[float] = None
+    # Range × Counter product weight (#442) — normalized via (median × 25)²
     range_counter_weight: Optional[float] = None
 
     # Display limit: how many references to show
@@ -834,8 +834,9 @@ class ReferenceConfigUpdateRequest(BaseModel):
                 "impulse_weight": 0.4,
                 "recency_weight": 0.1,
                 "depth_weight": 0.1,
-                "formation_fib_threshold": 0.5,
+                "counter_weight": 0.0,
                 "range_counter_weight": 0.0,
+                "formation_fib_threshold": 0.5,
                 "top_n": 5,
             }
         }
@@ -844,18 +845,19 @@ class ReferenceConfigUpdateRequest(BaseModel):
 
 class ReferenceConfigResponse(BaseModel):
     """
-    Response with current reference layer configuration (#436).
+    Response with current reference layer configuration (#436, #442).
 
     Returns all current values after an update, or the current defaults.
-    Uses unified weights (no scale-dependent weights).
+    Uses unified additive weights (no special modes).
     """
-    # Unified salience weights (#436)
+    # Unified salience weights (#436, #442)
     range_weight: float
     impulse_weight: float
     recency_weight: float
     depth_weight: float
-
-    # Standalone salience mode: Range×Counter
+    # Counter-trend range weight (#442)
+    counter_weight: float
+    # Range × Counter product weight (#442)
     range_counter_weight: float
 
     # Display limit: how many references to show
@@ -877,6 +879,7 @@ class ReferenceConfigResponse(BaseModel):
                 "impulse_weight": 0.4,
                 "recency_weight": 0.1,
                 "depth_weight": 0.1,
+                "counter_weight": 0.0,
                 "range_counter_weight": 0.0,
                 "top_n": 5,
                 "formation_fib_threshold": 0.382,

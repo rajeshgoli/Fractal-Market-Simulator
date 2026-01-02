@@ -45,15 +45,16 @@ class ReferenceConfig:
             Invalidates if price TRADES beyond this. Default 15%.
         significant_close_breach_tolerance: Close breach tolerance for significant refs.
             Invalidates if price CLOSES beyond this. Default 10%.
-        range_weight: Weight for range in salience calculation.
+        range_weight: Weight for range in salience calculation (normalized via median × 25).
         impulse_weight: Weight for impulse in salience calculation.
         recency_weight: Weight for recency in salience calculation.
         depth_weight: Weight for hierarchy depth (root legs score higher).
+        counter_weight: Weight for counter-trend range (normalized via median × 25).
+        range_counter_weight: Weight for range × counter product (normalized via (median × 25)²).
         recency_decay_bars: Half-life for recency scoring. Recency formula:
             1 / (1 + age / recency_decay_bars). Default 1000 bars.
         depth_decay_factor: Decay per depth level. Depth formula:
             1 / (1 + depth * depth_decay_factor). Default 0.5.
-        range_counter_weight: When > 0, uses range × counter for salience (standalone mode).
         top_n: Display limit for UI.
         confluence_tolerance_pct: Percentage tolerance for level clustering.
         active_level_distance_pct: Threshold for "currently active" levels.
@@ -84,22 +85,20 @@ class ReferenceConfig:
     significant_trade_breach_tolerance: float = 0.15   # Invalidates if TRADES beyond 15%
     significant_close_breach_tolerance: float = 0.10   # Invalidates if CLOSES beyond 10%
 
-    # Salience weights — unified (no scale-dependent weights) (#436)
+    # Salience weights — unified (no scale-dependent weights) (#436, #442)
+    # All weights are additive peers in a unified formula
     range_weight: float = 0.4
     impulse_weight: float = 0.4
     recency_weight: float = 0.1
     depth_weight: float = 0.1
+    # Counter-trend range weight (#442) — normalized via median × 25
+    counter_weight: float = 0.0
+    # Range × Counter product weight (#442) — normalized via (median × 25)²
+    range_counter_weight: float = 0.0
 
     # Salience decay parameters (#438)
     recency_decay_bars: int = 1000  # Half-life for recency scoring
     depth_decay_factor: float = 0.5  # Decay per depth level
-
-    # Standalone salience mode: Range×Counter — UI TUNABLE
-    # When > 0, uses range × origin_counter_trend_range for salience instead of
-    # the weighted combination of range/impulse/recency. Standalone mode because
-    # this metric has different normalization than the component weights.
-    # 0.0 = disabled (use weighted components), > 0 = enabled (use Range×Counter)
-    range_counter_weight: float = 0.0
 
     # Display limit: how many references to show in UI — UI TUNABLE
     top_n: int = 5
@@ -139,9 +138,10 @@ class ReferenceConfig:
             impulse_weight=data.get("impulse_weight", 0.4),
             recency_weight=data.get("recency_weight", 0.1),
             depth_weight=data.get("depth_weight", 0.1),
+            counter_weight=data.get("counter_weight", 0.0),
+            range_counter_weight=data.get("range_counter_weight", 0.0),
             recency_decay_bars=data.get("recency_decay_bars", 1000),
             depth_decay_factor=data.get("depth_decay_factor", 0.5),
-            range_counter_weight=data.get("range_counter_weight", 0.0),
             top_n=data.get("top_n", 5),
             confluence_tolerance_pct=data.get("confluence_tolerance_pct", 0.001),
             active_level_distance_pct=data.get("active_level_distance_pct", 0.005),
@@ -162,9 +162,10 @@ class ReferenceConfig:
             impulse_weight=self.impulse_weight,
             recency_weight=self.recency_weight,
             depth_weight=self.depth_weight,
+            counter_weight=self.counter_weight,
+            range_counter_weight=self.range_counter_weight,
             recency_decay_bars=self.recency_decay_bars,
             depth_decay_factor=self.depth_decay_factor,
-            range_counter_weight=self.range_counter_weight,
             top_n=self.top_n,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,
@@ -190,9 +191,10 @@ class ReferenceConfig:
             impulse_weight=self.impulse_weight,
             recency_weight=self.recency_weight,
             depth_weight=self.depth_weight,
+            counter_weight=self.counter_weight,
+            range_counter_weight=self.range_counter_weight,
             recency_decay_bars=self.recency_decay_bars,
             depth_decay_factor=self.depth_decay_factor,
-            range_counter_weight=self.range_counter_weight,
             top_n=self.top_n,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,
@@ -206,9 +208,10 @@ class ReferenceConfig:
         impulse_weight: float = None,
         recency_weight: float = None,
         depth_weight: float = None,
+        counter_weight: float = None,
+        range_counter_weight: float = None,
         recency_decay_bars: int = None,
         depth_decay_factor: float = None,
-        range_counter_weight: float = None,
         top_n: int = None,
     ) -> "ReferenceConfig":
         """Create a new config with modified salience weights."""
@@ -223,9 +226,10 @@ class ReferenceConfig:
             impulse_weight=impulse_weight if impulse_weight is not None else self.impulse_weight,
             recency_weight=recency_weight if recency_weight is not None else self.recency_weight,
             depth_weight=depth_weight if depth_weight is not None else self.depth_weight,
+            counter_weight=counter_weight if counter_weight is not None else self.counter_weight,
+            range_counter_weight=range_counter_weight if range_counter_weight is not None else self.range_counter_weight,
             recency_decay_bars=recency_decay_bars if recency_decay_bars is not None else self.recency_decay_bars,
             depth_decay_factor=depth_decay_factor if depth_decay_factor is not None else self.depth_decay_factor,
-            range_counter_weight=range_counter_weight if range_counter_weight is not None else self.range_counter_weight,
             top_n=top_n if top_n is not None else self.top_n,
             confluence_tolerance_pct=self.confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,
@@ -246,9 +250,10 @@ class ReferenceConfig:
             impulse_weight=self.impulse_weight,
             recency_weight=self.recency_weight,
             depth_weight=self.depth_weight,
+            counter_weight=self.counter_weight,
+            range_counter_weight=self.range_counter_weight,
             recency_decay_bars=self.recency_decay_bars,
             depth_decay_factor=self.depth_decay_factor,
-            range_counter_weight=self.range_counter_weight,
             top_n=self.top_n,
             confluence_tolerance_pct=confluence_tolerance_pct,
             active_level_distance_pct=self.active_level_distance_pct,

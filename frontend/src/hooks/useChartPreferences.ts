@@ -43,6 +43,7 @@ function mergeReferenceConfig(saved: Partial<ReferenceConfig> & Record<string, u
     impulse_weight: impulseWeight,
     recency_weight: recencyWeight,
     depth_weight: saved.depth_weight ?? DEFAULT_REFERENCE_CONFIG.depth_weight,
+    counter_weight: saved.counter_weight ?? DEFAULT_REFERENCE_CONFIG.counter_weight,
     range_counter_weight: saved.range_counter_weight ?? DEFAULT_REFERENCE_CONFIG.range_counter_weight,
     top_n: saved.top_n ?? DEFAULT_REFERENCE_CONFIG.top_n,
     formation_fib_threshold: saved.formation_fib_threshold ?? DEFAULT_REFERENCE_CONFIG.formation_fib_threshold,

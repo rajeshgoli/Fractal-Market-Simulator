@@ -375,29 +375,16 @@ class TestIsFatallyBreached:
         assert leg.leg_id not in ref_layer._formed_refs
 
 
-class TestNormalizeRange:
-    """Tests for _normalize_range() method (#369)."""
+class TestGetMaxRange:
+    """Tests for _get_max_range() method (#369, #442)."""
 
     def test_empty_distribution(self):
-        """Empty distribution should return 0.5."""
+        """Empty distribution should return 1.0 (fallback)."""
         ref_layer = ReferenceLayer()
-        assert ref_layer._normalize_range(10.0) == 0.5
+        assert ref_layer._get_max_range() == 1.0
 
-    def test_max_range_normalization(self):
-        """Range at max (median × 25) should return 1.0."""
-        ref_layer = ReferenceLayer()
-        # Add ranges to establish a median around 10
-        for i, r in enumerate([5.0, 10.0, 15.0, 20.0, 25.0]):
-            ref_layer._bin_distribution.add_leg(f"leg_{i}", r, 1000.0 + i)
-
-        # median is around 15, so max = 15 * 25 = 375
-        median = ref_layer._bin_distribution.median
-        max_range = median * 25
-
-        assert ref_layer._normalize_range(max_range) == 1.0
-
-    def test_partial_range_normalization(self):
-        """Range proportional to max (median × 25)."""
+    def test_max_range_from_median(self):
+        """Max range should be median × 25."""
         ref_layer = ReferenceLayer()
         # Add ranges to establish a median around 10
         for i, r in enumerate([8.0, 10.0, 12.0]):
@@ -405,18 +392,19 @@ class TestNormalizeRange:
 
         # median is 10, so max = 10 * 25 = 250
         median = ref_layer._bin_distribution.median
-        # Range = half of max should give 0.5
-        half_max = median * 12.5
-        assert ref_layer._normalize_range(half_max) == pytest.approx(0.5, abs=0.01)
+        assert median == pytest.approx(10.0, abs=0.01)
+        assert ref_layer._get_max_range() == pytest.approx(250.0, abs=0.01)
 
-    def test_above_max_capped(self):
-        """Range above max (median × 25) should be capped at 1.0."""
+    def test_max_range_with_different_ranges(self):
+        """Max range should be computed as median × 25."""
         ref_layer = ReferenceLayer()
-        for i, r in enumerate([5.0, 10.0, 15.0]):
+        # Add ranges with various values
+        for i, r in enumerate([15.0, 20.0, 25.0]):
             ref_layer._bin_distribution.add_leg(f"leg_{i}", r, 1000.0 + i)
 
-        # median is 10, max = 250, so 500 is above max
-        assert ref_layer._normalize_range(500.0) == 1.0
+        # Max range should equal median × 25
+        median = ref_layer._bin_distribution.median
+        assert ref_layer._get_max_range() == pytest.approx(median * 25, abs=0.01)
 
 
 class TestComputeSalience:

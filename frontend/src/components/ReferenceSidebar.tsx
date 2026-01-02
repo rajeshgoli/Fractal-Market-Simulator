@@ -50,7 +50,8 @@ const TOOLTIPS = {
   impulse_weight: "Rank by move speed. Fast, impulsive moves score higher.",
   recency_weight: "Rank by age. Recent legs score higher.",
   depth_weight: "Rank by hierarchy depth. Root-level legs score higher.",
-  range_counter_weight: "Rank by structural importance: leg size \u00d7 counter-trend defense. Standalone mode \u2014 disables other components.",
+  counter_weight: "Rank by counter-trend defense. Legs with larger counter-trend ranges score higher.",
+  range_counter_weight: "Rank by structural importance: leg size \u00d7 counter-trend defense. Must be big AND defended.",
   formation_fib_threshold: "Retracement required before leg forms. Higher = stricter formation (only clear reversals).",
   origin_breach_tolerance: "How far price can breach origin before leg is invalidated. Higher = more tolerant.",
   top_n: "Maximum number of reference legs to display. Lower = less clutter.",
@@ -67,16 +68,14 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
   const [showTooltip, setShowTooltip] = useState<string | null>(null);
   const hasAppliedRef = React.useRef(false);
 
-  // Check if Range×Counter standalone mode is active
-  const isStandaloneMode = localConfig.range_counter_weight > 0;
-
-  // Track if config has changes from server config (#436: unified weights)
+  // Track if config has changes from server config (#436, #442: unified weights)
   const hasChanges = useMemo(() => {
     return (
       localConfig.range_weight !== config.range_weight ||
       localConfig.impulse_weight !== config.impulse_weight ||
       localConfig.recency_weight !== config.recency_weight ||
       localConfig.depth_weight !== config.depth_weight ||
+      localConfig.counter_weight !== config.counter_weight ||
       localConfig.range_counter_weight !== config.range_counter_weight ||
       localConfig.formation_fib_threshold !== config.formation_fib_threshold ||
       localConfig.origin_breach_tolerance !== config.origin_breach_tolerance ||
@@ -201,12 +200,36 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         />
       </div>
 
-      {/* Range×Counter Standalone Mode */}
+      {/* Salience Weights (#436, #442: unified additive formula) */}
       <div className="space-y-2">
-        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Standalone Mode</div>
+        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Salience Weights</div>
+        <SliderRow
+          label="Range"
+          value={localConfig.range_weight ?? 0.4}
+          onChange={(v) => handleWeightChange('range', v)}
+          min={0}
+          max={1}
+          step={0.1}
+          disabled={isUpdating}
+          tooltip={TOOLTIPS.range_weight}
+          showTooltip={showTooltip === 'range_weight'}
+          onToggleTooltip={() => toggleTooltip('range_weight')}
+        />
+        <SliderRow
+          label="Counter"
+          value={localConfig.counter_weight ?? 0.0}
+          onChange={(v) => handleSliderChange('counter_weight', v)}
+          min={0}
+          max={1}
+          step={0.1}
+          disabled={isUpdating}
+          tooltip={TOOLTIPS.counter_weight}
+          showTooltip={showTooltip === 'counter_weight'}
+          onToggleTooltip={() => toggleTooltip('counter_weight')}
+        />
         <SliderRow
           label="Range×Counter"
-          value={localConfig.range_counter_weight}
+          value={localConfig.range_counter_weight ?? 0.0}
           onChange={(v) => handleSliderChange('range_counter_weight', v)}
           min={0}
           max={1}
@@ -216,28 +239,6 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           showTooltip={showTooltip === 'range_counter_weight'}
           onToggleTooltip={() => toggleTooltip('range_counter_weight')}
         />
-        {isStandaloneMode && (
-          <div className="text-[9px] text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">
-            Standalone mode active. Salience weights disabled.
-          </div>
-        )}
-      </div>
-
-      {/* Salience Weights (#436: unified) */}
-      <div className={`space-y-2 ${isStandaloneMode ? 'opacity-50' : ''}`}>
-        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Salience Weights</div>
-        <SliderRow
-          label="Range"
-          value={localConfig.range_weight ?? 0.4}
-          onChange={(v) => handleWeightChange('range', v)}
-          min={0}
-          max={1}
-          step={0.1}
-          disabled={isUpdating || isStandaloneMode}
-          tooltip={TOOLTIPS.range_weight}
-          showTooltip={showTooltip === 'range_weight'}
-          onToggleTooltip={() => toggleTooltip('range_weight')}
-        />
         <SliderRow
           label="Impulse"
           value={localConfig.impulse_weight ?? 0.4}
@@ -245,7 +246,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
-          disabled={isUpdating || isStandaloneMode}
+          disabled={isUpdating}
           tooltip={TOOLTIPS.impulse_weight}
           showTooltip={showTooltip === 'impulse_weight'}
           onToggleTooltip={() => toggleTooltip('impulse_weight')}
@@ -257,7 +258,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
-          disabled={isUpdating || isStandaloneMode}
+          disabled={isUpdating}
           tooltip={TOOLTIPS.depth_weight}
           showTooltip={showTooltip === 'depth_weight'}
           onToggleTooltip={() => toggleTooltip('depth_weight')}
@@ -269,7 +270,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
-          disabled={isUpdating || isStandaloneMode}
+          disabled={isUpdating}
           tooltip={TOOLTIPS.recency_weight}
           showTooltip={showTooltip === 'recency_weight'}
           onToggleTooltip={() => toggleTooltip('recency_weight')}

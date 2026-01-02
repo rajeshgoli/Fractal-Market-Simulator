@@ -687,40 +687,32 @@ class ReferenceLayer:
 
         return False
 
-    def _normalize_range(self, leg_range: float) -> float:
+    def _get_max_range(self) -> float:
         """
-        Normalize range to 0-1 based on bin distribution median (#439).
-
-        Uses median * 25 as the max range (bin 10 edge), which represents
-        exceptional ranges. This ensures consistent normalization that tracks
-        with the current distribution state.
-
-        Args:
-            leg_range: Absolute range of the leg
+        Get the normalization factor for range-based scores (median × 25).
 
         Returns:
-            Normalized score from 0 to 1. Returns 0.5 if distribution is empty.
+            max_range value, or 1.0 if distribution is empty/zero.
         """
         if self._bin_distribution.total_count == 0:
-            return 0.5
+            return 1.0
         max_range = self._bin_distribution.median * 25  # Bin 10 edge
-        if max_range == 0:
-            return 0.5
-        return min(leg_range / max_range, 1.0)
+        return max_range if max_range > 0 else 1.0
 
     def _compute_salience(self, leg: Leg, current_bar_index: int) -> float:
         """
         Compute salience score for ranking references.
 
-        Two modes:
-        1. Combine mode (range_counter_weight == 0): Weighted sum of range, impulse, recency, depth
-        2. Standalone mode (range_counter_weight > 0): Range × Counter (structural importance)
+        Unified additive formula (#442) — all 6 weights are additive peers:
+        - Range: leg size normalized via median × 25
+        - Counter: counter-trend range normalized via median × 25
+        - Range×Counter: product normalized via (median × 25)²
+        - Impulse: percentile from DAG (0-1)
+        - Recency: decay based on age
+        - Depth: inverse depth score
 
-        Combine mode uses unified weights (#436) - no scale-dependent weights.
-
-        Standalone mode: range × origin_counter_trend_range
-        - Measures structural importance: how big is the leg × how big was the counter-trend
-        - Larger legs that survived larger counter-trends score higher
+        No clamping — exceptional legs (>25× median) can score >1.0 in range
+        components, which allows them to rank appropriately higher.
 
         Args:
             leg: The leg to score
@@ -729,23 +721,19 @@ class ReferenceLayer:
         Returns:
             Salience score (higher = more relevant)
         """
-        # Check for Range×Counter standalone mode
-        if self.reference_config.range_counter_weight > 0:
-            # Standalone mode: use range × origin_counter_trend_range
-            counter_range = leg.origin_counter_trend_range or 0.0
-            raw_score = float(leg.range) * counter_range
-            # Normalize by max range (median × 25, bin 10 edge) (#439)
-            max_range = self._bin_distribution.median * 25 if self._bin_distribution.total_count > 0 else 1.0
-            # Normalize: divide by max_range² to keep in reasonable 0-1 range
-            if max_range > 0:
-                return min(raw_score / (max_range * max_range), 1.0)
-            return 0.0
+        max_val = self._get_max_range()
 
-        # Combine mode: weighted sum of components
-        # Range score: normalized against distribution
-        range_score = self._normalize_range(float(leg.range))
+        # Range-based components (#442) — normalized via median × 25
+        # No clamping: exceptional values should score exceptionally high
+        range_score = float(leg.range) / max_val
 
-        # Impulse score: percentile from DAG
+        counter_range = float(leg.origin_counter_trend_range or 0)
+        counter_score = counter_range / max_val
+
+        # Range×Counter: normalized via (median × 25)²
+        range_counter_score = (float(leg.range) * counter_range) / (max_val * max_val)
+
+        # Impulse score: percentile from DAG (already 0-100, scale to 0-1)
         use_impulse = leg.impulsiveness is not None
         impulse_score = leg.impulsiveness / 100 if use_impulse else 0
 
@@ -760,24 +748,34 @@ class ReferenceLayer:
         depth_decay = self.reference_config.depth_decay_factor
         depth_score = 1.0 / (1.0 + depth * depth_decay)
 
-        # Unified weights (#436) - no scale-dependent weights
+        # Unified weights (#436, #442) — all are additive peers
         weights = {
             'range': self.reference_config.range_weight,
+            'counter': self.reference_config.counter_weight,
+            'range_counter': self.reference_config.range_counter_weight,
             'impulse': self.reference_config.impulse_weight,
             'recency': self.reference_config.recency_weight,
             'depth': self.reference_config.depth_weight,
         }
 
-        # Normalize weights if impulse is missing
-        if not use_impulse:
-            total = weights['range'] + weights['recency'] + weights['depth']
-            if total > 0:
-                weights['range'] /= total
-                weights['recency'] /= total
-                weights['depth'] /= total
+        # Normalize weights if impulse is missing (redistribute impulse weight to others)
+        if not use_impulse and weights['impulse'] > 0:
+            redistributed = weights['impulse']
+            total_others = (weights['range'] + weights['counter'] + weights['range_counter'] +
+                           weights['recency'] + weights['depth'])
+            if total_others > 0:
+                # Redistribute impulse weight proportionally
+                factor = 1 + redistributed / total_others
+                weights['range'] *= factor
+                weights['counter'] *= factor
+                weights['range_counter'] *= factor
+                weights['recency'] *= factor
+                weights['depth'] *= factor
             weights['impulse'] = 0
 
         return (weights['range'] * range_score +
+                weights['counter'] * counter_score +
+                weights['range_counter'] * range_counter_score +
                 weights['impulse'] * impulse_score +
                 weights['recency'] * recency_score +
                 weights['depth'] * depth_score)

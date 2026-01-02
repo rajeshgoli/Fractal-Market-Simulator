@@ -32,6 +32,7 @@ class TestReferenceConfigSchemas:
             impulse_weight=config.impulse_weight,
             recency_weight=config.recency_weight,
             depth_weight=config.depth_weight,
+            counter_weight=config.counter_weight,
             range_counter_weight=config.range_counter_weight,
             top_n=config.top_n,
             formation_fib_threshold=config.formation_fib_threshold,
@@ -43,6 +44,7 @@ class TestReferenceConfigSchemas:
         assert response.impulse_weight == 0.4
         assert response.recency_weight == 0.1
         assert response.depth_weight == 0.1
+        assert response.counter_weight == 0.0
         assert response.range_counter_weight == 0.0
         assert response.top_n == 5
         assert response.formation_fib_threshold == 0.382

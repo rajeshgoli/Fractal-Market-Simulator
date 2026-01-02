@@ -379,17 +379,13 @@ The Reference Config panel lets you tune salience weights to control which level
 | Threshold | .236, .382, .5, .618 | Fibonacci level at which a leg becomes a valid reference. Higher = stricter formation (only clear reversals) |
 | Breach Tol. | 0.0-0.5 | How far price can breach origin before leg is invalidated. Higher = more tolerant |
 
-**Standalone Mode:**
-
-| Parameter | Range | Description |
-|-----------|-------|-------------|
-| Range×Counter | 0.0-1.0 | Rank by structural importance: leg size × counter-trend defense. When > 0, disables other salience weights |
-
-**Salience Weights:** Controls how references are scored and ranked. These are unified across all scales.
+**Salience Weights:** Controls how references are scored and ranked. All weights are additive peers — any blend works.
 
 | Parameter | Range | Description |
 |-----------|-------|-------------|
 | Range | 0.0-1.0 | Higher values emphasize references with larger price ranges |
+| Counter | 0.0-1.0 | Higher values emphasize references with larger counter-trend defense ranges |
+| Range×Counter | 0.0-1.0 | Higher values emphasize structural importance: must be big AND defended |
 | Impulse | 0.0-1.0 | Higher values emphasize references formed by impulsive moves |
 | Depth | 0.0-1.0 | Higher values emphasize root-level (depth 0) references |
 | Recency | 0.0-1.0 | Higher values emphasize more recently formed references |

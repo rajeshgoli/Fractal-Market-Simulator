@@ -824,12 +824,14 @@ export async function fetchTelemetryPanel(barIndex?: number): Promise<TelemetryP
 // ============================================================================
 
 export interface ReferenceConfig {
-  // Unified salience weights (#436: bin-based migration)
+  // Unified additive salience weights (#436, #442)
   range_weight: number;
   impulse_weight: number;
   recency_weight: number;
   depth_weight: number;
-  // Standalone mode: when > 0, uses range × counter instead of weighted sum
+  // Counter-trend range weight (#442) — normalized via median × 25
+  counter_weight: number;
+  // Range × Counter product weight (#442) — normalized via (median × 25)²
   range_counter_weight: number;
   // Display limit
   top_n: number;
@@ -846,6 +848,7 @@ export interface ReferenceConfigUpdateRequest {
   impulse_weight?: number;
   recency_weight?: number;
   depth_weight?: number;
+  counter_weight?: number;
   range_counter_weight?: number;
   top_n?: number;
   formation_fib_threshold?: number;
@@ -858,6 +861,7 @@ export const DEFAULT_REFERENCE_CONFIG: ReferenceConfig = {
   impulse_weight: 0.4,
   recency_weight: 0.1,
   depth_weight: 0.1,
+  counter_weight: 0.0,
   range_counter_weight: 0.0,
   top_n: 5,
   formation_fib_threshold: 0.382,

@@ -771,6 +771,7 @@ async def get_reference_config():
         impulse_weight=config.impulse_weight,
         recency_weight=config.recency_weight,
         depth_weight=config.depth_weight,
+        counter_weight=config.counter_weight,
         range_counter_weight=config.range_counter_weight,
         top_n=config.top_n,
         formation_fib_threshold=config.formation_fib_threshold,
@@ -808,12 +809,13 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
     ref_layer = cache["reference_layer"]
     current_config = ref_layer.reference_config
 
-    # Apply salience weight updates
+    # Apply salience weight updates (#442: unified formula)
     new_config = current_config.with_salience_weights(
         range_weight=request.range_weight,
         impulse_weight=request.impulse_weight,
         recency_weight=request.recency_weight,
         depth_weight=request.depth_weight,
+        counter_weight=request.counter_weight,
         range_counter_weight=request.range_counter_weight,
         top_n=request.top_n,
     )
@@ -836,6 +838,7 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
         impulse_weight=new_config.impulse_weight,
         recency_weight=new_config.recency_weight,
         depth_weight=new_config.depth_weight,
+        counter_weight=new_config.counter_weight,
         range_counter_weight=new_config.range_counter_weight,
         top_n=new_config.top_n,
         formation_fib_threshold=new_config.formation_fib_threshold,
