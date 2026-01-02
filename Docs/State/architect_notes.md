@@ -38,6 +38,7 @@ Read in order:
 **Known debt:**
 - Scaling test `test_scaling_is_not_quadratic` marginally fails (64 vs 60 threshold) — flaky boundary, low priority
 - DAGView/LevelsAtPlayView duplication (~350 lines) — Intentionally kept separate; views differ in complexity (#413 closed)
+- `dag.py` router coupling — Handles playback orchestration (advance/reverse) + DAG queries + Reference layer updates. Misnomer: `/api/dag/advance` is really a playback concern. Low priority until we need to untangle.
 
 **Completed architectural cleanup (#394, #396, #398, #403, #404, #408, #410, #412):**
 - ✅ SwingNode, `swing_id`, `formed` removed from DAG; old Reference Layer API removed (#394)
