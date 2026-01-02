@@ -27,14 +27,11 @@ interface ReferenceConfigPanelProps {
   hideHeader?: boolean;
 }
 
-// Discrete Fib values for formation threshold slider (0, .236, .382, .5, .618, Off)
-// "Off" = Infinity (no formation threshold)
-const FORMATION_FIB_VALUES = [0, 0.236, 0.382, 0.5, 0.618, Infinity];
-const FORMATION_FIB_LABELS = ['0', '.236', '.382', '.5', '.618', 'Off'];
-
-// Discrete Fib values for breach tolerance slider (0, .236, .382, .5, .618, 1)
-const BREACH_FIB_VALUES = [0, 0.236, 0.382, 0.5, 0.618, 1];
-const BREACH_FIB_LABELS = ['0', '.236', '.382', '.5', '.618', '1'];
+// Discrete Fib values for formation threshold slider
+// 0 = "Off" (least restrictive - every leg is formed)
+// Higher values = more restrictive (need more retracement to form)
+const FORMATION_FIB_VALUES = [0, 0.236, 0.382, 0.5, 0.618];
+const FORMATION_FIB_LABELS = ['Off', '.236', '.382', '.5', '.618'];
 
 // Find nearest value in array
 function findNearestIndex(value: number, values: number[]): number {
@@ -122,38 +119,31 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     setShowTooltip(showTooltip === key ? null : key);
   };
 
-  // Get orange gradient color for breach tolerance (intensifies toward 1)
-  const getBreachColor = (value: number): string => {
-    // 0 = blue (safe), 1 = orange (caution)
-    const ratio = value;
+  // Get orange gradient color for breach tolerance (intensifies toward max)
+  const getBreachColor = (value: number, max: number): string => {
+    // 0 = blue (safe), max = orange (caution)
+    const ratio = max > 0 ? value / max : 0;
     const r = Math.round(59 + ratio * (249 - 59));
     const g = Math.round(130 + ratio * (115 - 130));
     const b = Math.round(246 + ratio * (22 - 246));
     return `rgb(${r}, ${g}, ${b})`;
   };
 
-  // Render discrete Fib slider with stop labels (#444)
-  const renderDiscreteFibSlider = (
-    key: 'formation_fib_threshold' | 'origin_breach_tolerance',
-    label: string,
-    values: number[],
-    labels: string[],
-    isOrange: boolean = false
-  ) => {
-    const value = localConfig[key] ?? values[0];
-    const sliderIndex = findNearestIndex(value, values);
-    const displayValue = value === Infinity ? 'Off' : value === 0 ? '0' : value.toFixed(3);
-    const sliderColor = isOrange ? getBreachColor(value) : 'rgb(59, 130, 246)';
+  // Render discrete Fib slider with stop labels for Formation (#444)
+  const renderFormationSlider = () => {
+    const value = localConfig.formation_fib_threshold ?? FORMATION_FIB_VALUES[1];
+    const sliderIndex = findNearestIndex(value, FORMATION_FIB_VALUES);
+    const displayValue = value === 0 ? 'Off' : value.toFixed(3);
 
     return (
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 min-w-[80px]">
-            <span className="text-[10px] text-app-muted whitespace-nowrap">{label}</span>
+          <div className="flex items-center gap-1 w-[70px] flex-shrink-0">
+            <span className="text-[10px] text-app-muted whitespace-nowrap">Threshold</span>
             <button
-              onClick={() => toggleTooltip(key)}
+              onClick={() => toggleTooltip('formation_fib_threshold')}
               className="text-app-muted hover:text-app-text transition-colors flex-shrink-0"
-              title={TOOLTIPS[key]}
+              title={TOOLTIPS.formation_fib_threshold}
             >
               <Info size={10} />
             </button>
@@ -161,26 +151,25 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           <input
             type="range"
             min={0}
-            max={values.length - 1}
+            max={FORMATION_FIB_VALUES.length - 1}
             step={1}
             value={sliderIndex}
-            onChange={(e) => handleSliderChange(key, values[parseInt(e.target.value)])}
-            className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer"
-            style={{ accentColor: sliderColor }}
+            onChange={(e) => handleSliderChange('formation_fib_threshold', FORMATION_FIB_VALUES[parseInt(e.target.value)])}
+            className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer accent-trading-blue"
             disabled={isUpdating}
           />
-          <span className="text-[10px] font-mono w-10 text-right text-app-text flex-shrink-0">
+          <span className="text-[10px] font-mono w-[38px] text-right text-app-text flex-shrink-0">
             {displayValue}
           </span>
         </div>
-        <div className="flex justify-between text-[9px] text-app-muted ml-[92px] mr-[52px]">
-          {labels.map((lbl, i) => (
+        <div className="flex justify-between text-[9px] text-app-muted px-[82px]">
+          {FORMATION_FIB_LABELS.map((lbl, i) => (
             <span key={i}>{lbl}</span>
           ))}
         </div>
-        {showTooltip === key && (
+        {showTooltip === 'formation_fib_threshold' && (
           <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded">
-            {TOOLTIPS[key]}
+            {TOOLTIPS.formation_fib_threshold}
           </p>
         )}
       </div>
@@ -199,25 +188,45 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
       {/* FORMATION Section (#444) */}
       <div className="space-y-2">
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Formation</div>
-        {renderDiscreteFibSlider(
-          'formation_fib_threshold',
-          'Threshold',
-          FORMATION_FIB_VALUES,
-          FORMATION_FIB_LABELS,
-          false
-        )}
+        {renderFormationSlider()}
       </div>
 
-      {/* ORIGIN BREACH Section (#444) */}
+      {/* ORIGIN BREACH Section (#444) - continuous slider 0-0.3 */}
       <div className="space-y-2">
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Origin Breach</div>
-        {renderDiscreteFibSlider(
-          'origin_breach_tolerance',
-          'Tolerance',
-          BREACH_FIB_VALUES,
-          BREACH_FIB_LABELS,
-          true
-        )}
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 w-[70px] flex-shrink-0">
+              <span className="text-[10px] text-app-muted whitespace-nowrap">Tolerance</span>
+              <button
+                onClick={() => toggleTooltip('origin_breach_tolerance')}
+                className="text-app-muted hover:text-app-text transition-colors flex-shrink-0"
+                title={TOOLTIPS.origin_breach_tolerance}
+              >
+                <Info size={10} />
+              </button>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={0.3}
+              step={0.01}
+              value={localConfig.origin_breach_tolerance ?? 0}
+              onChange={(e) => handleSliderChange('origin_breach_tolerance', parseFloat(e.target.value))}
+              className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer"
+              style={{ accentColor: getBreachColor(localConfig.origin_breach_tolerance ?? 0, 0.3) }}
+              disabled={isUpdating}
+            />
+            <span className="text-[10px] font-mono w-[38px] text-right text-app-text flex-shrink-0">
+              {(localConfig.origin_breach_tolerance ?? 0).toFixed(2)}
+            </span>
+          </div>
+          {showTooltip === 'origin_breach_tolerance' && (
+            <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded">
+              {TOOLTIPS.origin_breach_tolerance}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* SALIENCE WEIGHTS Section (#436, #442, #444: unified additive formula) */}
@@ -373,7 +382,7 @@ const SliderRow: React.FC<SliderRowProps> = ({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 min-w-[80px]">
+        <div className="flex items-center gap-1 w-[70px] flex-shrink-0">
           <span className={`text-[10px] whitespace-nowrap ${disabled ? 'text-app-muted/50' : 'text-app-muted'}`}>{label}</span>
           {tooltip && onToggleTooltip && (
             <button
@@ -395,7 +404,7 @@ const SliderRow: React.FC<SliderRowProps> = ({
           className={`flex-1 h-1 bg-app-border rounded-lg appearance-none ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} accent-trading-blue`}
           disabled={disabled}
         />
-        <span className={`text-[10px] font-mono w-10 text-right flex-shrink-0 ${disabled ? 'text-app-muted/50' : 'text-app-text'}`}>
+        <span className={`text-[10px] font-mono w-[38px] text-right flex-shrink-0 ${disabled ? 'text-app-muted/50' : 'text-app-text'}`}>
           {formatValue(value)}
         </span>
       </div>
