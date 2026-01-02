@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 8
 
 **Last Review:** 2026-01-01
 
@@ -15,6 +15,7 @@
 5. **#423, #424** — ReferenceConfig API endpoints + ReferenceSidebar component
 6. **#425** — ReferenceConfigPanel component with salience weight sliders + localStorage persistence
 7. **#426, #427** — ReferenceSidebar integration into LevelsAtPlayView + documentation updates
+8. **#429** — Range×Counter standalone mode + info tooltips for ReferenceConfigPanel
 
 ---
 
