@@ -832,7 +832,7 @@ cd frontend && npm run build  # Output: frontend/dist/
 | `LevelsAtPlayView.tsx` | Reference Layer visualization page (#374, #426) |
 | `ChartArea.tsx` | Two stacked lightweight-charts |
 | `LegOverlay.tsx` | Leg visualization (includes tree icon hover) |
-| `ReferenceLegOverlay.tsx` | Reference visualization with scale/direction/location (#377-#379) |
+| `ReferenceLegOverlay.tsx` | Reference visualization with labels at leg midpoint, viewport density limiting (#377-#379, #432) |
 | `HierarchyModeOverlay.tsx` | Hierarchy exploration mode (exit button, connection lines, status) |
 | `PlaybackControls.tsx` | Play/pause/step transport |
 | `DAGStatePanel.tsx` | DAG internal state display (legs, origins, pivots, expandable lists, attachments) |

@@ -433,6 +433,19 @@ Each leg displays:
 
 **Show top N dropdown**: In the Reference Config panel, use the "Show top" dropdown to control page size (3, 5, or 10). This setting persists to localStorage.
 
+#### Chart Labels
+
+Each reference leg on the chart displays a label at its midpoint showing:
+- **Bin badge**: Median multiple (e.g., "5×", "2.5×") with color coding
+- **Location badge**: Current price position (0-2 scale)
+
+**Viewport-based density limiting**: To reduce visual clutter, labels are limited to one per 150×150 pixel area. When multiple legs overlap:
+- Only the most prominent label (highest median multiple) is shown
+- Zooming in spreads legs across more pixels, revealing more labels
+- Zooming out clusters labels, showing only the most important
+
+This behaves like map applications: major features visible when zoomed out, details appear when zoomed in.
+
 #### Reference Stats Panel
 
 Displays aggregate statistics about active references:
