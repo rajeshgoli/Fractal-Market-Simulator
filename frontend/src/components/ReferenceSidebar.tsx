@@ -136,9 +136,9 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     const displayValue = value === 0 ? 'Off' : value.toFixed(3);
 
     return (
-      <div className="space-y-1">
+      <div className="space-y-0.5">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 w-[60px] flex-shrink-0">
+          <div className="flex items-center gap-1 w-[55px] flex-shrink-0">
             <span className="text-[10px] text-app-muted whitespace-nowrap">Threshold</span>
             <button
               onClick={() => toggleTooltip('formation_fib_threshold')}
@@ -158,19 +158,17 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
             className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer accent-trading-blue"
             disabled={isUpdating}
           />
-          <span className="text-[10px] font-mono w-[42px] text-right text-app-text flex-shrink-0">
+          <span className="text-[10px] font-mono w-[50px] text-right text-app-text flex-shrink-0">
             {displayValue}
           </span>
         </div>
-        {/* Labels row mirrors slider row structure for alignment */}
-        <div className="flex items-center gap-2">
-          <div className="w-[60px] flex-shrink-0"></div>
-          <div className="flex-1 flex justify-between text-[9px] text-app-muted">
-            {FORMATION_FIB_LABELS.map((lbl, i) => (
-              <span key={i}>{lbl}</span>
-            ))}
-          </div>
-          <div className="w-[42px] flex-shrink-0"></div>
+        {/* Endpoint labels only - full labels don't fit in narrow sidebar */}
+        <div className="flex items-center gap-2 text-[8px] text-app-muted">
+          <div className="w-[55px] flex-shrink-0"></div>
+          <span>Off</span>
+          <span className="flex-1"></span>
+          <span>.618</span>
+          <div className="w-[50px] flex-shrink-0"></div>
         </div>
         {showTooltip === 'formation_fib_threshold' && (
           <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded">
@@ -201,7 +199,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Origin Breach</div>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 w-[60px] flex-shrink-0">
+            <div className="flex items-center gap-1 w-[55px] flex-shrink-0">
               <span className="text-[10px] text-app-muted whitespace-nowrap">Tolerance</span>
               <button
                 onClick={() => toggleTooltip('origin_breach_tolerance')}
@@ -222,7 +220,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
               style={{ accentColor: getBreachColor(localConfig.origin_breach_tolerance ?? 0, 0.3) }}
               disabled={isUpdating}
             />
-            <span className="text-[10px] font-mono w-[42px] text-right text-app-text flex-shrink-0">
+            <span className="text-[10px] font-mono w-[50px] text-right text-app-text flex-shrink-0">
               {(localConfig.origin_breach_tolerance ?? 0).toFixed(2)}
             </span>
           </div>
@@ -387,7 +385,7 @@ const SliderRow: React.FC<SliderRowProps> = ({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 w-[60px] flex-shrink-0">
+        <div className="flex items-center gap-1 w-[55px] flex-shrink-0">
           <span className={`text-[10px] whitespace-nowrap ${disabled ? 'text-app-muted/50' : 'text-app-muted'}`}>{label}</span>
           {tooltip && onToggleTooltip && (
             <button
@@ -409,7 +407,7 @@ const SliderRow: React.FC<SliderRowProps> = ({
           className={`flex-1 h-1 bg-app-border rounded-lg appearance-none ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} accent-trading-blue`}
           disabled={disabled}
         />
-        <span className={`text-[10px] font-mono w-[42px] text-right flex-shrink-0 ${disabled ? 'text-app-muted/50' : 'text-app-text'}`}>
+        <span className={`text-[10px] font-mono w-[50px] text-right flex-shrink-0 ${disabled ? 'text-app-muted/50' : 'text-app-text'}`}>
           {formatValue(value)}
         </span>
       </div>
