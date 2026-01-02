@@ -1360,7 +1360,12 @@ class ReferenceLayer:
         self._last_level.clear()
         self._pending_cross_events.clear()
 
-    def update(self, legs: List[Leg], bar: Bar) -> ReferenceState:
+    def update(
+        self,
+        legs: List[Leg],
+        bar: Bar,
+        build_response: bool = True,
+    ) -> Optional[ReferenceState]:
         """
         Main entry point. Called each bar after DAG processes.
 
@@ -1369,9 +1374,13 @@ class ReferenceLayer:
         Args:
             legs: Active legs from DAG.
             bar: Current bar with OHLC.
+            build_response: If True (default), build and return full ReferenceState.
+                If False, only perform side effects (formation tracking, breach
+                removal, bin distribution updates) and return None. Use False
+                during bulk advances for performance (#437).
 
         Returns:
-            ReferenceState with all valid references.
+            ReferenceState with all valid references, or None if build_response=False.
         """
         current_price = Decimal(str(bar.close))
         timestamp = bar.timestamp if bar.timestamp else 0.0
@@ -1387,6 +1396,8 @@ class ReferenceLayer:
 
         # Cold start check: not enough swings for meaningful bin classification
         if self.is_cold_start:
+            if not build_response:
+                return None
             return ReferenceState(
                 references=[],
                 by_bin={},
@@ -1398,34 +1409,39 @@ class ReferenceLayer:
                 warmup_progress=self.cold_start_progress,
             )
 
-        references: List[ReferenceSwing] = []
-        for leg in legs:
-            bin_index = self._get_bin_index(leg.range)
-            location = self._compute_location(leg, current_price)
+        # === SIDE EFFECTS: Breach checking (removes invalid refs from _formed_refs) ===
+        bar_high = Decimal(str(bar.high))
+        bar_low = Decimal(str(bar.low))
 
-            # Formation check (already computed above, just checking membership)
+        for leg in legs:
             if leg.leg_id not in self._formed_refs:
                 continue
 
-            # Compute location from bar extremes for breach check
-            # For bull reference (bear leg): defended pivot is LOW, price must stay above
-            # For bear reference (bull leg): defended pivot is HIGH, price must stay below
-            bar_high = Decimal(str(bar.high))
-            bar_low = Decimal(str(bar.low))
+            bin_index = self._get_bin_index(leg.range)
 
+            # Compute location from bar extremes for breach check
             if leg.direction == 'bear':
-                # Bull reference: pivot is LOW, use bar_low for max breach check
                 extreme_location = self._compute_location(leg, bar_low)
             else:
-                # Bear reference: pivot is HIGH, use bar_high for max breach check
                 extreme_location = self._compute_location(leg, bar_high)
 
-            bar_close_location = location  # location is already computed from close
+            bar_close_location = self._compute_location(leg, current_price)
 
-            # Validity check (location + tolerance)
-            if self._is_fatally_breached(leg, bin_index, extreme_location, bar_close_location):
-                # Already removed from formed refs by _is_fatally_breached
+            # Side effect: removes from _formed_refs if fatally breached
+            self._is_fatally_breached(leg, bin_index, extreme_location, bar_close_location)
+
+        # Early return for bulk advances - side effects done, skip response building
+        if not build_response:
+            return None
+
+        # === RESPONSE BUILDING: Only when build_response=True ===
+        references: List[ReferenceSwing] = []
+        for leg in legs:
+            if leg.leg_id not in self._formed_refs:
                 continue
+
+            bin_index = self._get_bin_index(leg.range)
+            location = self._compute_location(leg, current_price)
 
             salience = self._compute_salience(leg, bar.index)
 

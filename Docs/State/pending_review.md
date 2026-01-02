@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-1. **#437** — Replace track_formation() with update() in bulk advances for continuous breach tracking
+1. **#437** — Replace track_formation() with update(build_response=False) in bulk advances for continuous breach tracking without performance regression
 
 ---
 
