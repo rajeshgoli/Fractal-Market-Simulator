@@ -13,6 +13,8 @@ interface ReferenceLegOverlayProps {
   // Phase 2: Sticky leg support
   stickyLegIds?: Set<string>;
   onLegClick?: (legId: string) => void;
+  // Double-click to attach leg to feedback observation
+  onLegDoubleClick?: (ref: ReferenceSwing) => void;
   // Reference Observation mode (Issue #400)
   filteredLegs?: FilteredLeg[];
   showFiltered?: boolean;
@@ -75,6 +77,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   bars,
   stickyLegIds = new Set(),
   onLegClick,
+  onLegDoubleClick,
   filteredLegs = [],
   showFiltered = false,
 }) => {
@@ -533,12 +536,22 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     setHoveredLegId(null);
   }, []);
 
-  // Handle click on label
+  // Handle click on label (toggle sticky/pinned)
   const handleLabelClick = useCallback((legId: string) => {
     if (onLegClick) {
       onLegClick(legId);
     }
   }, [onLegClick]);
+
+  // Handle double-click on label (attach to feedback observation)
+  const handleLabelDoubleClick = useCallback((legId: string) => {
+    if (onLegDoubleClick) {
+      const ref = references.find(r => r.leg_id === legId);
+      if (ref) {
+        onLegDoubleClick(ref);
+      }
+    }
+  }, [onLegDoubleClick, references]);
 
   // Handle filtered leg hover
   const handleFilteredLegMouseEnter = useCallback((legId: string) => {
@@ -578,6 +591,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
             onMouseEnter={() => handleLabelMouseEnter(legId)}
             onMouseLeave={handleLabelMouseLeave}
             onClick={() => handleLabelClick(legId)}
+            onDoubleClick={() => handleLabelDoubleClick(legId)}
           />
         );
       })}

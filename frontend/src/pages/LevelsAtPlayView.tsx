@@ -7,6 +7,7 @@ import { ReferenceTelemetryPanel } from '../components/ReferenceTelemetryPanel';
 import { ReferenceLegOverlay } from '../components/ReferenceLegOverlay';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { ReferenceSidebar } from '../components/ReferenceSidebar';
+import { AttachableItem } from '../components/DAGStatePanel';
 import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { useChartPreferences } from '../hooks/useChartPreferences';
 import { useSessionSettings } from '../hooks/useSessionSettings';
@@ -20,6 +21,8 @@ import {
   updateReferenceConfig,
   ReferenceConfig,
   DEFAULT_REFERENCE_CONFIG,
+  ReferenceSwing,
+  DagLeg,
 } from '../lib/api';
 import { formatReplayBarsData } from '../utils/barDataUtils';
 import {
@@ -80,6 +83,67 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [referenceConfig, setReferenceConfig] = useState<ReferenceConfig>(
     chartPrefs.referenceConfig ?? DEFAULT_REFERENCE_CONFIG
   );
+
+  // Feedback attachment state (for Observation form)
+  const [attachedItems, setAttachedItems] = useState<AttachableItem[]>([]);
+
+  // Convert ReferenceSwing to DagLeg format for attachment
+  const referenceSwingToDagLeg = useCallback((ref: ReferenceSwing): DagLeg => ({
+    leg_id: ref.leg_id,
+    direction: ref.direction,
+    pivot_price: ref.pivot_price,
+    pivot_index: ref.pivot_index,
+    origin_price: ref.origin_price,
+    origin_index: ref.origin_index,
+    retracement_pct: ref.location * 100, // location 0-2 maps roughly to retracement
+    status: 'active',
+    origin_breached: false,
+    bar_count: ref.pivot_index - ref.origin_index,
+    impulsiveness: ref.impulsiveness,
+    spikiness: null,
+    parent_leg_id: null,
+    impulse_to_deepest: null,
+    impulse_back: null,
+    net_segment_impulse: null,
+  }), []);
+
+  // Handle attaching a reference to feedback
+  const handleAttachItem = useCallback((item: AttachableItem) => {
+    setAttachedItems(prev => {
+      if (prev.length >= 5) return prev;
+      const isDuplicate = prev.some(existing => {
+        if (existing.type !== item.type) return false;
+        if (item.type === 'leg') {
+          return (existing.data as DagLeg).leg_id === (item.data as DagLeg).leg_id;
+        }
+        return false;
+      });
+      if (isDuplicate) return prev;
+      return [...prev, item];
+    });
+  }, []);
+
+  // Handle double-click on reference leg to attach
+  const handleLegDoubleClick = useCallback((ref: ReferenceSwing) => {
+    const dagLeg = referenceSwingToDagLeg(ref);
+    handleAttachItem({ type: 'leg', data: dagLeg });
+  }, [referenceSwingToDagLeg, handleAttachItem]);
+
+  // Handle detaching an item
+  const handleDetachItem = useCallback((item: AttachableItem) => {
+    setAttachedItems(prev => prev.filter(existing => {
+      if (existing.type !== item.type) return true;
+      if (item.type === 'leg') {
+        return (existing.data as DagLeg).leg_id !== (item.data as DagLeg).leg_id;
+      }
+      return true;
+    }));
+  }, []);
+
+  // Clear all attachments
+  const handleClearAttachments = useCallback(() => {
+    setAttachedItems([]);
+  }, []);
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -686,6 +750,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               swingsInvalidated: 0,
               swingsCompleted: 0,
             }}
+            attachedItems={attachedItems}
+            onDetachItem={handleDetachItem}
+            onClearAttachments={handleClearAttachments}
           />
         </div>
 
@@ -715,6 +782,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 bars={visibleChart1Bars}
                 stickyLegIds={stickyLegIds}
                 onLegClick={toggleStickyLeg}
+                onLegDoubleClick={handleLegDoubleClick}
                 filteredLegs={referenceState?.filtered_legs ?? []}
                 showFiltered={showFiltered}
               />
@@ -728,6 +796,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 bars={visibleChart2Bars}
                 stickyLegIds={stickyLegIds}
                 onLegClick={toggleStickyLeg}
+                onLegDoubleClick={handleLegDoubleClick}
                 filteredLegs={referenceState?.filtered_legs ?? []}
                 showFiltered={showFiltered}
               />
