@@ -301,14 +301,14 @@ class TestIsFatallyBreached:
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # Add to formed refs to test removal
-        ref_layer._formed_refs.add(leg.leg_id)
+        ref_layer._formed_refs[leg.leg_id] = leg.pivot_price
 
         # Just past origin (location > 1.0 + 0.0 = 1.0) - bins 0-7 (small)
         assert ref_layer._is_fatally_breached(leg, 5, 1.01, 1.01) is True
         assert ref_layer._is_fatally_breached(leg, 7, 1.01, 1.01) is True
 
         # At exactly 1.0 - NOT breached
-        ref_layer._formed_refs.add(leg.leg_id)  # Re-add for next test
+        ref_layer._formed_refs[leg.leg_id] = leg.pivot_price  # Re-add for next test
         assert ref_layer._is_fatally_breached(leg, 5, 1.0, 1.0) is False
 
     def test_small_bin_origin_breach_configurable_tolerance(self):
@@ -365,7 +365,7 @@ class TestIsFatallyBreached:
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # Add to formed refs
-        ref_layer._formed_refs.add(leg.leg_id)
+        ref_layer._formed_refs[leg.leg_id] = leg.pivot_price
         assert leg.leg_id in ref_layer._formed_refs
 
         # Trigger fatal breach - bin 5 (small)

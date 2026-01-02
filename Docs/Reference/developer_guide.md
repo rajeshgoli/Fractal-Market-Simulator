@@ -528,7 +528,7 @@ config = ReferenceConfig.default().with_breach_tolerance(
 |-------|---------|-------------|
 | `significant_bin_threshold` | 8 | Bins >= this are "significant" (5× median) |
 | `min_swings_for_classification` | 50 | Cold start threshold |
-| `formation_fib_threshold` | 0.382 | Price-based formation level |
+| `formation_fib_threshold` | 0.236 | Price-based formation level |
 | `origin_breach_tolerance` | 0.0 | Small bins: origin breach tolerance |
 | `significant_trade_breach_tolerance` | 0.15 | Significant bins: trade breach (15%) |
 | `significant_close_breach_tolerance` | 0.10 | Significant bins: close breach (10%) |
@@ -578,7 +578,7 @@ The frontend displays median multiples (e.g., "2.5×") instead of bin numbers fo
 
 #### Formation and Breach
 
-**Formation:** Price-based, not age-based. A leg becomes a valid reference when price retraces to the formation threshold (default 38.2%). Once formed, stays formed until fatally breached.
+**Formation:** Price-based, not age-based. A leg becomes a valid reference when price retraces to the formation threshold (default 23.6%). Formation is tracked per pivot level — if the pivot extends past the price at which formation occurred, formation is nullified and must be re-achieved at the new level (#448).
 
 **Fatal breach conditions:**
 1. **Pivot breach**: location < 0 (price past defended pivot)
@@ -615,7 +615,7 @@ for status in statuses:
 |-------|---------|
 | `VALID` | Passed all filters |
 | `COLD_START` | Not enough swings for bin classification |
-| `NOT_FORMED` | Price hasn't reached 38.2% formation |
+| `NOT_FORMED` | Price hasn't reached 23.6% formation |
 | `PIVOT_BREACHED` | Location < 0 (past defended pivot) |
 | `COMPLETED` | Location > 2 (past 2× target) |
 | `ORIGIN_BREACHED` | Bin-dependent tolerance exceeded |

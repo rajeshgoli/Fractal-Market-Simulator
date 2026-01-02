@@ -58,14 +58,22 @@ class TestCopyStateFrom:
         assert new_layer._bin_distribution.total_count == 3
 
     def test_copy_state_from_preserves_formed_refs(self):
-        """Formed refs set should be copied to new instance."""
+        """Formed refs dict should be copied to new instance."""
         old_layer = ReferenceLayer()
-        old_layer._formed_refs = {"leg_1", "leg_2", "leg_3"}
+        old_layer._formed_refs = {
+            "leg_1": Decimal("100"),
+            "leg_2": Decimal("200"),
+            "leg_3": Decimal("300"),
+        }
 
         new_layer = ReferenceLayer()
         new_layer.copy_state_from(old_layer)
 
-        assert new_layer._formed_refs == {"leg_1", "leg_2", "leg_3"}
+        assert new_layer._formed_refs == {
+            "leg_1": Decimal("100"),
+            "leg_2": Decimal("200"),
+            "leg_3": Decimal("300"),
+        }
 
     def test_copy_state_from_preserves_tracked_for_crossing(self):
         """Tracked for crossing set should be copied to new instance."""
@@ -92,7 +100,7 @@ class TestCopyStateFrom:
         old_layer = ReferenceLayer()
         old_layer._bin_distribution.add_leg("leg_1", 10.0, 1000.0)
         old_layer._bin_distribution.add_leg("leg_2", 20.0, 1001.0)
-        old_layer._formed_refs = {"leg_1"}
+        old_layer._formed_refs = {"leg_1": Decimal("100")}  # dict with pivot price
         old_layer._seen_leg_ids = {"id_1"}
 
         new_layer = ReferenceLayer()
@@ -100,12 +108,12 @@ class TestCopyStateFrom:
 
         # Mutate new layer
         new_layer._bin_distribution.add_leg("leg_3", 30.0, 1002.0)
-        new_layer._formed_refs.add("leg_2")
+        new_layer._formed_refs["leg_2"] = Decimal("100")  # dummy pivot price
         new_layer._seen_leg_ids.add("id_2")
 
         # Original should be unchanged
         assert old_layer._bin_distribution.total_count == 2
-        assert old_layer._formed_refs == {"leg_1"}
+        assert old_layer._formed_refs == {"leg_1": Decimal("100")}
         assert old_layer._seen_leg_ids == {"id_1"}
 
     def test_copy_state_from_preserves_cold_start_progress(self):
@@ -138,7 +146,7 @@ class TestCopyStateFrom:
         new_layer.copy_state_from(old_layer)
 
         assert new_layer._bin_distribution.total_count == 0
-        assert new_layer._formed_refs == set()
+        assert new_layer._formed_refs == {}  # empty dict
         assert new_layer._tracked_for_crossing == set()
         assert new_layer._seen_leg_ids == set()
 
@@ -154,7 +162,7 @@ class TestWarmupStatePreservation:
         for i in range(55):
             old_layer._bin_distribution.add_leg(f"leg_{i}", 10.0 + i, 1000.0 + i)
             old_layer._seen_leg_ids.add(f"leg_{i}")
-            old_layer._formed_refs.add(f"leg_{i}")
+            old_layer._formed_refs[f"leg_{i}"] = Decimal("100")  # dummy pivot price
 
         assert old_layer.is_cold_start is False
         assert old_layer.cold_start_progress == (55, 50)

@@ -420,8 +420,9 @@ class ReferenceLayer:
             recompute_interval_legs=self.reference_config.bin_recompute_interval,
         )
         # Track which legs have formed as references (price reached formation threshold)
-        # Once formed, stays formed until fatally breached
-        self._formed_refs: Set[str] = set()
+        # Maps leg_id -> pivot_price at time of formation
+        # Formation is nullified if pivot extends past this price (Issue #448)
+        self._formed_refs: Dict[str, Decimal] = {}
         # Track which legs are monitored for level crossings (opt-in per leg)
         self._tracked_for_crossing: Set[str] = set()
         # Track last known fib level for each tracked leg (for cross detection)
@@ -593,13 +594,18 @@ class ReferenceLayer:
 
         Formation is PRICE-BASED, not age-based. A leg becomes a valid reference
         when the subsequent confirming move reaches the formation threshold
-        (default 38.2%).
+        (default 23.6%).
 
         Example: Bear leg from $110 (origin) to $100 (pivot), range = $10.
-        - Formation threshold = 0.382 (38.2%)
-        - Price must rise to $103.82 (38.2% retracement from pivot toward origin)
-        - At that point, location = 0.382, swing is formed
-        - Once formed, stays formed until fatally breached
+        - Formation threshold = 0.236 (23.6%)
+        - Price must rise to $102.36 (23.6% retracement from pivot toward origin)
+        - At that point, location = 0.236, swing is formed
+
+        IMPORTANT (Issue #448): Formation is nullified when pivot extends.
+        If the leg's current pivot has extended past the pivot at which it was
+        formed, formation is cleared and must be re-achieved at the new level.
+        This prevents legs from appearing as "formed" when their pivots have
+        extended far beyond the original formation point.
 
         Args:
             leg: The leg to check
@@ -607,21 +613,34 @@ class ReferenceLayer:
             timestamp: Bar timestamp for bin distribution tracking (#434)
 
         Returns:
-            True if formed (or was previously formed)
+            True if formed at current pivot level
         """
-        # Once formed, always formed (until fatal breach removes it)
+        # Check if previously formed
         if leg.leg_id in self._formed_refs:
-            return True
+            formation_pivot = self._formed_refs[leg.leg_id]
+            # Check if pivot has extended past formation pivot (Issue #448)
+            # Bull leg: pivot extends higher; Bear leg: pivot extends lower
+            pivot_extended = (
+                (leg.direction == 'bull' and leg.pivot_price > formation_pivot) or
+                (leg.direction == 'bear' and leg.pivot_price < formation_pivot)
+            )
+            if pivot_extended:
+                # Pivot extended - nullify formation, must re-form at new level
+                del self._formed_refs[leg.leg_id]
+            else:
+                # Pivot unchanged - still formed
+                return True
 
         location = self._compute_location(leg, current_price)
-        threshold = self.reference_config.formation_fib_threshold  # 0.382
+        threshold = self.reference_config.formation_fib_threshold
 
         # Formation occurs when price retraces TO the threshold
         # Location 0 = pivot, Location 1 = origin
         # For formation, price must move from pivot toward origin by at least threshold
         # This means location must be >= threshold
         if location >= threshold:
-            self._formed_refs.add(leg.leg_id)
+            # Store pivot price at formation (Issue #448)
+            self._formed_refs[leg.leg_id] = leg.pivot_price
             # Add to bin distribution on first formation (#372, #439)
             if leg.leg_id not in self._seen_leg_ids:
                 self._seen_leg_ids.add(leg.leg_id)
@@ -661,29 +680,29 @@ class ReferenceLayer:
         # Pivot breach (location < 0)
         if location < 0:
             # Remove from formed refs if present
-            self._formed_refs.discard(leg.leg_id)
+            self._formed_refs.pop(leg.leg_id, None)
             return True
 
         # Past completion (location > 2)
         if location > 2:
-            self._formed_refs.discard(leg.leg_id)
+            self._formed_refs.pop(leg.leg_id, None)
             return True
 
         # Origin breach — bin-dependent (#436)
         if bin_index < self.reference_config.significant_bin_threshold:
             # Small refs: zero tolerance (or configurable)
             if location > (1.0 + self.reference_config.origin_breach_tolerance):
-                self._formed_refs.discard(leg.leg_id)
+                self._formed_refs.pop(leg.leg_id, None)
                 return True
         else:
             # Significant refs (bin >= 8): two thresholds
             # Trade breach: invalidates if price TRADES beyond 15%
             if location > (1.0 + self.reference_config.significant_trade_breach_tolerance):
-                self._formed_refs.discard(leg.leg_id)
+                self._formed_refs.pop(leg.leg_id, None)
                 return True
             # Close breach: invalidates if price CLOSES beyond 10%
             if bar_close_location > (1.0 + self.reference_config.significant_close_breach_tolerance):
-                self._formed_refs.discard(leg.leg_id)
+                self._formed_refs.pop(leg.leg_id, None)
                 return True
 
         return False
@@ -1503,7 +1522,7 @@ class ReferenceLayer:
 
             # Pivot breached: location < 0
             if extreme_location < 0:
-                self._formed_refs.discard(leg.leg_id)
+                self._formed_refs.pop(leg.leg_id, None)
                 results.append(FilteredLeg(
                     leg=leg,
                     reason=FilterReason.PIVOT_BREACHED,
@@ -1515,7 +1534,7 @@ class ReferenceLayer:
 
             # Completed: location > 2
             if extreme_location > 2:
-                self._formed_refs.discard(leg.leg_id)
+                self._formed_refs.pop(leg.leg_id, None)
                 results.append(FilteredLeg(
                     leg=leg,
                     reason=FilterReason.COMPLETED,
@@ -1529,7 +1548,7 @@ class ReferenceLayer:
             if bin_index < self.reference_config.significant_bin_threshold:
                 tolerance = self.reference_config.origin_breach_tolerance
                 if extreme_location > (1.0 + tolerance):
-                    self._formed_refs.discard(leg.leg_id)
+                    self._formed_refs.pop(leg.leg_id, None)
                     results.append(FilteredLeg(
                         leg=leg,
                         reason=FilterReason.ORIGIN_BREACHED,
@@ -1542,7 +1561,7 @@ class ReferenceLayer:
                 trade_tolerance = self.reference_config.significant_trade_breach_tolerance
                 close_tolerance = self.reference_config.significant_close_breach_tolerance
                 if extreme_location > (1.0 + trade_tolerance):
-                    self._formed_refs.discard(leg.leg_id)
+                    self._formed_refs.pop(leg.leg_id, None)
                     results.append(FilteredLeg(
                         leg=leg,
                         reason=FilterReason.ORIGIN_BREACHED,
@@ -1552,7 +1571,7 @@ class ReferenceLayer:
                     ))
                     continue
                 if bar_close_location > (1.0 + close_tolerance):
-                    self._formed_refs.discard(leg.leg_id)
+                    self._formed_refs.pop(leg.leg_id, None)
                     results.append(FilteredLeg(
                         leg=leg,
                         reason=FilterReason.ORIGIN_BREACHED,
