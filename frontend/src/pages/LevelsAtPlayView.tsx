@@ -79,6 +79,11 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [isProcessingTill, setIsProcessingTill] = useState(false);
   const [showFiltered, setShowFiltered] = useState(false);  // Reference Observation mode
 
+  // Bidirectional hover/click state (Issue #430)
+  const [sidebarHoveredLegId, setSidebarHoveredLegId] = useState<string | null>(null);
+  const [chartHoveredLegId, setChartHoveredLegId] = useState<string | null>(null);
+  const [selectedLegId, setSelectedLegId] = useState<string | null>(null);
+
   // Reference Config state (Issue #425)
   const [referenceConfig, setReferenceConfig] = useState<ReferenceConfig>(
     chartPrefs.referenceConfig ?? DEFAULT_REFERENCE_CONFIG
@@ -144,6 +149,39 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const handleClearAttachments = useCallback(() => {
     setAttachedItems([]);
   }, []);
+
+  // Sidebar hover handler (Issue #430)
+  const handleSidebarHoverLeg = useCallback((legId: string | null) => {
+    setSidebarHoveredLegId(legId);
+  }, []);
+
+  // Chart hover handler (Issue #430) - called when chart leg is hovered
+  const handleChartHoverLeg = useCallback((legId: string | null) => {
+    setChartHoveredLegId(legId);
+  }, []);
+
+  // Sidebar select handler (Issue #430) - clicking a leg selects it (shows fibs persistently)
+  const handleSidebarSelectLeg = useCallback((legId: string) => {
+    // Toggle selection - clicking same leg deselects it
+    setSelectedLegId(prev => prev === legId ? null : legId);
+    // Also toggle sticky state for the chart overlay
+    toggleStickyLeg(legId);
+  }, [toggleStickyLeg]);
+
+  // Effective hovered leg for sidebar (combine sidebar and chart hover)
+  const effectiveSidebarHoveredLegId = useMemo(() => {
+    return sidebarHoveredLegId || chartHoveredLegId;
+  }, [sidebarHoveredLegId, chartHoveredLegId]);
+
+  // Compute total reference count for sidebar display
+  const totalReferenceCount = useMemo(() => {
+    // Count all references from by_bin to get total, not just top N
+    if (!referenceState?.by_bin) return 0;
+    return Object.values(referenceState.by_bin).reduce(
+      (sum, refs) => sum + refs.length,
+      0
+    );
+  }, [referenceState?.by_bin]);
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -711,8 +749,15 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
           <ReferenceSidebar
             referenceConfig={referenceConfig}
             onReferenceConfigUpdate={handleReferenceConfigUpdate}
-            structureData={structureData ?? undefined}
+            // Levels at Play Panel (Issue #430)
             references={referenceState?.references ?? []}
+            totalReferenceCount={totalReferenceCount}
+            selectedLegId={selectedLegId}
+            hoveredLegId={effectiveSidebarHoveredLegId}
+            onHoverLeg={handleSidebarHoverLeg}
+            onSelectLeg={handleSidebarSelectLeg}
+            // Legacy props
+            structureData={structureData ?? undefined}
             trackedLegIds={stickyLegIds}
             onToggleTrack={toggleStickyLeg}
             telemetryData={referenceState ? {
@@ -785,6 +830,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 onLegDoubleClick={handleLegDoubleClick}
                 filteredLegs={referenceState?.filtered_legs ?? []}
                 showFiltered={showFiltered}
+                externalHoveredLegId={sidebarHoveredLegId}
+                onLegHover={handleChartHoverLeg}
               />
             }
             chart2Overlay={
@@ -799,6 +846,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 onLegDoubleClick={handleLegDoubleClick}
                 filteredLegs={referenceState?.filtered_legs ?? []}
                 showFiltered={showFiltered}
+                externalHoveredLegId={sidebarHoveredLegId}
+                onLegHover={handleChartHoverLeg}
               />
             }
           />

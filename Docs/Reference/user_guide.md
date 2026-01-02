@@ -404,9 +404,24 @@ The Reference Config panel lets you tune salience weights to control which level
 
 **Reset to Defaults:** Click the rotate icon (↻) next to the panel header or the button at the bottom of the sidebar to reset all weights to their default values.
 
-#### Structure Panel
+#### Levels at Play Panel
 
-Shows the hierarchical structure of currently active references, organized by bin (median multiple). Click on any reference to toggle tracking—tracked references persist visually on the chart. References display their median multiple (e.g., "2.5×") for quick size assessment.
+Shows the top N most salient references ranked by importance. The panel header displays "(N/total)" showing how many are displayed vs total active references.
+
+Each leg displays:
+- **Rank**: Position in salience ranking (1., 2., 3., ...)
+- **Bin badge**: Median multiple (e.g., "5×", "2.5×") with color coding
+- **Direction**: ▲ (bull) or ▼ (bear)
+- **Price**: The pivot price (key structural level)
+- **Salience bar**: Visual indicator of relative importance
+
+**Bidirectional Linking:**
+- **Hover** over a leg in the sidebar to highlight it on the chart
+- **Hover** over a leg on the chart to highlight it in the sidebar
+- **Click** on a leg to select it (shows Fibonacci levels persistently)
+- Clicking the same leg again deselects it
+
+**Show top N dropdown**: In the Reference Config panel, use the "Show top" dropdown to control how many legs appear (3, 5, or 10). This setting persists to localStorage.
 
 #### Reference Stats Panel
 
@@ -443,7 +458,7 @@ The bottom panel height is adjustable via the resize handle.
 | Feature | Market Structure View | Levels at Play View |
 |---------|----------------------|---------------------|
 | Focus | Leg formation & lifecycle | Reference significance |
-| Sidebar | Detection Config, Linger Events | Reference Config, Structure, Stats |
+| Sidebar | Detection Config, Linger Events | Reference Config, Levels at Play, Stats |
 | Bottom Panel | Current Structure | Reference Telemetry |
 | Overlay | Diagonal leg lines | Reference level zones |
 | Use case | Algorithm debugging | Level interaction observation |

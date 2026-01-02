@@ -1,5 +1,5 @@
 import React, { useState, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Settings, RotateCcw, Layers, Activity, Loader, Info } from 'lucide-react';
+import { ChevronDown, ChevronRight, Settings, RotateCcw, Activity, Loader, Info } from 'lucide-react';
 import {
   ReferenceConfig,
   StructurePanelResponse,
@@ -9,7 +9,7 @@ import {
 } from '../lib/api';
 import { FeedbackForm } from './FeedbackForm';
 import type { FeedbackContext, DagContext } from './FeedbackForm';
-import { StructurePanel } from './StructurePanel';
+import { LevelsAtPlayPanel } from './LevelsAtPlayPanel';
 import { ReplayEvent } from '../lib/api';
 import { AttachableItem } from './DAGStatePanel';
 import { getBinBadgeColor } from '../utils/binUtils';
@@ -297,8 +297,8 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
             className="flex-1 h-6 bg-app-bg border border-app-border rounded text-[10px] text-app-text px-2"
             disabled={isUpdating}
           >
-            {[3, 5, 7, 10, 15, 20].map(n => (
-              <option key={n} value={n}>{n} legs</option>
+            {[3, 5, 10].map(n => (
+              <option key={n} value={n}>{n}</option>
             ))}
           </select>
         </div>
@@ -511,9 +511,16 @@ interface ReferenceSidebarProps {
   lingerEvent?: ReplayEvent;
   dagContext?: DagContext;
 
-  // Structure Panel
-  structureData?: StructurePanelResponse;
+  // Levels at Play Panel (Issue #430)
   references?: ReferenceSwing[];
+  totalReferenceCount?: number;
+  selectedLegId?: string | null;
+  hoveredLegId?: string | null;
+  onHoverLeg?: (legId: string | null) => void;
+  onSelectLeg?: (legId: string) => void;
+
+  // Legacy props for backward compatibility (deprecated)
+  structureData?: StructurePanelResponse;
   trackedLegIds?: Set<string>;
   onToggleTrack?: (legId: string) => Promise<{ success: boolean; error?: string }>;
 
@@ -541,10 +548,17 @@ export const ReferenceSidebar: React.FC<ReferenceSidebarProps> = ({
   isLingering = false,
   lingerEvent,
   dagContext,
-  structureData,
+  // Levels at Play Panel (Issue #430)
   references = [],
-  trackedLegIds = new Set(),
-  onToggleTrack = async () => ({ success: true }),
+  totalReferenceCount = 0,
+  selectedLegId = null,
+  hoveredLegId = null,
+  onHoverLeg = () => {},
+  onSelectLeg = () => {},
+  // Legacy props (deprecated, unused)
+  structureData: _structureData,
+  trackedLegIds: _trackedLegIds = new Set(),
+  onToggleTrack: _onToggleTrack = async () => ({ success: true }),
   telemetryData,
   onResetDefaults,
   className = '',
@@ -611,7 +625,7 @@ export const ReferenceSidebar: React.FC<ReferenceSidebarProps> = ({
         />
       )}
 
-      {/* Structure Panel */}
+      {/* Levels at Play Panel (Issue #430) */}
       <div className="border-t border-app-border">
         <button
           className="w-full p-4 hover:bg-app-card/30 transition-colors text-left"
@@ -619,17 +633,18 @@ export const ReferenceSidebar: React.FC<ReferenceSidebarProps> = ({
         >
           <h3 className="text-xs font-bold text-app-muted uppercase tracking-wider flex items-center gap-2">
             {isStructureCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-            <Layers size={14} />
-            Structure
+            Levels at Play
           </h3>
         </button>
         {!isStructureCollapsed && (
           <div className="px-4 pb-4">
-            <StructurePanel
-              structureData={structureData || null}
+            <LevelsAtPlayPanel
               references={references}
-              trackedLegIds={trackedLegIds}
-              onToggleTrack={onToggleTrack}
+              totalReferenceCount={totalReferenceCount}
+              selectedLegId={selectedLegId}
+              hoveredLegId={hoveredLegId}
+              onHoverLeg={onHoverLeg}
+              onSelectLeg={onSelectLeg}
             />
           </div>
         )}

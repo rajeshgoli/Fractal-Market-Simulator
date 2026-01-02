@@ -19,6 +19,9 @@ interface ReferenceLegOverlayProps {
   // Reference Observation mode (Issue #400)
   filteredLegs?: FilteredLeg[];
   showFiltered?: boolean;
+  // Bidirectional sidebar linking (Issue #430)
+  externalHoveredLegId?: string | null;
+  onLegHover?: (legId: string | null) => void;
 }
 
 // Bin to line width mapping - uses shared utility
@@ -74,6 +77,9 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   onLegDoubleClick,
   filteredLegs = [],
   showFiltered = false,
+  // Bidirectional sidebar linking (Issue #430)
+  externalHoveredLegId = null,
+  onLegHover,
 }) => {
   // Track created line series so we can remove them on update
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,8 +107,13 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   // Hovered filtered leg
   const [hoveredFilteredLegId, setHoveredFilteredLegId] = useState<string | null>(null);
 
-  // Hover state
-  const [hoveredLegId, setHoveredLegId] = useState<string | null>(null);
+  // Internal hover state (from chart interaction)
+  const [internalHoveredLegId, setInternalHoveredLegId] = useState<string | null>(null);
+
+  // Effective hover state: combine internal (chart) and external (sidebar) hover
+  const hoveredLegId = useMemo(() => {
+    return internalHoveredLegId || externalHoveredLegId;
+  }, [internalHoveredLegId, externalHoveredLegId]);
 
   // Assign colors to sticky legs
   const stickyColorMap = useMemo(() => {
@@ -520,15 +531,21 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     };
   }, [chart, updateLabelPositions, updateFilteredLabelPositions, updateFibLevels]);
 
-  // Handle mouse enter on label
+  // Handle mouse enter on label (Issue #430: bidirectional linking)
   const handleLabelMouseEnter = useCallback((legId: string) => {
-    setHoveredLegId(legId);
-  }, []);
+    setInternalHoveredLegId(legId);
+    if (onLegHover) {
+      onLegHover(legId);
+    }
+  }, [onLegHover]);
 
-  // Handle mouse leave on label
+  // Handle mouse leave on label (Issue #430: bidirectional linking)
   const handleLabelMouseLeave = useCallback(() => {
-    setHoveredLegId(null);
-  }, []);
+    setInternalHoveredLegId(null);
+    if (onLegHover) {
+      onLegHover(null);
+    }
+  }, [onLegHover]);
 
   // Handle click on label (toggle sticky/pinned)
   const handleLabelClick = useCallback((legId: string) => {

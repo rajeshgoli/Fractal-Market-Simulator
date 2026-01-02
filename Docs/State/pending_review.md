@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2026-01-02
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 1. **#440** — Hook up evict_old_legs() in update() side effects for rolling 90-day window; remove dead remove_leg() and _remove_from_bin_distribution() methods
+2. **#430** — Simplified sidebar to show only top N legs by salience ("Levels at Play"); bidirectional hover/click linking between sidebar and chart
 
 ---
 
