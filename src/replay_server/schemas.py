@@ -809,6 +809,10 @@ class ReferenceConfigUpdateRequest(BaseModel):
     small_impulse_weight: Optional[float] = None
     small_recency_weight: Optional[float] = None
 
+    # Standalone salience mode: Range×Counter
+    # When > 0, uses range × origin_counter_trend_range instead of weighted sum
+    range_counter_weight: Optional[float] = None
+
     # Formation threshold
     formation_fib_threshold: Optional[float] = None
 
@@ -817,6 +821,7 @@ class ReferenceConfigUpdateRequest(BaseModel):
             "example": {
                 "big_range_weight": 0.6,
                 "formation_fib_threshold": 0.5,
+                "range_counter_weight": 0.0,
             }
         }
     )
@@ -838,6 +843,9 @@ class ReferenceConfigResponse(BaseModel):
     small_impulse_weight: float
     small_recency_weight: float
 
+    # Standalone salience mode: Range×Counter
+    range_counter_weight: float
+
     # Formation threshold
     formation_fib_threshold: float
 
@@ -850,6 +858,7 @@ class ReferenceConfigResponse(BaseModel):
                 "small_range_weight": 0.2,
                 "small_impulse_weight": 0.3,
                 "small_recency_weight": 0.5,
+                "range_counter_weight": 0.0,
                 "formation_fib_threshold": 0.382,
             }
         }

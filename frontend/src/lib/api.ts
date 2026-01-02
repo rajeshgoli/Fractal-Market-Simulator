@@ -829,6 +829,7 @@ export interface ReferenceConfig {
   small_range_weight: number;
   small_impulse_weight: number;
   small_recency_weight: number;
+  range_counter_weight: number;  // Standalone mode: when > 0, uses range × counter instead of weighted sum
   formation_fib_threshold: number;
 }
 
@@ -839,6 +840,7 @@ export interface ReferenceConfigUpdateRequest {
   small_range_weight?: number;
   small_impulse_weight?: number;
   small_recency_weight?: number;
+  range_counter_weight?: number;
   formation_fib_threshold?: number;
 }
 
@@ -849,6 +851,7 @@ export const DEFAULT_REFERENCE_CONFIG: ReferenceConfig = {
   small_range_weight: 0.2,
   small_impulse_weight: 0.3,
   small_recency_weight: 0.5,
+  range_counter_weight: 0.0,
   formation_fib_threshold: 0.382,
 };
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Settings, RotateCcw, Layers, Activity, Loader } from 'lucide-react';
+import { ChevronDown, ChevronRight, Settings, RotateCcw, Layers, Activity, Loader, Info } from 'lucide-react';
 import {
   ReferenceConfig,
   StructurePanelResponse,
@@ -27,6 +27,18 @@ interface ReferenceConfigPanelProps {
   hideHeader?: boolean;
 }
 
+// Tooltip definitions for each parameter
+const TOOLTIPS = {
+  big_range_weight: "Rank by leg size. Larger legs score higher.",
+  big_impulse_weight: "Rank by move speed. Fast, impulsive moves score higher.",
+  big_recency_weight: "Rank by age. Recent legs score higher.",
+  small_range_weight: "Rank by leg size. Larger legs score higher.",
+  small_impulse_weight: "Rank by move speed. Fast, impulsive moves score higher.",
+  small_recency_weight: "Rank by age. Recent legs score higher.",
+  range_counter_weight: "Rank by structural importance: leg size \u00d7 counter-trend defense. Standalone mode \u2014 disables other components.",
+  formation_fib_threshold: "Retracement required before leg forms. Higher = stricter formation (only clear reversals).",
+};
+
 const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, ReferenceConfigPanelProps>(({
   config,
   onConfigUpdate,
@@ -35,7 +47,11 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
   // Local state for sliders
   const [localConfig, setLocalConfig] = useState<ReferenceConfig>(config);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showTooltip, setShowTooltip] = useState<string | null>(null);
   const hasAppliedRef = React.useRef(false);
+
+  // Check if Range×Counter standalone mode is active
+  const isStandaloneMode = localConfig.range_counter_weight > 0;
 
   // Track if config has changes from server config
   const hasChanges = useMemo(() => {
@@ -46,6 +62,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
       localConfig.small_range_weight !== config.small_range_weight ||
       localConfig.small_impulse_weight !== config.small_impulse_weight ||
       localConfig.small_recency_weight !== config.small_recency_weight ||
+      localConfig.range_counter_weight !== config.range_counter_weight ||
       localConfig.formation_fib_threshold !== config.formation_fib_threshold
     );
   }, [localConfig, config]);
@@ -79,6 +96,10 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
     }
   };
 
+  const toggleTooltip = (key: string) => {
+    setShowTooltip(showTooltip === key ? null : key);
+  };
+
   return (
     <div className="space-y-4">
       {!hideHeader && (
@@ -88,8 +109,30 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         </div>
       )}
 
-      {/* Base Weights (L/XL) */}
+      {/* Range×Counter Standalone Mode */}
       <div className="space-y-2">
+        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Standalone Mode</div>
+        <SliderRow
+          label="Range×Counter"
+          value={localConfig.range_counter_weight}
+          onChange={(v) => handleSliderChange('range_counter_weight', v)}
+          min={0}
+          max={1}
+          step={0.1}
+          disabled={isUpdating}
+          tooltip={TOOLTIPS.range_counter_weight}
+          showTooltip={showTooltip === 'range_counter_weight'}
+          onToggleTooltip={() => toggleTooltip('range_counter_weight')}
+        />
+        {isStandaloneMode && (
+          <div className="text-[9px] text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">
+            Standalone mode active. Other weight sliders disabled.
+          </div>
+        )}
+      </div>
+
+      {/* Base Weights (L/XL) */}
+      <div className={`space-y-2 ${isStandaloneMode ? 'opacity-50' : ''}`}>
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Base Weights (L/XL)</div>
         <SliderRow
           label="Range"
@@ -98,7 +141,10 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
-          disabled={isUpdating}
+          disabled={isUpdating || isStandaloneMode}
+          tooltip={TOOLTIPS.big_range_weight}
+          showTooltip={showTooltip === 'big_range_weight'}
+          onToggleTooltip={() => toggleTooltip('big_range_weight')}
         />
         <SliderRow
           label="Impulse"
@@ -107,7 +153,10 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
-          disabled={isUpdating}
+          disabled={isUpdating || isStandaloneMode}
+          tooltip={TOOLTIPS.big_impulse_weight}
+          showTooltip={showTooltip === 'big_impulse_weight'}
+          onToggleTooltip={() => toggleTooltip('big_impulse_weight')}
         />
         <SliderRow
           label="Recency"
@@ -116,12 +165,15 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
-          disabled={isUpdating}
+          disabled={isUpdating || isStandaloneMode}
+          tooltip={TOOLTIPS.big_recency_weight}
+          showTooltip={showTooltip === 'big_recency_weight'}
+          onToggleTooltip={() => toggleTooltip('big_recency_weight')}
         />
       </div>
 
       {/* Base Weights (S/M) */}
-      <div className="space-y-2">
+      <div className={`space-y-2 ${isStandaloneMode ? 'opacity-50' : ''}`}>
         <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Base Weights (S/M)</div>
         <SliderRow
           label="Range"
@@ -130,7 +182,10 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
-          disabled={isUpdating}
+          disabled={isUpdating || isStandaloneMode}
+          tooltip={TOOLTIPS.small_range_weight}
+          showTooltip={showTooltip === 'small_range_weight'}
+          onToggleTooltip={() => toggleTooltip('small_range_weight')}
         />
         <SliderRow
           label="Impulse"
@@ -139,7 +194,10 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
-          disabled={isUpdating}
+          disabled={isUpdating || isStandaloneMode}
+          tooltip={TOOLTIPS.small_impulse_weight}
+          showTooltip={showTooltip === 'small_impulse_weight'}
+          onToggleTooltip={() => toggleTooltip('small_impulse_weight')}
         />
         <SliderRow
           label="Recency"
@@ -148,7 +206,10 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           min={0}
           max={1}
           step={0.1}
-          disabled={isUpdating}
+          disabled={isUpdating || isStandaloneMode}
+          tooltip={TOOLTIPS.small_recency_weight}
+          showTooltip={showTooltip === 'small_recency_weight'}
+          onToggleTooltip={() => toggleTooltip('small_recency_weight')}
         />
       </div>
 
@@ -164,6 +225,9 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           step={0.01}
           formatValue={(v) => v.toFixed(3)}
           disabled={isUpdating}
+          tooltip={TOOLTIPS.formation_fib_threshold}
+          showTooltip={showTooltip === 'formation_fib_threshold'}
+          onToggleTooltip={() => toggleTooltip('formation_fib_threshold')}
         />
       </div>
 
@@ -194,7 +258,7 @@ ReferenceConfigPanelInner.displayName = 'ReferenceConfigPanel';
 
 export const ReferenceConfigPanel = ReferenceConfigPanelInner;
 
-// Slider row component
+// Slider row component with tooltip support
 interface SliderRowProps {
   label: string;
   value: number;
@@ -204,6 +268,9 @@ interface SliderRowProps {
   step: number;
   formatValue?: (value: number) => string;
   disabled?: boolean;
+  tooltip?: string;
+  showTooltip?: boolean;
+  onToggleTooltip?: () => void;
 }
 
 const SliderRow: React.FC<SliderRowProps> = ({
@@ -215,23 +282,44 @@ const SliderRow: React.FC<SliderRowProps> = ({
   step,
   formatValue = (v) => v.toFixed(1),
   disabled = false,
+  tooltip,
+  showTooltip = false,
+  onToggleTooltip,
 }) => {
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-[10px] text-app-muted w-16">{label}</span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="flex-1 h-1 bg-app-border rounded-lg appearance-none cursor-pointer accent-trading-blue"
-        disabled={disabled}
-      />
-      <span className="text-[10px] font-mono text-app-text w-10 text-right">
-        {formatValue(value)}
-      </span>
+    <div className="space-y-1">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 w-24">
+          <span className={`text-[10px] ${disabled ? 'text-app-muted/50' : 'text-app-muted'}`}>{label}</span>
+          {tooltip && onToggleTooltip && (
+            <button
+              onClick={onToggleTooltip}
+              className="text-app-muted hover:text-app-text transition-colors"
+              title={tooltip}
+            >
+              <Info size={10} />
+            </button>
+          )}
+        </div>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(parseFloat(e.target.value))}
+          className={`flex-1 h-1 bg-app-border rounded-lg appearance-none ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} accent-trading-blue`}
+          disabled={disabled}
+        />
+        <span className={`text-[10px] font-mono w-10 text-right ${disabled ? 'text-app-muted/50' : 'text-app-text'}`}>
+          {formatValue(value)}
+        </span>
+      </div>
+      {showTooltip && tooltip && (
+        <p className="text-[9px] text-app-muted bg-app-bg/50 p-1.5 rounded ml-0">
+          {tooltip}
+        </p>
+      )}
     </div>
   );
 };

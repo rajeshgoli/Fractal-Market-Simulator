@@ -29,10 +29,12 @@ class TestReferenceConfigSchemas:
             small_range_weight=config.small_range_weight,
             small_impulse_weight=config.small_impulse_weight,
             small_recency_weight=config.small_recency_weight,
+            range_counter_weight=config.range_counter_weight,
             formation_fib_threshold=config.formation_fib_threshold,
         )
 
         assert response.big_range_weight == 0.5
+        assert response.range_counter_weight == 0.0
         assert response.big_impulse_weight == 0.4
         assert response.big_recency_weight == 0.1
         assert response.small_range_weight == 0.2

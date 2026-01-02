@@ -727,17 +727,17 @@ class ReferenceLayer:
         """
         Compute salience score for ranking references.
 
-        North star: big, impulsive, and early (for large swings)
-                    vs recent (for small swings).
+        Two modes:
+        1. Combine mode (range_counter_weight == 0): Weighted sum of range, impulse, recency
+        2. Standalone mode (range_counter_weight > 0): Range × Counter (structural importance)
 
-        Components:
-        1. range_score — Normalized range (0-1)
-        2. impulse_score — leg.impulsiveness / 100 (0-1), skip if None
-        3. recency_score — 1 / (1 + age/1000) decay function
-
-        Scale-dependent weights:
+        Combine mode weights (scale-dependent):
         - L/XL: range=0.5, impulse=0.4, recency=0.1
         - S/M: range=0.2, impulse=0.3, recency=0.5
+
+        Standalone mode: range × origin_counter_trend_range
+        - Measures structural importance: how big is the leg × how big was the counter-trend
+        - Larger legs that survived larger counter-trends score higher
 
         Args:
             leg: The leg to score
@@ -747,6 +747,19 @@ class ReferenceLayer:
         Returns:
             Salience score (higher = more relevant)
         """
+        # Check for Range×Counter standalone mode
+        if self.reference_config.range_counter_weight > 0:
+            # Standalone mode: use range × origin_counter_trend_range
+            counter_range = leg.origin_counter_trend_range or 0.0
+            raw_score = float(leg.range) * counter_range
+            # Normalize by max observed (use range distribution as proxy)
+            max_range = float(max(self._range_distribution)) if self._range_distribution else 1.0
+            # Normalize: divide by max_range² to keep in reasonable 0-1 range
+            if max_range > 0:
+                return min(raw_score / (max_range * max_range), 1.0)
+            return 0.0
+
+        # Combine mode: weighted sum of components
         # Range score: normalized against distribution
         range_score = self._normalize_range(float(leg.range))
 

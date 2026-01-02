@@ -753,6 +753,7 @@ async def get_reference_config():
         small_range_weight=config.small_range_weight,
         small_impulse_weight=config.small_impulse_weight,
         small_recency_weight=config.small_recency_weight,
+        range_counter_weight=config.range_counter_weight,
         formation_fib_threshold=config.formation_fib_threshold,
     )
 
@@ -794,6 +795,7 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
         small_range_weight=request.small_range_weight,
         small_impulse_weight=request.small_impulse_weight,
         small_recency_weight=request.small_recency_weight,
+        range_counter_weight=request.range_counter_weight,
     )
 
     # Apply formation threshold update
@@ -810,5 +812,6 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
         small_range_weight=new_config.small_range_weight,
         small_impulse_weight=new_config.small_impulse_weight,
         small_recency_weight=new_config.small_recency_weight,
+        range_counter_weight=new_config.range_counter_weight,
         formation_fib_threshold=new_config.formation_fib_threshold,
     )
