@@ -588,6 +588,8 @@ config = ReferenceConfig.default().with_breach_tolerance(
 | `impulse_weight` | 0.4 | Unified salience: impulse weight |
 | `recency_weight` | 0.1 | Unified salience: recency weight |
 | `depth_weight` | 0.1 | Unified salience: depth weight |
+| `recency_decay_bars` | 1000 | Recency half-life: `1/(1 + age/decay)` |
+| `depth_decay_factor` | 0.5 | Depth decay: `1/(1 + depth*factor)` |
 | `range_counter_weight` | 0.0 | Standalone mode: when > 0, uses range × counter |
 | `confluence_tolerance_pct` | 0.001 | Confluence zone clustering tolerance (0.1%) |
 
