@@ -272,11 +272,13 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   }, [isPlaying, forwardPlayback.currentPosition, calibrationBarCount]);
 
   // Fetch reference state when playback position changes (#412: simplified from CalibrationData)
+  // Guard: fetch when we have existing state OR when playback has started
+  // (calibrationBarCount > 0 means backend had state on load; isPlaying means we've advanced)
   useEffect(() => {
-    if (calibrationBarCount > 0) {
+    if (calibrationBarCount > 0 || isPlaying) {
       fetchReferenceState(currentPlaybackPosition);
     }
-  }, [currentPlaybackPosition, calibrationBarCount, fetchReferenceState]);
+  }, [currentPlaybackPosition, calibrationBarCount, isPlaying, fetchReferenceState]);
 
   // Auto-select top-ranked leg when references change (Issue #433)
   // - On initial load: auto-select top leg
@@ -367,6 +369,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
   // Filter chart bars to only show candles up to current playback position
   // Always filter based on position - don't show all bars before playback starts (#412)
+  // If computeLiveBar fails (no source bars), include original bar for timestamp mapping
   const visibleChart1Bars = useMemo(() => {
     const result: BarData[] = [];
     for (const bar of chart1Bars) {
@@ -374,7 +377,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         result.push(bar);
       } else if (bar.source_start_index <= currentPlaybackPosition) {
         const liveBar = computeLiveBar(bar, currentPlaybackPosition);
-        if (liveBar) result.push(liveBar);
+        // Include original bar if live computation fails - needed for timestamp mapping in overlays
+        result.push(liveBar ?? bar);
       }
     }
     return result;
@@ -387,7 +391,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         result.push(bar);
       } else if (bar.source_start_index <= currentPlaybackPosition) {
         const liveBar = computeLiveBar(bar, currentPlaybackPosition);
-        if (liveBar) result.push(liveBar);
+        // Include original bar if live computation fails - needed for timestamp mapping in overlays
+        result.push(liveBar ?? bar);
       }
     }
     return result;
@@ -853,6 +858,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 references={referenceState?.references ?? []}
                 fadingRefs={fadingRefs}
                 bars={visibleChart1Bars}
+                allBars={chart1Bars}
+                currentPosition={currentPlaybackPosition}
                 stickyLegIds={stickyLegIds}
                 onLegClick={toggleStickyLeg}
                 onLegDoubleClick={handleLegDoubleClick}
@@ -869,6 +876,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 references={referenceState?.references ?? []}
                 fadingRefs={fadingRefs}
                 bars={visibleChart2Bars}
+                allBars={chart2Bars}
+                currentPosition={currentPlaybackPosition}
                 stickyLegIds={stickyLegIds}
                 onLegClick={toggleStickyLeg}
                 onLegDoubleClick={handleLegDoubleClick}

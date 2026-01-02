@@ -11,6 +11,11 @@ interface ReferenceLegOverlayProps {
   references: ReferenceSwing[];
   fadingRefs: Set<string>;
   bars: BarData[];
+  // All bars (unfiltered) for timestamp lookup - needed when visible bars
+  // don't cover historical reference origins
+  allBars?: BarData[];
+  // Current playback position - filter legs to only show those formed up to this position
+  currentPosition: number;
   // Phase 2: Sticky leg support
   stickyLegIds?: Set<string>;
   onLegClick?: (legId: string) => void;
@@ -76,6 +81,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   references,
   fadingRefs,
   bars,
+  allBars,
+  currentPosition,
   stickyLegIds = new Set(),
   onLegClick,
   onLegDoubleClick,
@@ -85,6 +92,19 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   externalHoveredLegId = null,
   onLegHover,
 }) => {
+  // Use allBars for timestamp lookups if provided, otherwise fall back to bars
+  const barsForTimestampLookup = allBars ?? bars;
+
+  // Filter references to only show legs formed up to current playback position
+  // This prevents "future" legs from rendering before their candles exist
+  const visibleReferences = useMemo(() => {
+    return references.filter(ref => ref.pivot_index <= currentPosition);
+  }, [references, currentPosition]);
+
+  // Also filter filteredLegs by currentPosition
+  const visibleFilteredLegs = useMemo(() => {
+    return filteredLegs.filter(leg => leg.pivot_index <= currentPosition);
+  }, [filteredLegs, currentPosition]);
   // Track created line series so we can remove them on update
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lineSeriesRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
@@ -130,9 +150,9 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     return map;
   }, [stickyLegIds]);
 
-  // Find bar timestamp by source index
+  // Find bar timestamp by source index - uses allBars if provided for historical lookup
   const getTimestampForIndex = useCallback((barIndex: number): number | null => {
-    for (const bar of bars) {
+    for (const bar of barsForTimestampLookup) {
       if (bar.source_start_index !== undefined && bar.source_end_index !== undefined) {
         if (barIndex >= bar.source_start_index && barIndex <= bar.source_end_index) {
           return bar.timestamp;
@@ -140,7 +160,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       }
     }
     return null;
-  }, [bars]);
+  }, [barsForTimestampLookup]);
 
   // Get chart visible time range for fib lines
   const getVisibleTimeRange = useCallback((): { from: number; to: number } | null => {
@@ -392,7 +412,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       ref: ReferenceSwing
     }>();
 
-    for (const ref of references) {
+    for (const ref of visibleReferences) {
       if (fadingRefs.has(ref.leg_id)) continue;
 
       const originTime = getTimestampForIndex(ref.origin_index);
@@ -435,7 +455,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
     setLabelPositions(labelPos);
     setLegLinePositions(linePos);
-  }, [chart, series, references, fadingRefs, bars, getTimestampForIndex]);
+  }, [chart, series, visibleReferences, fadingRefs, bars, getTimestampForIndex]);
 
   // Update filtered label positions (Issue #400)
   const updateFilteredLabelPositions = useCallback(() => {
@@ -453,7 +473,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       leg: FilteredLeg
     }>();
 
-    for (const leg of filteredLegs) {
+    for (const leg of visibleFilteredLegs) {
       const originTime = getTimestampForIndex(leg.origin_index);
       const pivotTime = getTimestampForIndex(leg.pivot_index);
       if (originTime === null || pivotTime === null) continue;
@@ -494,7 +514,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
     setFilteredLabelPositions(labelPositions);
     setFilteredLinePositions(linePositions);
-  }, [chart, series, filteredLegs, bars, showFiltered, getTimestampForIndex]);
+  }, [chart, series, visibleFilteredLegs, bars, showFiltered, getTimestampForIndex]);
 
   // Update fib levels for hovered and sticky legs
   const updateFibLevels = useCallback(() => {
@@ -504,7 +524,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     clearFibSeries();
 
     // Get refs to show fib levels for
-    const refsToShow = references.filter(ref =>
+    const refsToShow = visibleReferences.filter(ref =>
       ref.leg_id === hoveredLegId || stickyLegIds.has(ref.leg_id)
     );
 
@@ -518,7 +538,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
       createFibLines(ref, color, opacity);
     });
-  }, [chart, series, references, hoveredLegId, stickyLegIds, stickyColorMap, clearFibSeries, createFibLines]);
+  }, [chart, series, visibleReferences, hoveredLegId, stickyLegIds, stickyColorMap, clearFibSeries, createFibLines]);
 
   // Update line series when references, bars, or hover state changes
   useEffect(() => {
@@ -536,7 +556,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       // When showFiltered is on, fade valid legs so filtered legs stand out
       // When a leg is hovered (from sidebar or chart), fade other legs and highlight hovered
       const hasHoveredLeg = hoveredLegId !== null;
-      for (const ref of references) {
+      for (const ref of visibleReferences) {
         const isFading = fadingRefs.has(ref.leg_id);
         const isHoveredLeg = ref.leg_id === hoveredLegId;
         const fadeForHover = hasHoveredLeg && !isHoveredLeg;
@@ -548,7 +568,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
       // Create line series for filtered legs when showFiltered is true (Issue #400)
       if (showFiltered) {
-        for (const leg of filteredLegs) {
+        for (const leg of visibleFilteredLegs) {
           const lineSeries = createFilteredLegLine(leg);
           if (lineSeries) {
             lineSeriesRef.current.set(`filtered_${leg.leg_id}`, lineSeries);
@@ -574,12 +594,16 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         // Ignore disposal errors during cleanup
       }
     };
-  }, [chart, series, references, fadingRefs, bars, clearLineSeries, clearFibSeries, createRefLine, updateLabelPositions, updateFibLevels, showFiltered, filteredLegs, createFilteredLegLine, updateFilteredLabelPositions, hoveredLegId]);
+  }, [chart, series, visibleReferences, fadingRefs, bars, clearLineSeries, clearFibSeries, createRefLine, updateLabelPositions, updateFibLevels, showFiltered, visibleFilteredLegs, createFilteredLegLine, updateFilteredLabelPositions, hoveredLegId]);
 
   // Update fib levels when hover or sticky state changes
+  // Note: Don't include updateFibLevels in deps - it causes infinite loop since
+  // it's recreated when stickyLegIds/hoveredLegId change. We only need to trigger
+  // on actual data changes.
   useEffect(() => {
     updateFibLevels();
-  }, [hoveredLegId, stickyLegIds, updateFibLevels]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoveredLegId, stickyLegIds]);
 
   // Subscribe to visible range changes to update label positions and fib levels
   useEffect(() => {
@@ -624,12 +648,12 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   // Handle double-click on label (attach to feedback observation)
   const handleLabelDoubleClick = useCallback((legId: string) => {
     if (onLegDoubleClick) {
-      const ref = references.find(r => r.leg_id === legId);
+      const ref = visibleReferences.find(r => r.leg_id === legId);
       if (ref) {
         onLegDoubleClick(ref);
       }
     }
-  }, [onLegDoubleClick, references]);
+  }, [onLegDoubleClick, visibleReferences]);
 
   // Handle filtered leg hover
   const handleFilteredLegMouseEnter = useCallback((legId: string) => {
@@ -788,7 +812,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
       {/* Fib level labels - hidden when showFiltered is on */}
       {!showFiltered && (hoveredLegId || stickyLegIds.size > 0) && (() => {
-        const refsToLabel = references.filter(ref =>
+        const refsToLabel = visibleReferences.filter(ref =>
           ref.leg_id === hoveredLegId || stickyLegIds.has(ref.leg_id)
         );
 

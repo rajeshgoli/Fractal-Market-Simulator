@@ -803,6 +803,7 @@ cd frontend && npm run build  # Output: frontend/dist/
 - `useForwardPlayback` has two bar advance mechanisms:
   - `renderNextBar`: Buffer-based for smooth continuous playback
   - `advanceBar`: Direct API call for manual stepping (step forward, jump to event)
+- **Overlay Position Filtering (#449)**: Both `LegOverlay` and `ReferenceLegOverlay` filter legs by `pivot_index <= currentPosition` to prevent rendering legs before their candles exist during playback
 
 **Settings Persistence (#347, #358, #425, #426):**
 
