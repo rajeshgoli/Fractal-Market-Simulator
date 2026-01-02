@@ -517,6 +517,11 @@ interface ReferenceSidebarProps {
   hoveredLegId?: string | null;
   onHoverLeg?: (legId: string | null) => void;
   onSelectLeg?: (legId: string) => void;
+  // Pagination
+  currentPage?: number;
+  pageSize?: number;
+  onPrevPage?: () => void;
+  onNextPage?: () => void;
 
   // Telemetry (Reference Stats)
   telemetryData?: TelemetryPanelResponse;
@@ -549,6 +554,11 @@ export const ReferenceSidebar: React.FC<ReferenceSidebarProps> = ({
   hoveredLegId = null,
   onHoverLeg = () => {},
   onSelectLeg = () => {},
+  // Pagination
+  currentPage = 0,
+  pageSize = 5,
+  onPrevPage = () => {},
+  onNextPage = () => {},
   telemetryData,
   onResetDefaults,
   className = '',
@@ -635,6 +645,10 @@ export const ReferenceSidebar: React.FC<ReferenceSidebarProps> = ({
               hoveredLegId={hoveredLegId}
               onHoverLeg={onHoverLeg}
               onSelectLeg={onSelectLeg}
+              currentPage={currentPage}
+              pageSize={pageSize}
+              onPrevPage={onPrevPage}
+              onNextPage={onNextPage}
             />
           </div>
         )}

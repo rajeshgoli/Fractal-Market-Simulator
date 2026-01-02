@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { ReferenceSwing } from '../lib/api';
 import { getBinBadgeColor, formatMedianMultiple } from '../utils/binUtils';
 
@@ -10,6 +11,11 @@ interface LevelsAtPlayPanelProps {
   onHoverLeg: (legId: string | null) => void;
   onSelectLeg: (legId: string) => void;
   isLoading?: boolean;
+  // Pagination
+  currentPage: number;
+  pageSize: number;
+  onPrevPage: () => void;
+  onNextPage: () => void;
 }
 
 /**
@@ -29,7 +35,15 @@ export const LevelsAtPlayPanel: React.FC<LevelsAtPlayPanelProps> = ({
   onHoverLeg,
   onSelectLeg,
   isLoading = false,
+  currentPage,
+  pageSize,
+  onPrevPage,
+  onNextPage,
 }) => {
+  const startIndex = currentPage * pageSize;
+  const endIndex = Math.min(startIndex + references.length, totalReferenceCount);
+  const hasPrev = currentPage > 0;
+  const hasNext = endIndex < totalReferenceCount;
   if (isLoading) {
     return (
       <div className="text-xs text-app-muted text-center py-4">
@@ -48,14 +62,32 @@ export const LevelsAtPlayPanel: React.FC<LevelsAtPlayPanelProps> = ({
 
   return (
     <div className="space-y-1">
-      {/* Header with count */}
+      {/* Header with count and pagination */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-medium text-app-muted uppercase tracking-wider">
           Levels at Play
         </span>
-        <span className="text-[10px] text-app-muted">
-          ({references.length}/{totalReferenceCount})
-        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onPrevPage}
+            disabled={!hasPrev}
+            className={`p-0.5 rounded ${hasPrev ? 'hover:bg-app-card text-app-muted hover:text-app-text' : 'text-app-border cursor-not-allowed'}`}
+            title="Previous page"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="text-[10px] text-app-muted min-w-[50px] text-center">
+            {startIndex + 1}-{endIndex}/{totalReferenceCount}
+          </span>
+          <button
+            onClick={onNextPage}
+            disabled={!hasNext}
+            className={`p-0.5 rounded ${hasNext ? 'hover:bg-app-card text-app-muted hover:text-app-text' : 'text-app-border cursor-not-allowed'}`}
+            title="Next page"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Leg list */}
@@ -64,7 +96,7 @@ export const LevelsAtPlayPanel: React.FC<LevelsAtPlayPanelProps> = ({
           <LegItem
             key={ref.leg_id}
             reference={ref}
-            rank={idx + 1}
+            rank={startIndex + idx + 1}
             isSelected={selectedLegId === ref.leg_id}
             isHovered={hoveredLegId === ref.leg_id}
             onHover={onHoverLeg}

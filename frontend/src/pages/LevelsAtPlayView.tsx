@@ -81,6 +81,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [sidebarHoveredLegId, setSidebarHoveredLegId] = useState<string | null>(null);
   const [chartHoveredLegId, setChartHoveredLegId] = useState<string | null>(null);
   const [selectedLegId, setSelectedLegId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
 
   // Reference Config state (Issue #425)
   const [referenceConfig, setReferenceConfig] = useState<ReferenceConfig>(
@@ -181,12 +182,35 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     );
   }, [referenceState?.by_bin]);
 
-  // Compute top N references for sidebar (Issue #430)
-  const topNReferences = useMemo(() => {
+  // Compute page size from config
+  const pageSize = referenceConfig.top_n ?? 5;
+
+  // Compute paginated references for sidebar (Issue #430)
+  const paginatedReferences = useMemo(() => {
     const allRefs = referenceState?.references ?? [];
-    const topN = referenceConfig.top_n ?? 5;
-    return allRefs.slice(0, topN);
-  }, [referenceState?.references, referenceConfig.top_n]);
+    const startIndex = currentPage * pageSize;
+    return allRefs.slice(startIndex, startIndex + pageSize);
+  }, [referenceState?.references, currentPage, pageSize]);
+
+  // Pagination handlers
+  const handlePrevPage = useCallback(() => {
+    setCurrentPage(prev => Math.max(0, prev - 1));
+  }, []);
+
+  const handleNextPage = useCallback(() => {
+    const allRefs = referenceState?.references ?? [];
+    const maxPage = Math.ceil(allRefs.length / pageSize) - 1;
+    setCurrentPage(prev => Math.min(maxPage, prev + 1));
+  }, [referenceState?.references, pageSize]);
+
+  // Reset page when references change significantly
+  useEffect(() => {
+    const allRefs = referenceState?.references ?? [];
+    const maxPage = Math.max(0, Math.ceil(allRefs.length / pageSize) - 1);
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [referenceState?.references, pageSize, currentPage]);
 
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
@@ -755,12 +779,17 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             referenceConfig={referenceConfig}
             onReferenceConfigUpdate={handleReferenceConfigUpdate}
             // Levels at Play Panel (Issue #430)
-            references={topNReferences}
+            references={paginatedReferences}
             totalReferenceCount={totalReferenceCount}
             selectedLegId={selectedLegId}
             hoveredLegId={effectiveSidebarHoveredLegId}
             onHoverLeg={handleSidebarHoverLeg}
             onSelectLeg={handleSidebarSelectLeg}
+            // Pagination
+            currentPage={currentPage}
+            pageSize={pageSize}
+            onPrevPage={handlePrevPage}
+            onNextPage={handleNextPage}
             telemetryData={referenceState ? {
               counts_by_bin: Object.fromEntries(
                 Object.entries(referenceState.by_bin).map(([bin, refs]) => [parseInt(bin), refs.length])
