@@ -1,6 +1,6 @@
 # Pitch Refresh
 
-Read this doc, then refresh `Docs/Working/pitch/pitch.md`.
+Read this doc, then refresh `Docs/Pitch/pitch.md`.
 
 ---
 
@@ -51,7 +51,7 @@ Each pitch should be what *they* want to hear, not what you want to tell.
 
 ## Output
 
-Update `Docs/Working/pitch/pitch.md`:
+Update `Docs/Pitch/pitch.md`:
 - Refresh all numbers tables
 - Update narrative if phase changed or major milestones hit
 - Maintain three audience versions (Technical, Product, Money)

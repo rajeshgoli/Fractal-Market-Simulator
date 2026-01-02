@@ -1,7 +1,7 @@
 # The Fractal Market Simulator Story
 
 > **Last refreshed:** January 1, 2026
-> **Refresh guide:** `Docs/Working/pitch/refresh.md`
+> **Refresh guide:** `Docs/Pitch/refresh.md`
 
 ---
 
