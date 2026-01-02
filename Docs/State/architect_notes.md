@@ -30,6 +30,9 @@ Read in order:
 - **Branch ratio domination:** Creation-time filter prevents insignificant child legs (#337)
 - **Turn ratio pruning:** Horizontal sibling filter at shared pivots (threshold or top-k) (#341, #342, #344)
 - **Tiered Reference Layer updates:** Per-bar `track_formation()` for stateful ops only; full `update()` on-demand for display. Salience is stable (ranking rarely changes bar-to-bar), so per-bar recomputation is wasteful. See `Docs/Archive/reference_update_perf.md`.
+- **Bin-based classification:** Median-normalized bins (0-10) replace S/M/L/XL; instrument-agnostic via rolling median (#434, #436)
+- **RollingBinDistribution:** O(1) bin operations, periodic O(n) median recomputation every 100 legs (#434)
+- **Unified salience weights:** Single weight set for all bins; Range×Counter standalone mode for experimentation (#429, #436)
 
 **Known debt:**
 - #240 — TODO: Empirically determine engulfed retention threshold based on impulse
@@ -60,7 +63,9 @@ Read in order:
 
 ---
 
-## Current Phase: Reference Layer Implementation
+## Current Phase: Reference Layer COMPLETE
+
+**All 4 phases complete as of Jan 2, 2026.**
 
 ### Phase 1: COMPLETE — Dec 31, 2025
 
@@ -159,14 +164,29 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 
 **Note:** Confluence zone UI was implemented then removed due to visual clutter (labels stacking). Backend API (`/api/reference/confluence`) remains available.
 
-### Phase 4: Opt-in Level Crossing — #416
+### Phase 4: COMPLETE — Jan 2, 2026
 
 **Epic #416: Level Crossing Tracking** (2 sub-issues)
 
 | # | Issue | Description | Status |
 |---|-------|-------------|--------|
-| P4.1 | #417 Backend: Level crossing detection + events | Track legs, detect crosses, emit LevelCrossEvent | Pending |
-| P4.2 | #418 Frontend: Track button + crossing event display | UI for tracking, display events in Structure Panel | Pending |
+| P4.1 | #417 Backend: Level crossing detection + events | Track legs, detect crosses, emit LevelCrossEvent | ✅ |
+| P4.2 | #418 Frontend: Track button + crossing event display | UI for tracking, display events in Structure Panel | ✅ |
+
+### Bin-Based Classification: COMPLETE — Jan 2, 2026
+
+| # | Issue | Description | Status |
+|---|-------|-------------|--------|
+| | #434 Rolling bin distribution | Median-normalized adaptive bins for scale classification | ✅ |
+| | #436 S/M/L/XL → bin migration | Replace scale with bin index (0-10), unified weights | ✅ |
+
+### Reference Config Panel: COMPLETE — Jan 2, 2026
+
+| # | Issue | Description | Status |
+|---|-------|-------------|--------|
+| | #423, #424 ReferenceConfig API + UI | GET/POST endpoints + ReferenceSidebar component | ✅ |
+| | #425 ReferenceConfigPanel sliders | Salience weight sliders + localStorage persistence | ✅ |
+| | #429 Panel redesign | Unified weights, fib snapping, breach tolerance, show top N | ✅ |
 
 ### Parallel Exploration Task
 
@@ -202,11 +222,16 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 - ✅ P2 (Fib Level Interaction) — COMPLETE (5 issues: #388-#393)
 - ✅ Reference Observation (#400) — COMPLETE (2 issues: #401, #402 + #414 UX inversion)
 - ✅ P3 (Structure Panel + Confluence) — COMPLETE (#415)
-- ⏳ **P4 (Level Crossing Tracking)** — NEXT (#416: 2 sub-issues #417, #418)
+- ✅ P4 (Level Crossing Tracking) — COMPLETE (#416, #417, #418)
+- ✅ Bin-Based Classification (#434, #436) — COMPLETE
+- ✅ Reference Config Panel (#423-#429) — COMPLETE
 
-**Next step:** Phase 4 (Opt-in Level Crossing) — selective level tracking, crossing events
+**Reference Layer is COMPLETE.** All 4 phases + bin-based classification + config UI delivered.
 
-**Spec:** `Docs/Working/reference_layer_spec.md` (lines 806-826)
+**Next phase:** To be determined by Product. Potential directions:
+- GAN simulation / training data generation
+- Additional analysis tooling
+- Performance optimization for larger datasets
 
 ---
 
@@ -265,7 +290,7 @@ All 3 pending changes accepted. Summary:
 | DetectionConfig | Complete | Centralizes all parameters including pruning toggles (#288) |
 | SwingNode | **Removed** | Deleted in #394; formation now in Reference Layer |
 | ReferenceFrame | Complete | Central coordinate abstraction |
-| ReferenceLayer | **Phase 3 Complete** | Core + UI + Observation + Structure Panel (#361-#387, #400, #414, #415) |
+| ReferenceLayer | **Complete** | All 4 phases + bin classification + config UI (#361-#436) |
 | Pivot Breach Pruning | Complete | 10% threshold with replacement leg (#208) |
 | Engulfed Detection | Complete | Strict (0.0 threshold) deletes leg (#208, #236) |
 | Inner Structure Pruning | **Removed** | Deleted in #348 — disabled by default, worst-performing method |
@@ -294,8 +319,8 @@ All 3 pending changes accepted. Summary:
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| `developer_guide.md` | Current | API restructure documented; Reference Observation API added |
-| `user_guide.md` | Current | O! marker, follow leg, Structural Legs naming updated |
+| `developer_guide.md` | Needs update | Bin-based classification (#436) not yet documented |
+| `user_guide.md` | Needs update | Levels at Play bin display, Config Panel not documented |
 | `DAG.md` | Current | Updated Dec 31 |
 | `CLAUDE.md` | Current | No changes needed |
 
@@ -366,6 +391,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 2 | #415, #416, #420, #421, #423, #424, #425, #426, #427, #429, #434, #436 — Reference Layer P3/P4, Config Panel redesign, bin-based classification (10 issues) | All Accepted; Reference Layer complete |
 | Jan 1 | #400, #403, #404, #408, #409, #410, #411, #412, #414 — Reference Observation, router cleanup, DAG cleanup, cache consolidation, lazy init, view fixes (9 issues) | All Accepted; Phase 2 complete, P3 ready |
 | Dec 31 | #398 — Schema unification, router split, naming cleanup | Accepted with notes; #403 filed for incomplete split (duplication, tombstones) |
 | Dec 31 | #395, #396, #397 — Pivot fix, arch cleanup (Phases 1-2d), warmup preservation | All Accepted; #398 filed for remaining work |

@@ -681,7 +681,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
               fontWeight="500"
               fontFamily="system-ui, sans-serif"
             >
-              {ref.location.toFixed(2)}
+              {(ref.location ?? 0).toFixed(2)}
             </text>
 
             {/* Sticky indicator */}
@@ -735,7 +735,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
                   fontWeight="500"
                   fontFamily="system-ui, sans-serif"
                 >
-                  {ratio.toFixed(ratio === 0 || ratio === 1 || ratio === 2 ? 0 : 3)}
+                  {(ratio ?? 0).toFixed(ratio === 0 || ratio === 1 || ratio === 2 ? 0 : 3)}
                 </text>
               </g>
             );
@@ -826,7 +826,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
                   fontWeight="500"
                   fontFamily="system-ui, sans-serif"
                 >
-                  {leg.location.toFixed(2)}
+                  {(leg.location ?? 0).toFixed(2)}
                 </text>
               </>
             )}

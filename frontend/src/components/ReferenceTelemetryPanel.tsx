@@ -212,7 +212,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
                     {biggestRef.direction === 'bull' ? '▲' : '▼'}
                   </span>
                   <span className="font-mono text-app-text">
-                    {Math.abs(biggestRef.origin_price - biggestRef.pivot_price).toFixed(2)}
+                    {Math.abs((biggestRef.origin_price ?? 0) - (biggestRef.pivot_price ?? 0)).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -330,7 +330,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
                   </span>
                   <span className="text-app-muted">Crossed</span>
                   <span className="font-mono text-app-text">
-                    {event.level_crossed.toFixed(3)}
+                    {(event.level_crossed ?? 0).toFixed(3)}
                   </span>
                   <span className={`px-1 py-0.5 rounded ${
                     event.cross_direction === 'up'
@@ -368,7 +368,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
                     {event.direction === 'bull' ? '▲' : '▼'}
                   </span>
                   <span className="font-mono text-app-text">
-                    {event.level_crossed.toFixed(3)}
+                    {(event.level_crossed ?? 0).toFixed(3)}
                   </span>
                   <span className={`px-1 py-0.5 rounded ${
                     event.cross_direction === 'up'

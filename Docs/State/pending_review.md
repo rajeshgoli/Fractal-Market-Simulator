@@ -1,23 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 10
+**Unreviewed Change Count:** 1
 
-**Last Review:** 2026-01-01
+**Last Review:** 2026-01-02
 
 ---
 
 ## Pending Changes
 
-1. **#415** — Reference Layer P3: Structure Panel + Confluence Zones backend + Telemetry updates
-2. **#416** — Reference Layer P4: Opt-in Level Crossing Detection (backend #417, frontend #418)
-3. **#420** — P3/P4 Frontend: Structure Panel component + Telemetry Events section
-4. **#421** — P3/P4 Frontend: Track button (confluence zones removed due to visual clutter)
-5. **#423, #424** — ReferenceConfig API endpoints + ReferenceSidebar component
-6. **#425** — ReferenceConfigPanel component with salience weight sliders + localStorage persistence
-7. **#426, #427** — ReferenceSidebar integration into LevelsAtPlayView + documentation updates
-8. **#429** — Reference Config Panel redesign: unified weights, fib snapping, breach tolerance, show top N, standalone mode
-9. **#434** — Rolling bin distribution for median-normalized scale classification
-10. **#436** — Migrate from S/M/L/XL scale to bin-based classification
+1. **#437** — Replace track_formation() with update() in bulk advances for continuous breach tracking
 
 ---
 
@@ -25,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 2 | #415, #416, #420, #421, #423, #424, #425, #426, #427, #429, #434, #436 — Reference Layer P3/P4, Config Panel redesign, bin-based classification (10 issues) | All Accepted; Reference Layer Phase 4 complete, bin-based classification deployed |
 | Jan 1 | #400, #403, #404, #408, #409, #410, #411, #412, #414 — Reference Observation, router cleanup, DAG cleanup, cache consolidation, lazy init, view fixes (9 issues) | All Accepted; Reference Phase 2 complete, P3 ready |
 | Dec 31 | #398 — Schema unification, router split, naming cleanup | Accepted with notes; #403 filed for incomplete split |
 | Dec 31 | #395, #396, #397 — Pivot fix, arch cleanup (Phases 1-2d), warmup preservation | All Accepted; #398 filed for remaining work |
@@ -63,26 +55,3 @@
 | Dec 16 | Replay View Spec (`Docs/Working/replay_view_spec.md`) | Feasible → Issues #82-#87 created |
 | Dec 16 | #73, #74, #75, #76, #77 — Discretization core implementation | All Accepted |
 | Dec 16 | #68, #69, #70, #71 — Phase 3 + Architecture Overhaul | All Accepted |
-| Dec 15 | Q-2025-12-15-2: FIB structural separation feasibility | Feasible → Merged into Phase 3 |
-| Dec 15 | Q-2025-12-15-2: Endpoint selection design | Designed → Ready for implementation |
-| Dec 15 | #64: FP category refinements, filter tightening, --start-date parameter | Accepted |
-| Dec 15 | #59, #60, #61, #62, #63 — Annotation UX + Too Small + Prominence filters | All Accepted |
-| Dec 15 | Q-2025-12-15-6: Too small + subsumed filter design | Designed → #62, #63 created |
-| Dec 15 | #54, #55, #56, #57, #58 - Protection validation, data collection, detection quality, UX batches | All Accepted |
-| Dec 15 | Protection validation design (Q-2025-12-15-2) | Approved → #54 created |
-| Dec 15 | Counter-trend FP category | Accepted |
-| Dec 15 | #31, #51, #52, #53 - Test stability, FP quick-select, session filenames | All Accepted |
-| Dec 12 | #46-#50 - P1 UX fixes (Fib labels, presets, toast, keep/discard, caching) | All Accepted |
-| Dec 12 | #44 - Deprecated module removal | Accepted |
-| Dec 12 | Review Mode epic (#38) - #39, #40, #41, #42, #43 | All Accepted, epic closed |
-| Dec 12 | #32, #33, #34, #35, #37 - UX polish batch | All Accepted |
-| Dec 12 | #27, #28, #29, #30 - Ground truth annotation tool MVP | All Accepted |
-| Dec 12 | Ground truth annotation design question | Approved - ready for engineering |
-| Dec 12 | #22, #24 - Full dataset loading, resolution-agnostic | Accepted |
-| Dec 12 | #16, #17, #19, #20, #21 - Lightweight validator, O(N log N) detector, progressive loading, performance optimization, test fixes | All Accepted |
-| Dec 11 | Dogfood Feedback - Harness Assessment | Resolved - Product chose Path B |
-| Dec 11 | Issue #15 - PlaybackController state refactor | Accepted |
-| Dec 11 | Thread Safety (renderer, keyboard_handler) | Accepted |
-| Dec 11 | Phase 1 Visualization | Accepted |
-| Dec 11 | Algorithm Rewrite | Accepted |
-| Dec 11 | Test Maintenance | Accepted |

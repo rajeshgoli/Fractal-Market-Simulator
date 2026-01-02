@@ -19,10 +19,11 @@ interface StructurePanelProps {
 // Bin badge colors helper - uses the shared utility
 const getBinStyle = (bin: number): { bg: string; text: string } => getBinBadgeColor(bin);
 
-// Format level display
+// Format level display (with null safety)
 const formatLevel = (level: FibLevel, currentPrice: number): { distance: string; direction: 'above' | 'below' } => {
-  const direction = level.price > currentPrice ? 'above' : 'below';
-  const distance = Math.abs(level.price - currentPrice).toFixed(2);
+  const price = level.price ?? 0;
+  const direction = price > currentPrice ? 'above' : 'below';
+  const distance = Math.abs(price - currentPrice).toFixed(2);
   return {
     distance,
     direction,
@@ -155,7 +156,7 @@ export const StructurePanel: React.FC<StructurePanelProps> = ({
   );
 };
 
-// Touch item component
+// Touch item component (with null safety)
 const TouchItem: React.FC<{ touch: LevelTouch; compact?: boolean }> = ({ touch, compact = false }) => {
   const binStyle = getBinStyle(touch.bin);
   const crossIcon = touch.cross_direction === 'up' ? <ChevronUp size={10} /> : <ChevronDown size={10} />;
@@ -170,21 +171,21 @@ const TouchItem: React.FC<{ touch: LevelTouch; compact?: boolean }> = ({ touch, 
         {touch.direction === 'bull' ? '▲' : '▼'}
       </span>
       <span className="font-mono text-app-text">
-        {touch.ratio.toFixed(3)}
+        {(touch.ratio ?? 0).toFixed(3)}
       </span>
       <span className={`${crossColor}`}>
         {crossIcon}
       </span>
       {!compact && (
         <span className="text-app-muted">
-          @ bar {touch.bar_index}
+          @ bar {touch.bar_index ?? 0}
         </span>
       )}
     </div>
   );
 };
 
-// Active level item with track button
+// Active level item with track button (with null safety)
 const ActiveLevelItem: React.FC<{
   level: FibLevel;
   currentPrice: number;
@@ -219,10 +220,10 @@ const ActiveLevelItem: React.FC<{
         {level.direction === 'bull' ? '▲' : '▼'}
       </span>
       <span className="font-mono text-app-text">
-        {level.ratio.toFixed(3)}
+        {(level.ratio ?? 0).toFixed(3)}
       </span>
       <span className="text-app-muted">
-        @ {level.price.toFixed(2)}
+        @ {(level.price ?? 0).toFixed(2)}
       </span>
       <span className={`text-[9px] ${direction === 'above' ? 'text-trading-bull' : 'text-trading-bear'}`}>
         ({distance} {direction})
@@ -231,14 +232,16 @@ const ActiveLevelItem: React.FC<{
   );
 };
 
-// Reference item with track button
+// Reference item with track button (with null safety)
 const ReferenceItem: React.FC<{
   reference: ReferenceSwing;
   isTracked: boolean;
   onToggleTrack: (legId: string) => Promise<{ success: boolean; error?: string }>;
 }> = ({ reference, isTracked, onToggleTrack }) => {
   const binStyle = getBinStyle(reference.bin);
-  const range = Math.abs(reference.origin_price - reference.pivot_price).toFixed(2);
+  const pivotPrice = reference.pivot_price ?? 0;
+  const originPrice = reference.origin_price ?? 0;
+  const range = Math.abs(originPrice - pivotPrice).toFixed(2);
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -265,10 +268,10 @@ const ReferenceItem: React.FC<{
         {reference.direction === 'bull' ? '▲' : '▼'}
       </span>
       <span className="font-mono text-app-text">
-        {reference.pivot_price.toFixed(2)}
+        {pivotPrice.toFixed(2)}
       </span>
       <span className="text-app-muted">
-        → {reference.origin_price.toFixed(2)}
+        → {originPrice.toFixed(2)}
       </span>
       <span className="text-[9px] text-app-muted">
         ({range})
