@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 10
 
 **Last Review:** 2026-01-01
 
@@ -17,6 +17,7 @@
 7. **#426, #427** — ReferenceSidebar integration into LevelsAtPlayView + documentation updates
 8. **#429** — Reference Config Panel redesign: unified weights, fib snapping, breach tolerance, show top N, standalone mode
 9. **#434** — Rolling bin distribution for median-normalized scale classification
+10. **#436** — Migrate from S/M/L/XL scale to bin-based classification
 
 ---
 
