@@ -33,6 +33,7 @@ Read in order:
 - **Bin-based classification:** Median-normalized bins (0-10) replace S/M/L/XL; instrument-agnostic via rolling median (#434, #436)
 - **RollingBinDistribution:** O(1) bin operations, periodic O(n) median recomputation every 100 legs (#434)
 - **Unified salience weights:** Single weight set for all bins; Range×Counter standalone mode for experimentation (#429, #436)
+- **Per-bar state snapshots:** Batched advance processes 100 bars at a time; any state layer used during playback must capture per-bar snapshots to avoid temporal inconsistency (server at bar 600 while rendering bar 515). Pattern established in #283 with `per_bar_dag_states`.
 
 **Known debt:**
 - Scaling test `test_scaling_is_not_quadratic` marginally fails (64 vs 60 threshold) — flaky boundary, low priority
@@ -371,11 +372,16 @@ All 3 pending changes accepted. Summary:
 
 ### Also Check
 
-5. **Duplicated Logic** — >50 lines of parallel code should be unified
-6. **Magic Numbers** — New thresholds need: what it represents, why this value
-7. **Core Decisions** — Aligned with list above?
-8. **Known Debt** — Add new debt, remove resolved debt
-9. **No Tombstones** — Flag "# Removed in #XXX" comments, hardcoded stub values, dead config options
+5. **Batched Playback Compatibility**
+   - Does this add server-side state consumed during playback?
+   - If yes: Does it capture per-bar snapshots like `per_bar_dag_states`?
+   - Red flag: State endpoint called during render but only returns current accumulated state
+
+6. **Duplicated Logic** — >50 lines of parallel code should be unified
+7. **Magic Numbers** — New thresholds need: what it represents, why this value
+8. **Core Decisions** — Aligned with list above?
+9. **Known Debt** — Add new debt, remove resolved debt
+10. **No Tombstones** — Flag "# Removed in #XXX" comments, hardcoded stub values, dead config options
 
 ### Outcomes
 

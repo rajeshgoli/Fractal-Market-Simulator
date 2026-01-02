@@ -762,6 +762,54 @@ agg_bar = aggregator.get_bar_at_source_time(timeframe=5, source_bar_idx=100)
 
 ---
 
+## Playback Architecture
+
+### Batched Advance
+
+The frontend fetches bars in batches (`FETCH_BATCH_SIZE = 100`) for performance. This creates a temporal gap:
+
+```
+Server position: bar 600 (after processing batch)
+Render position: bar 515 (frontend iterating through batch)
+```
+
+**Invariant:** Any state layer consumed during playback rendering must capture per-bar snapshots.
+
+### Per-Bar State Snapshots
+
+The `per_bar_dag_states` pattern (established in #283) solves this:
+
+```python
+# In advance endpoint - capture state AFTER each bar
+for idx in range(start_idx, end_idx):
+    bar = s.source_bars[idx]
+    events = detector.process_bar(bar)
+
+    if request.include_per_bar_dag_states:
+        per_bar_dag_states.append(build_dag_state(detector, s.window_offset))
+```
+
+Frontend applies the correct snapshot during render:
+
+```typescript
+// renderNextBar() - use snapshot matching render position
+const dagState = dagStatesBuffer[renderPosition - bufferStartIndex];
+setDagState(dagState);
+```
+
+### Adding a New State Layer
+
+When adding a state layer that's consumed during playback:
+
+1. **Add request parameter:** `include_per_bar_<layer>_states: bool`
+2. **Capture per-bar:** Snapshot state after each `process_bar()`
+3. **Return array:** Add `<layer>_states: List[StateSnapshot]` to response
+4. **Frontend buffer:** Apply correct snapshot in `renderNextBar()`
+
+**Anti-pattern:** Calling a state endpoint (e.g., `/api/reference/state`) during render and getting current accumulated state rather than historical state. This causes temporal inconsistency where rendered data shows future state.
+
+---
+
 ## Frontend (Replay View)
 
 ```bash
