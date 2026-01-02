@@ -35,9 +35,6 @@ Read in order:
 - **Unified salience weights:** Single weight set for all bins; Range×Counter standalone mode for experimentation (#429, #436)
 
 **Known debt:**
-- #240 — TODO: Empirically determine engulfed retention threshold based on impulse
-- #176 — `get_windowed_swings` missing Reference layer during calibration (fix after validation)
-- #399 — TODO: Salience optimization if needed (periodic refresh, event-driven, or lazy with TTL)
 - Scaling test `test_scaling_is_not_quadratic` marginally fails (64 vs 60 threshold) — flaky boundary, low priority
 
 **Completed architectural cleanup (#394, #396, #398, #403, #404, #408, #410, #412):**
@@ -391,6 +388,8 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 2 | #430, #431, #432, #440 — Top N sidebar, bottom panel merge, label midpoint, rolling eviction (4 issues) | All Accepted |
+| Jan 2 | #437, #438, #439 — Bulk advance breach tracking, configurable decay, bin distribution cleanup (3 issues) | All Accepted |
 | Jan 2 | #415, #416, #420, #421, #423, #424, #425, #426, #427, #429, #434, #436 — Reference Layer P3/P4, Config Panel redesign, bin-based classification (10 issues) | All Accepted; Reference Layer complete |
 | Jan 1 | #400, #403, #404, #408, #409, #410, #411, #412, #414 — Reference Observation, router cleanup, DAG cleanup, cache consolidation, lazy init, view fixes (9 issues) | All Accepted; Phase 2 complete, P3 ready |
 | Dec 31 | #398 — Schema unification, router split, naming cleanup | Accepted with notes; #403 filed for incomplete split (duplication, tombstones) |

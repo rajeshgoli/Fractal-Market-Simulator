@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2026-01-02
 
@@ -8,10 +8,7 @@
 
 ## Pending Changes
 
-1. **#440** — Hook up evict_old_legs() in update() side effects for rolling 90-day window; remove dead remove_leg() and _remove_from_bin_distribution() methods
-2. **#430** — Simplified sidebar to show only top N legs by salience ("Levels at Play"); bidirectional hover/click linking between sidebar and chart
-3. **#431** — Bottom panel redesign: merged REFERENCES+DIRECTION panels, multi-column EVENTS (1-4 cols), hover-to-highlight events
-4. **#432** — Move leg labels from pivot to midpoint for clear ownership
+(none)
 
 ---
 
@@ -19,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 2 | #430, #431, #432, #440 — Top N sidebar, bottom panel merge, label midpoint, rolling eviction (4 issues) | All Accepted |
 | Jan 2 | #437 — Replace track_formation() with update(build_response=False) for continuous breach tracking | Accepted |
 | Jan 2 | #438, #439 — Configurable decay factors, remove stale _range_distribution in favor of bin distribution | Accepted |
 | Jan 2 | #415, #416, #420, #421, #423, #424, #425, #426, #427, #429, #434, #436 — Reference Layer P3/P4, Config Panel redesign, bin-based classification (10 issues) | All Accepted; Reference Layer Phase 4 complete, bin-based classification deployed |
