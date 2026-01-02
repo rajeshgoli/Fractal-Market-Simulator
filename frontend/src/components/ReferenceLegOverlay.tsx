@@ -254,16 +254,27 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   }, [chart, series, getVisibleTimeRange, computeFibLevels]);
 
   // Create line series for a reference
-  const createRefLine = useCallback((ref: ReferenceSwing, isFading: boolean, fadeForFilter: boolean = false): ISeriesApi<'Line'> | null => {
+  const createRefLine = useCallback((
+    ref: ReferenceSwing,
+    isFading: boolean,
+    fadeForFilter: boolean = false,
+    fadeForHover: boolean = false,
+    isHoveredLeg: boolean = false
+  ): ISeriesApi<'Line'> | null => {
     if (!chart || !series) return null;
 
     // Direction determines color
     // Bull reference (bear leg) = green (price went down, looking to go long)
     // Bear reference (bull leg) = red (price went up, looking to go short)
     const color = ref.direction === 'bear' ? '#22c55e' : '#ef4444';
-    const lineWidth = getBinLineWidthForChart(ref.bin);
-    // When showFiltered is on, fade valid legs heavily so filtered legs stand out
-    const opacity = fadeForFilter ? 0.08 : (isFading ? 0.3 : 0.8);
+    const lineWidth = isHoveredLeg ? Math.min(4, getBinLineWidthForChart(ref.bin) + 1) as LineWidth : getBinLineWidthForChart(ref.bin);
+    // Opacity priority: filter mode > hover fade > fading refs > normal
+    // When hovering, fade non-hovered legs heavily, highlight hovered leg
+    const opacity = fadeForFilter ? 0.08
+      : fadeForHover ? 0.15
+      : isHoveredLeg ? 1.0
+      : isFading ? 0.3
+      : 0.8;
 
     // Get timestamps for origin and pivot
     const originTime = getTimestampForIndex(ref.origin_index);
@@ -509,7 +520,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     });
   }, [chart, series, references, hoveredLegId, stickyLegIds, stickyColorMap, clearFibSeries, createFibLines]);
 
-  // Update line series when references or bars change
+  // Update line series when references, bars, or hover state changes
   useEffect(() => {
     if (!chart || !series || bars.length === 0) {
       clearLineSeries();
@@ -523,9 +534,13 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
       // Create line series for each reference
       // When showFiltered is on, fade valid legs so filtered legs stand out
+      // When a leg is hovered (from sidebar or chart), fade other legs and highlight hovered
+      const hasHoveredLeg = hoveredLegId !== null;
       for (const ref of references) {
         const isFading = fadingRefs.has(ref.leg_id);
-        const lineSeries = createRefLine(ref, isFading, showFiltered);
+        const isHoveredLeg = ref.leg_id === hoveredLegId;
+        const fadeForHover = hasHoveredLeg && !isHoveredLeg;
+        const lineSeries = createRefLine(ref, isFading, showFiltered, fadeForHover, isHoveredLeg);
         if (lineSeries) {
           lineSeriesRef.current.set(ref.leg_id, lineSeries);
         }
@@ -559,7 +574,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         // Ignore disposal errors during cleanup
       }
     };
-  }, [chart, series, references, fadingRefs, bars, clearLineSeries, clearFibSeries, createRefLine, updateLabelPositions, updateFibLevels, showFiltered, filteredLegs, createFilteredLegLine, updateFilteredLabelPositions]);
+  }, [chart, series, references, fadingRefs, bars, clearLineSeries, clearFibSeries, createRefLine, updateLabelPositions, updateFibLevels, showFiltered, filteredLegs, createFilteredLegLine, updateFilteredLabelPositions, hoveredLegId]);
 
   // Update fib levels when hover or sticky state changes
   useEffect(() => {
@@ -701,11 +716,16 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         const isSticky = stickyLegIds.has(legId);
         const isHovered = hoveredLegId === legId;
         const medianLabel = formatMedianMultiple(ref.median_multiple);
+        // Fade labels when another leg is hovered
+        const hasHoveredLeg = hoveredLegId !== null;
+        const fadeForHover = hasHoveredLeg && !isHovered;
+        const labelOpacity = fadeForHover ? 0.2 : 1.0;
 
         return (
           <g
             key={legId}
             transform={`translate(${x + 8}, ${y})`}
+            opacity={labelOpacity}
           >
             {/* Median multiple badge */}
             <rect
