@@ -409,11 +409,9 @@ The Reference Config panel lets you tune salience weights to control which level
 
 The Filters panel (collapsible) shows the reference filter pipeline status:
 
-- **Show Filtered toggle**: Toggle visibility of filtered (invalid) legs on the chart. Uses the same toggle style as DAG linger events.
+- **Show Filtered toggle**: Toggle visibility of filtered (invalid) legs on the chart
 - **Pass rate**: Progress bar showing what percentage of legs pass all filters
 - **Filter reasons**: Breakdown of why legs were filtered (Not Formed, Pivot Breached, Origin Breached, etc.)
-
-This panel was moved from the bottom panel to the sidebar in #445 for better organization.
 
 #### Chart Labels
 
@@ -440,7 +438,7 @@ Displays aggregate statistics about active references:
 
 ### Bottom Panel: Levels at Play + Events
 
-The bottom panel displays two key sections (#445):
+The bottom panel displays two key sections:
 
 #### LEVELS AT PLAY
 
