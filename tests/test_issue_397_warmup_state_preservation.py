@@ -108,7 +108,7 @@ class TestCopyStateFrom:
 
         # Mutate new layer
         new_layer._bin_distribution.add_leg("leg_3", 30.0, 1002.0)
-        new_layer._formed_refs["leg_2"] = Decimal("100")  # dummy pivot price
+        new_layer._formed_refs["leg_2"] = (Decimal("100"), 0)  # dummy pivot price
         new_layer._seen_leg_ids.add("id_2")
 
         # Original should be unchanged
@@ -162,7 +162,7 @@ class TestWarmupStatePreservation:
         for i in range(55):
             old_layer._bin_distribution.add_leg(f"leg_{i}", 10.0 + i, 1000.0 + i)
             old_layer._seen_leg_ids.add(f"leg_{i}")
-            old_layer._formed_refs[f"leg_{i}"] = Decimal("100")  # dummy pivot price
+            old_layer._formed_refs[f"leg_{i}"] = (Decimal("100"), 0)  # dummy pivot price
 
         assert old_layer.is_cold_start is False
         assert old_layer.cold_start_progress == (55, 50)

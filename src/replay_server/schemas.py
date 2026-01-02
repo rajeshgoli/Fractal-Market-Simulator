@@ -108,6 +108,7 @@ class ReplayAdvanceRequest(BaseModel):
     include_aggregated_bars: Optional[List[str]] = None  # Scales to include (e.g., ["S", "M"])
     include_dag_state: bool = False  # Whether to include DAG state (at final bar only)
     include_per_bar_dag_states: bool = False  # Whether to include per-bar DAG states (#283)
+    include_per_bar_ref_states: bool = False  # Whether to include per-bar Reference states (#451)
     from_index: Optional[int] = None  # FE position for resync if BE diverged (#310)
 
 
@@ -161,6 +162,17 @@ Uses a dictionary to support arbitrary timeframe keys (1m, 5m, 15m, 30m, 1H, 4H,
 """
 
 
+class RefStateSnapshot(BaseModel):
+    """Lightweight per-bar reference state for buffered playback (#451).
+
+    Captures which legs are formed at a specific bar index. Used by frontend
+    to filter DAG legs to only show those that were actually formed at the
+    bar being rendered, preventing future formations from appearing early.
+    """
+    bar_index: int  # The bar index this snapshot is for
+    formed_leg_ids: List[str]  # Leg IDs that were formed at or before this bar
+
+
 class ReplayAdvanceResponse(BaseModel):
     """Response from advance endpoint."""
     new_bars: List[ReplayBarResponse]
@@ -174,6 +186,7 @@ class ReplayAdvanceResponse(BaseModel):
     aggregated_bars: Optional[AggregatedBarsResponse] = None
     dag_state: Optional["DagStateResponse"] = None  # DAG state at final bar only
     dag_states: Optional[List["DagStateResponse"]] = None  # Per-bar DAG states (#283)
+    ref_states: Optional[List[RefStateSnapshot]] = None  # Per-bar Reference states (#451)
 
 
 # ============================================================================

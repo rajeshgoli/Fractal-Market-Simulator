@@ -161,6 +161,12 @@ export interface AggregatedBarsResponse {
   '1W'?: BarData[];
 }
 
+// Per-bar reference state snapshot for buffered playback (#451)
+export interface RefStateSnapshot {
+  bar_index: number;
+  formed_leg_ids: string[];
+}
+
 export interface ReplayAdvanceResponse {
   new_bars: ReplayBarData[];
   events: ReplayEvent[];
@@ -173,6 +179,7 @@ export interface ReplayAdvanceResponse {
   aggregated_bars?: AggregatedBarsResponse;
   dag_state?: DagStateResponse;  // DAG state at final bar only
   dag_states?: DagStateResponse[];  // Per-bar DAG states (#283)
+  ref_states?: RefStateSnapshot[];  // Per-bar Reference states (#451)
 }
 
 export interface ReplayAdvanceRequest {
@@ -182,6 +189,7 @@ export interface ReplayAdvanceRequest {
   include_aggregated_bars?: string[];  // Scales to include (e.g., ["S", "M"])
   include_dag_state?: boolean;  // DAG state at final bar only
   include_per_bar_dag_states?: boolean;  // Per-bar DAG states (#283)
+  include_per_bar_ref_states?: boolean;  // Per-bar Reference states (#451)
   from_index?: number;  // FE position for BE resync if diverged (#310)
 }
 
@@ -192,7 +200,8 @@ export async function advanceReplay(
   includeAggregatedBars?: string[],
   includeDagState?: boolean,
   includePerBarDagStates?: boolean,
-  fromIndex?: number
+  fromIndex?: number,
+  includePerBarRefStates?: boolean
 ): Promise<ReplayAdvanceResponse> {
   const requestBody: ReplayAdvanceRequest = {
     calibration_bar_count: calibrationBarCount,
@@ -207,6 +216,9 @@ export async function advanceReplay(
   }
   if (includePerBarDagStates) {
     requestBody.include_per_bar_dag_states = includePerBarDagStates;
+  }
+  if (includePerBarRefStates) {
+    requestBody.include_per_bar_ref_states = includePerBarRefStates;
   }
   if (fromIndex !== undefined) {
     requestBody.from_index = fromIndex;

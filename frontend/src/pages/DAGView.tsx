@@ -167,6 +167,13 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     return state.calibrationBarCount > 0 ? state.calibrationBarCount - 1 : 0;
   }, [state.isPlaying, forwardPlayback.currentPosition, state.calibrationBarCount]);
 
+  // Save playback position to session settings for view switching (#451)
+  useEffect(() => {
+    if (state.isPlaying && currentPlaybackPosition >= 0) {
+      sessionSettings.setPlaybackPosition(currentPlaybackPosition);
+    }
+  }, [currentPlaybackPosition, state.isPlaying, sessionSettings.setPlaybackPosition]);
+
   // Compute a "live" aggregated bar from source bars for incremental display
   const computeLiveBar = useCallback((
     aggBar: BarData,
@@ -685,8 +692,13 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
         const hasExistingState = session.current_bar_index !== null && session.current_bar_index >= 0;
 
         if (hasExistingState) {
-          // Backend has state - use it without resetting (#412: simplified from CalibrationData)
-          state.setCalibrationBarCount(session.current_bar_index! + 1);
+          // Use saved playback position if available, otherwise use server position (#451)
+          // This preserves the render position when switching views
+          const targetPosition = sessionSettings.playbackPosition !== null
+            ? sessionSettings.playbackPosition
+            : session.current_bar_index!;
+
+          state.setCalibrationBarCount(targetPosition + 1);
 
           // Fetch lifecycle events from backend to restore stats (#409)
           const lifecycleResponse = await fetchAllLifecycleEvents();
@@ -710,14 +722,14 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
             };
           });
 
-          // Sync forward playback with backend position and restored events
-          forwardPlayback.syncToPosition(session.current_bar_index!, [], 0, restoredEvents);
+          // Sync forward playback with saved position, not server position
+          forwardPlayback.syncToPosition(targetPosition, [], 0, restoredEvents);
         } else {
           // No existing state - backend will auto-init on first /dag/state call (#412)
           state.setCalibrationBarCount(0);
         }
 
-        state.setSourceBars([]);
+        state.setSourceBars(source);
         state.setCalibrationBars([]);
 
         const [bars1, bars2] = await Promise.all([

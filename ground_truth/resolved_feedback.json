@@ -3566,6 +3566,136 @@
       "resolved_at": "2025-12-31T18:28:49.002753",
       "resolution": "fixed_or_stale",
       "session": "/Users/rajesh/Desktop/fractal-market-simulator/test_data/es-30m-new.csv"
+    },
+    {
+      "original_session_id": "fd4024e4-41c3-47c8-8d74-f36e15d5cce5",
+      "observation_id": "532df39f-f069-4a68-8919-e48990f28b8d",
+      "created_at": "2026-01-02T22:07:45.387756+00:00",
+      "playback_bar": 499,
+      "text": "This should be in not formed state (Pivot extended and not retraced to required 0.236 retracement. Why is it included in levels at play? ",
+      "snapshot": {
+        "state": "playing",
+        "csv_index": 499,
+        "bars_since_calibration": -1,
+        "current_bar_index": 499,
+        "calibration_bar_count": 500,
+        "swings_found": {
+          "XL": 0,
+          "L": 5,
+          "M": 4,
+          "S": 6
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0,
+        "event_context": null,
+        "mode": null,
+        "replay_context": null,
+        "dag_context": null,
+        "attachments": [
+          {
+            "type": "leg",
+            "leg_id": "leg_bull_3656.5_0",
+            "direction": "bull",
+            "pivot_price": 3952.0,
+            "origin_price": 3656.5,
+            "pivot_index": 494,
+            "origin_index": 0,
+            "csv_index": null
+          }
+        ],
+        "detection_config": null
+      },
+      "resolution": {
+        "status": "fixed",
+        "issue": "#448",
+        "notes": "Pivot extension now nullifies formation - formation is tracked per pivot level"
+      }
+    },
+    {
+      "observation_id": "f63d8dec-9610-47bb-90a8-46cc3826fd22",
+      "text": "How come this is formed? Doesn't seem like 0.236 has been hit from the new pivot? ",
+      "playback_bar": 531,
+      "created_at": "2026-01-02T22:39:11.474801+00:00",
+      "snapshot": {
+        "state": "playing",
+        "csv_index": 531,
+        "bars_since_calibration": 531,
+        "current_bar_index": 531,
+        "calibration_bar_count": 0,
+        "swings_found": {
+          "XL": 0,
+          "L": 4,
+          "M": 7,
+          "S": 7
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0,
+        "event_context": null,
+        "mode": null,
+        "replay_context": null,
+        "dag_context": null,
+        "attachments": [
+          {
+            "type": "leg",
+            "leg_id": "leg_bull_3717.25_31",
+            "direction": "bull",
+            "pivot_price": 3959.25,
+            "origin_price": 3717.25,
+            "pivot_index": 508,
+            "origin_index": 31,
+            "csv_index": null
+          }
+        ],
+        "detection_config": null
+      },
+      "resolution": {
+        "status": "fixed",
+        "issue": "#451",
+        "notes": "Root cause: Reference Layer lacks per-bar state capture during buffered playback. _formed_refs is cumulative - legs formed at bar 574 incorrectly shown as formed at bar 515."
+      }
+    },
+    {
+      "observation_id": "6b2cec93-daee-46d7-a0fc-3ef160e13f59",
+      "text": "See attached. ",
+      "playback_bar": 515,
+      "created_at": "2026-01-02T22:55:52.086832+00:00",
+      "snapshot": {
+        "state": "playing",
+        "csv_index": 515,
+        "bars_since_calibration": 515,
+        "current_bar_index": 515,
+        "calibration_bar_count": 0,
+        "swings_found": {
+          "XL": 0,
+          "L": 3,
+          "M": 5,
+          "S": 3
+        },
+        "swings_invalidated": 0,
+        "swings_completed": 0,
+        "event_context": null,
+        "mode": null,
+        "replay_context": null,
+        "dag_context": null,
+        "attachments": [
+          {
+            "type": "leg",
+            "leg_id": "leg_bull_3756.5_45",
+            "direction": "bull",
+            "pivot_price": 3959.25,
+            "origin_price": 3756.5,
+            "pivot_index": 508,
+            "origin_index": 45,
+            "csv_index": null
+          }
+        ],
+        "detection_config": null
+      },
+      "resolution": {
+        "status": "fixed",
+        "issue": "#451",
+        "notes": "Root cause: Reference Layer lacks per-bar state capture during buffered playback. _formed_refs is cumulative - legs formed at bar 574 incorrectly shown as formed at bar 515."
+      }
     }
   ]
 }

@@ -28,6 +28,7 @@ from ..schemas import (
     ReplayBarResponse,
     ReplayEventResponse,
     ReplayAdvanceResponse,
+    RefStateSnapshot,
     TreeStatistics,
     SwingsByDepth,
     CalibrationResponseHierarchical,
@@ -331,6 +332,9 @@ async def advance_dag(request: ReplayAdvanceRequest):
     # Per-bar DAG states for high-speed playback (#283)
     per_bar_dag_states: List[DagStateResponse] = []
 
+    # Per-bar Reference states for buffered playback (#451)
+    per_bar_ref_states: List[RefStateSnapshot] = []
+
     # Get Reference layer from cache for tolerance-based checks (#175)
     ref_layer = cache.get("reference_layer")
 
@@ -381,6 +385,14 @@ async def advance_dag(request: ReplayAdvanceRequest):
         if request.include_per_bar_dag_states:
             per_bar_dag_states.append(build_dag_state(detector, s.window_offset))
 
+        # Snapshot Reference state after each bar for buffered playback (#451)
+        if request.include_per_bar_ref_states and ref_layer is not None:
+            formed_ids = list(ref_layer.get_formed_leg_ids_at_bar(bar.index))
+            per_bar_ref_states.append(RefStateSnapshot(
+                bar_index=bar.index,
+                formed_leg_ids=formed_ids,
+            ))
+
     # Update cache state
     cache["last_bar_index"] = end_idx - 1
     s.playback_index = end_idx - 1
@@ -411,6 +423,9 @@ async def advance_dag(request: ReplayAdvanceRequest):
     # Include per-bar DAG states for high-speed playback (#283)
     dag_states = per_bar_dag_states if request.include_per_bar_dag_states else None
 
+    # Include per-bar Reference states for buffered playback (#451)
+    ref_states = per_bar_ref_states if request.include_per_bar_ref_states else None
+
     return ReplayAdvanceResponse(
         new_bars=new_bars,
         events=all_events,
@@ -422,6 +437,7 @@ async def advance_dag(request: ReplayAdvanceRequest):
         aggregated_bars=aggregated_bars,
         dag_state=dag_state,
         dag_states=dag_states,
+        ref_states=ref_states,
     )
 
 

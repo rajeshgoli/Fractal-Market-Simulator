@@ -280,6 +280,13 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     }
   }, [currentPlaybackPosition, calibrationBarCount, isPlaying, fetchReferenceState]);
 
+  // Save playback position to session settings for view switching (#451)
+  useEffect(() => {
+    if (isPlaying && currentPlaybackPosition >= 0) {
+      sessionSettings.setPlaybackPosition(currentPlaybackPosition);
+    }
+  }, [currentPlaybackPosition, isPlaying, sessionSettings.setPlaybackPosition]);
+
   // Auto-select top-ranked leg when references change (Issue #433)
   // - On initial load: auto-select top leg
   // - When salience config changes: re-auto-select new top leg
@@ -694,16 +701,21 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         const hasExistingState = session.current_bar_index !== null && session.current_bar_index >= 0;
 
         if (hasExistingState) {
-          // Backend has state - use it without resetting (#412: simplified from CalibrationData)
-          setCalibrationBarCount(session.current_bar_index! + 1);
-          // Sync forward playback with backend position
-          forwardPlayback.syncToPosition(session.current_bar_index!, [], 0, []);
+          // Use saved playback position if available, otherwise use server position (#451)
+          // This preserves the render position when switching views
+          const targetPosition = sessionSettings.playbackPosition !== null
+            ? sessionSettings.playbackPosition
+            : session.current_bar_index!;
+
+          setCalibrationBarCount(targetPosition + 1);
+          // Sync forward playback with saved position, not server position
+          forwardPlayback.syncToPosition(targetPosition, [], 0, []);
         } else {
           // No existing state - backend will auto-init on first /dag/state call (#412)
           setCalibrationBarCount(0);
         }
 
-        setSourceBars([]);
+        setSourceBars(source);
         setCalibrationBars([]);
 
         const [bars1, bars2] = await Promise.all([

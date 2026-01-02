@@ -166,7 +166,7 @@ class TestGetAllWithStatus:
         leg = make_leg('bear', 110, 100, 100, 105)
 
         # Form the leg by reaching 38.2%
-        ref_layer._formed_refs[leg.leg_id] = leg.pivot_price
+        ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
         # Now price drops below pivot (100) - bar low at 98
         # For bear leg/bull reference, pivot breach means bar.low < pivot
@@ -190,7 +190,7 @@ class TestGetAllWithStatus:
         leg = make_leg('bear', 110, 100, 100, 105)
 
         # Form the leg
-        ref_layer._formed_refs[leg.leg_id] = leg.pivot_price
+        ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
         # Price goes past 2x extension (bar low at 125 > 120)
         completion_bar = make_bar(110, 125, 130, 125, 127)
@@ -214,7 +214,7 @@ class TestGetAllWithStatus:
         leg = make_leg('bear', 102, 100, 100, 105)
 
         # Form the leg
-        ref_layer._formed_refs[leg.leg_id] = leg.pivot_price
+        ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
         # For bear leg (bull reference), extreme_location uses bar.low
         # Origin breach needs extreme_location > 1.0
@@ -241,7 +241,7 @@ class TestGetAllWithStatus:
         leg = make_leg('bear', 110, 100, 100, 105)
 
         # Form the leg
-        ref_layer._formed_refs[leg.leg_id] = leg.pivot_price
+        ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
         # Price in valid zone (between pivot and origin)
         # Close at 105, high at 106 (below origin 110), low at 104 (above pivot 100)
@@ -262,7 +262,7 @@ class TestGetAllWithStatus:
 
         # Leg 1: formed and valid
         leg1 = make_leg('bear', 110, 50, 100, 55)
-        ref_layer._formed_refs[leg1.leg_id] = leg1.pivot_price
+        ref_layer._formed_refs[leg1.leg_id] = (leg1.pivot_price, 0)
 
         # Leg 2: not formed (hasn't reached 38.2%)
         leg2 = make_leg('bear', 120, 60, 110, 65)
@@ -297,7 +297,7 @@ class TestFilterStatsComputation:
 
         # Valid leg (formed)
         leg1 = make_leg('bear', 110, 50, 100, 55)
-        ref_layer._formed_refs[leg1.leg_id] = leg1.pivot_price
+        ref_layer._formed_refs[leg1.leg_id] = (leg1.pivot_price, 0)
         legs.append(leg1)
 
         # Not formed leg
@@ -338,7 +338,7 @@ class TestEdgeCases:
 
         # Bear leg with price way past completion
         leg = make_leg('bear', 110, 100, 100, 105)
-        ref_layer._formed_refs[leg.leg_id] = leg.pivot_price
+        ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
         # Price at 80 (way past 2x completion of 90)
         bar = make_bar(110, 80, 81, 79, 80)
@@ -361,7 +361,7 @@ class TestEdgeCases:
         leg = make_leg('bull', 90, 100, 100, 105)
 
         # Form it
-        ref_layer._formed_refs[leg.leg_id] = leg.pivot_price
+        ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
         # Valid bar
         bar = make_bar(110, 95, 96, 94, 95)

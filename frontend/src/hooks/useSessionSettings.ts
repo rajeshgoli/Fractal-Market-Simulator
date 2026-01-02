@@ -11,11 +11,13 @@ const STORAGE_KEY = 'session-settings';
 export interface SessionSettings {
   dataFile: string | null;    // Path to selected CSV
   startDate: string | null;   // ISO date string (YYYY-MM-DD)
+  playbackPosition: number | null;  // Frontend render position (#451)
 }
 
 const DEFAULT_SETTINGS: SessionSettings = {
   dataFile: null,
   startDate: null,
+  playbackPosition: null,
 };
 
 function loadSettings(): SessionSettings {
@@ -46,6 +48,7 @@ export interface UseSessionSettingsReturn {
   // Current settings
   dataFile: string | null;
   startDate: string | null;
+  playbackPosition: number | null;  // Frontend render position (#451)
 
   // Whether settings have been loaded from storage
   isLoaded: boolean;
@@ -56,6 +59,7 @@ export interface UseSessionSettingsReturn {
   // Update functions
   setDataFile: (value: string | null) => void;
   setStartDate: (value: string | null) => void;
+  setPlaybackPosition: (value: number | null) => void;  // (#451)
 
   // Save current session settings (call after successful session load)
   saveSession: (dataFile: string, startDate: string | null) => void;
@@ -94,8 +98,12 @@ export function useSessionSettings(): UseSessionSettingsReturn {
     setSettings(prev => ({ ...prev, startDate: value }));
   }, []);
 
+  const setPlaybackPosition = useCallback((value: number | null) => {
+    setSettings(prev => ({ ...prev, playbackPosition: value }));
+  }, []);
+
   const saveSession = useCallback((dataFile: string, startDate: string | null) => {
-    setSettings({ dataFile, startDate });
+    setSettings({ dataFile, startDate, playbackPosition: null });
   }, []);
 
   const clearSession = useCallback(() => {
@@ -107,10 +115,12 @@ export function useSessionSettings(): UseSessionSettingsReturn {
   return {
     dataFile: settings.dataFile,
     startDate: settings.startDate,
+    playbackPosition: settings.playbackPosition,
     isLoaded,
     hasSavedSession,
     setDataFile,
     setStartDate,
+    setPlaybackPosition,
     saveSession,
     clearSession,
   };

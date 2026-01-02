@@ -189,8 +189,13 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
     active_legs = detector.state.active_legs
 
     # Update reference layer and get state
+    # When a specific bar_index is requested (historical query), filter references
+    # to only include legs formed at or before that bar (#451)
     ref_layer = cache["reference_layer"]
-    ref_state: ReferenceState = ref_layer.update(active_legs, bar)
+    max_bar_for_formation = target_index if bar_index is not None else None
+    ref_state: ReferenceState = ref_layer.update(
+        active_legs, bar, max_bar_index=max_bar_for_formation
+    )
 
     # Get all legs with filter status for observation mode
     all_statuses = ref_layer.get_all_with_status(active_legs, bar)

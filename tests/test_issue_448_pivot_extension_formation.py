@@ -73,7 +73,7 @@ class TestPivotExtensionNullifiesFormation:
         formed = ref_layer._is_formed_for_reference(leg, Decimal("107"), 0.0)
         assert formed is True
         assert leg.leg_id in ref_layer._formed_refs
-        assert ref_layer._formed_refs[leg.leg_id] == Decimal("110")  # Stored formation pivot
+        assert ref_layer._formed_refs[leg.leg_id][0] == Decimal("110")  # Stored formation pivot
 
         # Now pivot extends to 120
         leg.update_pivot(Decimal("120"), 20)
@@ -102,7 +102,7 @@ class TestPivotExtensionNullifiesFormation:
         formed = ref_layer._is_formed_for_reference(leg, Decimal("103"), 0.0)
         assert formed is True
         assert leg.leg_id in ref_layer._formed_refs
-        assert ref_layer._formed_refs[leg.leg_id] == Decimal("100")  # Stored formation pivot
+        assert ref_layer._formed_refs[leg.leg_id][0] == Decimal("100")  # Stored formation pivot
 
         # Now pivot extends to 90 (lower for bear)
         leg.update_pivot(Decimal("90"), 20)
@@ -136,7 +136,7 @@ class TestPivotExtensionNullifiesFormation:
         # New range = 20, formation at 0.236 = 120 - 4.72 = 115.28
         formed = ref_layer._is_formed_for_reference(leg, Decimal("115"), 0.0)
         assert formed is True  # 115 is at location = 5/20 = 0.25 >= 0.236
-        assert ref_layer._formed_refs[leg.leg_id] == Decimal("120")  # New formation pivot
+        assert ref_layer._formed_refs[leg.leg_id][0] == Decimal("120")  # New formation pivot
 
     def test_unchanged_pivot_stays_formed(self):
         """Leg stays formed if pivot hasn't extended."""
@@ -205,7 +205,7 @@ class TestFormationWithGetAllWithStatus:
         # Check status - should be VALID (assuming we're past cold start for this check)
         # Actually get_all_with_status checks cold start, so let's just verify formed
         assert leg.leg_id in ref_layer._formed_refs
-        assert ref_layer._formed_refs[leg.leg_id] == Decimal("110")
+        assert ref_layer._formed_refs[leg.leg_id][0] == Decimal("110")
 
         # Extend pivot to 130
         leg.update_pivot(Decimal("130"), 20)

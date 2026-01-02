@@ -420,9 +420,10 @@ class ReferenceLayer:
             recompute_interval_legs=self.reference_config.bin_recompute_interval,
         )
         # Track which legs have formed as references (price reached formation threshold)
-        # Maps leg_id -> pivot_price at time of formation
+        # Maps leg_id -> (pivot_price, formation_bar_index) at time of formation
         # Formation is nullified if pivot extends past this price (Issue #448)
-        self._formed_refs: Dict[str, Decimal] = {}
+        # Formation bar index used to filter by bar for per-bar state queries (#451)
+        self._formed_refs: Dict[str, Tuple[Decimal, int]] = {}
         # Track which legs are monitored for level crossings (opt-in per leg)
         self._tracked_for_crossing: Set[str] = set()
         # Track last known fib level for each tracked leg (for cross detection)
@@ -480,9 +481,10 @@ class ReferenceLayer:
         """
         current_price = Decimal(str(bar.close))
         timestamp = bar.timestamp if bar.timestamp else 0.0
+        bar_index = bar.index if hasattr(bar, 'index') else 0
         for leg in legs:
             was_already_formed = leg.leg_id in self._formed_refs
-            self._is_formed_for_reference(leg, current_price, timestamp)
+            self._is_formed_for_reference(leg, current_price, timestamp, bar_index)
             # Update bin distribution on pivot extension for already-formed legs (#434)
             if was_already_formed and leg.leg_id in self._seen_leg_ids:
                 self._update_bin_distribution(leg.leg_id, float(leg.range))
@@ -511,6 +513,42 @@ class ReferenceLayer:
             Tuple of (current swings in distribution, required minimum).
         """
         return (self._bin_distribution.total_count, self.reference_config.min_swings_for_classification)
+
+    def is_formed_at_bar(self, leg_id: str, bar_index: int) -> bool:
+        """
+        Check if a leg was formed at or before the given bar index (#451).
+
+        Used for per-bar reference state queries during buffered playback.
+        A leg is considered formed at bar N if its formation_bar <= N.
+
+        Args:
+            leg_id: The leg ID to check.
+            bar_index: The bar index to check formation at.
+
+        Returns:
+            True if the leg was formed at or before the given bar index.
+        """
+        if leg_id not in self._formed_refs:
+            return False
+        _pivot_price, formation_bar = self._formed_refs[leg_id]
+        return formation_bar <= bar_index
+
+    def get_formed_leg_ids_at_bar(self, bar_index: int) -> Set[str]:
+        """
+        Get set of leg IDs that were formed at or before the given bar (#451).
+
+        Used for per-bar reference state queries during buffered playback.
+
+        Args:
+            bar_index: The bar index to filter formation at.
+
+        Returns:
+            Set of leg IDs that were formed at or before the given bar.
+        """
+        return {
+            leg_id for leg_id, (_, formation_bar) in self._formed_refs.items()
+            if formation_bar <= bar_index
+        }
 
     def _get_bin_index(self, leg_range: Decimal) -> int:
         """
@@ -588,6 +626,7 @@ class ReferenceLayer:
         leg: Leg,
         current_price: Decimal,
         timestamp: float = 0.0,
+        bar_index: int = 0,
     ) -> bool:
         """
         Check if leg has reached formation threshold.
@@ -611,13 +650,14 @@ class ReferenceLayer:
             leg: The leg to check
             current_price: Current price
             timestamp: Bar timestamp for bin distribution tracking (#434)
+            bar_index: Current bar index for formation tracking (#451)
 
         Returns:
             True if formed at current pivot level
         """
         # Check if previously formed
         if leg.leg_id in self._formed_refs:
-            formation_pivot = self._formed_refs[leg.leg_id]
+            formation_pivot, _formation_bar = self._formed_refs[leg.leg_id]
             # Check if pivot has extended past formation pivot (Issue #448)
             # Bull leg: pivot extends higher; Bear leg: pivot extends lower
             pivot_extended = (
@@ -639,8 +679,8 @@ class ReferenceLayer:
         # For formation, price must move from pivot toward origin by at least threshold
         # This means location must be >= threshold
         if location >= threshold:
-            # Store pivot price at formation (Issue #448)
-            self._formed_refs[leg.leg_id] = leg.pivot_price
+            # Store pivot price and bar index at formation (Issue #448, #451)
+            self._formed_refs[leg.leg_id] = (leg.pivot_price, bar_index)
             # Add to bin distribution on first formation (#372, #439)
             if leg.leg_id not in self._seen_leg_ids:
                 self._seen_leg_ids.add(leg.leg_id)
@@ -1321,6 +1361,7 @@ class ReferenceLayer:
         legs: List[Leg],
         bar: Bar,
         build_response: bool = True,
+        max_bar_index: Optional[int] = None,
     ) -> Optional[ReferenceState]:
         """
         Main entry point. Called each bar after DAG processes.
@@ -1334,18 +1375,22 @@ class ReferenceLayer:
                 If False, only perform side effects (formation tracking, breach
                 removal, bin distribution updates) and return None. Use False
                 during bulk advances for performance (#437).
+            max_bar_index: If provided, only include legs that were formed at or
+                before this bar index in the response (#451). Used for historical
+                bar queries during buffered playback.
 
         Returns:
             ReferenceState with all valid references, or None if build_response=False.
         """
         current_price = Decimal(str(bar.close))
         timestamp = bar.timestamp if bar.timestamp else 0.0
+        bar_index = bar.index if hasattr(bar, 'index') else 0
 
         # Check formation for all legs first (this updates range distribution
         # for newly formed legs, which affects cold start progress)
         for leg in legs:
             was_already_formed = leg.leg_id in self._formed_refs
-            self._is_formed_for_reference(leg, current_price, timestamp)
+            self._is_formed_for_reference(leg, current_price, timestamp, bar_index)
             # Update bin distribution on pivot extension for already-formed legs (#434)
             if was_already_formed and leg.leg_id in self._seen_leg_ids:
                 self._update_bin_distribution(leg.leg_id, float(leg.range))
@@ -1398,6 +1443,13 @@ class ReferenceLayer:
         for leg in legs:
             if leg.leg_id not in self._formed_refs:
                 continue
+
+            # Filter by formation bar if max_bar_index is provided (#451)
+            # Only include legs that were formed at or before the requested bar
+            if max_bar_index is not None:
+                _pivot_price, formation_bar = self._formed_refs[leg.leg_id]
+                if formation_bar > max_bar_index:
+                    continue  # Skip legs formed after the requested bar
 
             bin_index = self._get_bin_index(leg.range)
             location = self._compute_location(leg, current_price)
@@ -1477,12 +1529,13 @@ class ReferenceLayer:
         bar_high = Decimal(str(bar.high))
         bar_low = Decimal(str(bar.low))
         timestamp = bar.timestamp if bar.timestamp else 0.0
+        bar_index = bar.index if hasattr(bar, 'index') else 0
         results: List[FilteredLeg] = []
 
         # Check formation for all legs first (populates _formed_refs)
         for leg in legs:
             was_already_formed = leg.leg_id in self._formed_refs
-            self._is_formed_for_reference(leg, current_price, timestamp)
+            self._is_formed_for_reference(leg, current_price, timestamp, bar_index)
             # Update bin distribution on pivot extension for already-formed legs (#434)
             if was_already_formed and leg.leg_id in self._seen_leg_ids:
                 self._update_bin_distribution(leg.leg_id, float(leg.range))
