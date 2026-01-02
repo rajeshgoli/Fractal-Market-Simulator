@@ -16,9 +16,9 @@ For full specification, see [Product North Star](Docs/Reference/product_north_st
 
 ## Current State
 
-**Phase:** Reference Layer exploration — tuning salience formulas, building toward rule discovery.
+**Phase:** Reference Layer complete — exploration and Outcome Layer definition next.
 
-The system uses a **hierarchical DAG model** where swings form a tree structure with parent-child relationships. The Reference Layer filters these into valid trading references with scale classification, formation tracking, and level analysis.
+The system uses a **hierarchical DAG model** where swings form a tree structure with parent-child relationships. The Reference Layer filters these into valid trading references with bin-based classification, formation tracking, and level analysis.
 
 ### Two Views
 
@@ -46,7 +46,7 @@ open http://127.0.0.1:8000
 - **Hierarchy exploration**: Visualize parent-child relationships between legs
 - **Follow leg**: Track specific legs through their lifecycle with event markers
 - **Detection config panel**: Adjust thresholds at runtime without restart
-- **Reference Layer**: Scale classification (S/M/L/XL), formation tracking, fib level interaction
+- **Reference Layer**: Bin-based classification (median multiples), formation tracking, fib level interaction
 - **Level crossing**: Opt-in tracking for specific legs
 
 See [User Guide](Docs/Reference/user_guide.md) for detailed documentation.

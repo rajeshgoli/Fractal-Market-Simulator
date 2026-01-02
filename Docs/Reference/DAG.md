@@ -2,7 +2,7 @@
 
 **A Trader's Guide to the Algorithm**
 
-*Last Updated: December 31, 2025*
+*Last Updated: January 2, 2026*
 
 ---
 
@@ -11,17 +11,16 @@
 1. [Executive Summary](#executive-summary)
 2. [The Core Idea: What Are We Detecting?](#the-core-idea)
 3. [Fundamental Concepts](#fundamental-concepts)
-4. [How Swings Are Born: The Leg Lifecycle](#leg-lifecycle)
+4. [How Legs Are Born: The Leg Lifecycle](#leg-lifecycle)
 5. [Bar Classification: Establishing Temporal Order](#bar-classification)
-6. [Formation: When a Leg Becomes a Swing](#formation)
-7. [Invalidation: When Structure Breaks](#invalidation)
-8. [Pruning: Keeping the Structure Clean](#pruning)
-9. [Hierarchy: Parent-Child Relationships](#hierarchy)
-10. [Impulse Metrics: Quantifying Move Quality](#impulse-metrics)
-11. [Configuration Parameters](#configuration)
-12. [Complete Example: Walking Through Real Data](#complete-example)
-13. [QA Section: Expert Trader Questions](#qa-section)
-14. [Simplification Opportunities](#simplification)
+6. [Origin Breach: When Structure Is Compromised](#invalidation)
+7. [Pruning: Keeping the Structure Clean](#pruning)
+8. [Hierarchy: Parent-Child Relationships](#hierarchy)
+9. [Impulse Metrics: Quantifying Move Quality](#impulse-metrics)
+10. [Configuration Parameters](#configuration)
+11. [Complete Example: Walking Through Real Data](#complete-example)
+12. [QA Section: Expert Trader Questions](#qa-section)
+13. [Simplification Opportunities](#simplification)
 
 ---
 
@@ -35,9 +34,8 @@
 | **Bear leg** | Downward move (HIGH → LOW) | Often refers to bullish setup |
 | **Origin** | Where move started (defended level) | — |
 | **Pivot** | Current extreme (extends as move continues) | — |
-| **Formation** | Move has progressed 28.7% from origin | — |
 
-This document describes **what the code does**, using the code's terminology.
+This document describes **what the DAG layer does**, using the code's terminology. For formation and reference filtering, see the Reference Layer documentation.
 
 ---
 
@@ -45,14 +43,14 @@ This document describes **what the code does**, using the code's terminology.
 
 This document reverse-engineers the DAG (Directed Acyclic Graph) layer that detects market structure in ES futures. The algorithm identifies **swings** — defended price extremes that form the backbone of market structure.
 
-**What the algorithm does:**
+**What the DAG layer does:**
 - Tracks directional price movements ("legs") from origin to pivot
-- Confirms structure when price retraces 28.7% toward origin
-- Invalidates structure when origin is breached by 38.2% of range
-- Builds hierarchical relationships between swings
+- Extends pivots as price makes new extremes
+- Detects origin breach when price violates the defended level
+- Builds hierarchical parent-child relationships between legs
 - Prunes redundant structure to maintain clarity
 
-**Key insight for traders:** The algorithm thinks in terms of *defended levels*. A swing high is a high that price pulled back from. A swing low is a low that price bounced from. The algorithm only confirms structure after price demonstrates the level matters.
+**Key insight for traders:** The DAG tracks *structural extremes*. A leg represents a directional move from a starting point (origin) to a current extreme (pivot). The Reference Layer then determines which legs are meaningful trading references.
 
 ---
 
@@ -90,11 +88,11 @@ Without the retracement, we don't know if the extreme matters. The algorithm wai
 | Concept | Definition | Trader Analogy |
 |---------|------------|----------------|
 | **Leg** | Directional move from origin to pivot, tracked by DAG layer | "Price is pushing up from here" |
-| **Reference** | Formed leg filtered by Reference Layer (price at 38.2%+ of range) | "That's a real swing low" |
+| **Reference** | Leg filtered by Reference Layer for trading relevance | "That's a real swing low" |
 
-A leg is a *candidate* reference. The Reference Layer "forms" a leg into a reference when price has progressed at least 38.2% of the range from pivot toward origin. The DAG layer tracks all legs; the Reference Layer filters which ones are meaningful for trading.
+The DAG layer tracks all legs — every structural move from origin to pivot. The Reference Layer (separate component) filters which legs are meaningful trading references based on formation, breach tolerance, and salience.
 
-**Note (December 2025):** The `SwingNode` class and `formed` flag on Leg have been removed (#394). Formation is now computed at runtime by the Reference Layer based on current price location.
+**This document covers the DAG layer only.** See Reference Layer documentation for formation and filtering.
 
 ### Origin and Pivot
 
@@ -118,27 +116,6 @@ BEAR LEG:
 
 **Key insight:** Origins are fixed; pivots extend. The origin is where the move started — it's the level being defended. The pivot is where the move reached — it extends as price pushes further.
 
-### Formation (Reference Layer)
-
-Formation is now handled by the **Reference Layer**, not the DAG layer. The Reference Layer determines which legs are "formed" based on price location at the time of query.
-
-**Formation threshold:** 38.2% (configurable via `ReferenceConfig.formation_threshold`)
-
-A leg is considered formed when price has progressed at least 38.2% of the range from pivot toward origin:
-
-```
-Example: Bear leg from 110 (origin) to 100 (pivot)
-Range = 10 points
-Formation location = 0.382
-
-Formation happens when: (current - pivot) / range >= 0.382
-                       (current - 100) / 10 >= 0.382
-                       current >= 100 + 3.82 = 103.82
-
-When current price >= 103.82, the reference is FORMED.
-```
-
-**Key difference from previous design:** Formation is now computed at runtime, not stored on the Leg. A leg can be "formed" in one bar and "unformed" in the next if price moves away. Once formed, the Reference Layer remembers the leg was formed (sticky formation).
 
 ### Origin Breach Detection (#345)
 
@@ -165,7 +142,7 @@ actively defended.
 
 ---
 
-## How Swings Are Born: The Leg Lifecycle <a name="leg-lifecycle"></a>
+## How Legs Are Born: The Leg Lifecycle <a name="leg-lifecycle"></a>
 
 ### Phase 1: Pending Origin
 
@@ -213,41 +190,23 @@ Bar 4: H=3981.00 L=3979.00  (pivot EXTENDS to 3981.00)
 Bull leg now: Origin=3976.25, Pivot=3981.00, Range=4.75 points
 ```
 
-### Phase 4: Formation
+### Phase 4: Origin Breach
 
-When progress through the move reaches 28.7%, the leg becomes a swing.
-
-```
-Bull leg: Origin=3976.25, Pivot=3983.25 (extended), Range=7.00 points
-Formation threshold = 0.287 (28.7% progress from origin to pivot)
-
-Progress = (current - origin) / range
-
-Bar N: Close=3978.00 → Progress = (3978 - 3976.25) / 7.00 = 25% (not yet)
-Bar N+1: Close=3979.00 → Progress = (3979 - 3976.25) / 7.00 = 39% ✓ FORMED!
-
-The 3983.25 high is now a confirmed SWING HIGH.
-
-Note: Formation can happen immediately on leg creation if the
-close is already 28.7%+ of the way from origin to pivot.
-```
-
-### Phase 5: Invalidation
-
-If price breaches origin by 38.2% of range, the structure breaks.
+When price touches or crosses the origin, the leg is marked as breached (`max_origin_breach` is set).
 
 ```
-Bull leg: Origin=3976.25, Pivot=3983.25, Range=7.00 points
-Invalidation threshold = 3976.25 - (0.382 × 7.00) = 3973.58
+Bull leg: Origin=3976.25, Pivot=3983.25
 
-Bar M: Low=3974.00 → Still valid (above 3973.58)
-Bar M+1: Low=3973.50 → INVALIDATED! (below 3973.58)
+Bar M: Low=3976.50 → Origin intact
+Bar M+1: Low=3976.00 → ORIGIN BREACHED! (touched 3976.25)
 
-The swing is invalidated but NOT deleted.
-It remains as a historical reference until cleaned up.
+After breach:
+- Pivot freezes (no longer extends)
+- max_origin_breach = 0.25 points
+- Leg remains for context but is structurally compromised
 ```
 
-### Phase 6: Removal (Pruning)
+### Phase 5: Removal (Pruning)
 
 Invalidated or redundant legs are eventually removed through various pruning mechanisms (detailed in [Pruning](#pruning)).
 
@@ -355,132 +314,42 @@ Bar 5: O=3979.00 H=3981.00 L=3979.00 C=3980.75
 
 ---
 
-## Formation: When a Leg Becomes a Swing <a name="formation"></a>
+## Origin Breach: When Structure Is Compromised <a name="invalidation"></a>
 
-### The Formation Rule
+### The Origin Breach Rule
 
-A leg FORMS (becomes a swing) when price has moved at least 28.7% from origin toward pivot.
-
-**Key insight:** Formation measures *progress through the move*, not a pullback. A leg can form on the same bar it's created if the move is already substantial.
+A leg's origin is BREACHED when price touches or crosses it (0% tolerance in DAG layer).
 
 ```
-BULL LEG FORMATION:
-───────────────────
+BULL LEG ORIGIN BREACH:
+───────────────────────
             Pivot ────►  3983.25
                ▲
                │ Range = 7.00
                │
-           Origin ────►  3976.25
+           Origin ────►  3976.25  ← Breach point
 
-Formation Check: (current - origin) / range >= 0.287
-                 (current - 3976.25) / 7.00 >= 0.287
-                 current >= 3978.26
-
-When bar.close >= 3978.26, the swing is FORMED.
-(Note: Uses bar.high for inside bars where temporal order is known)
+When bar.low ≤ 3976.25, the origin is BREACHED.
+- max_origin_breach is set
+- Pivot freezes (no more extension)
+- Leg remains for context
 
 
-BEAR LEG FORMATION:
-───────────────────
-           Origin ────►  4523.50
+BEAR LEG ORIGIN BREACH:
+───────────────────────
+           Origin ────►  4523.50  ← Breach point
                │
                │ Range = 5.25
                ▼
             Pivot ────►  4518.25
 
-Formation Check: (origin - current) / range >= 0.287
-                 (4523.50 - current) / 5.25 >= 0.287
-                 current <= 4522.00
-
-When bar.close <= 4522.00, the swing is FORMED.
+When bar.high ≥ 4523.50, the origin is BREACHED.
+- max_origin_breach is set
+- Pivot freezes (no more extension)
+- Leg remains for context
 ```
 
-### Why Have a Formation Threshold?
-
-Formation ensures the move is substantial:
-
-```
-ES 5-minute: Very small move
-
-Bar 0: Price at 3900
-Bar 1: Type 2-Bull, price at 3901 (only 1 point move)
-
-Without formation requirement:
-  - This tiny move creates a "swing"
-  - Not meaningful structure
-
-With formation requirement:
-  - 1 point move with any reasonable pivot won't meet 28.7%
-  - Filters out noise, keeps only substantial moves
-```
-
-**What formation really means:** The move from origin to pivot is big enough to matter. It's not just random fluctuation.
-
-### Real ES Example: Formation
-
-```
-ES 5-minute: March 9, 2023 (Pre-SVB period)
-
-Session shows price trending up from 4517.50 to 4524.00
-
-Bull Leg Created:
-  Origin: 4517.50 (LOW at 17:15)
-
-As price extends:
-  Bar +5: Pivot extends to 4520.25
-  Bar +10: Pivot extends to 4522.25
-  Bar +15: Pivot extends to 4523.50
-  Bar +20: Pivot extends to 4524.00
-
-Range = 4524.00 - 4517.50 = 6.50 points
-Formation threshold = 4517.50 + (0.287 × 6.50) = 4519.37
-
-Looking for close ≥ 4519.37:
-  Bar at 19:15: Close = 4520.25 → 43% retracement ✓ FORMED!
-
-The 4524.00 high is now a confirmed swing high.
-```
-
----
-
-## Invalidation: When Structure Breaks <a name="invalidation"></a>
-
-### The Invalidation Rule
-
-A leg (or swing) is INVALIDATED when price breaches the origin by 38.2% of the range.
-
-```
-BULL LEG INVALIDATION:
-──────────────────────
-            Pivot ────►  3983.25
-               ▲
-               │ Range = 7.00
-               │
-           Origin ────►  3976.25
-               │
-               │ 38.2% of Range = 2.67
-               ▼
-    Invalidation ────►  3973.58
-
-When bar.low ≤ 3973.58, the leg is INVALIDATED.
-The pivot is no longer a valid swing reference.
-
-
-BEAR LEG INVALIDATION:
-──────────────────────
-    Invalidation ────►  4525.51
-               ▲
-               │ 38.2% of Range = 2.01
-               │
-           Origin ────►  4523.50
-               │
-               │ Range = 5.25
-               ▼
-            Pivot ────►  4518.25
-
-When bar.high ≥ 4525.51, the leg's origin is BREACHED.
-The pivot is no longer a valid swing reference.
-```
+**Note:** The Reference Layer applies additional tolerance rules for trading purposes. The DAG layer uses strict 0% breach detection.
 
 ### What Happens After Origin Breach? (#345)
 
@@ -507,7 +376,7 @@ Bar at 07:20: Low = 3976.50 ← Below origin of 3985.50!
 
 Origin breach amount = 3985.50 - 3976.50 = 9 points
 The leg's origin is BREACHED (max_origin_breach = 9).
-The 3989.75 swing high is no longer valid structure.
+The 3989.75 pivot is frozen — no longer extends.
 Price has broken the pattern — the low was not defended.
 
 What happened next:
@@ -515,7 +384,7 @@ What happened next:
   Bar at 07:40: Low = 3964.75
   Bar at 08:05: Low = 3960.00
 
-The invalidation correctly signaled structure breakdown.
+The breach correctly signaled structure breakdown.
 ```
 
 ---
@@ -1026,15 +895,8 @@ Compare: HH, HL → TYPE 2-BULL
 
 EXTEND BULL LEG PIVOT:
   Origin: 3976.25
-  Pivot: 3983.25 (extended)
+  Pivot: 3983.25 (extended from 3981.00)
   Range: 7.00 points
-
-CHECK FORMATION:
-  Formation threshold = 3976.25 + (0.287 × 7.00) = 3978.26
-  Current close = 3982.25
-  Retracement = (3982.25 - 3976.25) / 7.00 = 85.7%
-
-  Wait... that's above the pivot. Not yet retracing.
 
 
 Bar 7 (00:35): O=3982.25 H=3982.75 L=3979.25 C=3980.00
@@ -1043,123 +905,71 @@ Compare: LH=3982.75 < 3983.25, HL=3979.25 < 3980.25
 → TYPE 2-BEAR (direction change!)
 
 CREATE BEAR LEG:
-  Origin: 3983.25 (previous bar's HIGH)
+  Origin: 3983.25 (previous bar's HIGH — the bull leg's pivot)
   Pivot: 3979.25 (current LOW)
   Range: 4.00 points
 
 Active Legs: [Bull: 3976.25 → 3983.25, Bear: 3983.25 → 3979.25]
 
-CHECK BULL LEG FORMATION:
-  Formation threshold = 3976.25 + (0.287 × 7.00) = 3978.26
-  Current close = 3980.00
-  Retracement toward origin = (3983.25 - 3980.00) / 7.00 = 46.4%
-
-  Has price pulled back to 3978.26?
-  Close is 3980.00, which is above 3978.26.
-  So retracement is: (3980.00 - 3976.25) / 7.00 = 53.6% of range above origin.
-
-  Formation check: Is price at or below formation level? No.
-  Formation threshold interpreted as: price must retrace TO this level.
-  3980.00 > 3978.26, so still above formation level.
-
-  WAIT: Let me reconsider. For a BULL leg:
-    - Origin is at LOW (3976.25)
-    - Pivot is at HIGH (3983.25)
-    - Formation means price retraces TOWARD origin (goes down)
-    - Formation price = 3976.25 + 0.287 × 7.00 = 3978.26
-    - Price must drop TO 3978.26 or below to form.
-
-  Current close = 3980.00 (above 3978.26)
-  NOT YET FORMED.
-
-
-Bar 8-10: Price continues lower...
-
-Bar 11 (00:55): O=3979.50 H=3980.00 L=3979.00 C=3979.75
-───────────────────────────────────────────────────────
-Close = 3979.75 (still above 3978.26 formation level)
-
-Bull leg still forming...
+Note: The bear leg's origin is exactly the bull leg's pivot.
+This is how counter-trend structure forms.
 
 
 Bar 25 (02:00): O=3982.75 H=3984.00 L=3978.25 C=3981.00
 ───────────────────────────────────────────────────────
-Low = 3978.25 (touched formation zone!)
+Compare: HH, HL → TYPE 2-BULL
 
-CHECK BULL LEG FORMATION:
-  Formation threshold = 3978.26
-  Low = 3978.25 ← BELOW threshold!
-
-  Using close for formation check: Close = 3981.00 (above threshold)
-
-  Actually, the algorithm uses close for TYPE_2 bars.
-  Close = 3981.00 > 3978.26, so NOT formed on this bar.
-
-
-Bar 31 (02:30): O=3981.50 H=3981.50 L=3978.75 C=3980.50
-───────────────────────────────────────────────────────
-TYPE 1 (inside bar)
-For TYPE 1, formation uses bar.high for bull check.
-
-High = 3981.50 > 3978.26 → Still above formation zone.
-
-Hmm, the bull leg keeps extending but hasn't formed yet because
-price hasn't retraced enough. Let me check if the pivot extended more.
-
-Actually, checking the data: Bar at 03:00 shows H=3989.50
-So the pivot extended further, increasing the range.
-
-New range after extension:
+Bull leg pivot extends again:
   Origin: 3976.25
-  Pivot: 3989.50
-  Range: 13.25 points
-  Formation threshold = 3976.25 + (0.287 × 13.25) = 3980.05
+  Pivot: 3984.00 (extended)
+  Range: 7.75 points
 
-Now price needs to drop to 3980.05 or below to form.
+Bear leg origin check:
+  Origin: 3983.25
+  Current high: 3984.00 > 3983.25 ← ORIGIN BREACHED!
+  max_origin_breach = 0.75 points
+  Bear leg pivot freezes at 3979.25
 
 
-Bar at 03:05 (close=3986.75): Above 3980.05 → NOT FORMED
-Bar at 03:15 (close=3983.50): Above 3980.05 → NOT FORMED
-Bar at 03:20 (close=3983.50): Above 3980.05 → NOT FORMED
-Bar at 03:25 (close=3983.00): Above 3980.05 → NOT FORMED
-...
+Bar 50 (later): Price drops to 3975.00
+───────────────────────────────────────
+Bull leg origin check:
+  Origin: 3976.25
+  Current low: 3975.00 < 3976.25 ← ORIGIN BREACHED!
+  max_origin_breach = 1.25 points
+  Bull leg pivot freezes at 3984.00
 
-Eventually when price drops below 3980.05, the swing FORMS.
+Both legs now breached. DAG continues tracking for context.
+Reference Layer determines which remain valid trading references.
 ```
 
 This walkthrough illustrates:
 1. Bar classification determining temporal order
 2. Leg creation from pending origins
 3. Pivot extension on new extremes
-4. Turn detection and pruning
-5. Formation threshold calculation and waiting
+4. Counter-trend leg creation at pivots
+5. Origin breach detection
 
 ---
 
 ## QA Section: Expert Trader Questions <a name="qa-section"></a>
 
-### Q1: Why 28.7% for formation instead of 38.2%?
+### Q1: Why does the DAG track ALL legs, not just "valid" ones?
 
-**A:** The 28.7% threshold sits between 23.6% and 38.2% Fibonacci levels. It's a balance:
-- **Too low (23.6%):** Too many small moves qualify as "swings."
-- **Too high (38.2%):** Misses moves that are substantial but haven't extended far enough.
+**A:** The DAG layer is the structural foundation — it tracks every directional move without filtering. This separation of concerns allows:
+- DAG to focus on accurate structural detection
+- Reference Layer to apply trading-specific filters (formation, tolerance, salience)
+- Different trading strategies to use different Reference Layer settings
 
-28.7% is empirically chosen to filter noise while capturing real structure. The move must be at least 28.7% of the range to be considered a swing.
+The DAG is the "what happened" layer; Reference Layer is the "what matters" layer.
 
-*Verification:* The configuration allows this to be changed. You could set `formation_fib=0.382` for more conservative detection (only larger moves form swings).
+### Q2: Why is origin breach at 0% (any touch)?
 
-### Q2: Why use origin breach for invalidation instead of just "price below origin"?
+**A:** The DAG uses strict structural detection. When price touches the origin, the defended level has been tested. The DAG marks this immediately via `max_origin_breach`.
 
-**A:** A simple breach (1 tick below) would be too sensitive. Markets probe levels before reversing. The 38.2% threshold:
-- Gives the structure room to breathe
-- Aligns with Fibonacci significance
-- Filters out false breakdowns
+The **Reference Layer** applies tolerance rules for trading purposes — significant legs get more leeway before being invalidated as trading references.
 
-Example: If origin is 3900 with range 50, invalidation is at 3880.9. This means:
-- 3899.75 breach? Structure intact.
-- 3880.00 breach? Structure broken.
-
-### Q3: Why not just track the most recent swing? Why multiple legs?
+### Q3: Why not just track the most recent leg? Why multiple legs?
 
 **A:** Markets are fractal. Multiple structures coexist at different scales:
 
@@ -1171,20 +981,22 @@ Both are valid. The algorithm tracks all concurrent structures
 so traders at different timeframes get relevant levels.
 ```
 
-### Q4: What happens when a swing is invalidated? Does it disappear immediately?
+### Q4: What happens when a leg's origin is breached? Does it disappear immediately?
 
-**A:** No. Invalidated swings remain as **historical references** for context. They're eventually pruned when:
-- Another structure supersedes them (domination)
-- They become engulfed (both ends breached)
-- The market moves far beyond them (optional 3x cleanup, currently disabled)
+**A:** No. Breached legs remain for context. After origin breach:
+- Pivot freezes (no more extension)
+- `max_origin_breach` tracks how far price went
+- Leg remains visible until pruned
 
-Traders can still see where old structure was, even if it's no longer valid.
+Legs are eventually removed when:
+- They become engulfed (both origin AND pivot breached)
+- They reach stale extension threshold (3× range beyond origin)
 
-### Q5: How do I know if a swing is "big" vs "small"?
+### Q5: How does the DAG determine leg significance?
 
-**A:** The algorithm tracks a population of all formed leg ranges. A swing is "big" if its range is in the top 10% of all historical swings (configurable via `big_swing_threshold`).
+**A:** The DAG tracks raw structural data — it doesn't classify legs as "big" or "small". That's the Reference Layer's job.
 
-Big swings get different invalidation tolerances — they're more significant levels.
+The DAG provides: range, impulse, spikiness, depth, parent relationships. The Reference Layer uses these to compute salience and bin classification.
 
 ### Q6: The algorithm tracks "impulse" and "spikiness" — how should I interpret these together?
 
@@ -1249,25 +1061,21 @@ After reverse-engineering all rules, here are potential simplifications:
 
 ### 1. Unifying Theme: "Defended Levels"
 
-All rules reduce to one concept: **Is this level still being defended?**
+All DAG rules reduce to one concept: **Is this level still being defended?**
 
-- Formation = confirmation of defense
-- Invalidation = defense broken
-- Pruning = removing redundant defenders
+- Origin intact = level defended
+- Origin breached = defense broken
+- Pruning = removing redundant structure
 
 **Opportunity:** Rename "leg" to "defended level" in documentation. More intuitive for traders.
 
-### 2. Formation vs. Invalidation Thresholds
+### 2. DAG/Reference Layer Separation
 
-Current:
-- Formation: 28.7% retracement
-- Invalidation: 38.2% breach
+The current separation is clean:
+- **DAG:** Structural detection (0% tolerance, tracks everything)
+- **Reference Layer:** Trading filters (tolerance, formation, salience)
 
-These could be unified as **one "structure threshold"** with different directions:
-- Positive direction (toward pivot): Formation
-- Negative direction (away from origin): Invalidation
-
-**Opportunity:** Single `structure_threshold = 0.382` that governs both.
+This separation allows different trading strategies to use the same structural data.
 
 ### 3. Pruning Rules Consolidation
 
@@ -1298,34 +1106,31 @@ Current defaults are symmetric. If asymmetric behavior isn't needed, simplify to
 
 ---
 
-## Appendix A: All Thresholds Summary
+## Appendix A: DAG Configuration Parameters
 
-| Threshold | Value | Purpose |
-|-----------|-------|---------|
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
 | Origin Range Prune | 0.02 | Range similarity for origin-proximity pruning (#294) |
 | Origin Time Prune | 0.02 | Time proximity for origin-proximity pruning (#294) |
-| Max Legs | 10 | Limit legs per pivot, scored by counter-trend range (#404) |
-| Engulfed Breach Threshold | 0.236 | Combined breach % for engulfed deletion (per direction). 1.0 = disabled. |
-| Stale Extension | 3.0 | Prune invalidated child legs at 3x range |
-| Big Swing Threshold | 0.10 | Top 10% by range = "big" (Reference Layer) |
+| Max Turns | 10 | Limit legs per pivot, scored by counter-trend range (#404) |
+| Engulfed Breach Threshold | 0.236 | Combined breach % for engulfed deletion. 1.0 = disabled. |
+| Stale Extension | 3.0 | Prune breached child legs at 3x range |
 
-Note: Formation Fibonacci (0.236) and Invalidation Threshold (0.382) are Reference Layer concepts, not DAG layer. See Reference Layer documentation.
+**Note:** Formation, salience, and bin classification are Reference Layer concepts. See Reference Layer documentation.
 
 ---
 
-## Appendix B: Event Types
+## Appendix B: DAG Event Types
 
 The DAG layer emits events for state changes:
 
 | Event | Trigger |
 |-------|---------|
-| `LegCreatedEvent` | New leg from pending origin |
-| `LegPrunedEvent` | Leg removed by pruning |
-| `LegInvalidatedEvent` | Origin breach beyond threshold |
-| `OriginBreachedEvent` | Origin price level breached |
-| `PivotBreachedEvent` | Pivot breached beyond threshold |
+| `LegCreatedEvent` | New leg created from pending origin |
+| `LegPrunedEvent` | Leg removed by pruning (origin-proximity, engulfed, stale) |
+| `LegInvalidatedEvent` | Origin breached (structural invalidation) |
 
-**Note:** `SwingFormedEvent` and `SwingInvalidatedEvent` have been removed (#394). Formation is now handled by the Reference Layer at runtime.
+**Note:** Formation events are emitted by the Reference Layer, not the DAG.
 
 ---
 
@@ -1334,17 +1139,16 @@ The DAG layer emits events for state changes:
 | Term | Definition |
 |------|------------|
 | **Leg** | Directional move from origin to pivot, tracked by DAG layer |
-| **Reference** | Formed leg filtered by Reference Layer (price 38.2%+ into range) |
 | **Origin** | Where the move started (fixed, defended level) |
 | **Pivot** | Current extreme of the move (extends on new extremes) |
 | **Range** | Distance from origin to pivot |
-| **Formation** | Reference Layer determining a leg is meaningful (38.2%+ progress) |
-| **Invalidation** | Structure broken via origin breach |
+| **Origin Breach** | Price touched or crossed the origin (structural compromise) |
 | **Pruning** | Removing redundant or dominated legs |
-| **DAG** | Directed Acyclic Graph (hierarchical structure) |
+| **DAG** | Directed Acyclic Graph (hierarchical leg structure) |
 | **Impulse** | Points per bar (move intensity) |
-| **Impulsiveness** | Percentile rank of impulse |
-| **Spikiness** | Skewness of bar contributions |
+| **Impulsiveness** | Percentile rank of impulse vs historical legs |
+| **Spikiness** | Distribution of move contribution across bars |
+| **Reference** | Leg filtered by Reference Layer for trading (see Reference Layer docs) |
 
 ---
 

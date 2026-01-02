@@ -65,22 +65,15 @@ Changes take effect immediately after restart. Session settings persist across b
 
 ### Detection Config Panel
 
-The Detection Config panel in the sidebar controls the leg detection algorithm parameters. All settings persist across browser sessions and are automatically applied to the server on app startup—no need to click Apply after refresh.
+The Detection Config panel in the sidebar controls the leg detection algorithm parameters. All settings persist across browser sessions and are automatically applied to the server on app startup.
 
-#### Turn Ratio Pruning (#347)
+#### Turn Pruning
 
-Turn ratio pruning limits the number of sibling legs sharing the same pivot. Two mutually exclusive modes are available via dual sliders:
+Limits the number of sibling legs at each shared pivot:
 
-| Slider | Range | Effect |
-|--------|-------|--------|
-| **Min Ratio %** | 0-50% | Prune legs with turn ratio (counter-trend / leg range) below threshold |
-| **Max Turns** | 0-20 | Keep only top-k legs per pivot by turn ratio |
-
-**Mutual exclusion:** Setting one slider > 0 automatically zeros the other. Both at 0 = disabled.
-
-**When to use which:**
-- **Min Ratio %**: Filter out weak retracements regardless of quantity
-- **Max Turns**: Limit maximum concurrent legs per pivot, keeping strongest
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| **Max Turns** | 0-20 | Keep only top-k legs per pivot, ranked by counter-trend range. 0 = disabled. |
 
 #### Other Parameters
 
@@ -89,13 +82,7 @@ Turn ratio pruning limits the number of sibling legs sharing the same pivot. Two
 | Stale Extension | 1.0-5.0x | Extension multiple for stale pruning |
 | Origin Range % | 0-10% | Range similarity threshold for origin-proximity pruning |
 | Origin Time % | 0-10% | Time proximity threshold for origin-proximity pruning |
-| Branch Ratio | 0-20% | Min ratio of child counter-trend to parent counter-trend |
-
-#### Pruning Algorithm Toggles
-
-| Toggle | Description |
-|--------|-------------|
-| Engulfed | Delete legs breached on both origin and pivot sides |
+| Engulfed Threshold | Off, .236, .382, .5, .618, 1.0 | Combined breach ratio for engulfed deletion. 1.0 = disabled. |
 
 Click **Apply** to send changes to the backend. Changes take effect immediately on the current session.
 

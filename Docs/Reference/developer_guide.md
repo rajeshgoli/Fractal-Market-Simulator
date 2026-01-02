@@ -402,71 +402,20 @@ Configuration:
 - `DetectionConfig.origin_time_prune_threshold` (default: 0.0 = disabled)
 - `DetectionConfig.proximity_prune_strategy` (default: `'oldest'`)
 
-**Branch ratio origin domination (#337):**
+**Turn pruning (#404):**
 
-Prevents insignificant child legs at creation time by requiring the counter-trend at a new leg's origin to be at least a minimum ratio of the counter-trend at its parent's origin:
-
-```
-R0 = counter-trend at new leg's origin
-R1 = counter-trend at parent's origin
-Create leg if: R0 >= min_branch_ratio * R1
-```
-
-This scales naturally through the hierarchy:
-- Root level: Large counter-trend (e.g., 100 pts)
-- Child needs: >= 10% of 100 = 10 pts
-- Grandchild needs: >= 10% of 10 = 1 pt
-
-**Why this works:** At a strong pivot (countering a large rally/drop), child legs need significant counter-trend to be considered valid. At a weak pivot, smaller counter-trends are acceptable. This captures the fractal nature of market structure.
-
-Configuration: `DetectionConfig.min_branch_ratio` (default: 0.0 = disabled)
-
-**Turn ratio pruning (#341, #342, #344, #357):**
-
-Filters sibling legs horizontally at shared pivots based on turn ratio:
-```
-turn_ratio = counter_leg._max_counter_leg_range / counter_leg.range
-```
-
-Turn ratio measures how far a leg extended relative to the counter-trend that created its origin. Low turn ratio means the leg extended far beyond what the structure justified ("punched above its weight class").
-
-**Bootstrap tracking (#357):** `_max_counter_leg_range` can be:
-- `None` (exempt): Leg created before any opposite-direction leg existed (truly unknown counter-trend)
-- `0.0` (most prunable): Leg created after opposite direction bootstrapped, but no counter-leg at that pivot
-- `> 0.0` (normal): Actual counter-trend range captured at leg creation
-
-The distinction is tracked via `DetectorState._has_created_bull_leg` and `_has_created_bear_leg` flags. When creating a bull leg, if no bear leg with pivot at that origin exists:
-- Before any bear leg ever created → `_max_counter_leg_range = None` (exempt)
-- After bear legs exist → `_max_counter_leg_range = 0.0` (turn_ratio = 0, most prunable)
-
-Two mutually exclusive modes:
-1. **Threshold mode** (`min_turn_ratio > 0`): Prune legs with `turn_ratio < min_turn_ratio`
-2. **Top-k mode** (`min_turn_ratio == 0` and `max_turns_per_pivot > 0`): Keep only the k highest-ratio legs at each pivot
+Limits the number of sibling legs at each shared pivot. When a new leg forms at origin O, counter-legs with pivot == O are evaluated.
 
 ```
-Threshold mode:
-  If turn_ratio < min_turn_ratio → prune the leg
-
-Top-k mode:
-  Sort all counter-legs at pivot by turn_ratio (descending)
-  Keep top k, prune the rest
+max_turns = 10 (default)
+At each pivot, keep only the top k legs ranked by counter-trend range.
 ```
 
-**Largest leg exemption (#344):** The largest leg (by range) at each shared pivot is always exempt from turn-ratio pruning. Since the biggest leg has the lowest ratio (range is in the denominator), it would otherwise be pruned first — but it represents primary structure and should be preserved.
+**Counter-trend range scoring:** Each leg tracks `_max_counter_leg_range` — the largest opposite-direction leg that existed at their origin when created. Higher counter-trend range = more structurally significant origin.
 
-When a new leg forms at origin O, counter-legs with pivot == O are checked.
+**Largest leg exemption:** The largest leg (by range) at each shared pivot is always exempt from pruning. It represents primary structure.
 
-Configuration:
-- `DetectionConfig.min_turn_ratio` (default: 0.0 = disabled)
-- `DetectionConfig.max_turns_per_pivot` (default: 0 = disabled, max: 20)
-
-If both are 0, turn ratio pruning is disabled. If `min_turn_ratio > 0`, threshold mode is used (ignoring `max_turns_per_pivot`).
-
-**Frontend controls (#347):** Two mutually exclusive sliders in the Detection Config panel:
-- **Min Ratio %** (0-50%): Setting > 0 auto-zeros Max Turns
-- **Max Turns** (0-20): Setting > 0 auto-zeros Min Ratio
-
-Both at 0 = disabled. No explicit Off button needed.
+Configuration: `DetectionConfig.max_turns` (default: 10, 0 = disabled)
 
 **Why pivot grouping is required:** Legs with different pivots can validly have newer legs with larger ranges (e.g., a leg that found a better origin AND a later pivot). Cross-pivot comparisons would incorrectly flag this as invalid.
 
@@ -491,10 +440,9 @@ Breached legs (where origin has been touched) remain visible in the DAG until pr
 
 Configuration:
 - `DetectionConfig.stale_extension_threshold`: Multiplier for extension prune (default: 3.0)
-- `DetectionConfig.emit_level_crosses`: Enable/disable LevelCrossEvent emission (default: False for performance)
-- `DetectionConfig.enable_engulfed_prune`: Toggle engulfed pruning algorithm
+- `DetectionConfig.engulfed_breach_threshold`: Breach ratio for engulfed deletion (default: 0.236, 1.0 = disabled)
 
-**Note (#345):** The `invalidation_threshold` config has been removed. Origin breach is now detected at 0% (any touch). Use `max_origin_breach is not None` to check if a leg's origin has been breached.
+**Note (#345):** Origin breach is detected at 0% (any touch). Use `max_origin_breach is not None` to check if a leg's origin has been breached.
 
 **Benefits:**
 - Multi-origin preservation: Keeps the best leg from each structural level

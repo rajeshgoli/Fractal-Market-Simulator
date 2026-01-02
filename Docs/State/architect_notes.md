@@ -36,6 +36,7 @@ Read in order:
 
 **Known debt:**
 - Scaling test `test_scaling_is_not_quadratic` marginally fails (64 vs 60 threshold) — flaky boundary, low priority
+- DAGView/LevelsAtPlayView duplication (~350 lines) — Intentionally kept separate; views differ in complexity (#413 closed)
 
 **Completed architectural cleanup (#394, #396, #398, #403, #404, #408, #410, #412):**
 - ✅ SwingNode, `swing_id`, `formed` removed from DAG; old Reference Layer API removed (#394)
@@ -316,9 +317,10 @@ All 3 pending changes accepted. Summary:
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| `developer_guide.md` | Current | Bin-based classification, ReferenceConfig, API documented |
-| `user_guide.md` | Current | Levels at Play, Config Panel, median multiples documented |
-| `DAG.md` | Current | Updated Dec 31 |
+| `developer_guide.md` | Current | Updated Jan 2 — #404 simplified config |
+| `user_guide.md` | Current | Updated Jan 2 — simplified Detection Config |
+| `DAG.md` | Current | Updated Jan 2 — DAG-focused, Reference Layer concepts removed |
+| `README.md` | Current | Updated Jan 2 — phase reflects completion |
 | `CLAUDE.md` | Current | No changes needed |
 
 ---
@@ -388,6 +390,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 2 | #413 — DAGView/LevelsAtPlayView duplication audit: ~350 lines duplicated but intentionally separate | Closed (kept separate) |
 | Jan 2 | #445 — Bottom panel consolidation: LEVELS AT PLAY (column-major, paginated), FILTERS to sidebar, hover highlight | Accepted |
 | Jan 2 | #442 — Unified salience formula: 6 additive weights, normalized via median×25, standalone mode removed | Accepted |
 | Jan 2 | #432, #433 — Label density limiting, auto-select top leg (2 enhancements) | All Accepted |
