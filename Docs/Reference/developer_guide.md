@@ -808,6 +808,45 @@ When adding a state layer that's consumed during playback:
 
 **Anti-pattern:** Calling a state endpoint (e.g., `/api/reference/state`) during render and getting current accumulated state rather than historical state. This causes temporal inconsistency where rendered data shows future state.
 
+### Formation Bar Tracking (#451)
+
+Reference Layer tracks when each leg formed (not just that it formed):
+
+```python
+# _formed_refs stores (pivot_price, formation_bar_index)
+self._formed_refs: Dict[str, Tuple[Decimal, int]] = {}
+
+# Query formation state at a specific bar
+def is_formed_at_bar(self, leg_id: str, bar_index: int) -> bool:
+    if leg_id not in self._formed_refs:
+        return False
+    _, formation_bar = self._formed_refs[leg_id]
+    return bar_index >= formation_bar
+```
+
+This enables correct per-bar formation state during buffered playback, where the server may be at bar 600 but frontend is rendering bar 515.
+
+### View Position Synchronization (#451)
+
+When switching between views (DAG View ↔ Levels at Play), the render position is preserved via `playbackPosition` in session settings:
+
+```typescript
+// useSessionSettings.ts
+interface SessionSettings {
+  dataFile: string | null;
+  startDate: string | null;
+  playbackPosition: number | null;  // Frontend render position
+}
+
+// Each view saves position during playback
+updateSessionSettings({ playbackPosition: renderPosition });
+
+// On mount, use saved position instead of server position
+const targetPosition = sessionSettings.playbackPosition ?? session.current_bar_index;
+```
+
+This prevents jarring jumps where switching views would snap to the server's buffered position rather than the user's viewing position.
+
 ---
 
 ## Frontend (Replay View)
