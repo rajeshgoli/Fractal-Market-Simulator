@@ -301,7 +301,7 @@ async def get_reference_levels(bar_index: Optional[int] = Query(None)):
     # Get active levels
     levels_dict = ref_layer.get_active_levels(ref_state)
 
-    # Convert to response format (#436: use bin instead of scale)
+    # Convert to response format (#436: use bin instead of scale, add median_multiple)
     levels_by_ratio: Dict[str, List[FibLevelResponse]] = {}
     for ratio, level_infos in levels_dict.items():
         ratio_key = str(ratio)
@@ -311,6 +311,7 @@ async def get_reference_levels(bar_index: Optional[int] = Query(None)):
                 ratio=info.ratio,
                 leg_id=info.reference.leg.leg_id,
                 bin=info.reference.bin,
+                median_multiple=ref_layer._bin_distribution.get_median_multiple(float(info.reference.leg.range)),
                 direction=info.reference.leg.direction,
             )
             for info in level_infos
@@ -475,7 +476,7 @@ async def get_confluence_zones(
     zones = ref_layer.get_confluence_zones(ref_state, tolerance_pct=tolerance_pct)
     actual_tolerance = tolerance_pct if tolerance_pct is not None else ref_layer.reference_config.confluence_tolerance_pct
 
-    # Convert to response format (#436: use bin instead of scale)
+    # Convert to response format (#436: use bin instead of scale, add median_multiple)
     zone_responses = []
     for zone in zones:
         levels = [
@@ -484,6 +485,7 @@ async def get_confluence_zones(
                 ratio=lvl.ratio,
                 leg_id=lvl.reference.leg.leg_id,
                 bin=lvl.reference.bin,
+                median_multiple=ref_layer._bin_distribution.get_median_multiple(float(lvl.reference.leg.range)),
                 direction=lvl.reference.leg.direction,
             )
             for lvl in zone.levels
@@ -559,13 +561,14 @@ async def get_structure_panel(bar_index: Optional[int] = Query(None)):
     # Get structure panel data
     panel_data = ref_layer.get_structure_panel_data(ref_state, bar)
 
-    # Convert to response format (#436: use bin instead of scale)
+    # Convert to response format (#436: use bin instead of scale, add median_multiple)
     def touch_to_response(touch) -> LevelTouchResponse:
         return LevelTouchResponse(
             price=touch.level.price,
             ratio=touch.level.ratio,
             leg_id=touch.level.reference.leg.leg_id,
             bin=touch.level.reference.bin,
+            median_multiple=ref_layer._bin_distribution.get_median_multiple(float(touch.level.reference.leg.range)),
             direction=touch.level.reference.leg.direction,
             bar_index=touch.bar_index,
             touch_price=touch.touch_price,
@@ -578,6 +581,7 @@ async def get_structure_panel(bar_index: Optional[int] = Query(None)):
             ratio=level.ratio,
             leg_id=level.reference.leg.leg_id,
             bin=level.reference.bin,
+            median_multiple=ref_layer._bin_distribution.get_median_multiple(float(level.reference.leg.range)),
             direction=level.reference.leg.direction,
         )
 

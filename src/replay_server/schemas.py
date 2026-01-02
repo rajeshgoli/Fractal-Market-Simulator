@@ -619,6 +619,7 @@ class FibLevelResponse(BaseModel):
     ratio: float
     leg_id: str
     bin: int  # 0-10 median-normalized bin index (#436)
+    median_multiple: float = 1.0  # Ratio to running median (#436)
     direction: str  # "bull" or "bear"
 
 
@@ -665,6 +666,7 @@ class ConfluenceZoneLevelResponse(BaseModel):
     ratio: float
     leg_id: str
     bin: int  # 0-10 median-normalized bin index (#436)
+    median_multiple: float = 1.0  # Ratio to running median (#436)
     direction: str
 
 
@@ -695,6 +697,7 @@ class LevelTouchResponse(BaseModel):
     ratio: float
     leg_id: str
     bin: int  # 0-10 median-normalized bin index (#436)
+    median_multiple: float = 1.0  # Ratio to running median (#436)
     direction: str
     bar_index: int
     touch_price: float
