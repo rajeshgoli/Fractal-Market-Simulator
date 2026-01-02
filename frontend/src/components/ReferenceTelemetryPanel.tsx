@@ -1,6 +1,6 @@
 import React from 'react';
 import { ReferenceStateResponseExtended, LevelCrossEvent, LifecycleEvent } from '../lib/api';
-import { TrendingUp, TrendingDown, Layers, Activity, Filter, Eye, EyeOff, Crosshair, AlertCircle, X, Zap } from 'lucide-react';
+import { TrendingUp, Layers, Filter, Eye, EyeOff, Crosshair, AlertCircle, X, Zap } from 'lucide-react';
 import { getBinBadgeColor, formatMedianMultiple } from '../utils/binUtils';
 
 interface ReferenceTelemetryPanelProps {
@@ -12,6 +12,7 @@ interface ReferenceTelemetryPanelProps {
   trackError: string | null;
   onClearTrackError: () => void;
   trackedCount: number;
+  onEventHover?: (legId: string | null) => void;  // Hover callback to highlight leg on chart
 }
 
 // Filter reason display names and colors
@@ -42,6 +43,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
   trackError,
   onClearTrackError,
   trackedCount,
+  onEventHover,
 }) => {
   if (!referenceState) {
     return (
@@ -76,7 +78,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
     );
   }
 
-  const { by_bin, by_direction, direction_imbalance, references, filter_stats } = referenceState;
+  const { by_bin, by_direction, references, filter_stats } = referenceState;
 
   // Find biggest, most salient, and most impulsive
   const biggestRef = references.length > 0
@@ -95,9 +97,6 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
 
   const bullCount = by_direction.bull?.length || 0;
   const bearCount = by_direction.bear?.length || 0;
-  const imbalanceRatio = bullCount > 0 && bearCount > 0
-    ? Math.max(bullCount / bearCount, bearCount / bullCount).toFixed(1)
-    : null;
 
   return (
     <div className="h-full bg-app-secondary p-4 overflow-y-auto border-t border-app-border">
@@ -117,80 +116,51 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
         </div>
       )}
 
-      <div className="grid grid-cols-6 gap-4">
-        {/* References by Bin */}
+      <div className="grid grid-cols-5 gap-4">
+        {/* References - Merged with Direction (Issue #431) */}
         <div className="bg-app-card rounded-lg p-3 border border-app-border">
           <div className="flex items-center gap-2 mb-3">
             <Layers size={14} className="text-trading-blue" />
             <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">References</h3>
           </div>
           <div className="space-y-1.5">
-            {/* Group bins: 0-7 (Small), 8 (Sig), 9 (Large), 10 (XL) */}
+            {/* Sig (bin >= 8) vs Other (bin < 8) - per Issue #431/#436 */}
             {(() => {
-              const smallCount = Object.entries(by_bin)
-                .filter(([bin]) => parseInt(bin) <= 7)
+              const sigCount = Object.entries(by_bin)
+                .filter(([bin]) => parseInt(bin) >= 8)
                 .reduce((sum, [, refs]) => sum + refs.length, 0);
-              const sigCount = by_bin[8]?.length || 0;
-              const largeCount = by_bin[9]?.length || 0;
-              const xlCount = by_bin[10]?.length || 0;
+              const otherCount = Object.entries(by_bin)
+                .filter(([bin]) => parseInt(bin) < 8)
+                .reduce((sum, [, refs]) => sum + refs.length, 0);
 
-              const binCategories = [
-                { label: '25x+', count: xlCount, bin: 10 },
-                { label: '10-25x', count: largeCount, bin: 9 },
-                { label: '5-10x', count: sigCount, bin: 8 },
-                { label: '<5x', count: smallCount, bin: 7 },
-              ];
-
-              return binCategories.map(({ label, count, bin }) => {
-                const binColor = getBinBadgeColor(bin);
-                return (
-                  <div key={label} className="flex justify-between items-center">
-                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${binColor.bg} ${binColor.text}`}>{label}</span>
-                    <span className="text-sm font-mono text-app-text">{count}</span>
+              return (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-app-muted">Sig</span>
+                    <span className="text-sm font-mono text-app-text">{sigCount}</span>
                   </div>
-                );
-              });
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-app-muted">Other</span>
+                    <span className="text-sm font-mono text-app-text">{otherCount}</span>
+                  </div>
+                </>
+              );
             })()}
+            {/* Direction counts inline */}
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-trading-bull">&#9650;</span>
+                <span className="text-sm font-mono text-trading-bull">{bullCount}</span>
+                <span className="text-trading-bear">&#9660;</span>
+                <span className="text-sm font-mono text-trading-bear">{bearCount}</span>
+              </div>
+            </div>
             <div className="border-t border-app-border pt-1.5 mt-1.5">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-app-muted">Total</span>
                 <span className="text-sm font-mono font-semibold text-app-text">{references.length}</span>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Direction */}
-        <div className="bg-app-card rounded-lg p-3 border border-app-border">
-          <div className="flex items-center gap-2 mb-3">
-            <Activity size={14} className="text-trading-blue" />
-            <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">Direction</h3>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <TrendingUp size={14} className="text-trading-bull" />
-                <span className="text-xs text-app-muted">Bull</span>
-              </div>
-              <span className="text-sm font-mono text-trading-bull">{bullCount}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <TrendingDown size={14} className="text-trading-bear" />
-                <span className="text-xs text-app-muted">Bear</span>
-              </div>
-              <span className="text-sm font-mono text-trading-bear">{bearCount}</span>
-            </div>
-            {direction_imbalance && (
-              <div className={`mt-2 px-2 py-1 rounded text-xs font-medium text-center ${
-                direction_imbalance === 'bull'
-                  ? 'bg-trading-bull/20 text-trading-bull'
-                  : 'bg-trading-bear/20 text-trading-bear'
-              }`}>
-                {direction_imbalance === 'bull' ? 'Bull' : 'Bear'}-heavy
-                {imbalanceRatio && ` (${imbalanceRatio}:1)`}
-              </div>
-            )}
           </div>
         </div>
 
@@ -209,7 +179,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
                     {formatMedianMultiple(biggestRef.median_multiple)}
                   </span>
                   <span className={biggestRef.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
-                    {biggestRef.direction === 'bull' ? '▲' : '▼'}
+                    {biggestRef.direction === 'bull' ? '\u25B2' : '\u25BC'}
                   </span>
                   <span className="font-mono text-app-text">
                     {Math.abs((biggestRef.origin_price ?? 0) - (biggestRef.pivot_price ?? 0)).toFixed(2)}
@@ -225,7 +195,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
                     {formatMedianMultiple(mostImpulsive.median_multiple)}
                   </span>
                   <span className={mostImpulsive.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
-                    {mostImpulsive.direction === 'bull' ? '▲' : '▼'}
+                    {mostImpulsive.direction === 'bull' ? '\u25B2' : '\u25BC'}
                   </span>
                   <span className="font-mono text-app-text">
                     {mostImpulsive.impulsiveness?.toFixed(0)}%
@@ -298,55 +268,85 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
           )}
         </div>
 
-        {/* Recent Events (Issue #420) */}
+        {/* Recent Events (Issue #420, #431 multi-column redesign) */}
         <div className="bg-app-card rounded-lg p-3 border border-app-border">
           <div className="flex items-center gap-2 mb-3">
             <Zap size={14} className="text-yellow-400" />
             <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">Events</h3>
           </div>
-          <div className="space-y-1.5">
-            {lifecycleEvents.length > 0 ? (
-              lifecycleEvents.slice(-5).reverse().map((event, idx) => {
-                const eventInfo = EVENT_TYPE_LABELS[event.event_type] || { label: event.event_type, color: 'text-app-muted', icon: 'invalidated' };
-                return (
-                  <div key={`lifecycle-${event.leg_id}-${event.bar_index}-${idx}`} className="text-[10px] flex items-center gap-1.5">
-                    <span className={event.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
-                      {event.direction === 'bull' ? '▲' : '▼'}
-                    </span>
-                    <span className={eventInfo.color}>
-                      {eventInfo.label}
-                    </span>
-                    <span className="text-app-muted">
-                      @ bar {event.bar_index}
-                    </span>
-                  </div>
-                );
-              })
-            ) : crossingEvents.length > 0 ? (
-              crossingEvents.slice(-4).map((event, idx) => (
-                <div key={`crossing-${event.leg_id}-${event.bar_index}-${idx}`} className="text-[10px] flex items-center gap-1.5">
-                  <span className={event.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
-                    {event.direction === 'bull' ? '▲' : '▼'}
-                  </span>
-                  <span className="text-app-muted">Crossed</span>
-                  <span className="font-mono text-app-text">
-                    {(event.level_crossed ?? 0).toFixed(3)}
-                  </span>
-                  <span className={`px-1 py-0.5 rounded ${
-                    event.cross_direction === 'up'
-                      ? 'bg-trading-bull/20 text-trading-bull'
-                      : 'bg-trading-bear/20 text-trading-bear'
-                  }`}>
-                    {event.cross_direction === 'up' ? '↑' : '↓'}
-                  </span>
+          {/* Multi-column layout: 1-4 columns based on event count */}
+          {(() => {
+            // Combine lifecycle and crossing events, prioritizing lifecycle
+            const allEvents: Array<{ type: 'lifecycle' | 'crossing'; event: LifecycleEvent | LevelCrossEvent }> = [
+              ...lifecycleEvents.map(e => ({ type: 'lifecycle' as const, event: e })),
+              ...crossingEvents.map(e => ({ type: 'crossing' as const, event: e })),
+            ];
+            // Take last 16 events, reversed for most recent first
+            const recentEvents = allEvents.slice(-16).reverse();
+
+            // Determine column count based on event count
+            const columnClass = recentEvents.length <= 4
+              ? 'columns-1'
+              : recentEvents.length <= 8
+                ? 'columns-2'
+                : recentEvents.length <= 12
+                  ? 'columns-3'
+                  : 'columns-4';
+
+            if (recentEvents.length === 0) {
+              return (
+                <div className="text-xs text-app-muted text-center py-2">
+                  No events yet
                 </div>
-              ))
-            ) : (
-              <div className="text-xs text-app-muted text-center py-2">
-                No events yet
+              );
+            }
+
+            return (
+              <div className={`${columnClass} gap-x-3`}>
+                {recentEvents.map((item, idx) => {
+                  if (item.type === 'lifecycle') {
+                    const event = item.event as LifecycleEvent;
+                    const eventInfo = EVENT_TYPE_LABELS[event.event_type] || { label: event.event_type, color: 'text-app-muted', icon: 'invalidated' };
+                    return (
+                      <div
+                        key={`lifecycle-${event.leg_id}-${event.bar_index}-${idx}`}
+                        className="text-[10px] flex items-center gap-1 py-0.5 cursor-pointer hover:bg-app-border/30 rounded px-1 transition-colors break-inside-avoid"
+                        onMouseEnter={() => onEventHover?.(event.leg_id)}
+                        onMouseLeave={() => onEventHover?.(null)}
+                      >
+                        <span className={event.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
+                          {event.direction === 'bull' ? '\u25B2' : '\u25BC'}
+                        </span>
+                        <span className={`${eventInfo.color} truncate`}>
+                          {eventInfo.label}
+                        </span>
+                      </div>
+                    );
+                  } else {
+                    const event = item.event as LevelCrossEvent;
+                    return (
+                      <div
+                        key={`crossing-${event.leg_id}-${event.bar_index}-${idx}`}
+                        className="text-[10px] flex items-center gap-1 py-0.5 cursor-pointer hover:bg-app-border/30 rounded px-1 transition-colors break-inside-avoid"
+                        onMouseEnter={() => onEventHover?.(event.leg_id)}
+                        onMouseLeave={() => onEventHover?.(null)}
+                      >
+                        <span className={event.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
+                          {event.direction === 'bull' ? '\u25B2' : '\u25BC'}
+                        </span>
+                        <span className="text-app-muted truncate">
+                          Crossed {(event.level_crossed ?? 0).toFixed(3)}
+                        </span>
+                        <span className={event.cross_direction === 'up' ? 'text-trading-bull' : 'text-trading-bear'}>
+                          {event.cross_direction === 'up' ? '\u2191' : '\u2193'}
+                        </span>
+                      </div>
+                    );
+                  }
+                })}
               </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
 
         {/* Level Crossings (Issue #416) */}
@@ -365,7 +365,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
               crossingEvents.slice(-4).map((event, idx) => (
                 <div key={`${event.leg_id}-${event.bar_index}-${idx}`} className="text-[10px] flex items-center gap-1.5">
                   <span className={event.direction === 'bull' ? 'text-trading-bull' : 'text-trading-bear'}>
-                    {event.direction === 'bull' ? '▲' : '▼'}
+                    {event.direction === 'bull' ? '\u25B2' : '\u25BC'}
                   </span>
                   <span className="font-mono text-app-text">
                     {(event.level_crossed ?? 0).toFixed(3)}
@@ -375,7 +375,7 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
                       ? 'bg-trading-bull/20 text-trading-bull'
                       : 'bg-trading-bear/20 text-trading-bear'
                   }`}>
-                    {event.cross_direction === 'up' ? '↑' : '↓'}
+                    {event.cross_direction === 'up' ? '\u2191' : '\u2193'}
                   </span>
                 </div>
               ))
