@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2026-01-02
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-- **#445** — Reference Layer bottom panel consolidation: LEVELS AT PLAY moved to bottom panel (multi-column), FILTERS moved to sidebar (toggle style), removed redundant REFERENCES/TOP REFERENCES/CROSSINGS panels
+(none)
 
 ---
 
@@ -16,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 2 | #445 — Bottom panel consolidation: LEVELS AT PLAY (column-major, paginated), FILTERS to sidebar, hover highlight, removed redundant panels | Accepted |
 | Jan 2 | #444 — Reference Config Panel redesign: 4-section layout, color fill sliders, discrete Fib threshold, continuous breach tolerance (0-0.30), updated defaults | Accepted |
 | Jan 2 | #442 — Unified salience formula: 6 additive weights, normalized via median×25, no standalone mode | Accepted |
 | Jan 2 | #433 — Auto-select top-ranked leg on load, re-auto-select on config change, single selection model | Accepted |

@@ -388,6 +388,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 2 | #445 — Bottom panel consolidation: LEVELS AT PLAY (column-major, paginated), FILTERS to sidebar, hover highlight | Accepted |
 | Jan 2 | #442 — Unified salience formula: 6 additive weights, normalized via median×25, standalone mode removed | Accepted |
 | Jan 2 | #432, #433 — Label density limiting, auto-select top leg (2 enhancements) | All Accepted |
 | Jan 2 | #430, #431, #432, #440 — Top N sidebar, bottom panel merge, label midpoint, rolling eviction (4 issues) | All Accepted |
