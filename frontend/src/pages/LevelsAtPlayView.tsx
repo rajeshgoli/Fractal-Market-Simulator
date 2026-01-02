@@ -181,6 +181,13 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     );
   }, [referenceState?.by_bin]);
 
+  // Compute top N references for sidebar (Issue #430)
+  const topNReferences = useMemo(() => {
+    const allRefs = referenceState?.references ?? [];
+    const topN = referenceConfig.top_n ?? 5;
+    return allRefs.slice(0, topN);
+  }, [referenceState?.references, referenceConfig.top_n]);
+
   // Chart refs
   const chart1Ref = useRef<IChartApi | null>(null);
   const chart2Ref = useRef<IChartApi | null>(null);
@@ -748,7 +755,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             referenceConfig={referenceConfig}
             onReferenceConfigUpdate={handleReferenceConfigUpdate}
             // Levels at Play Panel (Issue #430)
-            references={referenceState?.references ?? []}
+            references={topNReferences}
             totalReferenceCount={totalReferenceCount}
             selectedLegId={selectedLegId}
             hoveredLegId={effectiveSidebarHoveredLegId}
