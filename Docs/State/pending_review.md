@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 8
 
 **Last Review:** 2026-01-02
 
@@ -15,6 +15,7 @@
 - **#467** — Prevent completed references from re-forming (add RefMetadata with max_location to Leg, derive completion status at runtime)
 - **#469** — Keep buffered state on pause in Levels view (skip API fetch when buffer exists, trigger resync on view switch)
 - **#470** — Persist reference config across reloads (push saved localStorage config to server on mount, mirroring DAGView behavior)
+- **#471** — Add missing fromIndex parameter to handleProcessTill advanceReplay calls (fixes timestamp disappearing after large advances)
 
 ---
 

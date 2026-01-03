@@ -487,7 +487,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         currentPlaybackPosition,
         barCount,
         [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation],
-        false
+        false,
+        false,  // includePerBarDagStates
+        currentPlaybackPosition  // fromIndex for BE resync (#471)
       );
 
       if (response.new_bars && response.new_bars.length > 0) {
