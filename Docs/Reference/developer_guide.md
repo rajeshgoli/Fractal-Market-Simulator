@@ -1148,6 +1148,13 @@ The `detection_config` field captures the full detection configuration at observ
 - Observations persist to `ground_truth/playback_feedback.json`
 - Screenshots saved to `ground_truth/screenshots/`
 
+**Multi-tenant storage** (`src/replay_server/db.py`):
+- SQLite database with WAL mode for read concurrency
+- Production path: `/data/fractal.db` (Fly.io volume)
+- Local dev fallback: `local_data/fractal.db`
+- Schema: `users` (id, email, created_at), `observations` (user_id, bar_index, event_context, text, screenshot, created_at)
+- Initialized on app startup via lifespan handler
+
 ### Debug logging
 ```python
 import logging
