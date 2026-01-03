@@ -66,7 +66,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [sourceBars, setSourceBars] = useState<BarData[]>([]);
   const [chart1Bars, setChart1Bars] = useState<BarData[]>([]);
   const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
   const [sourceResolutionMinutes, setSourceResolutionMinutes] = useState(1);
@@ -243,8 +242,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
   // Handler for playback reset (jumpToStart)
   const handleReset = useCallback(() => {
-    // Clear source bars
-    setSourceBars([]);
     // Clear aggregated chart bars (will be repopulated on advance)
     setChart1Bars([]);
     setChart2Bars([]);
@@ -261,7 +258,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     includeDagState: false,
     includePerBarRefStates: true,  // #456: Enable buffered ref states
     onNewBars: useCallback((newBars: BarData[]) => {
-      setSourceBars(prev => [...prev, ...newBars]);
       if (newBars.length > 0) {
         const lastBar = newBars[newBars.length - 1];
         syncChartsToPositionRef.current(lastBar.index);
@@ -365,7 +361,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     aggBar: BarData,
     currentPosition: number
   ): BarData | null => {
-    const relevantSourceBars = sourceBars.filter(
+    const relevantSourceBars = forwardPlayback.visibleBars.filter(
       sb => sb.index >= aggBar.source_start_index && sb.index <= currentPosition
     );
     if (relevantSourceBars.length === 0) return null;
@@ -381,7 +377,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       close: lastBar.close,
       source_end_index: currentPosition,
     };
-  }, [sourceBars]);
+  }, [forwardPlayback.visibleBars]);
 
   // Filter chart bars to only show candles up to current playback position
   // Always filter based on position - don't show all bars before playback starts (#412)
@@ -462,11 +458,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
       if (response.new_bars && response.new_bars.length > 0) {
         const newBars = formatReplayBarsData(response.new_bars);
-        setSourceBars(prev => [...prev, ...newBars]);
-        const allVisibleBars = [...forwardPlayback.visibleBars, ...newBars];
         forwardPlayback.syncToPosition(
           response.current_bar_index,
-          allVisibleBars,
+          [...forwardPlayback.visibleBars, ...newBars],
           response.csv_index,
           response.events
         );
@@ -714,12 +708,12 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             ? sessionSettings.playbackPosition
             : session.current_bar_index!;
 
-          // Sync forward playback with saved position, not server position
-          forwardPlayback.syncToPosition(targetPosition, [], 0, []);
+          // Sync forward playback with saved position and bars up to that position
+          // This populates visibleBars so timestamp lookups work after view switch (#463)
+          const barsUpToPosition = source.slice(0, targetPosition + 1);
+          forwardPlayback.syncToPosition(targetPosition, barsUpToPosition, 0, []);
         }
         // No else needed - backend will auto-init on first /dag/state call (#412)
-
-        setSourceBars(source);
 
         const [bars1, bars2] = await Promise.all([
           fetchBars(validChart1),
@@ -754,8 +748,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   }, [chartPrefs.explanationPanelHeight, chartPrefs.setExplanationPanelHeight]);
 
   // Get current timestamp for header
-  const currentTimestamp = sourceBars[currentPlaybackPosition]?.timestamp
-    ? new Date(sourceBars[currentPlaybackPosition].timestamp * 1000).toISOString()
+  const currentTimestamp = forwardPlayback.visibleBars[currentPlaybackPosition]?.timestamp
+    ? new Date(forwardPlayback.visibleBars[currentPlaybackPosition].timestamp * 1000).toISOString()
     : undefined;
 
   if (isLoading) {
@@ -944,10 +938,10 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               onDismissLinger={() => {}}
               lingerEnabled={false}
               lingerDisabled={true}
-              currentTimestamp={sourceBars[currentPlaybackPosition]?.timestamp}
+              currentTimestamp={forwardPlayback.visibleBars[currentPlaybackPosition]?.timestamp}
               maxTimestamp={
-                sourceBars[currentPlaybackPosition]?.timestamp && sessionInfo?.totalSourceBars
-                  ? sourceBars[currentPlaybackPosition].timestamp +
+                forwardPlayback.visibleBars[currentPlaybackPosition]?.timestamp && sessionInfo?.totalSourceBars
+                  ? forwardPlayback.visibleBars[currentPlaybackPosition].timestamp +
                     ((sessionInfo.totalSourceBars - currentPlaybackPosition - 1) * sourceResolutionMinutes * 60)
                   : undefined
               }

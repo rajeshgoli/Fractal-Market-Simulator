@@ -79,8 +79,6 @@ interface UseDAGViewStateReturn {
   setIsSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>;
 
   // Bar data
-  sourceBars: BarData[];
-  setSourceBars: React.Dispatch<React.SetStateAction<BarData[]>>;
   chart1Bars: BarData[];
   setChart1Bars: React.Dispatch<React.SetStateAction<BarData[]>>;
   chart2Bars: BarData[];
@@ -168,7 +166,6 @@ export function useDAGViewState({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Bar data
-  const [sourceBars, setSourceBars] = useState<BarData[]>([]);
   const [chart1Bars, setChart1Bars] = useState<BarData[]>([]);
   const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
 
@@ -356,8 +353,6 @@ export function useDAGViewState({
     setIsSettingsOpen,
 
     // Bar data
-    sourceBars,
-    setSourceBars,
     chart1Bars,
     setChart1Bars,
     chart2Bars,

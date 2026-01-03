@@ -124,14 +124,12 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
 
   // Handler for playback reset (jumpToStart)
   const handleReset = useCallback(() => {
-    // Clear source bars
-    state.setSourceBars([]);
     // Clear aggregated chart bars (will be repopulated on advance)
     state.setChart1Bars([]);
     state.setChart2Bars([]);
     // Clear DAG state
     state.setDagState(null);
-  }, [state.setSourceBars, state.setChart1Bars, state.setChart2Bars, state.setDagState]);
+  }, [state.setChart1Bars, state.setChart2Bars, state.setDagState]);
 
   // Forward playback hook
   const forwardPlayback = useForwardPlayback({
@@ -142,12 +140,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     chartAggregationScales: [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation],
     includeDagState: true,
     onNewBars: useCallback((newBars: BarData[]) => {
-      state.setSourceBars(prev => [...prev, ...newBars]);
       if (newBars.length > 0) {
         const lastBar = newBars[newBars.length - 1];
         state.syncChartsToPositionRef.current(lastBar.index);
       }
-    }, [state.setSourceBars]),
+    }, []),
     onAggregatedBarsChange: handleAggregatedBarsChange,
     onDagStateChange: handleDagStateChange,
     onReset: handleReset,
@@ -185,7 +182,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     aggBar: BarData,
     currentPosition: number
   ): BarData | null => {
-    const relevantSourceBars = state.sourceBars.filter(
+    const relevantSourceBars = forwardPlayback.visibleBars.filter(
       sb => sb.index >= aggBar.source_start_index && sb.index <= currentPosition
     );
     if (relevantSourceBars.length === 0) return null;
@@ -201,7 +198,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
       close: lastBar.close,
       source_end_index: currentPosition,
     };
-  }, [state.sourceBars]);
+  }, [forwardPlayback.visibleBars]);
 
   // Filter chart bars to only show candles up to current playback position
   // Always filter based on position - don't show all bars before playback starts (#412)
@@ -382,11 +379,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
 
       if (response.new_bars && response.new_bars.length > 0) {
         const newBars = formatReplayBarsData(response.new_bars);
-        state.setSourceBars(prev => [...prev, ...newBars]);
-        const allVisibleBars = [...forwardPlayback.visibleBars, ...newBars];
         forwardPlayback.syncToPosition(
           response.current_bar_index,
-          allVisibleBars,
+          [...forwardPlayback.visibleBars, ...newBars],
           response.csv_index,
           response.events
         );
@@ -416,7 +411,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     chartPrefs.chart2Aggregation,
     handleAggregatedBarsChange,
     handleDagStateChange,
-    state.setSourceBars,
     state.setIsPlaying,
     state.setIsProcessingTill,
   ]);
@@ -724,12 +718,12 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
             };
           });
 
-          // Sync forward playback with saved position, not server position
-          forwardPlayback.syncToPosition(targetPosition, [], 0, restoredEvents);
+          // Sync forward playback with saved position and bars up to that position
+          // This populates visibleBars so timestamp lookups work after view switch (#463)
+          const barsUpToPosition = source.slice(0, targetPosition + 1);
+          forwardPlayback.syncToPosition(targetPosition, barsUpToPosition, 0, restoredEvents);
         }
         // No else needed - backend will auto-init on first /dag/state call (#412)
-
-        state.setSourceBars(source);
 
         const [bars1, bars2] = await Promise.all([
           fetchBars(validChart1),
@@ -783,7 +777,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
   // Compute feedback context for DAG mode (#412: simplified from CalibrationData)
   const feedbackContext = useMemo(() => {
     // Only show feedback when we have data loaded
-    const hasData = forwardPlayback.currentPosition >= 0 || state.sourceBars.length > 0;
+    const hasData = forwardPlayback.currentPosition >= 0 || forwardPlayback.visibleBars.length > 0;
     if (!hasData) {
       return null;
     }
@@ -806,7 +800,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     };
   }, [
     state.isPlaying,
-    state.sourceBars.length,
+    forwardPlayback.visibleBars.length,
     forwardPlayback.playbackState,
     forwardPlayback.allEvents,
     forwardPlayback.csvIndex,
@@ -815,8 +809,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
   ]);
 
   // Get current timestamp for header
-  const currentTimestamp = state.sourceBars[currentPlaybackPosition]?.timestamp
-    ? new Date(state.sourceBars[currentPlaybackPosition].timestamp * 1000).toISOString()
+  const currentTimestamp = forwardPlayback.visibleBars[currentPlaybackPosition]?.timestamp
+    ? new Date(forwardPlayback.visibleBars[currentPlaybackPosition].timestamp * 1000).toISOString()
     : undefined;
 
   if (state.isLoading) {
@@ -866,7 +860,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
             onToggleLingerEvent={handleToggleLingerEvent}
             onResetDefaults={handleResetDefaults}
             className="w-64"
-            showFeedback={forwardPlayback.currentPosition >= 0 || state.sourceBars.length > 0}
+            showFeedback={forwardPlayback.currentPosition >= 0 || forwardPlayback.visibleBars.length > 0}
             isLingering={forwardPlayback.isLingering}
             lingerEvent={forwardPlayback.lingerEvent}
             currentPlaybackBar={currentPlaybackPosition}
@@ -883,7 +877,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
             detectionConfig={state.detectionConfig}
             initialDetectionConfig={chartPrefs.detectionConfig ?? undefined}
             onDetectionConfigUpdate={state.setDetectionConfig}
-            isCalibrated={forwardPlayback.currentPosition >= 0 || state.sourceBars.length > 0}
+            isCalibrated={forwardPlayback.currentPosition >= 0 || forwardPlayback.visibleBars.length > 0}
             legEvents={allLegEvents}
             activeLegs={state.dagState?.active_legs}
             onHoverLeg={state.setHighlightedDagItem}
@@ -1058,10 +1052,10 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
               onDismissLinger={forwardPlayback.dismissLinger}
               lingerEnabled={state.lingerEnabled}
               onToggleLinger={() => state.setLingerEnabled(prev => !prev)}
-              currentTimestamp={state.sourceBars[currentPlaybackPosition]?.timestamp}
+              currentTimestamp={forwardPlayback.visibleBars[currentPlaybackPosition]?.timestamp}
               maxTimestamp={
-                state.sourceBars[currentPlaybackPosition]?.timestamp && state.sessionInfo?.totalSourceBars
-                  ? state.sourceBars[currentPlaybackPosition].timestamp +
+                forwardPlayback.visibleBars[currentPlaybackPosition]?.timestamp && state.sessionInfo?.totalSourceBars
+                  ? forwardPlayback.visibleBars[currentPlaybackPosition].timestamp +
                     ((state.sessionInfo.totalSourceBars - currentPlaybackPosition - 1) * state.sourceResolutionMinutes * 60)
                   : undefined
               }
