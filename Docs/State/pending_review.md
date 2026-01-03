@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2026-01-02
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - **#462** — Remove 'Calibration' and 'Swing' naming from schemas (delete dead code, rename SwingsByDepth→LegsByDepth, CalibrationResponseHierarchical→DagInitResponse, remove calibrationPhase from frontend)
+- **#463** — Remove sourceBars/visibleBars duplication (use forwardPlayback.visibleBars as single source of truth)
 
 ---
 
