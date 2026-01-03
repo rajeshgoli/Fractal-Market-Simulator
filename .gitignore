@@ -105,3 +105,6 @@ ground_truth/screenshots/
 frontend/dist/
 tmp/
 cache/
+
+# Local development database (SQLite for dev mode)
+local_data/

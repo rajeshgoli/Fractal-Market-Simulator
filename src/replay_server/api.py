@@ -9,6 +9,7 @@ Minimal server for:
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -21,6 +22,16 @@ from fastapi.staticfiles import StaticFiles
 
 from .storage import PlaybackFeedbackStorage
 from .schemas import BarResponse
+from .db import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan handler for startup/shutdown events."""
+    # Startup
+    init_db()
+    yield
+    # Shutdown (nothing to clean up)
 from ..data.ohlc_loader import load_ohlc
 from ..swing_analysis.bar_aggregator import BarAggregator
 from ..swing_analysis.types import Bar
@@ -83,7 +94,9 @@ app = FastAPI(
     title="Replay View Server",
     description="Backend for Replay View swing detection",
     version="0.2.0",
+    lifespan=lifespan,
 )
+
 
 # Enable CORS for frontend
 app.add_middleware(

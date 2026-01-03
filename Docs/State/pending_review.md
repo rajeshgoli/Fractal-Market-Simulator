@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 2
 
 **Last Review:** 2026-01-03
 
@@ -9,6 +9,7 @@
 ## Pending Changes
 
 - **#475** — Fly.io deployment infrastructure: Dockerfile, fly.toml, --data-dir, MULTI_TENANT, static serving
+- **#476** — SQLite setup: db.py module, volume mount, WAL mode, startup init, local dev fallback
 
 ---
 
