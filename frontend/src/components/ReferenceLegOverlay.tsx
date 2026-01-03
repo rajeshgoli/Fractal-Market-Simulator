@@ -259,6 +259,12 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       const key = `${ref.leg_id}_fib_${ratio}`;
       if (fibSeriesRef.current.has(key)) return;
 
+      // Validate computed price to prevent "Value is null" error in lightweight-charts
+      if (typeof price !== 'number' || !isFinite(price)) {
+        console.warn('Invalid fib price for reference:', ref.leg_id, { ratio, price });
+        return;
+      }
+
       try {
         const fibSeries = chart.addSeries(LineSeries, {
           color,
@@ -324,6 +330,13 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       return null;
     }
 
+    // Validate prices to prevent "Value is null" error in lightweight-charts
+    if (typeof ref.origin_price !== 'number' || !isFinite(ref.origin_price) ||
+        typeof ref.pivot_price !== 'number' || !isFinite(ref.pivot_price)) {
+      console.warn('Invalid price data for reference:', ref.leg_id, { origin: ref.origin_price, pivot: ref.pivot_price });
+      return null;
+    }
+
     try {
       // Create line series for this reference
       const lineSeries = chart.addSeries(LineSeries, {
@@ -376,6 +389,13 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     const pivotTime = getTimestampForIndex(leg.pivot_index);
 
     if (originTime === null || pivotTime === null) {
+      return null;
+    }
+
+    // Validate prices to prevent "Value is null" error in lightweight-charts
+    if (typeof leg.origin_price !== 'number' || !isFinite(leg.origin_price) ||
+        typeof leg.pivot_price !== 'number' || !isFinite(leg.pivot_price)) {
+      console.warn('Invalid price data for filtered leg:', leg.leg_id, { origin: leg.origin_price, pivot: leg.pivot_price });
       return null;
     }
 
