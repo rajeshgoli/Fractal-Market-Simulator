@@ -31,21 +31,18 @@ Market Structure View provides the primary interface for observing how the hiera
 # Activate environment
 source venv/bin/activate
 
-# Start the server (no data file required)
+# Start the server
 python -m src.replay_server.main
 
-# Or start with a specific data file
-python -m src.replay_server.main --data test_data/es-5m.csv
-
-# Start at a specific date
-python -m src.replay_server.main --data test_data/es-5m.csv --start-date 2023-01-15
+# Or use a custom port
+python -m src.replay_server.main --port 8080
 ```
 
 Then open http://127.0.0.1:8000/replay in your browser.
 
-### First-Time Setup (No CLI Arguments)
+### First-Time Setup
 
-When you start the server without a `--data` argument, the frontend prompts you to select a data file:
+When you start the server, the frontend prompts you to select a data file:
 
 1. The Settings panel opens automatically
 2. Select a CSV file from the dropdown
