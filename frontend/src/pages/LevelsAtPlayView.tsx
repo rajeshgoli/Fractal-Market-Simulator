@@ -874,6 +874,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 showFiltered={showFiltered}
                 externalHoveredLegId={sidebarHoveredLegId}
                 onLegHover={handleChartHoverLeg}
+                selectedLegId={selectedLegId}
               />
             }
             chart2Overlay={
@@ -892,6 +893,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
                 showFiltered={showFiltered}
                 externalHoveredLegId={sidebarHoveredLegId}
                 onLegHover={handleChartHoverLeg}
+                selectedLegId={selectedLegId}
               />
             }
           />

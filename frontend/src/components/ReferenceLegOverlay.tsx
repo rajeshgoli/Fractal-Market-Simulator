@@ -27,6 +27,8 @@ interface ReferenceLegOverlayProps {
   // Bidirectional sidebar linking (Issue #430)
   externalHoveredLegId?: string | null;
   onLegHover?: (legId: string | null) => void;
+  // Selected leg (Issue #466: auto-selected top ref shows fib levels)
+  selectedLegId?: string | null;
 }
 
 // Bin to line width mapping - uses shared utility
@@ -92,6 +94,8 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
   // Bidirectional sidebar linking (Issue #430)
   externalHoveredLegId = null,
   onLegHover,
+  // Selected leg (Issue #466)
+  selectedLegId = null,
 }) => {
   // Use allBars for timestamp lookups if provided, otherwise fall back to bars
   const barsForTimestampLookup = allBars ?? bars;
@@ -532,16 +536,16 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     setFilteredLinePositions(linePositions);
   }, [chart, series, visibleFilteredLegs, bars, showFiltered, getTimestampForIndex]);
 
-  // Update fib levels for hovered and sticky legs
+  // Update fib levels for hovered, sticky, and selected legs
   const updateFibLevels = useCallback(() => {
     if (!chart || !series) return;
 
     // Clear existing fib series
     clearFibSeries();
 
-    // Get refs to show fib levels for
+    // Get refs to show fib levels for (#466: include selectedLegId)
     const refsToShow = visibleReferences.filter(ref =>
-      ref.leg_id === hoveredLegId || stickyLegIds.has(ref.leg_id)
+      ref.leg_id === hoveredLegId || stickyLegIds.has(ref.leg_id) || ref.leg_id === selectedLegId
     );
 
     // Create fib lines for each
@@ -554,7 +558,7 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
 
       createFibLines(ref, color, opacity);
     });
-  }, [chart, series, visibleReferences, hoveredLegId, stickyLegIds, stickyColorMap, clearFibSeries, createFibLines]);
+  }, [chart, series, visibleReferences, hoveredLegId, stickyLegIds, stickyColorMap, clearFibSeries, createFibLines, selectedLegId]);
 
   // Update line series when references, bars, or hover state changes
   useEffect(() => {
@@ -612,14 +616,14 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
     };
   }, [chart, series, visibleReferences, fadingRefs, bars, clearLineSeries, clearFibSeries, createRefLine, updateLabelPositions, updateFibLevels, showFiltered, visibleFilteredLegs, createFilteredLegLine, updateFilteredLabelPositions, hoveredLegId]);
 
-  // Update fib levels when hover or sticky state changes
+  // Update fib levels when hover, sticky, or selection state changes (#466)
   // Note: Don't include updateFibLevels in deps - it causes infinite loop since
-  // it's recreated when stickyLegIds/hoveredLegId change. We only need to trigger
+  // it's recreated when stickyLegIds/hoveredLegId/selectedLegId change. We only need to trigger
   // on actual data changes.
   useEffect(() => {
     updateFibLevels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hoveredLegId, stickyLegIds]);
+  }, [hoveredLegId, stickyLegIds, selectedLegId]);
 
   // Subscribe to visible range changes to update label positions and fib levels
   useEffect(() => {
@@ -826,10 +830,10 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         );
       })}
 
-      {/* Fib level labels - hidden when showFiltered is on */}
-      {!showFiltered && (hoveredLegId || stickyLegIds.size > 0) && (() => {
+      {/* Fib level labels - hidden when showFiltered is on (#466: include selectedLegId) */}
+      {!showFiltered && (hoveredLegId || stickyLegIds.size > 0 || selectedLegId) && (() => {
         const refsToLabel = visibleReferences.filter(ref =>
-          ref.leg_id === hoveredLegId || stickyLegIds.has(ref.leg_id)
+          ref.leg_id === hoveredLegId || stickyLegIds.has(ref.leg_id) || ref.leg_id === selectedLegId
         );
 
         return refsToLabel.flatMap(ref => {
