@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 8
 
 **Last Review:** 2026-01-02
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#464** — Consolidate test helpers into shared tests/helpers.py module
 - **#460** — Remove calibration concept from codebase (delete calibrate.py, tests, frontend state, doc updates)
 - **#459** — Preserve ReferenceConfig on playback resync (fixes user display preferences lost on pause/reverse)
 - **#458** — Buffer auto-tracked legs and crossing events during playback (eliminates per-bar track API calls)
