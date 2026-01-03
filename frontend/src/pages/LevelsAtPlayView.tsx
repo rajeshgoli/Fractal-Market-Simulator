@@ -307,10 +307,11 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     }
   }, [currentPlaybackPosition, isPlaying, sessionSettings.setPlaybackPosition]);
 
-  // Auto-select top-ranked leg when references change (Issue #433)
+  // Auto-select top-ranked leg when references change (Issue #433, #458)
   // - On initial load: auto-select top leg
   // - When salience config changes: re-auto-select new top leg
   // - When user manually selects: lock selection until they deselect
+  // #458: Skip track API calls during auto-selection - crossing events come from buffer
   useEffect(() => {
     // Skip if user has manually selected a leg
     if (isManualSelectionRef.current) return;
@@ -323,19 +324,13 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     // Skip if already selected (no change needed)
     if (selectedLegId === topLeg.leg_id) return;
 
-    // Auto-select the new top leg
-    // First untrack the old selection if any
-    if (selectedLegId !== null && stickyLegIds.has(selectedLegId)) {
-      toggleStickyLeg(selectedLegId); // Untrack old
-    }
-
+    // #458: Only update UI selection, don't call track/untrack API
+    // During buffered playback, crossing events come from the buffer's auto_tracked_leg_id
+    // We only call the track API when user manually pins a leg (see handleSidebarSelectLeg)
     setSelectedLegId(topLeg.leg_id);
-    if (!stickyLegIds.has(topLeg.leg_id)) {
-      toggleStickyLeg(topLeg.leg_id); // Track new
-    }
-  }, [referenceState?.references, selectedLegId, stickyLegIds, toggleStickyLeg]);
+  }, [referenceState?.references, selectedLegId]);
 
-  // Reference Config update handler (Issue #425)
+  // Reference Config update handler (Issue #425, #458)
   const handleReferenceConfigUpdate = useCallback(async (newConfig: ReferenceConfig) => {
     try {
       // Send to backend API
@@ -344,6 +339,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       setReferenceConfig(updatedConfig);
       // Persist to localStorage
       chartPrefs.setReferenceConfig(updatedConfig);
+      // #458: Invalidate buffer - salience rankings are now stale
+      forwardPlayback.clearRefStateBuffer();
       // Refresh reference state to reflect new salience weights
       if (calibrationBarCount > 0) {
         fetchReferenceState(currentPlaybackPosition);
@@ -351,7 +348,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     } catch (err) {
       console.error('Failed to update reference config:', err);
     }
-  }, [chartPrefs.setReferenceConfig, calibrationBarCount, currentPlaybackPosition, fetchReferenceState]);
+  }, [chartPrefs.setReferenceConfig, calibrationBarCount, currentPlaybackPosition, fetchReferenceState, forwardPlayback]);
 
   // Load reference config from backend on mount (Issue #425)
   useEffect(() => {

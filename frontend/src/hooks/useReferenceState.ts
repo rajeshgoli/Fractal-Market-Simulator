@@ -168,8 +168,13 @@ export function useReferenceState(): UseReferenceStateReturn {
       tracked_leg_ids: referenceState?.tracked_leg_ids ?? [],
       filtered_legs: snapshot.filtered_legs,
       filter_stats: null,  // Not included in snapshot for performance
-      crossing_events: [],  // Not included in snapshot for performance
+      crossing_events: snapshot.crossing_events ?? [],  // #458: crossing events from snapshot
     };
+
+    // Update crossing events from snapshot (#458)
+    if (snapshot.crossing_events && snapshot.crossing_events.length > 0) {
+      setCrossingEvents(snapshot.crossing_events);
+    }
 
     setReferenceState(state);
   }, [referenceState?.tracked_leg_ids]);

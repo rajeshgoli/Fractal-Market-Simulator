@@ -392,13 +392,14 @@ async def advance_dag(request: ReplayAdvanceRequest):
         if request.include_per_bar_dag_states:
             per_bar_dag_states.append(build_dag_state(detector, s.window_offset))
 
-        # Snapshot full Reference state after each bar for buffered playback (#456)
+        # Snapshot full Reference state after each bar for buffered playback (#456, #458)
         if request.include_per_bar_ref_states and ref_layer is not None and ref_state is not None:
             per_bar_ref_states.append(build_ref_state_snapshot(
                 bar.index,
                 ref_layer,
                 ref_state,
                 bar,
+                detector.state.active_legs,  # #458: for crossing detection
             ))
 
     # Update cache state

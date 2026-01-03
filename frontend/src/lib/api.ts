@@ -161,7 +161,7 @@ export interface AggregatedBarsResponse {
   '1W'?: BarData[];
 }
 
-// Per-bar reference state snapshot for buffered playback (#451, #456, #457)
+// Per-bar reference state snapshot for buffered playback (#451, #456, #457, #458)
 // Full reference state per bar for efficient batched fetching
 export interface RefStateSnapshot {
   bar_index: number;
@@ -174,6 +174,9 @@ export interface RefStateSnapshot {
   is_warming_up: boolean;  // Cold start indicator
   warmup_progress: [number, number];  // [current, target]
   median: number;  // Current rolling median for context
+  // Auto-tracking fields (#458) - eliminate per-bar track API calls
+  auto_tracked_leg_id?: string | null;  // Which leg the algorithm auto-tracks (top reference if no pin)
+  crossing_events?: LevelCrossEvent[];  // Level crossings for auto-tracked leg at this bar
 }
 
 export interface ReplayAdvanceResponse {

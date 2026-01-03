@@ -26,6 +26,7 @@ from ...schemas import (
     RefStateSnapshot,
     ReferenceSwingResponse,
     FilteredLegResponse,
+    LevelCrossEventResponse,
 )
 from .conversions import leg_to_response, size_to_scale
 
@@ -374,15 +375,17 @@ def build_ref_state_snapshot(
     ref_layer,
     ref_state,
     bar: Bar,
+    active_legs: list,
 ) -> RefStateSnapshot:
     """
-    Build full reference state snapshot for buffered playback (#456, #457).
+    Build full reference state snapshot for buffered playback (#456, #457, #458).
 
     Args:
         bar_index: The bar index this snapshot is for.
         ref_layer: The ReferenceLayer instance.
         ref_state: The ReferenceState from ref_layer.update().
         bar: The current bar (for price).
+        active_legs: Active legs from detector (for crossing detection).
 
     Returns:
         RefStateSnapshot with full reference state for this bar.
@@ -439,6 +442,56 @@ def build_ref_state_snapshot(
     # The filtered_legs are computed from ref_state in the caller if needed
     filtered_legs = []
 
+    # Determine auto-tracked leg and compute crossing events (#458)
+    # If user has pinned a leg, use that. Otherwise auto-track top reference.
+    auto_tracked_leg_id = None
+    crossing_events = []
+
+    tracked_leg_ids = ref_layer.get_tracked_leg_ids()
+    if tracked_leg_ids:
+        # User has pinned leg(s), use the first one
+        auto_tracked_leg_id = next(iter(tracked_leg_ids))
+        # Detect crossings for tracked legs
+        raw_events = ref_layer.detect_level_crossings(active_legs, bar)
+        crossing_events = [
+            LevelCrossEventResponse(
+                leg_id=e.leg_id,
+                direction=e.direction,
+                level_crossed=e.level_crossed,
+                cross_direction=e.cross_direction,
+                bar_index=e.bar_index,
+                timestamp=e.timestamp.isoformat(),
+            )
+            for e in raw_events
+        ]
+    elif ref_state.references:
+        # Auto-track top reference (no manual pin)
+        top_ref = ref_state.references[0]
+        auto_tracked_leg_id = top_ref.leg.leg_id
+
+        # Temporarily add to tracking to compute crossings
+        was_tracked = ref_layer.is_tracked_for_crossing(auto_tracked_leg_id)
+        if not was_tracked:
+            ref_layer.add_crossing_tracking(auto_tracked_leg_id)
+
+        # Detect crossings
+        raw_events = ref_layer.detect_level_crossings(active_legs, bar)
+        crossing_events = [
+            LevelCrossEventResponse(
+                leg_id=e.leg_id,
+                direction=e.direction,
+                level_crossed=e.level_crossed,
+                cross_direction=e.cross_direction,
+                bar_index=e.bar_index,
+                timestamp=e.timestamp.isoformat(),
+            )
+            for e in raw_events
+        ]
+
+        # Restore tracking state if we added it temporarily
+        if not was_tracked:
+            ref_layer.remove_crossing_tracking(auto_tracked_leg_id)
+
     return RefStateSnapshot(
         bar_index=bar_index,
         formed_leg_ids=formed_ids,
@@ -449,4 +502,6 @@ def build_ref_state_snapshot(
         is_warming_up=ref_state.is_warming_up,
         warmup_progress=list(ref_state.warmup_progress),
         median=ref_layer._bin_distribution.median,
+        auto_tracked_leg_id=auto_tracked_leg_id,
+        crossing_events=crossing_events,
     )

@@ -65,6 +65,8 @@ interface UseForwardPlaybackReturn {
   resumeLingerTimer: () => void;
   // External sync (for Process Till feature)
   syncToPosition: (newPosition: number, newBars: BarData[], newCsvIndex: number, events?: ReplayEvent[]) => void;
+  // Buffer management (#458)
+  clearRefStateBuffer: () => void;  // Invalidate ref state buffer (e.g., on config change)
 }
 
 export function useForwardPlayback({
@@ -1017,6 +1019,13 @@ export function useForwardPlayback({
     }
   }, []);
 
+  // Clear ref state buffer (#458: for config change invalidation)
+  // When salience config changes, buffered ref states have stale rankings
+  const clearRefStateBuffer = useCallback(() => {
+    barBufferRef.current = [];
+    pendingBatchStatesRef.current = [];
+  }, []);
+
   return {
     playbackState,
     currentPosition,
@@ -1053,5 +1062,7 @@ export function useForwardPlayback({
     resumeLingerTimer,
     // External sync (for Process Till feature)
     syncToPosition,
+    // Buffer management (#458)
+    clearRefStateBuffer,
   };
 }

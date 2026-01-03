@@ -134,6 +134,7 @@ class TestBuildRefStateSnapshot:
             ref_layer=ref_layer,
             ref_state=ref_state,
             bar=bar,
+            active_legs=[],  # #458: required for crossing detection
         )
 
         assert snapshot.bar_index == 100
@@ -169,6 +170,7 @@ class TestBuildRefStateSnapshot:
             ref_layer=ref_layer,
             ref_state=ref_state,
             bar=bar,
+            active_legs=[leg],  # #458: required for crossing detection
         )
 
         assert snapshot.bar_index == 100
@@ -200,6 +202,7 @@ class TestBuildRefStateSnapshot:
             ref_layer=ref_layer,
             ref_state=ref_state,
             bar=bar,
+            active_legs=[],  # #458: required for crossing detection
         )
 
         assert snapshot.is_warming_up is True
@@ -241,6 +244,7 @@ class TestBuildRefStateSnapshot:
             ref_layer=ref_layer,
             ref_state=ref_state,
             bar=bar,
+            active_legs=[leg],  # #458: required for crossing detection
         )
 
         ref_response = snapshot.references[0]
