@@ -454,7 +454,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       }
 
       const response = await advanceReplay(
-        0,
         currentPlaybackPosition,
         barCount,
         [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation],
