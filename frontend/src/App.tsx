@@ -1,10 +1,13 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { DAGView } from './pages/DAGView';
 import { LevelsAtPlayView } from './pages/LevelsAtPlayView';
+import { LandingPage } from './pages/LandingPage';
 import { useChartPreferences } from './hooks/useChartPreferences';
+import { useAuth } from './hooks/useAuth';
 
 export type ViewMode = 'dag' | 'levels-at-play';
 
-function App() {
+function AppViews() {
   const { currentView, setCurrentView } = useChartPreferences();
 
   return currentView === 'dag' ? (
@@ -14,4 +17,36 @@ function App() {
   );
 }
 
-export default App
+function HomePage() {
+  const { authenticated, loading, multiTenant } = useAuth();
+
+  // Show nothing while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-app-bg">
+        <div className="text-app-muted">Loading...</div>
+      </div>
+    );
+  }
+
+  // In multi-tenant mode: show app if authenticated, landing if not
+  // In single-tenant mode: always show landing at "/" (use /app to access app)
+  if (multiTenant) {
+    return authenticated ? <AppViews /> : <LandingPage />;
+  } else {
+    return <LandingPage />;
+  }
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/app" element={<AppViews />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
