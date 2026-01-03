@@ -4,6 +4,74 @@ Consolidated user interview notes. Most recent first.
 
 ---
 
+## January 3, 2026 - Multi-tenant Demo Scoping
+
+**Context:** Reference Layer complete. User wants to make the product shareable as a portfolio piece.
+
+### Background
+
+User feedback on current state:
+> "The product is really working beautifully now. The level setting and playback features are functioning exactly as I'd hoped. I can clearly see it drawing the right legs and the associated Fibonacci levels based on salience. This is exactly what I envisioned when I wanted to build it, and it's incredible that we got here in just three weeks."
+
+### Roadmap Discussion
+
+User proposed four tracks going forward:
+
+1. **Multi-tenant demo** — Quick win, shareable portfolio piece
+2. **Impulse rework** — Technical foundation (infra exists to validate)
+3. **Outcome Layer** — Statistical grounding for trading rules
+4. **Fractal narrative** — "Stepping stones" visualization of how parent targets are reached through child structures
+
+User's philosophy: **Concrete → Foundation → Grounding → Exploration**
+
+> "Do the concrete ones first. Multi-tenant first — quick win of a working app I can keep. Then fix impulse. Then maybe do some statistical work to ground the intuitions about rules. Once that's clear the foundation is good for narrative exploration."
+
+### Multi-tenant Requirements
+
+| Aspect | Decision |
+|--------|----------|
+| **Auth** | Login required (no guest). Google OAuth, + GitHub if not expensive |
+| **Data** | ES 30-min, max range hosting allows, read-only |
+| **Persistence** | Config + position across sessions |
+| **Observations** | Can grey out / disable for MVP (not a blocker) |
+| **Hosting** | Fly.io free tier preferred |
+| **Budget** | $0-20/month (stay in free tier if possible) |
+| **Scale** | 10-20 concurrent users |
+| **Database** | SQLite (persistent volume) |
+| **Deployment** | Auto-deploy on push to main |
+| **Domain** | `fractal.rajeshgo.li` (subdomain, DNS needs config) |
+| **MVP** | Full current app functionality, except observation panel |
+
+### Open Questions for Architect
+
+1. Fly.io setup for FastAPI + React
+2. SQLite on Fly.io persistent volume approach
+3. Google + GitHub OAuth library recommendations
+4. Data storage limits — how much ES 30-min history fits
+5. Session management with SQLite
+6. GitHub Actions → Fly.io CI/CD pipeline
+
+### Fractal Evolution Discussion (Deferred)
+
+User described the "stepping stones" concept:
+> "The largest swing guides the next actions, which then happen within smaller swings. Think of it like a big bull reference that spawns smaller bull references along the way. Some complete, some get invalidated, and they create temporary bear references that eventually help complete the original target."
+
+Key insight: Child structures aren't just detail — they're the **path** to the parent target.
+
+Constraint: Minimal chart clutter tolerance. Current density is about right.
+
+Decision: Defer fractal exploration until statistical foundation (Outcome Layer) is in place. Need to know what's worth showing before designing the UX.
+
+### Impulse Discussion
+
+User noted impulse detection in DAG needs work. This enhances fractal visualization but isn't blocking — separate epic for later.
+
+### Spec Created
+
+`Docs/Working/multi_tenant_demo_spec.md` — ready for Architect review.
+
+---
+
 ## December 25, 2025 - Reference Layer Spec Corrections
 
 **Context:** User reviewed Reference Layer spec revision 1 and identified several premature decisions.

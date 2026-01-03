@@ -1,96 +1,111 @@
 # Product Direction
 
-**Last Updated:** January 1, 2026
+**Last Updated:** January 3, 2026
 **Owner:** Product
 
 ---
 
 ## Current Objective
 
-**Reference Layer exploration + Outcome Layer definition.**
+**Multi-tenant demo deployment.**
 
 ---
 
-## Current Phase: Exploration & Rule Discovery
+## Current Phase: Foundation & Shareability
 
-P1-P4 Reference Layer is **complete**. Foundation enables:
-- Level formation/breach observation in real-time
-- Structure panel with touched/active/current levels
-- Level crossing event tracking
+Reference Layer (P1-P4) is **complete**. Product is working beautifully — legs and Fibonacci levels render correctly, playback works as envisioned.
 
-**Two parallel tracks:**
-
-| Track | Purpose | Status |
-|-------|---------|--------|
-| Reference Layer Exploration | Tune salience formula empirically | Ready — needs tuning UI |
-| Outcome Layer | Rule discovery: P(outcome \| features) | Draft — needs interview |
+**Next: Build concrete foundations before exploratory work.**
 
 ---
 
-## Reference Layer Exploration
+## Roadmap
 
-**Epic:** #422 (Levels at Play Sidebar + Reference Exploration)
-**Spec:** `Docs/Working/reference_layer_exploration.md`
+| # | Track | Rationale | Status |
+|---|-------|-----------|--------|
+| 1 | **Multi-tenant demo** | Quick win — working app to keep and share | **Next** |
+| 2 | **Impulse rework** | Technical foundation — infra exists to validate | Queued |
+| 3 | **Outcome Layer** | Statistical grounding — ground intuitions with data | Queued |
+| 4 | **Fractal narrative** | Exploratory UX — build on solid foundation | Future |
 
-Reference Layer is the exploration ground for salience formulas — same pattern as DAG layer with pruning algorithms. Wire up multiple approaches, tune empirically, see what works.
-
-**Scope:**
-- Left sidebar for Levels at Play (mirrors DAG View pattern)
-- Reference Config panel (salience weights, SI mode, etc.)
-- Feedback integration
-- Cross-window calibration workflow
-
-**Salience components:**
-- Base weights (range/impulse/recency per scale)
-- Structural importance: `origin_counter_trend_range × leg.range`
-- Depth score: `1/(1+depth)`
-- Time-at-level, touch count, confluence bonus
+**Philosophy:** Concrete → Foundation → Grounding → Exploration
 
 ---
 
-## Outcome Layer Definition
+## Track 1: Multi-tenant Demo
 
-**Spec:** `Docs/Working/outcome_layer_spec.md` (draft — needs interview)
+**Status:** Interview in progress
 
-New layer for rule discovery, downstream of Reference Layer:
+Minimal multi-tenant capability to host a shareable demo:
+- Session ID + per-user caching
+- Fixed backtest data (ES 30-minute)
+- Google OAuth (minimal auth)
+- CI/CD: push to main → deployed
+- User's domain
+
+**Goal:** Portfolio piece — live demo to point to.
+
+---
+
+## Track 2: Impulse Rework
+
+**Status:** Queued (after multi-tenant)
+
+Current impulse detection in DAG needs improvement. Infrastructure exists to visualize and validate. Enhances downstream features (fractal visualization, outcome layer).
+
+---
+
+## Track 3: Outcome Layer
+
+**Status:** Queued (after impulse)
+**Spec:** `Docs/Working/outcome_layer_spec.md` (draft)
+
+Statistical foundation for rule discovery:
 - Touch detection (what "price touched level" means)
 - Outcome labeling (bounce vs breakout vs continuation)
 - Feature extraction (structural importance, scale, location, confluence)
 - Statistical model: P(outcome | features)
 
-**Open questions requiring user input:**
-- Touch definition (wick vs close, tolerance band)
-- Outcome definition (bounce magnitude, lookforward window)
-- Feature prioritization
-- Validation approach
+**Purpose:** Ground intuitions about trading rules with data before building narrative UX.
+
+---
+
+## Track 4: Fractal Narrative
+
+**Status:** Future (after outcome layer)
+
+The "stepping stones" visualization — showing how parent targets are reached through cascading child structures. Requires:
+- Statistical grounding (Track 3) to know what's worth showing
+- Better impulse detection (Track 2) to identify meaningful structures
+- UX exploration to handle visual clutter constraint
 
 ---
 
 ## Completed: Reference Layer (Jan 1, 2026)
 
-**Status:** Complete (all 4 phases — backend + frontend).
+**Status:** Complete (all 4 phases).
 
-| Phase | Backend | Frontend |
-|-------|---------|----------|
-| P1: Core + Levels at Play | ✅ Complete | ✅ Complete |
-| P2: Fib Level Interaction | ✅ Complete | ✅ Complete |
-| P3: Structure Panel + Confluence | ✅ Complete | ✅ Complete (#420) |
-| P4: Level Crossing | ✅ Complete | ✅ Complete (#421) |
+| Phase | Status |
+|-------|--------|
+| P1: Core + Levels at Play | Complete |
+| P2: Fib Level Interaction | Complete |
+| P3: Structure Panel + Confluence | Complete (#420) |
+| P4: Level Crossing | Complete (#421) |
 
 ---
 
 ## Completed: Previous Phases
 
-- #400-#414 Reference Observation + Cleanup — Complete
-- #361-#387 Reference Layer Phase 1 — Complete
-- #388-#393 Reference Layer Phase 2 (Fib Interaction) — Complete
-- #347-#349 Turn ratio UX, inner structure removal, frontend cleanup — Complete
-- #324 Self-contained playback — Complete
-- #250 Hierarchy exploration mode — Complete
-- #241 Impulsiveness & spikiness scores — Complete
-- #167 DAG visualization mode — Complete
-- #163 Sibling swing detection — Complete
-- #158 DAG-based swing detection — Complete (4.06s for 10K bars)
+- #400-#414 Reference Observation + Cleanup
+- #361-#387 Reference Layer Phase 1
+- #388-#393 Reference Layer Phase 2 (Fib Interaction)
+- #347-#349 Turn ratio UX, inner structure removal, frontend cleanup
+- #324 Self-contained playback
+- #250 Hierarchy exploration mode
+- #241 Impulsiveness & spikiness scores
+- #167 DAG visualization mode
+- #163 Sibling swing detection
+- #158 DAG-based swing detection (4.06s for 10K bars)
 
 ---
 
@@ -98,35 +113,23 @@ New layer for rule discovery, downstream of Reference Layer:
 
 | Criterion | Status |
 |-----------|--------|
-| <5s for 10K bars | ✅ Done (#158) |
-| 100K window loads in frontend | ✅ Done (#158) |
-| Valid swings (L1-L7) detected | ✅ Done (Dec 25) |
-| Reference Layer filters valid references | ✅ Done (#361-#387) |
-| Reference Layer observability | ✅ Done (#400-#414) |
-| Structure Panel shows level touches | ✅ Done (#420) |
-| Confluence zones render on chart | Removed (visual clutter) |
-| Reference Layer tuning UI | **Next** |
-| Salience formula validated empirically | **Next** |
-| Outcome Layer touch detection | **Next** |
-| Rule discovery statistics | **Future** |
-
----
-
-## Roadmap
-
-1. ✅ **P1: Reference Layer Core** — Complete
-2. ✅ **P2: Fib Level Interaction** — Complete
-3. ✅ **P3: Structure Panel + Confluence** — Complete (#420)
-4. ✅ **P4: Level Crossing** — Complete (#421)
-5. ⏳ **Reference Layer Exploration** — Tuning UI + salience formula experiments
-6. ⏳ **Outcome Layer** — Rule discovery (parallel with #5)
+| <5s for 10K bars | Done (#158) |
+| 100K window loads in frontend | Done (#158) |
+| Valid swings (L1-L7) detected | Done (Dec 25) |
+| Reference Layer filters valid references | Done (#361-#387) |
+| Reference Layer observability | Done (#400-#414) |
+| Structure Panel shows level touches | Done (#420) |
+| Multi-tenant demo deployed | **Next** |
+| Impulse detection improved | Queued |
+| Outcome Layer statistics | Queued |
+| Fractal narrative UX | Future |
 
 ---
 
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- Reference Layer tuning reveals unexpected behavior
-- Outcome Layer definition needs user input (interview required)
-- Direction uncertainty requiring user values
-- Ready to validate salience formula empirically
+- Multi-tenant scope needs clarification
+- Impulse rework reveals design questions
+- Outcome Layer definition needs user input
+- Ready to begin fractal narrative exploration
