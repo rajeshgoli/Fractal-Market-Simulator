@@ -76,6 +76,8 @@ test.csv
 
 # Test data (symlinks to ~/Documents/backtest-data/, too large for git)
 test_data/*.csv
+# Exception: ES 30-min data for multi-tenant demo
+!test_data/es-30m.csv
 
 # Data refresh logs
 logs/
