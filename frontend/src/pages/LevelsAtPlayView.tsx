@@ -276,17 +276,47 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
   // Fetch reference state when playback position changes
   // #456: During active playback, ref states come from buffer via onRefStateChange
-  // Only fetch via API when paused/stopped/stepping
+  // #469: On pause, keep buffered state (don't overwrite with stale API data)
+  // Only fetch via API on view switch (referenceState is null)
   useEffect(() => {
-    // Skip API fetch during active playback - buffered states are applied via onRefStateChange
+    // Skip during active playback - buffer is updated via onRefStateChange
     if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
       return;
     }
-    // Fetch when we have data or playback has started
-    if (forwardPlayback.currentPosition >= 0 || isPlaying) {
-      fetchReferenceState(currentPlaybackPosition);
+
+    // #469: Skip if we already have reference state (from buffer)
+    // This prevents overwriting correct buffered state with stale API data on pause
+    if (referenceState !== null) {
+      return;
     }
-  }, [currentPlaybackPosition, forwardPlayback.currentPosition, isPlaying, fetchReferenceState, forwardPlayback.playbackState]);
+
+    // Only fetch when we need initial state (view switch, initial load)
+    // and have a valid position
+    if (forwardPlayback.currentPosition >= 0 || isPlaying) {
+      // #469: Trigger BE resync before fetching to ensure correct state
+      // This handles view switch when BE has buffered ahead of FE
+      const resyncAndFetch = async () => {
+        try {
+          // Call advance with advanceBy=0 and fromIndex to trigger resync without advancing
+          await advanceReplay(
+            currentPlaybackPosition - 1,  // current_bar_index (before current position)
+            0,                             // advance_by=0 (just resync, don't advance)
+            undefined,                     // includeAggregatedBars
+            false,                         // includeDagState
+            false,                         // includePerBarDagStates
+            currentPlaybackPosition,       // fromIndex (triggers resync if BE is ahead)
+            false                          // includePerBarRefStates
+          );
+        } catch (err) {
+          // Resync failed, but still try to fetch (might work if BE was already in sync)
+          console.warn('[LevelsAtPlayView] Resync failed, fetching anyway:', err);
+        }
+        // Now fetch reference state with BE at correct position
+        fetchReferenceState(currentPlaybackPosition);
+      };
+      resyncAndFetch();
+    }
+  }, [currentPlaybackPosition, forwardPlayback.currentPosition, isPlaying, fetchReferenceState, forwardPlayback.playbackState, referenceState]);
 
   // Save playback position to session settings for view switching (#451)
   useEffect(() => {
