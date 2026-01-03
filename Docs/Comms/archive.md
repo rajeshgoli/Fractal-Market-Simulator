@@ -2,6 +2,51 @@
 
 ---
 
+## Q-2026-01-03-1: Multi-tenant Demo Implementation
+
+**From:** Product
+**To:** Architect
+**Date:** January 3, 2026
+**Status:** Resolved
+
+### Context
+
+Product scoped multi-tenant requirements for hosting the Market Simulator as a shareable demo. Need to deploy to Fly.io with Google/GitHub OAuth, SQLite persistence, and auto-deploy from main.
+
+**Spec:** `Docs/Working/multi_tenant_demo_spec.md`
+
+### Questions Asked
+
+1. Fly.io setup for FastAPI + React — best practices?
+2. SQLite on Fly.io persistent volume — any gotchas?
+3. Google + GitHub OAuth — library recommendations for FastAPI?
+4. Data storage — how much ES 30-min history fits in free tier?
+5. Session management — approach for per-user state with SQLite?
+6. CI/CD — GitHub Actions → Fly.io deployment pipeline?
+
+### Resolution (Architect)
+
+All questions answered and spec updated. Summary:
+
+| Question | Answer |
+|----------|--------|
+| Fly.io setup | Single container, single uvicorn worker, multi-stage Dockerfile |
+| SQLite gotchas | Single worker only, WAL mode, volumes attach to one machine |
+| OAuth library | `authlib` (mature, FastAPI-compatible) |
+| Data storage | 12MB CSV, 3GB free storage — not a constraint |
+| Session management | SQLite schema with users/sessions tables, JWT tokens |
+| CI/CD | GitHub Actions with `superfly/flyctl-actions` |
+
+**Architecture:** Single container serving both static React files and FastAPI API. Persistent volume for SQLite + data.
+
+**Implementation phases:** 4 sequential phases (Container, Data, Auth, Persistence).
+
+**Risks identified:** Memory pressure on 256MB free tier (medium likelihood), SQLite write contention (low).
+
+**Next step:** File epic with sub-issues for Engineer implementation.
+
+---
+
 ## Q-2025-12-31-1: Dual Cache Technical Debt
 
 **From:** Engineer
