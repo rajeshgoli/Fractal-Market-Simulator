@@ -544,10 +544,11 @@ config = ReferenceConfig.default().with_breach_tolerance(
 
 #### Output Dataclasses
 
-**ReferenceState** — Complete output for a bar (#436: bin-based):
+**ReferenceState** — Complete output for a bar (#436: bin-based, #457: per-pivot top N):
 | Field | Type | Description |
 |-------|------|-------------|
-| `references` | `List[ReferenceSwing]` | All valid refs, sorted by salience |
+| `references` | `List[ReferenceSwing]` | Top N per pivot, sorted by salience |
+| `active_filtered` | `List[ReferenceSwing]` | Valid refs that didn't make per-pivot top N (#457) |
 | `by_bin` | `Dict[int, List]` | Grouped by bin index (0-10) |
 | `significant` | `List[ReferenceSwing]` | Bin >= 8 (5× median or larger) |
 | `by_depth` | `Dict[int, List]` | Grouped by hierarchy depth |
@@ -619,6 +620,7 @@ for status in statuses:
 | `NOT_FORMED` | Price hasn't reached 23.6% formation |
 | `PIVOT_BREACHED` | Location < 0 (past defended pivot with tolerance) |
 | `COMPLETED` | Location > completion_threshold (default 2×) |
+| `ACTIVE_NOT_SALIENT` | Valid ref, but didn't make per-pivot top N (#457) |
 
 **FilteredLeg fields (#436: bin-based):**
 | Field | Type | Description |

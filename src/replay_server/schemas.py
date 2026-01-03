@@ -163,7 +163,7 @@ Uses a dictionary to support arbitrary timeframe keys (1m, 5m, 15m, 30m, 1H, 4H,
 
 
 class RefStateSnapshot(BaseModel):
-    """Full per-bar reference state for buffered playback (#451, #456).
+    """Full per-bar reference state for buffered playback (#451, #456, #457).
 
     Contains complete reference layer state for a specific bar index.
     Used by frontend during high-speed playback to avoid per-bar API calls.
@@ -172,7 +172,8 @@ class RefStateSnapshot(BaseModel):
     bar_index: int  # The bar index this snapshot is for
     formed_leg_ids: List[str]  # Leg IDs that were formed at or before this bar
     # Full reference state (#456) - enables batched fetching like DAG
-    references: List["ReferenceSwingResponse"] = []  # All valid refs, sorted by salience
+    references: List["ReferenceSwingResponse"] = []  # Top N per pivot, sorted by salience
+    active_filtered: List["ReferenceSwingResponse"] = []  # Valid refs that didn't make top N (#457)
     filtered_legs: List["FilteredLegResponse"] = []  # Filtered legs for observation mode
     current_price: float = 0.0  # Bar close price for location calculation
     is_warming_up: bool = True  # Cold start indicator
@@ -615,8 +616,9 @@ class ReferenceSwingResponse(BaseModel):
 
 
 class ReferenceStateApiResponse(BaseModel):
-    """API response for reference layer state (#436)."""
-    references: List[ReferenceSwingResponse]
+    """API response for reference layer state (#436, #457)."""
+    references: List[ReferenceSwingResponse]  # Top N per pivot, sorted by salience
+    active_filtered: List[ReferenceSwingResponse] = []  # Valid refs that didn't make top N (#457)
     by_bin: Dict[int, List[ReferenceSwingResponse]]  # Grouped by bin index (#436)
     significant: List[ReferenceSwingResponse]  # Bin >= 8 (5× median or larger) (#436)
     by_depth: Dict[int, List[ReferenceSwingResponse]]

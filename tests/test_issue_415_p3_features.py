@@ -156,7 +156,7 @@ class TestGetConfluenceZones:
         # Create a simple state with one reference
         leg = make_leg("leg1", "bear", 110, 0, 100, 5)
         ref = make_reference_swing(leg)
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],
@@ -183,7 +183,7 @@ class TestGetConfluenceZones:
         ref1 = make_reference_swing(leg1, bin=8)
         ref2 = make_reference_swing(leg2, bin=8)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref1, ref2],
             by_bin={8: [ref1, ref2]},
             significant=[ref1, ref2],
@@ -209,7 +209,7 @@ class TestGetConfluenceZones:
         leg = make_leg("leg1", "bear", 110, 0, 100, 5)
         ref = make_reference_swing(leg)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],
@@ -227,7 +227,7 @@ class TestGetConfluenceZones:
         config = ReferenceConfig.default()
         layer = ReferenceLayer(reference_config=config)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[],
             by_bin={},
             significant=[],
@@ -246,7 +246,7 @@ class TestGetStructurePanelData:
     def test_empty_state_returns_empty_panel(self):
         """Empty reference state returns empty panel data."""
         layer = ReferenceLayer()
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[],
             by_bin={},
             significant=[],
@@ -271,7 +271,7 @@ class TestGetStructurePanelData:
         leg = make_leg("leg1", "bear", 110, 0, 100, 5)
         ref = make_reference_swing(leg)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],
@@ -298,7 +298,7 @@ class TestGetStructurePanelData:
         leg = make_leg("leg1", "bear", 110, 0, 100, 5)
         ref = make_reference_swing(leg)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],
@@ -323,7 +323,7 @@ class TestGetStructurePanelData:
         leg = make_leg("leg1", "bear", 110, 0, 100, 5)
         ref = make_reference_swing(leg)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],
@@ -356,7 +356,7 @@ class TestClearSessionTouches:
         leg = make_leg("leg1", "bear", 110, 0, 100, 5)
         ref = make_reference_swing(leg)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],
@@ -430,7 +430,7 @@ class TestConfluenceZoneAlgorithm:
         ref1 = make_reference_swing(leg1)
         ref2 = make_reference_swing(leg2)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref1, ref2],
             by_bin={8: [ref1, ref2]},
             significant=[ref1, ref2],

@@ -77,7 +77,7 @@ class TestGetActiveLevels:
         ref = self._create_reference_swing(leg)
 
         # Create a state with the reference
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],  # bin >= 8
@@ -105,7 +105,7 @@ class TestGetActiveLevels:
         leg = self._create_mock_leg("leg1", "bull", 100.0, 110.0)
         ref = self._create_reference_swing(leg)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],
@@ -134,7 +134,7 @@ class TestGetActiveLevels:
         leg = self._create_mock_leg("leg1", "bear", 110.0, 100.0)
         ref = self._create_reference_swing(leg)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],
@@ -163,7 +163,7 @@ class TestGetActiveLevels:
         ref1 = self._create_reference_swing(leg1)
         ref2 = self._create_reference_swing(leg2)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref1, ref2],
             by_bin={8: [ref1, ref2]},
             significant=[ref1, ref2],
@@ -184,7 +184,7 @@ class TestGetActiveLevels:
         """Test that empty state returns empty levels."""
         layer = ReferenceLayer()
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[],
             by_bin={},
             significant=[],
@@ -206,7 +206,7 @@ class TestGetActiveLevels:
         leg = self._create_mock_leg("leg1", "bull", 100.0, 110.0)
         ref = self._create_reference_swing(leg)
 
-        state = ReferenceState(
+        state = ReferenceState(active_filtered=[],
             references=[ref],
             by_bin={8: [ref]},
             significant=[ref],

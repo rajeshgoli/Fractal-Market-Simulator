@@ -78,16 +78,17 @@ def _filtered_leg_to_response(filtered_leg) -> FilteredLegResponse:
 
 
 def _compute_filter_stats(all_statuses, valid_leg_ids: set) -> FilterStatsResponse:
-    """Compute filter statistics from all leg statuses (#454: origin_breached removed)."""
+    """Compute filter statistics from all leg statuses (#454: origin_breached removed, #457: active_not_salient added)."""
     total = len(all_statuses)
     valid_count = len(valid_leg_ids)
 
-    # Count by reason (#454: origin_breached removed)
+    # Count by reason (#454: origin_breached removed, #457: active_not_salient added)
     by_reason = {
         'not_formed': 0,
         'pivot_breached': 0,
         'completed': 0,
         'cold_start': 0,
+        'active_not_salient': 0,
     }
 
     for status in all_statuses:
@@ -116,9 +117,10 @@ def _level_cross_event_to_response(event) -> LevelCrossEventResponse:
 
 
 def _empty_response() -> ReferenceStateApiResponse:
-    """Return an empty reference state response (#436, #454)."""
+    """Return an empty reference state response (#436, #454, #457)."""
     return ReferenceStateApiResponse(
         references=[],
+        active_filtered=[],
         by_bin={},
         significant=[],
         by_depth={},
@@ -132,7 +134,7 @@ def _empty_response() -> ReferenceStateApiResponse:
             total_legs=0,
             valid_count=0,
             pass_rate=0.0,
-            by_reason={'not_formed': 0, 'pivot_breached': 0, 'completed': 0, 'cold_start': 0},
+            by_reason={'not_formed': 0, 'pivot_breached': 0, 'completed': 0, 'cold_start': 0, 'active_not_salient': 0},
         ),
         crossing_events=[],
     )
@@ -215,8 +217,9 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
     # Detect level crossings for tracked legs
     crossing_events = ref_layer.detect_level_crossings(active_legs, bar)
 
-    # Convert to API response (#436: pass ref_layer for median_multiple)
+    # Convert to API response (#436: pass ref_layer for median_multiple, #457: active_filtered)
     refs_response = [_reference_swing_to_response(r, ref_layer) for r in ref_state.references]
+    active_filtered_response = [_reference_swing_to_response(r, ref_layer) for r in ref_state.active_filtered]
 
     by_bin_response = {
         bin_idx: [_reference_swing_to_response(r, ref_layer) for r in refs]
@@ -241,6 +244,7 @@ async def get_reference_state(bar_index: Optional[int] = Query(None)):
 
     return ReferenceStateApiResponse(
         references=refs_response,
+        active_filtered=active_filtered_response,
         by_bin=by_bin_response,
         significant=significant_response,
         by_depth=by_depth_response,

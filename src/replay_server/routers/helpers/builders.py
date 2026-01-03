@@ -376,7 +376,7 @@ def build_ref_state_snapshot(
     bar: Bar,
 ) -> RefStateSnapshot:
     """
-    Build full reference state snapshot for buffered playback (#456).
+    Build full reference state snapshot for buffered playback (#456, #457).
 
     Args:
         bar_index: The bar index this snapshot is for.
@@ -392,13 +392,34 @@ def build_ref_state_snapshot(
     # Get formed leg IDs at this bar
     formed_ids = list(ref_layer.get_formed_leg_ids_at_bar(bar_index))
 
-    # Convert references to response format
+    # Convert references to response format (top N per pivot)
     references = []
     for ref_swing in ref_state.references:
         median_multiple = ref_layer._bin_distribution.get_median_multiple(
             float(ref_swing.leg.range)
         )
         references.append(ReferenceSwingResponse(
+            leg_id=ref_swing.leg.leg_id,
+            bin=ref_swing.bin,
+            median_multiple=median_multiple,
+            depth=ref_swing.leg.depth,
+            location=ref_swing.location,
+            salience_score=ref_swing.salience_score,
+            direction=ref_swing.leg.direction,
+            origin_price=float(ref_swing.leg.origin_price),
+            origin_index=ref_swing.leg.origin_index,
+            pivot_price=float(ref_swing.leg.pivot_price),
+            pivot_index=ref_swing.leg.pivot_index,
+            impulsiveness=ref_swing.leg.impulsiveness,
+        ))
+
+    # Convert active_filtered to response format (#457: valid refs that didn't make top N)
+    active_filtered = []
+    for ref_swing in ref_state.active_filtered:
+        median_multiple = ref_layer._bin_distribution.get_median_multiple(
+            float(ref_swing.leg.range)
+        )
+        active_filtered.append(ReferenceSwingResponse(
             leg_id=ref_swing.leg.leg_id,
             bin=ref_swing.bin,
             median_multiple=median_multiple,
@@ -422,6 +443,7 @@ def build_ref_state_snapshot(
         bar_index=bar_index,
         formed_leg_ids=formed_ids,
         references=references,
+        active_filtered=active_filtered,
         filtered_legs=filtered_legs,
         current_price=bar.close,
         is_warming_up=ref_state.is_warming_up,

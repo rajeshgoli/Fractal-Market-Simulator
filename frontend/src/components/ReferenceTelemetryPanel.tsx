@@ -10,8 +10,9 @@ interface ReferenceTelemetryPanelProps {
   trackError: string | null;
   onClearTrackError: () => void;
   onEventHover?: (legId: string | null) => void;  // Hover callback to highlight leg on chart
-  // Levels at Play (Issue #445)
-  allReferences?: ReferenceSwing[];  // All references (not paginated)
+  // Levels at Play (Issue #445, #457)
+  allReferences?: ReferenceSwing[];  // Top N per pivot (not paginated)
+  activeFiltered?: ReferenceSwing[];  // Valid refs that didn't make top N (#457)
   selectedLegId?: string | null;
   hoveredLegId?: string | null;
   onHoverLeg?: (legId: string | null) => void;
@@ -35,8 +36,9 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
   trackError,
   onClearTrackError,
   onEventHover,
-  // Levels at Play (Issue #445)
+  // Levels at Play (Issue #445, #457)
   allReferences = [],
+  activeFiltered = [],
   selectedLegId = null,
   hoveredLegId = null,
   onHoverLeg = () => {},
@@ -93,14 +95,14 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
         </div>
       )}
 
-      {/* Two-column layout: LEVELS AT PLAY (wide) + EVENTS (narrow) - Issue #445 */}
+      {/* Three-column layout: TOP REFS (wide) + ON DECK (medium) + EVENTS (narrow) - Issue #445, #457 */}
       <div className="flex gap-3 h-full">
-        {/* LEVELS AT PLAY - Multi-column, all legs */}
+        {/* TOP REFERENCES - Multi-column, top N per pivot */}
         <div className="flex-1 bg-app-card rounded-lg border border-app-border flex flex-col min-w-0">
           <div className="flex items-center gap-2 p-2 border-b border-app-border shrink-0">
             <Layers size={14} className="text-trading-blue" />
             <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">
-              Levels at Play
+              Top References
             </h3>
             <span className="text-[10px] text-app-muted">
               ({allReferences.length})
@@ -116,6 +118,30 @@ export const ReferenceTelemetryPanel: React.FC<ReferenceTelemetryPanelProps> = (
             />
           </div>
         </div>
+
+        {/* ACTIVE (ON DECK) - Valid refs that didn't make top N (#457) */}
+        {activeFiltered.length > 0 && (
+          <div className="w-48 shrink-0 bg-app-card rounded-lg border border-app-border flex flex-col">
+            <div className="flex items-center gap-2 p-2 border-b border-app-border shrink-0">
+              <Layers size={14} className="text-app-muted" />
+              <h3 className="text-xs font-semibold text-app-text uppercase tracking-wider">
+                On Deck
+              </h3>
+              <span className="text-[10px] text-app-muted">
+                ({activeFiltered.length})
+              </span>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <LevelsAtPlayBottomPanel
+                references={activeFiltered}
+                selectedLegId={selectedLegId}
+                hoveredLegId={hoveredLegId}
+                onHoverLeg={onHoverLeg}
+                onSelectLeg={onSelectLeg}
+              />
+            </div>
+          </div>
+        )}
 
         {/* EVENTS - Lifecycle events */}
         <div className="w-64 shrink-0 bg-app-card rounded-lg border border-app-border flex flex-col">

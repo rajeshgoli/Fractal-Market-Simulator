@@ -117,7 +117,7 @@ class TestBuildRefStateSnapshot:
     def test_builds_snapshot_with_empty_refs(self):
         """build_ref_state_snapshot should work with empty references."""
         ref_layer = ReferenceLayer()
-        ref_state = ReferenceState(
+        ref_state = ReferenceState(active_filtered=[],
             references=[],
             by_bin={},
             significant=[],
@@ -152,7 +152,7 @@ class TestBuildRefStateSnapshot:
             location=0.5,
             salience_score=0.8,
         )
-        ref_state = ReferenceState(
+        ref_state = ReferenceState(active_filtered=[],
             references=[ref_swing],
             by_bin={8: [ref_swing]},
             significant=[ref_swing],
@@ -183,7 +183,7 @@ class TestBuildRefStateSnapshot:
     def test_snapshot_includes_warmup_state(self):
         """build_ref_state_snapshot should capture warmup state correctly."""
         ref_layer = ReferenceLayer()
-        ref_state = ReferenceState(
+        ref_state = ReferenceState(active_filtered=[],
             references=[],
             by_bin={},
             significant=[],
@@ -224,7 +224,7 @@ class TestBuildRefStateSnapshot:
             location=0.618,
             salience_score=0.9,
         )
-        ref_state = ReferenceState(
+        ref_state = ReferenceState(active_filtered=[],
             references=[ref_swing],
             by_bin={9: [ref_swing]},
             significant=[ref_swing],

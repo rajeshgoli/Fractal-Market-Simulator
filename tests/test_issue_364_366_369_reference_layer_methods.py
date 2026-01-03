@@ -83,6 +83,7 @@ class TestReferenceState:
         """ReferenceState should work with empty references."""
         state = ReferenceState(
             references=[],
+            active_filtered=[],
             by_bin={},
             significant=[],
             by_depth={},
@@ -91,6 +92,7 @@ class TestReferenceState:
         )
 
         assert len(state.references) == 0
+        assert len(state.active_filtered) == 0
         assert state.direction_imbalance is None
 
     def test_state_with_references(self):
@@ -103,6 +105,7 @@ class TestReferenceState:
 
         state = ReferenceState(
             references=[ref1, ref2],
+            active_filtered=[],
             by_bin={9: [ref1], 8: [ref2]},
             significant=[ref1, ref2],  # Both bin >= 8
             by_depth={0: [ref1], 1: [ref2]},
@@ -119,6 +122,7 @@ class TestReferenceState:
         """direction_imbalance should be 'bull' when bull > 2x bear."""
         state = ReferenceState(
             references=[],
+            active_filtered=[],
             by_bin={},
             significant=[],
             by_depth={},
@@ -131,6 +135,7 @@ class TestReferenceState:
         """direction_imbalance should be 'bear' when bear > 2x bull."""
         state = ReferenceState(
             references=[],
+            active_filtered=[],
             by_bin={},
             significant=[],
             by_depth={},
@@ -143,6 +148,7 @@ class TestReferenceState:
         """direction_imbalance should be None when roughly balanced."""
         state = ReferenceState(
             references=[],
+            active_filtered=[],
             by_bin={},
             significant=[],
             by_depth={},

@@ -987,8 +987,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               trackError={trackError}
               onClearTrackError={clearTrackError}
               onEventHover={handleSidebarHoverLeg}
-              // Levels at Play (Issue #445 - moved from sidebar)
+              // Levels at Play (Issue #445 - moved from sidebar, #457 - split panels)
               allReferences={referenceState?.references ?? []}
+              activeFiltered={referenceState?.active_filtered ?? []}
               selectedLegId={selectedLegId}
               hoveredLegId={effectiveSidebarHoveredLegId}
               onHoverLeg={handleSidebarHoverLeg}

@@ -25,6 +25,7 @@ interface ReferenceConfigPanelProps {
   config: ReferenceConfig;
   onConfigUpdate: (config: ReferenceConfig) => void | Promise<void>;
   hideHeader?: boolean;
+  maxLegsPerPivot?: number;  // Max from DAG config (#457) - ceiling for top_n slider
 }
 
 // Discrete Fib values for formation threshold slider
@@ -63,6 +64,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
   config,
   onConfigUpdate,
   hideHeader = false,
+  maxLegsPerPivot = 10,  // Default to 10 if not provided (#457)
 }, ref) => {
   // Local state for sliders
   const [localConfig, setLocalConfig] = useState<ReferenceConfig>(config);
@@ -286,7 +288,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           value={localConfig.top_n ?? 5}
           onChange={(v) => handleSliderChange('top_n', Math.round(v))}
           min={1}
-          max={20}
+          max={maxLegsPerPivot}
           step={1}
           formatValue={(v) => String(Math.round(v))}
           disabled={isUpdating}

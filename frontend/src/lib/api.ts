@@ -161,13 +161,14 @@ export interface AggregatedBarsResponse {
   '1W'?: BarData[];
 }
 
-// Per-bar reference state snapshot for buffered playback (#451, #456)
+// Per-bar reference state snapshot for buffered playback (#451, #456, #457)
 // Full reference state per bar for efficient batched fetching
 export interface RefStateSnapshot {
   bar_index: number;
   formed_leg_ids: string[];
-  // Full reference state (#456) - enables batched fetching like DAG
-  references: ReferenceSwing[];  // All valid refs, sorted by salience
+  // Full reference state (#456, #457) - enables batched fetching like DAG
+  references: ReferenceSwing[];  // Top N per pivot, sorted by salience
+  active_filtered: ReferenceSwing[];  // Valid refs that didn't make top N (#457)
   filtered_legs: FilteredLeg[];  // Filtered legs for observation mode
   current_price: number;  // Bar close price for location calculation
   is_warming_up: boolean;  // Cold start indicator
@@ -613,8 +614,8 @@ export interface ReferenceStateResponse {
   warmup_progress: [number, number];
 }
 
-// Reference Observation types (Issue #400)
-export type FilterReason = 'valid' | 'cold_start' | 'not_formed' | 'pivot_breached' | 'completed' | 'origin_breached';
+// Reference Observation types (Issue #400, #457)
+export type FilterReason = 'valid' | 'cold_start' | 'not_formed' | 'pivot_breached' | 'completed' | 'origin_breached' | 'active_not_salient';
 
 export interface FilteredLeg {
   leg_id: string;
@@ -649,6 +650,7 @@ export interface LevelCrossEvent {
 
 export interface ReferenceStateResponseExtended extends ReferenceStateResponse {
   tracked_leg_ids: string[];
+  active_filtered: ReferenceSwing[];  // Valid refs that didn't make per-pivot top N (#457)
   filtered_legs: FilteredLeg[];
   filter_stats: FilterStats | null;
   crossing_events: LevelCrossEvent[];

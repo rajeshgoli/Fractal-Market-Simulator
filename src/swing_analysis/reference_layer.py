@@ -58,6 +58,7 @@ class FilterReason(Enum):
        - Bins < 8: Uses pivot_breach_tolerance (default 0%)
        - Bins >= 8: Uses significant_trade_breach_tolerance (15%) or close (10%)
     4. COMPLETED - Location > completion_threshold (past extension target)
+    5. ACTIVE_NOT_SALIENT - Valid reference, but didn't make per-pivot top N (#457)
 
     Note: Origin breach was removed in #454. A reference leg should remain valid
     as long as the pivot holds — origin breach just means you're in breakout zone.
@@ -73,6 +74,7 @@ class FilterReason(Enum):
     NOT_FORMED = "not_formed"         # Price hasn't reached formation threshold
     PIVOT_BREACHED = "pivot_breached" # Location < -tolerance (past defended pivot)
     COMPLETED = "completed"           # Location > completion_threshold
+    ACTIVE_NOT_SALIENT = "active_not_salient"  # Valid ref, didn't make per-pivot top N (#457)
 
 
 @dataclass
@@ -279,7 +281,10 @@ class ReferenceState:
     and analysis.
 
     Attributes:
-        references: All valid references, ranked by salience (highest first).
+        references: Top N per pivot, ranked by salience (highest first).
+        active_filtered: Valid references that didn't make per-pivot top N (#457).
+            These are fully valid references with salience scores — they just
+            didn't make the cut. Can return to top N as salience shifts.
         by_bin: References grouped by bin index (0-10).
         significant: References with bin >= 8 (5× median or larger).
         by_depth: References grouped by hierarchy depth (0 = root).
@@ -288,7 +293,9 @@ class ReferenceState:
             'bear' if bear refs > 2× bull refs, None if balanced.
 
     Design Notes:
-        - No internal limit on references (UI can limit display)
+        - references contains top N per pivot (configurable via top_n)
+        - active_filtered contains valid refs that didn't make top N
+        - Both lists are sorted by salience (highest first)
         - Grouping dicts are views into the references list (not copies)
         - direction_imbalance highlights when one direction dominates
         - significant threshold is bin >= 8 (5× median), configurable
@@ -296,6 +303,7 @@ class ReferenceState:
     Example:
         >>> state = ReferenceState(
         ...     references=[ref1, ref2, ref3],
+        ...     active_filtered=[ref4, ref5],
         ...     by_bin={9: [ref1], 8: [ref2, ref3]},
         ...     significant=[ref1, ref2, ref3],
         ...     by_depth={0: [ref1], 1: [ref2, ref3]},
@@ -304,10 +312,11 @@ class ReferenceState:
         ... )
         >>> len(state.references)
         3
-        >>> len(state.significant)
-        3
+        >>> len(state.active_filtered)
+        2
     """
-    references: List['ReferenceSwing']              # All valid, ranked by salience
+    references: List['ReferenceSwing']              # Top N per pivot, ranked by salience
+    active_filtered: List['ReferenceSwing']         # Valid refs that didn't make top N (#457)
     by_bin: Dict[int, List['ReferenceSwing']]       # Grouped by bin index (0-10)
     significant: List['ReferenceSwing']             # Bin >= 8 (5× median or larger)
     by_depth: Dict[int, List['ReferenceSwing']]     # Grouped by hierarchy depth
@@ -912,6 +921,62 @@ class ReferenceLayer:
             result[r.leg.direction].append(r)
         return result
 
+    def _apply_per_pivot_top_n(
+        self,
+        all_refs: List[ReferenceSwing],
+        top_n: int,
+    ) -> Tuple[List[ReferenceSwing], List[ReferenceSwing]]:
+        """
+        Apply per-pivot top N filtering (#457).
+
+        Groups references by their defended pivot (direction-appropriate: HIGH for
+        bull legs, LOW for bear legs) and keeps only the top N by salience per group.
+
+        This is NON-DESTRUCTIVE — re-evaluated each bar. A reference filtered out
+        at bar 100 can surface at bar 200 if its salience rises.
+
+        Args:
+            all_refs: All valid references, already sorted by salience descending.
+            top_n: Number of references to keep per pivot group.
+
+        Returns:
+            Tuple of (top_refs, filtered_refs):
+            - top_refs: References that made the per-pivot top N cut
+            - filtered_refs: Valid references that didn't make the cut
+        """
+        if top_n <= 0:
+            # No limit - all refs are top refs
+            return (list(all_refs), [])
+
+        # Group by pivot key: (pivot_price, pivot_index)
+        # Bull legs: pivot = HIGH (defended), Bear legs: pivot = LOW (defended)
+        pivot_groups: Dict[Tuple[Decimal, int], List[ReferenceSwing]] = {}
+
+        for ref in all_refs:
+            pivot_key = (ref.leg.pivot_price, ref.leg.pivot_index)
+            if pivot_key not in pivot_groups:
+                pivot_groups[pivot_key] = []
+            pivot_groups[pivot_key].append(ref)
+
+        # Each pivot group is already sorted by salience (inherited from input sort)
+        # Keep top N from each group
+        top_refs: List[ReferenceSwing] = []
+        filtered_refs: List[ReferenceSwing] = []
+
+        for pivot_key, group in pivot_groups.items():
+            # Group is sorted by salience (descending) since input was sorted
+            for i, ref in enumerate(group):
+                if i < top_n:
+                    top_refs.append(ref)
+                else:
+                    filtered_refs.append(ref)
+
+        # Re-sort both lists by salience for consistent output
+        top_refs.sort(key=lambda r: r.salience_score, reverse=True)
+        filtered_refs.sort(key=lambda r: r.salience_score, reverse=True)
+
+        return (top_refs, filtered_refs)
+
     def get_active_levels(self, state: ReferenceState) -> Dict[float, List[LevelInfo]]:
         """
         Get key price levels from all valid references.
@@ -1401,6 +1466,7 @@ class ReferenceLayer:
                 return None
             return ReferenceState(
                 references=[],
+                active_filtered=[],
                 by_bin={},
                 significant=[],
                 by_depth={},
@@ -1468,13 +1534,18 @@ class ReferenceLayer:
         # Sort by salience (descending)
         references.sort(key=lambda r: r.salience_score, reverse=True)
 
-        # Build groupings (#436)
-        by_bin = self._group_by_bin(references)
-        significant = self._filter_significant(references)
-        by_depth = self._group_by_depth(references)
-        by_direction = self._group_by_direction(references)
+        # Apply per-pivot top N filtering (#457)
+        # top_n from config determines how many refs to keep per pivot
+        top_n = self.reference_config.top_n
+        top_refs, active_filtered = self._apply_per_pivot_top_n(references, top_n)
 
-        # Compute direction imbalance
+        # Build groupings (#436) - based on top refs only
+        by_bin = self._group_by_bin(top_refs)
+        significant = self._filter_significant(top_refs)
+        by_depth = self._group_by_depth(top_refs)
+        by_direction = self._group_by_direction(top_refs)
+
+        # Compute direction imbalance (based on top refs)
         bull_count = len(by_direction.get('bull', []))
         bear_count = len(by_direction.get('bear', []))
         if bull_count > bear_count * 2:
@@ -1485,7 +1556,8 @@ class ReferenceLayer:
             imbalance = None
 
         return ReferenceState(
-            references=references,
+            references=top_refs,
+            active_filtered=active_filtered,
             by_bin=by_bin,
             significant=significant,
             by_depth=by_depth,
