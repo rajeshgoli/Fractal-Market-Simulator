@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 8
+**Unreviewed Change Count:** 9
 
 **Last Review:** 2026-01-02
 
@@ -16,6 +16,7 @@
 - **#469** — Keep buffered state on pause in Levels view (skip API fetch when buffer exists, trigger resync on view switch)
 - **#470** — Persist reference config across reloads (push saved localStorage config to server on mount, mirroring DAGView behavior)
 - **#471** — Add missing fromIndex parameter to handleProcessTill advanceReplay calls (fixes timestamp disappearing after large advances)
+- **#472** — Include filter_stats in RefStateSnapshot for playback (track filter counts in update() as byproduct, propagate to snapshot schema and frontend)
 
 ---
 
