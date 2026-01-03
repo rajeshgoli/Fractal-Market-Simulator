@@ -13,12 +13,11 @@ Read in order:
 - Fibonacci-based structural analysis (0.382 formation/invalidation)
 - Resolution-agnostic (1m to 1mo)
 - DetectionConfig centralizes all detection parameters
-- Calibration-first playback for causal evaluation
 - Backend-controlled data boundary for replay (single source of truth)
 - **DAG/Reference separation:** Structural tracking vs semantic filtering
 - **Rules by construction:** Temporal ordering from bar relationships (Type 1/2/3)
 - **Strict inter-bar causality:** Legs only form when pivots are from different bars (#189)
-- **Modular DAG layer:** dag/ subdirectory with LegDetector, LegPruner, state, calibrate, leg modules (#206)
+- **Modular DAG layer:** dag/ subdirectory with LegDetector, LegPruner, state, leg modules (#206)
 - **Structure-driven pruning:** Origin-proximity consolidation (time+range), pivot breach (10%), engulfed (strict) (#203, #208, #294)
 - **Counter-trend scoring:** Proximity pruning selects survivor by counter-trend range (#319)
 - **Two-impulse model:** Segment tracking with impulse_to_deepest, impulse_back, net_segment_impulse (#307)
@@ -319,7 +318,7 @@ All 3 pending changes accepted. Summary:
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| `developer_guide.md` | **Stale** | Line 28 lists `swing_node.py` (deleted #394). Engineering follow-up needed. |
+| `developer_guide.md` | Current | Updated Jan 2 — SwingNode references removed |
 | `user_guide.md` | Current | Updated Jan 2 — simplified Detection Config |
 | `DAG.md` | Current | Updated Jan 2 — DAG-focused, Reference Layer concepts removed |
 | `README.md` | Current | Updated Jan 2 — phase reflects completion |
@@ -397,6 +396,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 2 | #454-#460, #464 — Breach filtering fix, reset button, batched ref states, per-pivot top N, auto-track buffering, config preservation, calibration deletion, test helper consolidation (8 issues) | All Accepted; calibration removed from core decisions |
 | Jan 2 | #448, #449, #450, #452 — Formation pivot tracking, playback position filtering, view persistence, chart cleanup (4 issues) | All Accepted |
 | Jan 2 | #413 — DAGView/LevelsAtPlayView duplication audit: ~350 lines duplicated but intentionally separate | Closed (kept separate) |
 | Jan 2 | #445 — Bottom panel consolidation: LEVELS AT PLAY (column-major, paginated), FILTERS to sidebar, hover highlight | Accepted |

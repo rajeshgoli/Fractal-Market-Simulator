@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 8
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2026-01-02
 
@@ -8,14 +8,7 @@
 
 ## Pending Changes
 
-- **#464** — Consolidate test helpers into shared tests/helpers.py module
-- **#460** — Remove calibration concept from codebase (delete calibrate.py, tests, frontend state, doc updates)
-- **#459** — Preserve ReferenceConfig on playback resync (fixes user display preferences lost on pause/reverse)
-- **#458** — Buffer auto-tracked legs and crossing events during playback (eliminates per-bar track API calls)
-- **#457** — Per-pivot salience filtering with top N display limit (active_filtered field, split panel UI)
-- **#456** — Buffer per-bar reference states during playback (eliminates per-bar API calls)
-- **#455** — Wire up |< button to reset backend state (detector + reference layer)
-- **#454** — Rename origin breach to pivot breach, remove origin breach check, add completion_threshold config
+(none)
 
 ---
 
@@ -23,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 2 | #454-#460, #464 — Breach filtering fix, reset button, batched ref states, per-pivot top N, auto-track buffering, config preservation, calibration deletion, test helper consolidation (8 issues) | All Accepted; calibration removed from core decisions |
 | Jan 2 | #448, #449, #450, #452 — Formation pivot tracking, playback position filtering, view persistence, chart cleanup race fix (4 issues) | All Accepted; developer_guide.md discrepancy noted |
 | Jan 2 | #445 — Bottom panel consolidation: LEVELS AT PLAY (column-major, paginated), FILTERS to sidebar, hover highlight, removed redundant panels | Accepted |
 | Jan 2 | #444 — Reference Config Panel redesign: 4-section layout, color fill sliders, discrete Fib threshold, continuous breach tolerance (0-0.30), updated defaults | Accepted |

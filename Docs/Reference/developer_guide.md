@@ -24,8 +24,7 @@ src/
 │   └── ohlc_loader.py              # CSV loading (TradingView + semicolon formats)
 ├── swing_analysis/
 │   ├── types.py                    # Bar dataclass
-│   ├── detection_config.py             # DetectionConfig, DirectionConfig
-│   ├── swing_node.py               # SwingNode hierarchical structure
+│   ├── detection_config.py         # DetectionConfig, DirectionConfig
 │   ├── events.py                   # DetectionEvent types
 │   ├── dag/                        # DAG-based leg detection (modularized)
 │   │   ├── __init__.py             # Re-exports: LegDetector, Leg, DetectorState, etc.
@@ -76,7 +75,7 @@ scripts/                            # Dev utilities
 │                           SWING ANALYSIS                                     │
 │                                                                              │
 │   dag/leg_detector.py ──────────────────────────────────────────────────┐   │
-│   └── LegDetector.process_bar() ───────────► SwingNode + DetectionEvent │   │
+│   └── LegDetector.process_bar() ───────────────────► DetectionEvent     │   │
 │            │                                                             │   │
 │            │ uses                                                        │   │
 │            ▼                                                             │   │
@@ -624,45 +623,6 @@ Ranks references by relevance. Unified weights across all bins:
 
 Returns empty ReferenceState until `min_swings_for_classification` legs (default 50) have been seen. This ensures meaningful median-based bin classification.
 
-#### Legacy SwingNode API
-
-For backward compatibility, the older SwingNode-based API remains:
-
-```python
-from src.swing_analysis.reference_layer import (
-    ReferenceLayer,
-    ReferenceSwingInfo,
-    InvalidationResult,
-    CompletionResult,
-)
-from src.swing_analysis.dag import LegDetector
-
-# Process bars to get legs
-detector = LegDetector(config)
-for bar in bars:
-    detector.process_bar(bar)
-legs = detector.state.active_legs
-
-# Apply reference layer filters
-ref_layer = ReferenceLayer(config)
-reference_swings = ref_layer.get_reference_swings(legs)
-
-# Check invalidation/completion
-for info in reference_swings:
-    result = ref_layer.check_invalidation(info.swing, bar)
-    if result.is_invalidated:
-        print(f"{info.swing.swing_id} invalidated: {result.reason}")
-```
-
-**ReferenceSwingInfo fields:**
-- `swing`: The underlying SwingNode
-- `touch_tolerance`: Tolerance for wick violations
-- `close_tolerance`: Tolerance for close violations
-- `is_reference`: Whether swing passes all filters
-- `is_big()`: Method to check if swing is big (no parents)
-
----
-
 ### Reference Frame
 
 **File:** `src/swing_analysis/reference_frame.py`
@@ -970,7 +930,6 @@ python -m pytest tests/ --cov=src --cov-report=html
 | `test_discretizer.py` | Event generation, side-channels |
 | `test_reference_frame.py` | ReferenceFrame coordinate system |
 | `test_detection_config.py` | DetectionConfig dataclass |
-| `test_swing_node.py` | SwingNode hierarchical structure |
 | `test_swing_events.py` | Event types |
 
 ---
