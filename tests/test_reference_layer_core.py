@@ -487,12 +487,12 @@ class TestUpdateMethodBreaching:
 
         assert len(state2.references) == 0
 
-    def test_origin_breach_removes_small_reference(self):
-        """S/M reference with origin breach should be removed."""
+    def test_origin_breach_removed_leg_stays_valid(self):
+        """Origin breach removed in #454 - leg stays valid while pivot holds."""
         ref_layer = ReferenceLayer()
-        self._populate_distribution(ref_layer, 100)  # Ensure leg is S/M scale
+        self._populate_distribution(ref_layer, 100)  # Ensure leg is small bin
 
-        # Small leg (range=5, will be S scale with 100 in distribution)
+        # Small leg (range=5, will be small bin with 100 in distribution)
         leg = make_leg(direction='bear', origin_price=105, pivot_price=100, origin_index=1)
 
         # First, form it
@@ -501,10 +501,12 @@ class TestUpdateMethodBreaching:
 
         # Check if it formed
         if len(state1.references) == 1:
-            # Now breach origin (price above 105)
-            breach_bar = make_bar(close=108, high=110, low=106, index=2)
-            state2 = ref_layer.update([leg], breach_bar)
-            assert len(state2.references) == 0
+            # Price goes past origin (above 105) but leg should stay valid
+            # because origin breach was removed in #454
+            past_origin_bar = make_bar(close=108, high=110, low=106, index=2)
+            state2 = ref_layer.update([leg], past_origin_bar)
+            # #454: Origin breach removed - leg stays valid as long as pivot holds
+            assert len(state2.references) == 1
 
 
 class TestScaleClassificationIntegration:

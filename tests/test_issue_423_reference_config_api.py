@@ -26,7 +26,7 @@ class TestReferenceConfigSchemas:
     """Test Pydantic schemas for reference config."""
 
     def test_response_schema_matches_config(self):
-        """ReferenceConfigResponse should match ReferenceConfig structure."""
+        """ReferenceConfigResponse should match ReferenceConfig structure (#454 update)."""
         from src.replay_server.schemas import ReferenceConfigResponse
 
         config = ReferenceConfig.default()
@@ -39,11 +39,12 @@ class TestReferenceConfigSchemas:
             range_counter_weight=config.range_counter_weight,
             top_n=config.top_n,
             formation_fib_threshold=config.formation_fib_threshold,
-            origin_breach_tolerance=config.origin_breach_tolerance,
+            pivot_breach_tolerance=config.pivot_breach_tolerance,  # #454 renamed
+            completion_threshold=config.completion_threshold,  # #454 added
             significant_bin_threshold=config.significant_bin_threshold,
         )
 
-        # #444: Updated defaults
+        # #444, #454: Updated defaults
         assert response.range_weight == 0.8
         assert response.impulse_weight == 0.0
         assert response.recency_weight == 0.4
@@ -52,7 +53,8 @@ class TestReferenceConfigSchemas:
         assert response.range_counter_weight == 0.0
         assert response.top_n == 5
         assert response.formation_fib_threshold == 0.236
-        assert response.origin_breach_tolerance == 0.0
+        assert response.pivot_breach_tolerance == 0.0  # #454 renamed
+        assert response.completion_threshold == 2.0  # #454 added
         assert response.significant_bin_threshold == 8
 
     def test_update_request_partial_fields(self):

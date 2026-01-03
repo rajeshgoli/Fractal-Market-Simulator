@@ -647,7 +647,7 @@ class ActiveLevelsResponse(BaseModel):
 
 
 class FilteredLegResponse(BaseModel):
-    """API response for a filtered leg with filter reason (#436)."""
+    """API response for a filtered leg with filter reason (#436, #454)."""
     leg_id: str
     direction: str  # "bull" or "bear"
     origin_price: float
@@ -655,8 +655,8 @@ class FilteredLegResponse(BaseModel):
     pivot_price: float
     pivot_index: int
     bin: int  # 0-10 median-normalized bin index (#436)
-    filter_reason: str  # "valid", "cold_start", "not_formed", "pivot_breached", "completed", "origin_breached"
-    location: float  # 0.0 - 2.0 (current price position in reference frame)
+    filter_reason: str  # "valid", "cold_start", "not_formed", "pivot_breached", "completed" (#454: removed origin_breached)
+    location: float  # 0.0 - completion_threshold (current price position in reference frame)
     threshold: Optional[float] = None  # Violated threshold (for breach reasons)
 
 
@@ -815,7 +815,7 @@ class TrackLegResponse(BaseModel):
 
 class ReferenceConfigUpdateRequest(BaseModel):
     """
-    Request to update reference layer configuration (#436, #442).
+    Request to update reference layer configuration (#436, #442, #454).
 
     All fields are optional - only provided fields are updated.
     Used by POST /api/reference/config to apply partial updates.
@@ -837,8 +837,12 @@ class ReferenceConfigUpdateRequest(BaseModel):
     # Formation threshold
     formation_fib_threshold: Optional[float] = None
 
-    # Origin breach tolerance (for bins < significant_bin_threshold)
-    origin_breach_tolerance: Optional[float] = None
+    # Pivot breach tolerance (#454: renamed from origin_breach_tolerance)
+    # For bins < significant_bin_threshold, leg is breached when location < -tolerance
+    pivot_breach_tolerance: Optional[float] = None
+
+    # Completion threshold (#454)
+    completion_threshold: Optional[float] = None
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -850,6 +854,8 @@ class ReferenceConfigUpdateRequest(BaseModel):
                 "counter_weight": 0.0,
                 "range_counter_weight": 0.0,
                 "formation_fib_threshold": 0.5,
+                "pivot_breach_tolerance": 0.0,
+                "completion_threshold": 2.0,
                 "top_n": 5,
             }
         }
@@ -858,7 +864,7 @@ class ReferenceConfigUpdateRequest(BaseModel):
 
 class ReferenceConfigResponse(BaseModel):
     """
-    Response with current reference layer configuration (#436, #442).
+    Response with current reference layer configuration (#436, #442, #454).
 
     Returns all current values after an update, or the current defaults.
     Uses unified additive weights (no special modes).
@@ -879,8 +885,12 @@ class ReferenceConfigResponse(BaseModel):
     # Formation threshold
     formation_fib_threshold: float
 
-    # Origin breach tolerance (for bins < significant_bin_threshold)
-    origin_breach_tolerance: float
+    # Pivot breach tolerance (#454: renamed from origin_breach_tolerance)
+    # For bins < significant_bin_threshold, leg is breached when location < -tolerance
+    pivot_breach_tolerance: float
+
+    # Completion threshold (#454)
+    completion_threshold: float
 
     # Bin classification
     significant_bin_threshold: int  # Bins >= this get breach tolerance (#436)
@@ -896,7 +906,8 @@ class ReferenceConfigResponse(BaseModel):
                 "range_counter_weight": 0.0,
                 "top_n": 5,
                 "formation_fib_threshold": 0.382,
-                "origin_breach_tolerance": 0.0,
+                "pivot_breach_tolerance": 0.0,
+                "completion_threshold": 2.0,
                 "significant_bin_threshold": 8,
             }
         }

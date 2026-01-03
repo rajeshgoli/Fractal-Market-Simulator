@@ -78,15 +78,14 @@ def _filtered_leg_to_response(filtered_leg) -> FilteredLegResponse:
 
 
 def _compute_filter_stats(all_statuses, valid_leg_ids: set) -> FilterStatsResponse:
-    """Compute filter statistics from all leg statuses."""
+    """Compute filter statistics from all leg statuses (#454: origin_breached removed)."""
     total = len(all_statuses)
     valid_count = len(valid_leg_ids)
 
-    # Count by reason
+    # Count by reason (#454: origin_breached removed)
     by_reason = {
         'not_formed': 0,
         'pivot_breached': 0,
-        'origin_breached': 0,
         'completed': 0,
         'cold_start': 0,
     }
@@ -117,7 +116,7 @@ def _level_cross_event_to_response(event) -> LevelCrossEventResponse:
 
 
 def _empty_response() -> ReferenceStateApiResponse:
-    """Return an empty reference state response (#436)."""
+    """Return an empty reference state response (#436, #454)."""
     return ReferenceStateApiResponse(
         references=[],
         by_bin={},
@@ -133,7 +132,7 @@ def _empty_response() -> ReferenceStateApiResponse:
             total_legs=0,
             valid_count=0,
             pass_rate=0.0,
-            by_reason={'not_formed': 0, 'pivot_breached': 0, 'origin_breached': 0, 'completed': 0, 'cold_start': 0},
+            by_reason={'not_formed': 0, 'pivot_breached': 0, 'completed': 0, 'cold_start': 0},
         ),
         crossing_events=[],
     )
@@ -780,7 +779,8 @@ async def get_reference_config():
         range_counter_weight=config.range_counter_weight,
         top_n=config.top_n,
         formation_fib_threshold=config.formation_fib_threshold,
-        origin_breach_tolerance=config.origin_breach_tolerance,
+        pivot_breach_tolerance=config.pivot_breach_tolerance,
+        completion_threshold=config.completion_threshold,
         significant_bin_threshold=config.significant_bin_threshold,
     )
 
@@ -793,7 +793,8 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
     Accepts partial updates - only provided fields are modified.
     Returns the full updated configuration.
 
-    This endpoint allows changing salience weights and formation threshold.
+    This endpoint allows changing salience weights, formation threshold,
+    pivot breach tolerance, and completion threshold.
     The new config applies immediately to future reference calculations.
 
     Args:
@@ -829,10 +830,36 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
     if request.formation_fib_threshold is not None:
         new_config = new_config.with_formation_threshold(request.formation_fib_threshold)
 
-    # Apply origin breach tolerance update
-    if request.origin_breach_tolerance is not None:
+    # Apply pivot breach tolerance update (#454: renamed from origin_breach_tolerance)
+    if request.pivot_breach_tolerance is not None:
         new_config = new_config.with_breach_tolerance(
-            origin_breach_tolerance=request.origin_breach_tolerance
+            pivot_breach_tolerance=request.pivot_breach_tolerance
+        )
+
+    # Apply completion threshold update (#454)
+    if request.completion_threshold is not None:
+        # Create new config with updated completion_threshold
+        new_config = ReferenceConfig(
+            significant_bin_threshold=new_config.significant_bin_threshold,
+            min_swings_for_classification=new_config.min_swings_for_classification,
+            formation_fib_threshold=new_config.formation_fib_threshold,
+            pivot_breach_tolerance=new_config.pivot_breach_tolerance,
+            significant_trade_breach_tolerance=new_config.significant_trade_breach_tolerance,
+            significant_close_breach_tolerance=new_config.significant_close_breach_tolerance,
+            completion_threshold=request.completion_threshold,
+            range_weight=new_config.range_weight,
+            impulse_weight=new_config.impulse_weight,
+            recency_weight=new_config.recency_weight,
+            depth_weight=new_config.depth_weight,
+            counter_weight=new_config.counter_weight,
+            range_counter_weight=new_config.range_counter_weight,
+            recency_decay_bars=new_config.recency_decay_bars,
+            depth_decay_factor=new_config.depth_decay_factor,
+            top_n=new_config.top_n,
+            confluence_tolerance_pct=new_config.confluence_tolerance_pct,
+            active_level_distance_pct=new_config.active_level_distance_pct,
+            bin_window_duration_days=new_config.bin_window_duration_days,
+            bin_recompute_interval=new_config.bin_recompute_interval,
         )
 
     # Update reference layer config (preserves accumulated state)
@@ -847,6 +874,7 @@ async def update_reference_config(request: ReferenceConfigUpdateRequest):
         range_counter_weight=new_config.range_counter_weight,
         top_n=new_config.top_n,
         formation_fib_threshold=new_config.formation_fib_threshold,
-        origin_breach_tolerance=new_config.origin_breach_tolerance,
+        pivot_breach_tolerance=new_config.pivot_breach_tolerance,
+        completion_threshold=new_config.completion_threshold,
         significant_bin_threshold=new_config.significant_bin_threshold,
     )

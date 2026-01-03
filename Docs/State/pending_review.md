@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2026-01-02
 
@@ -8,10 +8,7 @@
 
 ## Pending Changes
 
-- #452 — Fix "Value is null" error during chart series cleanup (chart validity checks)
-- #450 — Persist view mode to localStorage so it survives page refresh
-- #449 — Levels at Play: filter legs by currentPosition to prevent rendering ahead of candles
-- #448 — Pivot extension nullifies formation: track pivot at formation, clear when extended
+- **#454** — Rename origin breach to pivot breach, remove origin breach check, add completion_threshold config
 
 ---
 
@@ -19,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 2 | #448, #449, #450, #452 — Formation pivot tracking, playback position filtering, view persistence, chart cleanup race fix (4 issues) | All Accepted; developer_guide.md discrepancy noted |
 | Jan 2 | #445 — Bottom panel consolidation: LEVELS AT PLAY (column-major, paginated), FILTERS to sidebar, hover highlight, removed redundant panels | Accepted |
 | Jan 2 | #444 — Reference Config Panel redesign: 4-section layout, color fill sliders, discrete Fib threshold, continuous breach tolerance (0-0.30), updated defaults | Accepted |
 | Jan 2 | #442 — Unified salience formula: 6 additive weights, normalized via median×25, no standalone mode | Accepted |

@@ -276,88 +276,118 @@ class TestIsFormedForReference:
 
 
 class TestIsFatallyBreached:
-    """Tests for _is_fatally_breached() method (#368)."""
+    """Tests for _is_fatally_breached() method (#368, #454: origin breach removed)."""
 
-    def test_pivot_breach(self):
-        """Pivot breach (location < 0) should be fatal."""
+    def test_pivot_breach_small_bin(self):
+        """Pivot breach for small bins (< 8) with zero tolerance should be fatal (#454)."""
+        ref_layer = ReferenceLayer()  # Default pivot_breach_tolerance = 0.0
+        leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
+
+        # location < 0 is pivot breach for small bins with zero tolerance
+        assert ref_layer._is_fatally_breached(leg, 5, -0.01, -0.01) is True
+        assert ref_layer._is_fatally_breached(leg, 7, -0.01, -0.01) is True
+
+        # At exactly 0 - NOT breached (< not <=)
+        assert ref_layer._is_fatally_breached(leg, 5, 0.0, 0.0) is False
+
+    def test_pivot_breach_significant_bin(self):
+        """Pivot breach for significant bins (>= 8) uses 15% trade / 10% close tolerance (#454)."""
         ref_layer = ReferenceLayer()
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
-        # location < 0 - use bin 8 (significant)
-        assert ref_layer._is_fatally_breached(leg, 8, -0.1, -0.1) is True
+        # Within both tolerances (trade location = -0.08, close = -0.08) - not breached
+        assert ref_layer._is_fatally_breached(leg, 8, -0.08, -0.08) is False
+        assert ref_layer._is_fatally_breached(leg, 9, -0.08, -0.08) is False
+
+        # Beyond 15% trade tolerance (location = -0.16) - breached
+        assert ref_layer._is_fatally_breached(leg, 8, -0.16, -0.16) is True
+        assert ref_layer._is_fatally_breached(leg, 9, -0.16, -0.16) is True
 
     def test_completion_breach(self):
-        """Past completion (location > 2) should be fatal."""
+        """Past completion (location > completion_threshold) should be fatal (#454)."""
         ref_layer = ReferenceLayer()
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
-        # location > 2 - use bin 9 (large)
+        # location > 2 (default completion_threshold) - use bin 9 (large)
         assert ref_layer._is_fatally_breached(leg, 9, 2.1, 2.1) is True
 
-    def test_small_bin_origin_breach_zero_tolerance(self):
-        """Bins < 8 have zero tolerance for origin breach by default."""
-        config = ReferenceConfig.default()  # origin_breach_tolerance = 0.0
+        # At exactly 2.0 - NOT breached
+        assert ref_layer._is_fatally_breached(leg, 9, 2.0, 2.0) is False
+
+    def test_small_bin_pivot_breach_zero_tolerance(self):
+        """Bins < 8 have zero tolerance for pivot breach by default (#454)."""
+        config = ReferenceConfig.default()  # pivot_breach_tolerance = 0.0
         ref_layer = ReferenceLayer(reference_config=config)
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # Add to formed refs to test removal
         ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
-        # Just past origin (location > 1.0 + 0.0 = 1.0) - bins 0-7 (small)
-        assert ref_layer._is_fatally_breached(leg, 5, 1.01, 1.01) is True
-        assert ref_layer._is_fatally_breached(leg, 7, 1.01, 1.01) is True
+        # Just past pivot (location < 0) - bins 0-7 (small)
+        assert ref_layer._is_fatally_breached(leg, 5, -0.01, -0.01) is True
+        assert ref_layer._is_fatally_breached(leg, 7, -0.01, -0.01) is True
 
-        # At exactly 1.0 - NOT breached
+        # At exactly 0.0 - NOT breached
         ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)  # Re-add for next test
-        assert ref_layer._is_fatally_breached(leg, 5, 1.0, 1.0) is False
+        assert ref_layer._is_fatally_breached(leg, 5, 0.0, 0.0) is False
 
-    def test_small_bin_origin_breach_configurable_tolerance(self):
-        """Origin tolerance for small bins should be configurable."""
-        config = ReferenceConfig.default().with_breach_tolerance(origin_breach_tolerance=0.05)
+    def test_small_bin_pivot_breach_configurable_tolerance(self):
+        """Pivot tolerance for small bins should be configurable (#454)."""
+        config = ReferenceConfig.default().with_breach_tolerance(pivot_breach_tolerance=0.05)
         ref_layer = ReferenceLayer(reference_config=config)
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
-        # Within 5% tolerance (location = 1.04) - bin 5 (small)
-        assert ref_layer._is_fatally_breached(leg, 5, 1.04, 1.04) is False
+        # Within 5% tolerance (location = -0.04) - bin 5 (small)
+        assert ref_layer._is_fatally_breached(leg, 5, -0.04, -0.04) is False
 
-        # Beyond 5% tolerance (location = 1.06)
-        assert ref_layer._is_fatally_breached(leg, 5, 1.06, 1.06) is True
+        # Beyond 5% tolerance (location = -0.06)
+        assert ref_layer._is_fatally_breached(leg, 5, -0.06, -0.06) is True
 
     def test_significant_bin_trade_breach_15_percent(self):
-        """Significant bins (>= 8) trade breach at 15% should be fatal."""
+        """Significant bins (>= 8) pivot breach at 15% trade should be fatal (#454)."""
         ref_layer = ReferenceLayer()
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
-        # Within 15% trade tolerance (location = 1.14) - bins 9, 10 (significant)
-        assert ref_layer._is_fatally_breached(leg, 9, 1.14, 1.0) is False
-        assert ref_layer._is_fatally_breached(leg, 10, 1.14, 1.0) is False
+        # Within 15% trade tolerance (location = -0.14) - bins 9, 10 (significant)
+        assert ref_layer._is_fatally_breached(leg, 9, -0.14, 0.0) is False
+        assert ref_layer._is_fatally_breached(leg, 10, -0.14, 0.0) is False
 
-        # Beyond 15% trade tolerance (location = 1.16)
-        assert ref_layer._is_fatally_breached(leg, 9, 1.16, 1.0) is True
-        assert ref_layer._is_fatally_breached(leg, 10, 1.16, 1.0) is True
+        # Beyond 15% trade tolerance (location = -0.16)
+        assert ref_layer._is_fatally_breached(leg, 9, -0.16, 0.0) is True
+        assert ref_layer._is_fatally_breached(leg, 10, -0.16, 0.0) is True
 
     def test_significant_bin_close_breach_10_percent(self):
-        """Significant bins close breach at 10% should be fatal."""
+        """Significant bins pivot breach at 10% close should be fatal (#454)."""
         ref_layer = ReferenceLayer()
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # Trade within tolerance, close within tolerance - bin 9 (significant)
-        assert ref_layer._is_fatally_breached(leg, 9, 1.08, 1.08) is False
+        assert ref_layer._is_fatally_breached(leg, 9, -0.08, -0.08) is False
 
         # Trade within tolerance, close beyond 10%
-        assert ref_layer._is_fatally_breached(leg, 9, 1.08, 1.11) is True
+        assert ref_layer._is_fatally_breached(leg, 9, -0.08, -0.11) is True
 
     def test_tolerance_at_exact_boundary(self):
-        """Test behavior at exact tolerance boundaries."""
+        """Test behavior at exact tolerance boundaries (#454)."""
         ref_layer = ReferenceLayer()
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
-        # At exactly 15% trade tolerance (significant bins)
-        # Note: We use > not >= so exactly at boundary is NOT breached
-        assert ref_layer._is_fatally_breached(leg, 9, 1.15, 1.0) is False
+        # At exactly -15% trade tolerance (significant bins)
+        # Note: We use < not <= so exactly at boundary is NOT breached
+        assert ref_layer._is_fatally_breached(leg, 9, -0.15, 0.0) is False
 
-        # Just over 15%
-        assert ref_layer._is_fatally_breached(leg, 9, 1.1501, 1.0) is True
+        # Just beyond -15%
+        assert ref_layer._is_fatally_breached(leg, 9, -0.1501, 0.0) is True
+
+    def test_origin_breach_removed(self):
+        """Origin breach is no longer checked - legs stay valid while pivot holds (#454)."""
+        ref_layer = ReferenceLayer()
+        leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
+
+        # Even at location > 1.0 (past origin), should NOT be fatal
+        # Only completion (> 2.0) or pivot breach (< 0) is fatal
+        assert ref_layer._is_fatally_breached(leg, 5, 1.5, 1.5) is False
+        assert ref_layer._is_fatally_breached(leg, 9, 1.9, 1.9) is False
 
     def test_formed_refs_cleaned_on_breach(self):
         """Fatal breach should remove leg from _formed_refs."""

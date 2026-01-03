@@ -59,16 +59,16 @@ def make_leg(
 
 
 class TestFilterReasonEnum:
-    """Test FilterReason enum values."""
+    """Test FilterReason enum values (#454: ORIGIN_BREACHED removed)."""
 
     def test_filter_reasons_exist(self):
-        """All expected filter reasons should exist."""
+        """All expected filter reasons should exist (#454: ORIGIN_BREACHED removed)."""
         assert FilterReason.VALID.value == "valid"
         assert FilterReason.COLD_START.value == "cold_start"
         assert FilterReason.NOT_FORMED.value == "not_formed"
         assert FilterReason.PIVOT_BREACHED.value == "pivot_breached"
         assert FilterReason.COMPLETED.value == "completed"
-        assert FilterReason.ORIGIN_BREACHED.value == "origin_breached"
+        # ORIGIN_BREACHED removed in #454 - origin breach no longer filters legs
 
 
 class TestFilteredLegDataclass:
@@ -200,8 +200,8 @@ class TestGetAllWithStatus:
         assert statuses[0].reason == FilterReason.COMPLETED
         assert statuses[0].threshold == 2.0
 
-    def test_origin_breached_small_bin(self):
-        """Small bin refs (< 8) past origin should get ORIGIN_BREACHED."""
+    def test_origin_breach_removed_legs_stay_valid(self):
+        """Legs past origin should remain VALID - origin breach removed in #454."""
         config = ReferenceConfig.default()
         ref_layer = ReferenceLayer(reference_config=config)
 
@@ -217,7 +217,7 @@ class TestGetAllWithStatus:
         ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
         # For bear leg (bull reference), extreme_location uses bar.low
-        # Origin breach needs extreme_location > 1.0
+        # Origin breach (location > 1.0) no longer filters legs (#454)
         # location = (bar.low - pivot) / (origin - pivot) = (bar.low - 100) / 2
         # To get location > 1.0: bar.low > 102
         # Bar with low > origin (103 > 102)
@@ -225,7 +225,8 @@ class TestGetAllWithStatus:
 
         statuses = ref_layer.get_all_with_status([leg], breach_bar)
         assert len(statuses) == 1
-        assert statuses[0].reason == FilterReason.ORIGIN_BREACHED
+        # #454: Origin breach removed - leg stays VALID as long as pivot holds
+        assert statuses[0].reason == FilterReason.VALID
         # Should have small bin (< 8)
         assert statuses[0].bin < 8
 

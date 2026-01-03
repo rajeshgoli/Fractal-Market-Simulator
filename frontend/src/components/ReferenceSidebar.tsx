@@ -55,7 +55,7 @@ const TOOLTIPS = {
   counter_weight: "Rank by counter-trend defense. Legs with larger counter-trend ranges score higher.",
   range_counter_weight: "Rank by structural importance: leg size \u00d7 counter-trend defense. Must be big AND defended.",
   formation_fib_threshold: "Retracement required before leg forms. Higher = stricter formation (only clear reversals).",
-  origin_breach_tolerance: "How far price can breach origin before leg is invalidated. Higher = more tolerant.",
+  pivot_breach_tolerance: "How far price can breach pivot before leg is invalidated. Higher = more tolerant.",
   top_n: "Maximum number of reference legs to display. Lower = less clutter.",
 };
 
@@ -69,7 +69,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
   const [isUpdating, setIsUpdating] = useState(false);
   const hasAppliedRef = React.useRef(false);
 
-  // Track if config has changes from server config (#436, #442, #444: unified weights)
+  // Track if config has changes from server config (#436, #442, #444, #454: unified weights)
   const hasChanges = useMemo(() => {
     return (
       localConfig.range_weight !== config.range_weight ||
@@ -79,7 +79,7 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
       localConfig.counter_weight !== config.counter_weight ||
       localConfig.range_counter_weight !== config.range_counter_weight ||
       localConfig.formation_fib_threshold !== config.formation_fib_threshold ||
-      localConfig.origin_breach_tolerance !== config.origin_breach_tolerance ||
+      localConfig.pivot_breach_tolerance !== config.pivot_breach_tolerance ||
       localConfig.top_n !== config.top_n
     );
   }, [localConfig, config]);
@@ -181,11 +181,11 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
         {renderFormationSlider()}
       </div>
 
-      {/* ORIGIN BREACH Section (#444) - continuous slider 0-0.3, orange gradient */}
+      {/* PIVOT BREACH Section (#454: renamed from Origin Breach) - continuous slider 0-0.3, orange gradient */}
       <div className="space-y-2">
-        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Origin Breach</div>
+        <div className="text-[10px] font-medium text-app-muted uppercase tracking-wider">Pivot Breach</div>
         {(() => {
-          const breachValue = localConfig.origin_breach_tolerance ?? 0;
+          const breachValue = localConfig.pivot_breach_tolerance ?? 0;
           const fillPercent = (breachValue / 0.3) * 100;
           const fillColor = getBreachColor(breachValue, 0.3);
           const trackStyle = {
@@ -193,14 +193,14 @@ const ReferenceConfigPanelInner = forwardRef<ReferenceConfigPanelHandle, Referen
           };
           return (
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-app-muted whitespace-nowrap w-[52px] shrink-0" title={TOOLTIPS.origin_breach_tolerance}>Tolerance</span>
+              <span className="text-[10px] text-app-muted whitespace-nowrap w-[52px] shrink-0" title={TOOLTIPS.pivot_breach_tolerance}>Tolerance</span>
               <input
                 type="range"
                 min={0}
                 max={0.3}
                 step={0.01}
                 value={breachValue}
-                onChange={(e) => handleSliderChange('origin_breach_tolerance', parseFloat(e.target.value))}
+                onChange={(e) => handleSliderChange('pivot_breach_tolerance', parseFloat(e.target.value))}
                 className="flex-1 min-w-0 h-1.5 rounded-lg appearance-none cursor-pointer"
                 style={trackStyle}
                 disabled={isUpdating}
@@ -466,11 +466,10 @@ const ReferenceStatsPanel: React.FC<ReferenceStatsPanelProps> = ({
 // Filters Panel (Issue #445 - moved from bottom panel)
 // ============================================================================
 
-// Filter reason display names and colors
+// Filter reason display names and colors (#454: origin_breached removed)
 const FILTER_REASON_LABELS: Record<string, { label: string; color: string }> = {
   not_formed: { label: 'Not Formed', color: 'text-yellow-400' },
   pivot_breached: { label: 'Pivot Breached', color: 'text-red-400' },
-  origin_breached: { label: 'Origin Breached', color: 'text-orange-400' },
   completed: { label: 'Completed', color: 'text-blue-400' },
   cold_start: { label: 'Cold Start', color: 'text-gray-400' },
 };

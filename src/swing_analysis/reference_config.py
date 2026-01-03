@@ -39,12 +39,15 @@ class ReferenceConfig:
         formation_fib_threshold: Fib level for price-based formation (38.2%).
             A leg becomes a valid reference when the confirming move reaches
             this threshold retracement.
-        origin_breach_tolerance: Breach tolerance for bins < significant_bin_threshold.
-            Default 0.0 (zero tolerance per north star).
-        significant_trade_breach_tolerance: Trade breach tolerance for significant refs.
-            Invalidates if price TRADES beyond this. Default 15%.
-        significant_close_breach_tolerance: Close breach tolerance for significant refs.
-            Invalidates if price CLOSES beyond this. Default 10%.
+        pivot_breach_tolerance: Pivot breach tolerance for bins < significant_bin_threshold.
+            A leg is pivot-breached when location < -pivot_breach_tolerance.
+            Default 0.0 (zero tolerance per north star). #454: Renamed from origin_breach_tolerance.
+        significant_trade_breach_tolerance: Pivot breach tolerance for significant refs.
+            Invalidates if price TRADES beyond pivot by this amount. Default 15%.
+        significant_close_breach_tolerance: Pivot breach tolerance for significant refs.
+            Invalidates if price CLOSES beyond pivot by this amount. Default 10%.
+        completion_threshold: Location threshold for leg completion. Default 2.0.
+            A leg is completed when location > completion_threshold.
         range_weight: Weight for range in salience calculation (normalized via median × 25).
         impulse_weight: Weight for impulse in salience calculation.
         recency_weight: Weight for recency in salience calculation.
@@ -78,12 +81,16 @@ class ReferenceConfig:
     # Formation threshold (fib level) — Issue #444: Updated default to 0.236
     formation_fib_threshold: float = 0.236  # 23.6% retracement
 
-    # Origin breach tolerance — bin-based (#436)
+    # Pivot breach tolerance — bin-based (#436, #454: renamed from origin breach)
     # Bins < significant_bin_threshold: zero tolerance (or configurable)
-    origin_breach_tolerance: float = 0.0   # 0% for small refs per north star
-    # Bins >= significant_bin_threshold: two thresholds
+    # Pivot is breached when location < -pivot_breach_tolerance
+    pivot_breach_tolerance: float = 0.0   # 0% for small refs per north star
+    # Bins >= significant_bin_threshold: two thresholds for pivot breach
     significant_trade_breach_tolerance: float = 0.15   # Invalidates if TRADES beyond 15%
     significant_close_breach_tolerance: float = 0.10   # Invalidates if CLOSES beyond 10%
+
+    # Completion threshold (#454)
+    completion_threshold: float = 2.0  # Location > this means leg completed
 
     # Salience weights — unified (no scale-dependent weights) (#436, #442, #444)
     # All weights are additive peers in a unified formula
@@ -129,13 +136,17 @@ class ReferenceConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "ReferenceConfig":
         """Create from dictionary."""
         # Issue #444: Updated defaults per issue table
+        # Issue #454: Renamed origin_breach_tolerance to pivot_breach_tolerance
+        # Support both old and new field names for backwards compatibility
+        pivot_breach = data.get("pivot_breach_tolerance", data.get("origin_breach_tolerance", 0.0))
         return cls(
             significant_bin_threshold=data.get("significant_bin_threshold", 8),
             min_swings_for_classification=data.get("min_swings_for_classification", 50),
             formation_fib_threshold=data.get("formation_fib_threshold", 0.236),
-            origin_breach_tolerance=data.get("origin_breach_tolerance", 0.0),
+            pivot_breach_tolerance=pivot_breach,
             significant_trade_breach_tolerance=data.get("significant_trade_breach_tolerance", 0.15),
             significant_close_breach_tolerance=data.get("significant_close_breach_tolerance", 0.10),
+            completion_threshold=data.get("completion_threshold", 2.0),
             range_weight=data.get("range_weight", 0.8),
             impulse_weight=data.get("impulse_weight", 0.0),
             recency_weight=data.get("recency_weight", 0.4),
@@ -157,9 +168,10 @@ class ReferenceConfig:
             significant_bin_threshold=self.significant_bin_threshold,
             min_swings_for_classification=self.min_swings_for_classification,
             formation_fib_threshold=formation_fib_threshold,
-            origin_breach_tolerance=self.origin_breach_tolerance,
+            pivot_breach_tolerance=self.pivot_breach_tolerance,
             significant_trade_breach_tolerance=self.significant_trade_breach_tolerance,
             significant_close_breach_tolerance=self.significant_close_breach_tolerance,
+            completion_threshold=self.completion_threshold,
             range_weight=self.range_weight,
             impulse_weight=self.impulse_weight,
             recency_weight=self.recency_weight,
@@ -177,18 +189,26 @@ class ReferenceConfig:
 
     def with_breach_tolerance(
         self,
-        origin_breach_tolerance: float = None,
+        pivot_breach_tolerance: float = None,
         significant_trade_breach_tolerance: float = None,
         significant_close_breach_tolerance: float = None,
     ) -> "ReferenceConfig":
-        """Create a new config with modified breach tolerances."""
+        """Create a new config with modified breach tolerances.
+
+        Args:
+            pivot_breach_tolerance: Tolerance for pivot breach (location < -tolerance).
+                #454: Renamed from origin_breach_tolerance.
+            significant_trade_breach_tolerance: Trade breach tolerance for significant refs.
+            significant_close_breach_tolerance: Close breach tolerance for significant refs.
+        """
         return ReferenceConfig(
             significant_bin_threshold=self.significant_bin_threshold,
             min_swings_for_classification=self.min_swings_for_classification,
             formation_fib_threshold=self.formation_fib_threshold,
-            origin_breach_tolerance=origin_breach_tolerance if origin_breach_tolerance is not None else self.origin_breach_tolerance,
+            pivot_breach_tolerance=pivot_breach_tolerance if pivot_breach_tolerance is not None else self.pivot_breach_tolerance,
             significant_trade_breach_tolerance=significant_trade_breach_tolerance if significant_trade_breach_tolerance is not None else self.significant_trade_breach_tolerance,
             significant_close_breach_tolerance=significant_close_breach_tolerance if significant_close_breach_tolerance is not None else self.significant_close_breach_tolerance,
+            completion_threshold=self.completion_threshold,
             range_weight=self.range_weight,
             impulse_weight=self.impulse_weight,
             recency_weight=self.recency_weight,
@@ -221,9 +241,10 @@ class ReferenceConfig:
             significant_bin_threshold=self.significant_bin_threshold,
             min_swings_for_classification=self.min_swings_for_classification,
             formation_fib_threshold=self.formation_fib_threshold,
-            origin_breach_tolerance=self.origin_breach_tolerance,
+            pivot_breach_tolerance=self.pivot_breach_tolerance,
             significant_trade_breach_tolerance=self.significant_trade_breach_tolerance,
             significant_close_breach_tolerance=self.significant_close_breach_tolerance,
+            completion_threshold=self.completion_threshold,
             range_weight=range_weight if range_weight is not None else self.range_weight,
             impulse_weight=impulse_weight if impulse_weight is not None else self.impulse_weight,
             recency_weight=recency_weight if recency_weight is not None else self.recency_weight,
@@ -245,9 +266,10 @@ class ReferenceConfig:
             significant_bin_threshold=self.significant_bin_threshold,
             min_swings_for_classification=self.min_swings_for_classification,
             formation_fib_threshold=self.formation_fib_threshold,
-            origin_breach_tolerance=self.origin_breach_tolerance,
+            pivot_breach_tolerance=self.pivot_breach_tolerance,
             significant_trade_breach_tolerance=self.significant_trade_breach_tolerance,
             significant_close_breach_tolerance=self.significant_close_breach_tolerance,
+            completion_threshold=self.completion_threshold,
             range_weight=self.range_weight,
             impulse_weight=self.impulse_weight,
             recency_weight=self.recency_weight,

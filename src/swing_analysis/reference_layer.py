@@ -51,14 +51,16 @@ class FilterReason(Enum):
     Used by get_all_with_status() to explain why each leg didn't become
     a valid trading reference. VALID indicates the leg passed all filters.
 
-    Filter conditions (evaluated in order):
+    Filter conditions (evaluated in order) — Issue #454:
     1. COLD_START - System warming up (< min_swings_for_scale formed legs)
-    2. NOT_FORMED - Price hasn't reached formation threshold (38.2% retracement)
-    3. PIVOT_BREACHED - Location < 0 (price past defended pivot)
-    4. COMPLETED - Location > 2 (past 2× extension target)
-    5. ORIGIN_BREACHED - Scale-dependent tolerance exceeded
-       - S/M: 0% (any touch)
-       - L/XL: 15% trade breach OR 10% close breach
+    2. NOT_FORMED - Price hasn't reached formation threshold (23.6% retracement)
+    3. PIVOT_BREACHED - Location < -pivot_breach_tolerance (price past defended pivot)
+       - Bins < 8: Uses pivot_breach_tolerance (default 0%)
+       - Bins >= 8: Uses significant_trade_breach_tolerance (15%) or close (10%)
+    4. COMPLETED - Location > completion_threshold (past extension target)
+
+    Note: Origin breach was removed in #454. A reference leg should remain valid
+    as long as the pivot holds — origin breach just means you're in breakout zone.
 
     Example:
         >>> leg = create_leg(...)
@@ -69,9 +71,8 @@ class FilterReason(Enum):
     VALID = "valid"                   # Leg passes all filters
     COLD_START = "cold_start"         # Not enough data for scale classification
     NOT_FORMED = "not_formed"         # Price hasn't reached formation threshold
-    PIVOT_BREACHED = "pivot_breached" # Location < 0 (past defended pivot)
-    COMPLETED = "completed"           # Location > 2 (past 2× extension)
-    ORIGIN_BREACHED = "origin_breached"  # Scale-dependent tolerance exceeded
+    PIVOT_BREACHED = "pivot_breached" # Location < -tolerance (past defended pivot)
+    COMPLETED = "completed"           # Location > completion_threshold
 
 
 @dataclass
@@ -699,14 +700,14 @@ class ReferenceLayer:
         """
         Check if reference is fatally breached.
 
-        A reference is fatally breached if ANY of these conditions are met:
-        1. Pivot breach: location < 0 (price went past defended pivot)
-        2. Completion: location > 2 (price completed 2x target)
-        3. Origin breach: Bin-dependent (see below)
+        A reference is fatally breached if ANY of these conditions are met (#454):
+        1. Pivot breach: location < -pivot_breach_tolerance
+           - Bins < 8: Uses pivot_breach_tolerance (default 0%)
+           - Bins >= 8: Uses significant_trade_breach_tolerance (15%) or close (10%)
+        2. Completion: location > completion_threshold (default 2)
 
-        Bin-dependent origin breach (#436):
-        - Bins < significant_bin_threshold (default 8): zero tolerance (configurable)
-        - Bins >= significant_bin_threshold: two thresholds — trade (15%) AND close (10%)
+        Note: Origin breach was removed in #454. A reference should remain valid
+        as long as the pivot holds — origin breach just means you're in breakout zone.
 
         Args:
             leg: The leg to check
@@ -717,33 +718,30 @@ class ReferenceLayer:
         Returns:
             True if fatally breached (should be removed from references)
         """
-        # Pivot breach (location < 0)
-        if location < 0:
-            # Remove from formed refs if present
-            self._formed_refs.pop(leg.leg_id, None)
-            return True
+        completion_threshold = self.reference_config.completion_threshold
 
-        # Past completion (location > 2)
-        if location > 2:
-            self._formed_refs.pop(leg.leg_id, None)
-            return True
-
-        # Origin breach — bin-dependent (#436)
+        # Pivot breach — bin-dependent (#436, #454: now uses config tolerance)
         if bin_index < self.reference_config.significant_bin_threshold:
-            # Small refs: zero tolerance (or configurable)
-            if location > (1.0 + self.reference_config.origin_breach_tolerance):
+            # Small refs: pivot breach when location < -pivot_breach_tolerance
+            pivot_tolerance = self.reference_config.pivot_breach_tolerance
+            if location < -pivot_tolerance:
                 self._formed_refs.pop(leg.leg_id, None)
                 return True
         else:
-            # Significant refs (bin >= 8): two thresholds
-            # Trade breach: invalidates if price TRADES beyond 15%
-            if location > (1.0 + self.reference_config.significant_trade_breach_tolerance):
+            # Significant refs (bin >= 8): two thresholds for pivot breach
+            # Trade breach: invalidates if price TRADES beyond pivot by 15%
+            if location < -self.reference_config.significant_trade_breach_tolerance:
                 self._formed_refs.pop(leg.leg_id, None)
                 return True
-            # Close breach: invalidates if price CLOSES beyond 10%
-            if bar_close_location > (1.0 + self.reference_config.significant_close_breach_tolerance):
+            # Close breach: invalidates if price CLOSES beyond pivot by 10%
+            if bar_close_location < -self.reference_config.significant_close_breach_tolerance:
                 self._formed_refs.pop(leg.leg_id, None)
                 return True
+
+        # Past completion
+        if location > completion_threshold:
+            self._formed_refs.pop(leg.leg_id, None)
+            return True
 
         return False
 
@@ -1194,6 +1192,7 @@ class ReferenceLayer:
         Standard fib levels: 0, 0.382, 0.5, 0.618, 1.0, 1.382, 1.5, 1.618, 2.0
 
         If location is beyond the standard range, returns the nearest boundary.
+        Uses completion_threshold from config for the upper boundary (#454).
 
         Args:
             location: Current price location in reference frame (0-2+ range).
@@ -1201,10 +1200,11 @@ class ReferenceLayer:
         Returns:
             The nearest standard fib level.
         """
+        completion_threshold = self.reference_config.completion_threshold
         if location < 0:
             return 0.0
-        if location > 2.0:
-            return 2.0
+        if location > completion_threshold:
+            return completion_threshold
 
         # Find the nearest standard fib level
         min_diff = float('inf')
@@ -1453,6 +1453,7 @@ class ReferenceLayer:
 
             bin_index = self._get_bin_index(leg.range)
             location = self._compute_location(leg, current_price)
+            completion_threshold = self.reference_config.completion_threshold
 
             salience = self._compute_salience(leg, bar.index)
 
@@ -1460,7 +1461,7 @@ class ReferenceLayer:
                 leg=leg,
                 bin=bin_index,
                 depth=leg.depth,
-                location=min(location, 2.0),  # Cap at 2.0
+                location=min(location, completion_threshold),  # Cap at completion_threshold (#454)
                 salience_score=salience,
             ))
 
@@ -1543,6 +1544,7 @@ class ReferenceLayer:
         for leg in legs:
             bin_index = self._get_bin_index(leg.range)
             location = self._compute_location(leg, current_price)
+            completion_threshold = self.reference_config.completion_threshold
 
             # Cold start: return all legs with COLD_START reason
             if self.is_cold_start:
@@ -1550,7 +1552,7 @@ class ReferenceLayer:
                     leg=leg,
                     reason=FilterReason.COLD_START,
                     bin=bin_index,
-                    location=min(location, 2.0),
+                    location=min(location, completion_threshold),
                     threshold=None,
                 ))
                 continue
@@ -1561,7 +1563,7 @@ class ReferenceLayer:
                     leg=leg,
                     reason=FilterReason.NOT_FORMED,
                     bin=bin_index,
-                    location=min(location, 2.0),
+                    location=min(location, completion_threshold),
                     threshold=self.reference_config.formation_fib_threshold,
                 ))
                 continue
@@ -1573,73 +1575,66 @@ class ReferenceLayer:
                 extreme_location = self._compute_location(leg, bar_high)
             bar_close_location = location
 
-            # Pivot breached: location < 0
-            if extreme_location < 0:
-                self._formed_refs.pop(leg.leg_id, None)
-                results.append(FilteredLeg(
-                    leg=leg,
-                    reason=FilterReason.PIVOT_BREACHED,
-                    bin=bin_index,
-                    location=min(location, 2.0),
-                    threshold=None,
-                ))
-                continue
+            completion_threshold = self.reference_config.completion_threshold
 
-            # Completed: location > 2
-            if extreme_location > 2:
+            # Pivot breached — bin-dependent (#436, #454: uses config tolerance)
+            if bin_index < self.reference_config.significant_bin_threshold:
+                # Small refs: pivot breach when location < -pivot_breach_tolerance
+                pivot_tolerance = self.reference_config.pivot_breach_tolerance
+                if extreme_location < -pivot_tolerance:
+                    self._formed_refs.pop(leg.leg_id, None)
+                    results.append(FilteredLeg(
+                        leg=leg,
+                        reason=FilterReason.PIVOT_BREACHED,
+                        bin=bin_index,
+                        location=min(location, completion_threshold),
+                        threshold=-pivot_tolerance,
+                    ))
+                    continue
+            else:
+                # Significant refs (bin >= 8): two thresholds for pivot breach
+                trade_tolerance = self.reference_config.significant_trade_breach_tolerance
+                close_tolerance = self.reference_config.significant_close_breach_tolerance
+                if extreme_location < -trade_tolerance:
+                    self._formed_refs.pop(leg.leg_id, None)
+                    results.append(FilteredLeg(
+                        leg=leg,
+                        reason=FilterReason.PIVOT_BREACHED,
+                        bin=bin_index,
+                        location=min(location, completion_threshold),
+                        threshold=-trade_tolerance,
+                    ))
+                    continue
+                if bar_close_location < -close_tolerance:
+                    self._formed_refs.pop(leg.leg_id, None)
+                    results.append(FilteredLeg(
+                        leg=leg,
+                        reason=FilterReason.PIVOT_BREACHED,
+                        bin=bin_index,
+                        location=min(location, completion_threshold),
+                        threshold=-close_tolerance,
+                    ))
+                    continue
+
+            # Completed: location > completion_threshold (#454)
+            if extreme_location > completion_threshold:
                 self._formed_refs.pop(leg.leg_id, None)
                 results.append(FilteredLeg(
                     leg=leg,
                     reason=FilterReason.COMPLETED,
                     bin=bin_index,
-                    location=min(location, 2.0),
-                    threshold=2.0,
+                    location=min(location, completion_threshold),
+                    threshold=completion_threshold,
                 ))
                 continue
 
-            # Origin breached: bin-dependent tolerance (#436)
-            if bin_index < self.reference_config.significant_bin_threshold:
-                tolerance = self.reference_config.origin_breach_tolerance
-                if extreme_location > (1.0 + tolerance):
-                    self._formed_refs.pop(leg.leg_id, None)
-                    results.append(FilteredLeg(
-                        leg=leg,
-                        reason=FilterReason.ORIGIN_BREACHED,
-                        bin=bin_index,
-                        location=min(location, 2.0),
-                        threshold=1.0 + tolerance,
-                    ))
-                    continue
-            else:  # Significant bins (>= 8)
-                trade_tolerance = self.reference_config.significant_trade_breach_tolerance
-                close_tolerance = self.reference_config.significant_close_breach_tolerance
-                if extreme_location > (1.0 + trade_tolerance):
-                    self._formed_refs.pop(leg.leg_id, None)
-                    results.append(FilteredLeg(
-                        leg=leg,
-                        reason=FilterReason.ORIGIN_BREACHED,
-                        bin=bin_index,
-                        location=min(location, 2.0),
-                        threshold=1.0 + trade_tolerance,
-                    ))
-                    continue
-                if bar_close_location > (1.0 + close_tolerance):
-                    self._formed_refs.pop(leg.leg_id, None)
-                    results.append(FilteredLeg(
-                        leg=leg,
-                        reason=FilterReason.ORIGIN_BREACHED,
-                        bin=bin_index,
-                        location=min(location, 2.0),
-                        threshold=1.0 + close_tolerance,
-                    ))
-                    continue
-
             # Passed all filters - VALID
+            # Note: Origin breach removed in #454 - legs stay valid while pivot holds
             results.append(FilteredLeg(
                 leg=leg,
                 reason=FilterReason.VALID,
                 bin=bin_index,
-                location=min(location, 2.0),
+                location=min(location, completion_threshold),
                 threshold=None,
             ))
 

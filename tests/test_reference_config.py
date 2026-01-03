@@ -1,5 +1,5 @@
 """
-Tests for ReferenceConfig dataclass (#436 bin-based migration, #444 updated defaults).
+Tests for ReferenceConfig dataclass (#436 bin-based migration, #444 updated defaults, #454 pivot breach).
 
 Verifies:
 - Default values match current spec (#444 updated defaults)
@@ -31,14 +31,19 @@ class TestReferenceConfigDefaults:
         config = ReferenceConfig.default()
         assert config.formation_fib_threshold == 0.236
 
-    def test_default_origin_tolerances(self):
-        """Origin breach tolerances should match spec."""
+    def test_default_pivot_tolerances(self):
+        """Pivot breach tolerances should match spec (#454: renamed from origin)."""
         config = ReferenceConfig.default()
         # Small bins (< 8): zero tolerance per north star
-        assert config.origin_breach_tolerance == 0.0
+        assert config.pivot_breach_tolerance == 0.0
         # Significant bins (>= 8): two thresholds
         assert config.significant_trade_breach_tolerance == 0.15  # 15% trade breach
         assert config.significant_close_breach_tolerance == 0.10  # 10% close breach
+
+    def test_default_completion_threshold(self):
+        """Completion threshold should be 2.0 (#454)."""
+        config = ReferenceConfig.default()
+        assert config.completion_threshold == 2.0
 
     def test_default_unified_salience_weights(self):
         """Unified salience weights should match spec (#436, #444)."""
@@ -101,7 +106,7 @@ class TestReferenceConfigEquality:
 
 
 class TestReferenceConfigSerialization:
-    """Tests for ReferenceConfig serialization."""
+    """Tests for ReferenceConfig serialization (#454: pivot breach rename)."""
 
     def test_to_dict(self):
         """to_dict should include all fields."""
@@ -111,9 +116,10 @@ class TestReferenceConfigSerialization:
         assert data["significant_bin_threshold"] == 8
         assert data["min_swings_for_classification"] == 50
         assert data["formation_fib_threshold"] == 0.236  # #444 updated default
-        assert data["origin_breach_tolerance"] == 0.0
+        assert data["pivot_breach_tolerance"] == 0.0  # #454 renamed
         assert data["significant_trade_breach_tolerance"] == 0.15
         assert data["significant_close_breach_tolerance"] == 0.10
+        assert data["completion_threshold"] == 2.0  # #454 added
         assert data["range_weight"] == 0.8  # #444 updated default
         assert data["impulse_weight"] == 0.0  # #444 updated default
         assert data["recency_weight"] == 0.4  # #444 updated default
@@ -129,9 +135,10 @@ class TestReferenceConfigSerialization:
             "significant_bin_threshold": 9,
             "min_swings_for_classification": 100,
             "formation_fib_threshold": 0.5,
-            "origin_breach_tolerance": 0.05,
+            "pivot_breach_tolerance": 0.05,  # #454 renamed
             "significant_trade_breach_tolerance": 0.20,
             "significant_close_breach_tolerance": 0.15,
+            "completion_threshold": 1.5,  # #454 added
             "range_weight": 0.3,
             "impulse_weight": 0.5,
             "recency_weight": 0.1,
@@ -147,9 +154,10 @@ class TestReferenceConfigSerialization:
         assert config.significant_bin_threshold == 9
         assert config.min_swings_for_classification == 100
         assert config.formation_fib_threshold == 0.5
-        assert config.origin_breach_tolerance == 0.05
+        assert config.pivot_breach_tolerance == 0.05  # #454 renamed
         assert config.significant_trade_breach_tolerance == 0.20
         assert config.significant_close_breach_tolerance == 0.15
+        assert config.completion_threshold == 1.5  # #454 added
         assert config.range_weight == 0.3
         assert config.impulse_weight == 0.5
         assert config.recency_weight == 0.1
@@ -159,14 +167,27 @@ class TestReferenceConfigSerialization:
         assert config.range_counter_weight == 0.5
         assert config.confluence_tolerance_pct == 0.002
 
+    def test_from_dict_legacy_origin_breach_migration(self):
+        """from_dict should migrate legacy origin_breach_tolerance field (#454)."""
+        data = {
+            "origin_breach_tolerance": 0.05,  # Legacy field name
+        }
+
+        config = ReferenceConfig.from_dict(data)
+
+        # Should be migrated to pivot_breach_tolerance
+        assert config.pivot_breach_tolerance == 0.05
+
     def test_from_dict_missing_fields_use_defaults(self):
         """from_dict should use defaults for missing fields."""
         data = {}  # Empty dict
         config = ReferenceConfig.from_dict(data)
 
-        # Should have all defaults (#444 updated)
+        # Should have all defaults (#444, #454 updated)
         assert config.significant_bin_threshold == 8
         assert config.formation_fib_threshold == 0.236  # #444 updated
+        assert config.pivot_breach_tolerance == 0.0  # #454 renamed
+        assert config.completion_threshold == 2.0  # #454 added
         assert config.range_weight == 0.8  # #444 updated
         assert config.recency_decay_bars == 1000
         assert config.depth_decay_factor == 0.5
@@ -177,9 +198,10 @@ class TestReferenceConfigSerialization:
             significant_bin_threshold=9,
             min_swings_for_classification=75,
             formation_fib_threshold=0.45,
-            origin_breach_tolerance=0.08,
+            pivot_breach_tolerance=0.08,  # #454 renamed
             significant_trade_breach_tolerance=0.18,
             significant_close_breach_tolerance=0.12,
+            completion_threshold=1.8,  # #454 added
             range_weight=0.35,
             impulse_weight=0.45,
             recency_weight=0.10,
@@ -208,18 +230,18 @@ class TestReferenceConfigBuilders:
         assert modified.formation_fib_threshold == 0.5
 
     def test_with_breach_tolerance(self):
-        """with_breach_tolerance should modify origin tolerances."""
+        """with_breach_tolerance should modify pivot tolerances (#454 renamed)."""
         original = ReferenceConfig.default()
         modified = original.with_breach_tolerance(
-            origin_breach_tolerance=0.10,
+            pivot_breach_tolerance=0.10,  # #454 renamed
             significant_trade_breach_tolerance=0.25,
             significant_close_breach_tolerance=0.18,
         )
 
-        assert original.origin_breach_tolerance == 0.0
+        assert original.pivot_breach_tolerance == 0.0  # #454 renamed
         assert original.significant_trade_breach_tolerance == 0.15
         assert original.significant_close_breach_tolerance == 0.10
-        assert modified.origin_breach_tolerance == 0.10
+        assert modified.pivot_breach_tolerance == 0.10  # #454 renamed
         assert modified.significant_trade_breach_tolerance == 0.25
         assert modified.significant_close_breach_tolerance == 0.18
 
@@ -276,11 +298,11 @@ class TestReferenceConfigBuilders:
         config = (
             ReferenceConfig.default()
             .with_formation_threshold(0.5)
-            .with_breach_tolerance(origin_breach_tolerance=0.08)
+            .with_breach_tolerance(pivot_breach_tolerance=0.08)  # #454 renamed
         )
 
         assert config.formation_fib_threshold == 0.5
-        assert config.origin_breach_tolerance == 0.08
+        assert config.pivot_breach_tolerance == 0.08  # #454 renamed
         # Other values should be defaults
         assert config.significant_bin_threshold == 8
 
@@ -317,14 +339,14 @@ class TestReferenceConfigUsage:
         assert config.formation_fib_threshold == 0.5
 
     def test_loose_tolerance(self):
-        """Create config with looser breach tolerance."""
+        """Create config with looser breach tolerance (#454 renamed)."""
         config = ReferenceConfig.default().with_breach_tolerance(
-            origin_breach_tolerance=0.15,
+            pivot_breach_tolerance=0.15,  # #454 renamed
             significant_trade_breach_tolerance=0.25,
             significant_close_breach_tolerance=0.20,
         )
 
-        assert config.origin_breach_tolerance == 0.15
+        assert config.pivot_breach_tolerance == 0.15  # #454 renamed
         assert config.significant_trade_breach_tolerance == 0.25
         assert config.significant_close_breach_tolerance == 0.20
 

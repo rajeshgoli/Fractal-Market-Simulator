@@ -26,7 +26,7 @@ function mergeDetectionConfig(saved: Partial<DetectionConfig> | null): Detection
 
 /**
  * Deep merge saved reference config with defaults to ensure all fields exist.
- * Handles schema evolution: #425 (salience weights), #436 (unified weights).
+ * Handles schema evolution: #425 (salience weights), #436 (unified weights), #454 (pivot breach rename).
  * Migrates old per-scale weights (big_xxx/small_xxx) to unified weights.
  */
 function mergeReferenceConfig(saved: Partial<ReferenceConfig> & Record<string, unknown> | null): ReferenceConfig | null {
@@ -39,6 +39,9 @@ function mergeReferenceConfig(saved: Partial<ReferenceConfig> & Record<string, u
   const impulseWeight = saved.impulse_weight ?? legacy.big_impulse_weight ?? DEFAULT_REFERENCE_CONFIG.impulse_weight;
   const recencyWeight = saved.recency_weight ?? legacy.big_recency_weight ?? DEFAULT_REFERENCE_CONFIG.recency_weight;
 
+  // #454: Migrate origin_breach_tolerance to pivot_breach_tolerance
+  const pivotBreachTolerance = saved.pivot_breach_tolerance ?? legacy.origin_breach_tolerance ?? DEFAULT_REFERENCE_CONFIG.pivot_breach_tolerance;
+
   return {
     range_weight: rangeWeight,
     impulse_weight: impulseWeight,
@@ -48,7 +51,8 @@ function mergeReferenceConfig(saved: Partial<ReferenceConfig> & Record<string, u
     range_counter_weight: saved.range_counter_weight ?? DEFAULT_REFERENCE_CONFIG.range_counter_weight,
     top_n: saved.top_n ?? DEFAULT_REFERENCE_CONFIG.top_n,
     formation_fib_threshold: saved.formation_fib_threshold ?? DEFAULT_REFERENCE_CONFIG.formation_fib_threshold,
-    origin_breach_tolerance: saved.origin_breach_tolerance ?? DEFAULT_REFERENCE_CONFIG.origin_breach_tolerance,
+    pivot_breach_tolerance: pivotBreachTolerance,
+    completion_threshold: saved.completion_threshold ?? DEFAULT_REFERENCE_CONFIG.completion_threshold,
     significant_bin_threshold: saved.significant_bin_threshold ?? DEFAULT_REFERENCE_CONFIG.significant_bin_threshold,
   };
 }

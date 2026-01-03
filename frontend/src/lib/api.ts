@@ -272,6 +272,22 @@ export async function reverseReplay(
   return response.json();
 }
 
+/**
+ * Reset DAG detector state to initial state.
+ * Clears all existing detector state on the backend.
+ * Use this when you want to restart detection from bar 0.
+ */
+export async function resetDag(): Promise<void> {
+  const response = await fetch(`${API_BASE}/dag/reset`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Failed to reset DAG: ${response.statusText}`);
+  }
+  // Response is CalibrationResponseHierarchical but we don't need to use it
+}
+
 // Types for playback feedback
 export interface PlaybackFeedbackEventContext {
   event_type?: string;
@@ -849,8 +865,10 @@ export interface ReferenceConfig {
   top_n: number;
   // Formation threshold
   formation_fib_threshold: number;
-  // Origin breach tolerance
-  origin_breach_tolerance: number;
+  // Pivot breach tolerance (#454: renamed from origin_breach_tolerance)
+  pivot_breach_tolerance: number;
+  // Completion threshold (#454)
+  completion_threshold: number;
   // Significant bin threshold (#436)
   significant_bin_threshold: number;
 }
@@ -864,11 +882,12 @@ export interface ReferenceConfigUpdateRequest {
   range_counter_weight?: number;
   top_n?: number;
   formation_fib_threshold?: number;
-  origin_breach_tolerance?: number;
+  pivot_breach_tolerance?: number;
+  completion_threshold?: number;
   significant_bin_threshold?: number;
 }
 
-// Issue #444: Updated defaults per issue table
+// Issue #444, #454: Updated defaults per issue table
 export const DEFAULT_REFERENCE_CONFIG: ReferenceConfig = {
   range_weight: 0.8,
   impulse_weight: 0.0,
@@ -878,7 +897,8 @@ export const DEFAULT_REFERENCE_CONFIG: ReferenceConfig = {
   range_counter_weight: 0.0,
   top_n: 5,
   formation_fib_threshold: 0.236,
-  origin_breach_tolerance: 0.0,
+  pivot_breach_tolerance: 0.0,
+  completion_threshold: 2.0,
   significant_bin_threshold: 8,
 };
 
