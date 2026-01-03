@@ -157,6 +157,7 @@ export function useReferenceState(): UseReferenceStateReturn {
     // Build full response format
     const state: ReferenceStateResponseExtended = {
       references: snapshot.references,
+      active_filtered: snapshot.active_filtered ?? [],  // #457: refs that didn't make top N
       by_bin,
       by_depth,
       by_direction,

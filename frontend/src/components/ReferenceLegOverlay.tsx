@@ -57,7 +57,7 @@ const STICKY_COLORS = [
 // Labels are limited to 1 per cell; zooming in spreads legs across more cells
 const LABEL_GRID_CELL_SIZE = 150; // pixels
 
-// Filter reason badge colors (Issue #400)
+// Filter reason badge colors (Issue #400, #457)
 const FILTER_REASON_COLORS: Record<FilterReason, { bg: string; text: string; label: string }> = {
   'valid': { bg: '#22c55e', text: '#ffffff', label: 'Valid' },
   'not_formed': { bg: '#eab308', text: '#000000', label: 'Not Formed' },
@@ -65,6 +65,7 @@ const FILTER_REASON_COLORS: Record<FilterReason, { bg: string; text: string; lab
   'origin_breached': { bg: '#f97316', text: '#ffffff', label: 'Origin' },
   'completed': { bg: '#3b82f6', text: '#ffffff', label: 'Complete' },
   'cold_start': { bg: '#6b7280', text: '#ffffff', label: 'Cold' },
+  'active_not_salient': { bg: '#8b5cf6', text: '#ffffff', label: 'On Deck' },
 };
 
 /**
