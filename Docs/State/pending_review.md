@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2026-01-03
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(none)
+- **#475** — Fly.io deployment infrastructure: Dockerfile, fly.toml, --data-dir, MULTI_TENANT, static serving
 
 ---
 
