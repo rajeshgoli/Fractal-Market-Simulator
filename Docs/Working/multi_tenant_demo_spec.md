@@ -1,6 +1,6 @@
 # Multi-tenant Demo Spec
 
-**Status:** Architect reviewed — ready for epic filing
+**Status:** Complete — Live at https://fractal-market-simulator.fly.dev/
 **Created:** January 3, 2026
 **Owner:** Product
 
@@ -220,9 +220,9 @@ Sequential execution required (each depends on prior).
 
 ## Gaps to Address
 
-1. **Error pages** — OAuth failure, 404, 500
-2. **Session expiry** — 7 days recommended
-3. **DNS** — CNAME `fractal.rajeshgo.li` → Fly.io app hostname
+1. **Error pages** — OAuth failure, 404, 500 (deferred — not blocking)
+2. **Session expiry** — 7 days recommended (deferred — not blocking)
+3. ~~**DNS** — CNAME `fractal.rajeshgo.li` → Fly.io app hostname~~ Done
 
 ---
 
@@ -267,18 +267,19 @@ python -m src.replay_server.main --data-dir /data
 
 ## Success Criteria
 
-- [ ] Can access `fractal.rajeshgo.li` from browser
-- [ ] Login with Google works
-- [ ] ES 30-min data loads and plays back
-- [ ] All visualization features work as they do locally
-- [ ] Config changes persist across sessions
-- [ ] Push to main auto-deploys
+- [x] Can access app from browser (https://fractal.rajeshgo.li)
+- [x] Login with Google works
+- [x] ES 30-min data loads and plays back
+- [x] All visualization features work as they do locally
+- [x] Config changes persist across sessions
+- [x] Push to main auto-deploys
 
 ---
 
-## Next Steps
+## Completion Notes
 
-1. Architect reviews and answers open questions
-2. Architect proposes implementation approach
-3. Epic filed with sub-issues
-4. Engineer implements
+Deployed January 3, 2026.
+
+**URLs:**
+- https://fractal.rajeshgo.li (custom domain)
+- https://fractal-market-simulator.fly.dev/ (Fly.io fallback)
