@@ -290,11 +290,12 @@ class TestIsFatallyBreached:
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # location < 0 is pivot breach for small bins with zero tolerance
-        assert ref_layer._is_fatally_breached(leg, 5, -0.01, -0.01) is True
-        assert ref_layer._is_fatally_breached(leg, 7, -0.01, -0.01) is True
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 5, -0.01, -0.01) is not None
+        assert ref_layer._is_fatally_breached(leg, 7, -0.01, -0.01) is not None
 
         # At exactly 0 - NOT breached (< not <=)
-        assert ref_layer._is_fatally_breached(leg, 5, 0.0, 0.0) is False
+        assert ref_layer._is_fatally_breached(leg, 5, 0.0, 0.0) is None
 
     def test_pivot_breach_significant_bin(self):
         """Pivot breach for significant bins (>= 8) uses 15% trade / 10% close tolerance (#454)."""
@@ -302,12 +303,13 @@ class TestIsFatallyBreached:
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # Within both tolerances (trade location = -0.08, close = -0.08) - not breached
-        assert ref_layer._is_fatally_breached(leg, 8, -0.08, -0.08) is False
-        assert ref_layer._is_fatally_breached(leg, 9, -0.08, -0.08) is False
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 8, -0.08, -0.08) is None
+        assert ref_layer._is_fatally_breached(leg, 9, -0.08, -0.08) is None
 
         # Beyond 15% trade tolerance (location = -0.16) - breached
-        assert ref_layer._is_fatally_breached(leg, 8, -0.16, -0.16) is True
-        assert ref_layer._is_fatally_breached(leg, 9, -0.16, -0.16) is True
+        assert ref_layer._is_fatally_breached(leg, 8, -0.16, -0.16) is not None
+        assert ref_layer._is_fatally_breached(leg, 9, -0.16, -0.16) is not None
 
     def test_completion_breach(self):
         """Past completion (location > completion_threshold) should be fatal (#454)."""
@@ -315,10 +317,11 @@ class TestIsFatallyBreached:
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # location > 2 (default completion_threshold) - use bin 9 (large)
-        assert ref_layer._is_fatally_breached(leg, 9, 2.1, 2.1) is True
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 9, 2.1, 2.1) is not None
 
         # At exactly 2.0 - NOT breached
-        assert ref_layer._is_fatally_breached(leg, 9, 2.0, 2.0) is False
+        assert ref_layer._is_fatally_breached(leg, 9, 2.0, 2.0) is None
 
     def test_small_bin_pivot_breach_zero_tolerance(self):
         """Bins < 8 have zero tolerance for pivot breach by default (#454)."""
@@ -330,12 +333,13 @@ class TestIsFatallyBreached:
         ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
         # Just past pivot (location < 0) - bins 0-7 (small)
-        assert ref_layer._is_fatally_breached(leg, 5, -0.01, -0.01) is True
-        assert ref_layer._is_fatally_breached(leg, 7, -0.01, -0.01) is True
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 5, -0.01, -0.01) is not None
+        assert ref_layer._is_fatally_breached(leg, 7, -0.01, -0.01) is not None
 
         # At exactly 0.0 - NOT breached
         ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)  # Re-add for next test
-        assert ref_layer._is_fatally_breached(leg, 5, 0.0, 0.0) is False
+        assert ref_layer._is_fatally_breached(leg, 5, 0.0, 0.0) is None
 
     def test_small_bin_pivot_breach_configurable_tolerance(self):
         """Pivot tolerance for small bins should be configurable (#454)."""
@@ -344,10 +348,11 @@ class TestIsFatallyBreached:
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # Within 5% tolerance (location = -0.04) - bin 5 (small)
-        assert ref_layer._is_fatally_breached(leg, 5, -0.04, -0.04) is False
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 5, -0.04, -0.04) is None
 
         # Beyond 5% tolerance (location = -0.06)
-        assert ref_layer._is_fatally_breached(leg, 5, -0.06, -0.06) is True
+        assert ref_layer._is_fatally_breached(leg, 5, -0.06, -0.06) is not None
 
     def test_significant_bin_trade_breach_15_percent(self):
         """Significant bins (>= 8) pivot breach at 15% trade should be fatal (#454)."""
@@ -355,12 +360,13 @@ class TestIsFatallyBreached:
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # Within 15% trade tolerance (location = -0.14) - bins 9, 10 (significant)
-        assert ref_layer._is_fatally_breached(leg, 9, -0.14, 0.0) is False
-        assert ref_layer._is_fatally_breached(leg, 10, -0.14, 0.0) is False
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 9, -0.14, 0.0) is None
+        assert ref_layer._is_fatally_breached(leg, 10, -0.14, 0.0) is None
 
         # Beyond 15% trade tolerance (location = -0.16)
-        assert ref_layer._is_fatally_breached(leg, 9, -0.16, 0.0) is True
-        assert ref_layer._is_fatally_breached(leg, 10, -0.16, 0.0) is True
+        assert ref_layer._is_fatally_breached(leg, 9, -0.16, 0.0) is not None
+        assert ref_layer._is_fatally_breached(leg, 10, -0.16, 0.0) is not None
 
     def test_significant_bin_close_breach_10_percent(self):
         """Significant bins pivot breach at 10% close should be fatal (#454)."""
@@ -368,10 +374,11 @@ class TestIsFatallyBreached:
         leg = make_leg(direction='bear', origin_price=110, pivot_price=100)
 
         # Trade within tolerance, close within tolerance - bin 9 (significant)
-        assert ref_layer._is_fatally_breached(leg, 9, -0.08, -0.08) is False
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 9, -0.08, -0.08) is None
 
         # Trade within tolerance, close beyond 10%
-        assert ref_layer._is_fatally_breached(leg, 9, -0.08, -0.11) is True
+        assert ref_layer._is_fatally_breached(leg, 9, -0.08, -0.11) is not None
 
     def test_tolerance_at_exact_boundary(self):
         """Test behavior at exact tolerance boundaries (#454)."""
@@ -380,10 +387,11 @@ class TestIsFatallyBreached:
 
         # At exactly -15% trade tolerance (significant bins)
         # Note: We use < not <= so exactly at boundary is NOT breached
-        assert ref_layer._is_fatally_breached(leg, 9, -0.15, 0.0) is False
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 9, -0.15, 0.0) is None
 
         # Just beyond -15%
-        assert ref_layer._is_fatally_breached(leg, 9, -0.1501, 0.0) is True
+        assert ref_layer._is_fatally_breached(leg, 9, -0.1501, 0.0) is not None
 
     def test_origin_breach_removed(self):
         """Origin breach is no longer checked - legs stay valid while pivot holds (#454)."""
@@ -392,8 +400,9 @@ class TestIsFatallyBreached:
 
         # Even at location > 1.0 (past origin), should NOT be fatal
         # Only completion (> 2.0) or pivot breach (< 0) is fatal
-        assert ref_layer._is_fatally_breached(leg, 5, 1.5, 1.5) is False
-        assert ref_layer._is_fatally_breached(leg, 9, 1.9, 1.9) is False
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 5, 1.5, 1.5) is None
+        assert ref_layer._is_fatally_breached(leg, 9, 1.9, 1.9) is None
 
     def test_formed_refs_cleaned_on_breach(self):
         """Fatal breach should remove leg from _formed_refs."""
@@ -539,7 +548,8 @@ class TestReferenceLayerIntegration:
         assert leg.leg_id in ref_layer._formed_refs
 
         # Breach the reference - bin 5 (small)
-        assert ref_layer._is_fatally_breached(leg, 5, -0.1, -0.1) is True
+        # #472: _is_fatally_breached now returns FilterReason instead of bool
+        assert ref_layer._is_fatally_breached(leg, 5, -0.1, -0.1) is not None
         assert leg.leg_id not in ref_layer._formed_refs
 
     def test_location_used_by_formation(self):

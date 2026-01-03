@@ -115,6 +115,34 @@ class FilteredLeg:
 
 
 @dataclass
+class FilterStats:
+    """
+    Statistics about filter outcomes for observability (#472).
+
+    Computed as a byproduct of update() without requiring get_all_with_status().
+    Enables Filters panel to display filter stats during playback.
+
+    Attributes:
+        total_legs: Total number of legs evaluated.
+        valid_count: Number of legs that passed all filters (became references).
+        pass_rate: Ratio of valid_count to total_legs (0.0-1.0).
+        by_reason: Count of legs per filter reason.
+
+    Example:
+        >>> stats = FilterStats(
+        ...     total_legs=100,
+        ...     valid_count=30,
+        ...     pass_rate=0.30,
+        ...     by_reason={'not_formed': 50, 'pivot_breached': 15, 'completed': 5}
+        ... )
+    """
+    total_legs: int
+    valid_count: int
+    pass_rate: float
+    by_reason: Dict[str, int]
+
+
+@dataclass
 class ReferenceSwing:
     """
     A DAG leg that qualifies as a valid trading reference.
@@ -324,6 +352,7 @@ class ReferenceState:
     direction_imbalance: Optional[str]              # 'bull' | 'bear' | None
     is_warming_up: bool = False                      # True if in cold start
     warmup_progress: Tuple[int, int] = (0, 50)       # (current_count, required_count)
+    filter_stats: Optional['FilterStats'] = None     # Filter statistics (#472)
 
 
 @dataclass
@@ -756,7 +785,7 @@ class ReferenceLayer:
         bin_index: int,
         location: float,
         bar_close_location: float
-    ) -> bool:
+    ) -> Optional[FilterReason]:
         """
         Check if reference is fatally breached.
 
@@ -776,7 +805,8 @@ class ReferenceLayer:
             bar_close_location: Location of bar close (for significant close breach)
 
         Returns:
-            True if fatally breached (should be removed from references)
+            FilterReason if fatally breached (PIVOT_BREACHED or COMPLETED), None otherwise.
+            (#472: Changed from bool to Optional[FilterReason] to enable filter_stats tracking in update())
         """
         completion_threshold = self.reference_config.completion_threshold
 
@@ -786,26 +816,26 @@ class ReferenceLayer:
             pivot_tolerance = self.reference_config.pivot_breach_tolerance
             if location < -pivot_tolerance:
                 self._formed_refs.pop(leg.leg_id, None)
-                return True
+                return FilterReason.PIVOT_BREACHED
         else:
             # Significant refs (bin >= 8): two thresholds for pivot breach
             # Trade breach: invalidates if price TRADES beyond pivot by 15%
             if location < -self.reference_config.significant_trade_breach_tolerance:
                 self._formed_refs.pop(leg.leg_id, None)
-                return True
+                return FilterReason.PIVOT_BREACHED
             # Close breach: invalidates if price CLOSES beyond pivot by 10%
             if bar_close_location < -self.reference_config.significant_close_breach_tolerance:
                 self._formed_refs.pop(leg.leg_id, None)
-                return True
+                return FilterReason.PIVOT_BREACHED
 
         # Past completion (#467): Check both current location AND max_location
         # - location > threshold: current bar triggered completion (strict >)
         # - _is_completed: leg was completed on a previous bar (>= via max_location)
         if location > completion_threshold or self._is_completed(leg):
             self._formed_refs.pop(leg.leg_id, None)
-            return True
+            return FilterReason.COMPLETED
 
-        return False
+        return None
 
     def _get_max_range(self) -> float:
         """
@@ -1517,6 +1547,13 @@ class ReferenceLayer:
         if self.is_cold_start:
             if not build_response:
                 return None
+            # #472: Include filter_stats even during cold start
+            cold_start_stats = FilterStats(
+                total_legs=len(legs),
+                valid_count=0,
+                pass_rate=0.0,
+                by_reason={FilterReason.COLD_START.value: len(legs)},
+            )
             return ReferenceState(
                 references=[],
                 active_filtered=[],
@@ -1527,11 +1564,15 @@ class ReferenceLayer:
                 direction_imbalance=None,
                 is_warming_up=True,
                 warmup_progress=self.cold_start_progress,
+                filter_stats=cold_start_stats,
             )
 
         # === SIDE EFFECTS: Breach checking (removes invalid refs from _formed_refs) ===
         bar_high = Decimal(str(bar.high))
         bar_low = Decimal(str(bar.low))
+
+        # #472: Track filter counts as byproduct of breach checking
+        breach_counts: Dict[str, int] = {}
 
         for leg in legs:
             if leg.leg_id not in self._formed_refs:
@@ -1555,8 +1596,11 @@ class ReferenceLayer:
             bar_close_location = self._compute_location(leg, current_price)
 
             # Side effect: removes from _formed_refs if fatally breached
-            # Pass breach_extreme_location for breach checks
-            self._is_fatally_breached(leg, bin_index, breach_extreme_location, bar_close_location)
+            # #472: Returns FilterReason instead of bool for tracking
+            breach_reason = self._is_fatally_breached(leg, bin_index, breach_extreme_location, bar_close_location)
+            if breach_reason is not None:
+                reason_key = breach_reason.value
+                breach_counts[reason_key] = breach_counts.get(reason_key, 0) + 1
 
         # Time-based eviction - keeps distribution fresh (rolling 90-day window)
         self._bin_distribution.evict_old_legs(timestamp)
@@ -1567,8 +1611,11 @@ class ReferenceLayer:
 
         # === RESPONSE BUILDING: Only when build_response=True ===
         references: List[ReferenceSwing] = []
+        # #472: Count legs not formed
+        not_formed_count = 0
         for leg in legs:
             if leg.leg_id not in self._formed_refs:
+                not_formed_count += 1
                 continue
 
             # Filter by formation bar if max_bar_index is provided (#451)
@@ -1576,6 +1623,7 @@ class ReferenceLayer:
             if max_bar_index is not None:
                 _pivot_price, formation_bar = self._formed_refs[leg.leg_id]
                 if formation_bar > max_bar_index:
+                    not_formed_count += 1  # Count as not formed for this bar query
                     continue  # Skip legs formed after the requested bar
 
             bin_index = self._get_bin_index(leg.range)
@@ -1616,6 +1664,25 @@ class ReferenceLayer:
         else:
             imbalance = None
 
+        # #472: Build filter_stats from tracked counts
+        by_reason: Dict[str, int] = {}
+        if not_formed_count > 0:
+            by_reason[FilterReason.NOT_FORMED.value] = not_formed_count
+        # Add breach counts
+        by_reason.update(breach_counts)
+        # Count active_not_salient (valid refs that didn't make per-pivot top N)
+        if len(active_filtered) > 0:
+            by_reason[FilterReason.ACTIVE_NOT_SALIENT.value] = len(active_filtered)
+
+        total_legs = len(legs)
+        valid_count = len(top_refs)
+        filter_stats = FilterStats(
+            total_legs=total_legs,
+            valid_count=valid_count,
+            pass_rate=valid_count / total_legs if total_legs > 0 else 0.0,
+            by_reason=by_reason,
+        )
+
         return ReferenceState(
             references=top_refs,
             active_filtered=active_filtered,
@@ -1626,6 +1693,7 @@ class ReferenceLayer:
             direction_imbalance=imbalance,
             is_warming_up=False,
             warmup_progress=self.cold_start_progress,
+            filter_stats=filter_stats,
         )
 
     def get_all_with_status(self, legs: List[Leg], bar: Bar) -> List[FilteredLeg]:

@@ -141,7 +141,7 @@ Uses a dictionary to support arbitrary timeframe keys (1m, 5m, 15m, 30m, 1H, 4H,
 
 
 class RefStateSnapshot(BaseModel):
-    """Full per-bar reference state for buffered playback (#451, #456, #457, #458).
+    """Full per-bar reference state for buffered playback (#451, #456, #457, #458, #472).
 
     Contains complete reference layer state for a specific bar index.
     Used by frontend during high-speed playback to avoid per-bar API calls.
@@ -160,6 +160,8 @@ class RefStateSnapshot(BaseModel):
     # Auto-tracking fields (#458) - eliminate per-bar track API calls
     auto_tracked_leg_id: Optional[str] = None  # Which leg the algorithm auto-tracks (top reference if no pin)
     crossing_events: List["LevelCrossEventResponse"] = []  # Level crossings for auto-tracked leg at this bar
+    # Filter statistics (#472) - enables Filters panel during playback
+    filter_stats: Optional["FilterStatsResponse"] = None  # Filter breakdown statistics
 
 
 class ReplayAdvanceResponse(BaseModel):

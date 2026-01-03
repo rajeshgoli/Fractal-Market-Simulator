@@ -167,7 +167,7 @@ export function useReferenceState(): UseReferenceStateReturn {
       // Keep existing tracked_leg_ids from current state (not in snapshot)
       tracked_leg_ids: referenceState?.tracked_leg_ids ?? [],
       filtered_legs: snapshot.filtered_legs,
-      filter_stats: null,  // Not included in snapshot for performance
+      filter_stats: snapshot.filter_stats ?? null,  // #472: Use filter_stats from snapshot
       crossing_events: snapshot.crossing_events ?? [],  // #458: crossing events from snapshot
     };
 

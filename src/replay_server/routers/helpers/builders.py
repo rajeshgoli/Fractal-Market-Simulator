@@ -26,6 +26,7 @@ from ...schemas import (
     RefStateSnapshot,
     ReferenceSwingResponse,
     FilteredLegResponse,
+    FilterStatsResponse,
     LevelCrossEventResponse,
 )
 from .conversions import leg_to_response, size_to_scale
@@ -490,6 +491,16 @@ def build_ref_state_snapshot(
         if not was_tracked:
             ref_layer.remove_crossing_tracking(auto_tracked_leg_id)
 
+    # #472: Include filter_stats from ref_state
+    filter_stats_response = None
+    if ref_state.filter_stats is not None:
+        filter_stats_response = FilterStatsResponse(
+            total_legs=ref_state.filter_stats.total_legs,
+            valid_count=ref_state.filter_stats.valid_count,
+            pass_rate=ref_state.filter_stats.pass_rate,
+            by_reason=ref_state.filter_stats.by_reason,
+        )
+
     return RefStateSnapshot(
         bar_index=bar_index,
         formed_leg_ids=formed_ids,
@@ -502,4 +513,5 @@ def build_ref_state_snapshot(
         median=ref_layer._bin_distribution.median,
         auto_tracked_leg_id=auto_tracked_leg_id,
         crossing_events=crossing_events,
+        filter_stats=filter_stats_response,
     )

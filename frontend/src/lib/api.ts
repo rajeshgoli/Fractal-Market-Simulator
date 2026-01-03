@@ -160,7 +160,7 @@ export interface AggregatedBarsResponse {
   '1W'?: BarData[];
 }
 
-// Per-bar reference state snapshot for buffered playback (#451, #456, #457, #458)
+// Per-bar reference state snapshot for buffered playback (#451, #456, #457, #458, #472)
 // Full reference state per bar for efficient batched fetching
 export interface RefStateSnapshot {
   bar_index: number;
@@ -176,6 +176,8 @@ export interface RefStateSnapshot {
   // Auto-tracking fields (#458) - eliminate per-bar track API calls
   auto_tracked_leg_id?: string | null;  // Which leg the algorithm auto-tracks (top reference if no pin)
   crossing_events?: LevelCrossEvent[];  // Level crossings for auto-tracked leg at this bar
+  // Filter statistics (#472) - enables Filters panel during playback
+  filter_stats?: FilterStats | null;  // Filter breakdown statistics
 }
 
 export interface ReplayAdvanceResponse {
