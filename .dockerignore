@@ -39,9 +39,9 @@ ground_truth/
 .archive/
 .gemini/
 
-# Test data (except es-30m.csv which we need)
+# Test data (except demo file which we need)
 test_data/*.csv
-!test_data/es-30m.csv
+!test_data/es-30m-demo.csv
 
 # Documentation (not needed in container)
 Docs/
