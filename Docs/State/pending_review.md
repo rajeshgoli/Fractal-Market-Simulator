@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 6
+**Unreviewed Change Count:** 7
 
 **Last Review:** 2026-01-03
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#484** — OHLC loader mixed time format fix: Support both HH:MM and HH:MM:SS in format_a CSV files using pandas format='mixed'
 - **#475** — Fly.io deployment infrastructure: Dockerfile, fly.toml, --data-dir, MULTI_TENANT, static serving
 - **#476** — SQLite setup: db.py module, volume mount, WAL mode, startup init, local dev fallback
 - **#477** — OAuth authentication: Google + GitHub OAuth, JWT cookies, auth middleware, login page, user display in header
