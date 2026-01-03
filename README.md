@@ -34,9 +34,11 @@ pip install -r requirements.txt
 cd frontend && npm install && npm run build && cd ..
 
 # Launch Market Structure View
-python -m src.replay_server.main --data test_data/es-5m.csv --window 10000
-open http://127.0.0.1:8000
+python -m src.replay_server.main
+open http://127.0.0.1:8000/replay
 ```
+
+The UI will prompt you to select a data file on first launch.
 
 **Levels at Play** — Reference Layer view showing valid trading references with fib levels and level crossing events.
 
@@ -55,8 +57,8 @@ See [User Guide](Docs/Reference/user_guide.md) for detailed documentation.
 
 ```bash
 # Launch Market Structure View
-python -m src.replay_server.main --data test_data/es-5m.csv --window 10000
-open http://127.0.0.1:8000
+python -m src.replay_server.main
+open http://127.0.0.1:8000/replay
 
 # Run tests
 source venv/bin/activate && python -m pytest tests/ -v
