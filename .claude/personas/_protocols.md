@@ -2,6 +2,10 @@
 
 Essential rules all roles follow. Full system details in `director.md`.
 
+## Session Start
+
+Before any task, read `.claude/why.md` to calibrate quality expectations.
+
 ## Ownership
 
 Every task has exactly one owner. Ownership transfers explicitly with **Instruction**.
