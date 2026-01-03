@@ -59,6 +59,33 @@ const STICKY_COLORS = [
 // Labels are limited to 1 per cell; zooming in spreads legs across more cells
 const LABEL_GRID_CELL_SIZE = 150; // pixels
 
+/**
+ * Deduplicate and sort line data for TradingView's lightweight-charts.
+ * The library requires data to be strictly ascending by time with no duplicates.
+ * If duplicates exist, keeps only the first occurrence.
+ * Returns null if resulting data has fewer than 2 unique points (can't draw a line).
+ */
+const deduplicateLineData = <T extends { time: Time; value: number }>(data: T[]): T[] | null => {
+  if (data.length === 0) return null;
+
+  // Sort by time ascending
+  const sorted = [...data].sort((a, b) => (a.time as number) - (b.time as number));
+
+  // Deduplicate by keeping first occurrence of each timestamp
+  const seen = new Set<number>();
+  const deduped: T[] = [];
+  for (const point of sorted) {
+    const time = point.time as number;
+    if (!seen.has(time)) {
+      seen.add(time);
+      deduped.push(point);
+    }
+  }
+
+  // Need at least 2 points to draw a line
+  return deduped.length >= 2 ? deduped : null;
+};
+
 // Filter reason badge colors (Issue #400, #457)
 const FILTER_REASON_COLORS: Record<FilterReason, { bg: string; text: string; label: string }> = {
   'valid': { bg: '#22c55e', text: '#ffffff', label: 'Valid' },
@@ -286,10 +313,18 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
         });
 
         // Horizontal line spanning visible range
-        const data: LineData<Time>[] = [
+        // Deduplicate and sort to prevent 'data must be asc ordered by time' errors (#481)
+        const rawData: LineData<Time>[] = [
           { time: timeRange.from as Time, value: price },
           { time: timeRange.to as Time, value: price },
         ];
+
+        const data = deduplicateLineData(rawData);
+        if (!data) {
+          // Duplicate timestamps - can't draw line, skip this fib level
+          chart.removeSeries(fibSeries);
+          return;
+        }
 
         fibSeries.setData(data);
         fibSeriesRef.current.set(key, fibSeries);
@@ -357,13 +392,18 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       });
 
       // Set data: line from origin to pivot
-      const data: LineData<Time>[] = [
+      // Deduplicate and sort to prevent 'data must be asc ordered by time' errors (#481)
+      const rawData: LineData<Time>[] = [
         { time: originTime as Time, value: ref.origin_price },
         { time: pivotTime as Time, value: ref.pivot_price },
       ];
 
-      // Sort by time (required by lightweight-charts)
-      data.sort((a, b) => (a.time as number) - (b.time as number));
+      const data = deduplicateLineData(rawData);
+      if (!data) {
+        // Duplicate timestamps - can't draw line, skip this reference
+        chart.removeSeries(lineSeries);
+        return null;
+      }
 
       lineSeries.setData(data);
 
@@ -419,13 +459,18 @@ export const ReferenceLegOverlay: React.FC<ReferenceLegOverlayProps> = ({
       });
 
       // Set data: line from origin to pivot
-      const data: LineData<Time>[] = [
+      // Deduplicate and sort to prevent 'data must be asc ordered by time' errors (#481)
+      const rawData: LineData<Time>[] = [
         { time: originTime as Time, value: leg.origin_price },
         { time: pivotTime as Time, value: leg.pivot_price },
       ];
 
-      // Sort by time (required by lightweight-charts)
-      data.sort((a, b) => (a.time as number) - (b.time as number));
+      const data = deduplicateLineData(rawData);
+      if (!data) {
+        // Duplicate timestamps - can't draw line, skip this leg
+        chart.removeSeries(lineSeries);
+        return null;
+      }
 
       lineSeries.setData(data);
 
