@@ -1,22 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 9
+**Unreviewed Change Count:** 0
 
-**Last Review:** 2026-01-02
+**Last Review:** 2026-01-03
 
 ---
 
 ## Pending Changes
 
-- **#462** — Remove 'Calibration' and 'Swing' naming from schemas (delete dead code, rename SwingsByDepth→LegsByDepth, CalibrationResponseHierarchical→DagInitResponse, remove calibrationPhase from frontend)
-- **#463** — Remove sourceBars/visibleBars duplication (use forwardPlayback.visibleBars as single source of truth)
-- **#465** — Remove superseded CLI parameters from main.py (--data, --resolution, --window, --offset, --start-date, --target-bars, --reload); keep only --host and --port
-- **#466** — Display fib levels for auto-selected top reference (pass selectedLegId to ReferenceLegOverlay)
-- **#467** — Prevent completed references from re-forming (add RefMetadata with max_location to Leg, derive completion status at runtime)
-- **#469** — Keep buffered state on pause in Levels view (skip API fetch when buffer exists, trigger resync on view switch)
-- **#470** — Persist reference config across reloads (push saved localStorage config to server on mount, mirroring DAGView behavior)
-- **#471** — Add missing fromIndex parameter to handleProcessTill advanceReplay calls (fixes timestamp disappearing after large advances)
-- **#472** — Include filter_stats in RefStateSnapshot for playback (track filter counts in update() as byproduct, propagate to snapshot schema and frontend)
+(none)
 
 ---
 
@@ -24,6 +16,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 3 | #462, #463, #465-#467, #469-#472 — Calibration/Swing naming cleanup, sourceBars consolidation, CLI simplification, fib level fix, completed ref no-reform, pause buffering, config persistence, fromIndex fix, filter_stats in snapshots (9 issues) | All Accepted; commit 0004057 (follow-up to #471) untracked |
 | Jan 2 | #454-#460, #464 — Breach filtering fix, reset button, batched ref states, per-pivot top N, auto-track buffering, config preservation, calibration deletion, test helper consolidation (8 issues) | All Accepted; calibration removed from core decisions |
 | Jan 2 | #448, #449, #450, #452 — Formation pivot tracking, playback position filtering, view persistence, chart cleanup race fix (4 issues) | All Accepted; developer_guide.md discrepancy noted |
 | Jan 2 | #445 — Bottom panel consolidation: LEVELS AT PLAY (column-major, paginated), FILTERS to sidebar, hover highlight, removed redundant panels | Accepted |
