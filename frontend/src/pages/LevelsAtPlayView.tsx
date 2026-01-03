@@ -512,6 +512,13 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       if (response.current_bar_index >= 0) {
         syncChartsToPositionRef.current(response.current_bar_index);
       }
+
+      // Fetch reference state at the new position (#474)
+      // Process Till bypasses the buffered playback path, so we need to
+      // explicitly refresh reference state to avoid stale UI
+      if (response.current_bar_index >= 0) {
+        await fetchReferenceState(response.current_bar_index);
+      }
     } finally {
       setIsProcessingTill(false);
     }
@@ -522,6 +529,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     chartPrefs.chart1Aggregation,
     chartPrefs.chart2Aggregation,
     handleAggregatedBarsChange,
+    fetchReferenceState,
   ]);
 
   // Load chart bars when aggregation changes
