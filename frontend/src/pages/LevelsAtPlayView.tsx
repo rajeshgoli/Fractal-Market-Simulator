@@ -338,22 +338,26 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     }
   }, [chartPrefs.setReferenceConfig, forwardPlayback, currentPlaybackPosition, fetchReferenceState]);
 
-  // Load reference config from backend on mount (Issue #425)
+  // Sync reference config with backend on mount (Issue #425, #468)
+  // If we have saved preferences, push them to server to override defaults (like DAGView does)
   useEffect(() => {
-    const loadReferenceConfig = async () => {
+    const syncReferenceConfig = async () => {
       try {
-        const config = await fetchReferenceConfig();
-        setReferenceConfig(config);
-        // Update localStorage if different from saved
-        if (JSON.stringify(config) !== JSON.stringify(chartPrefs.referenceConfig)) {
-          chartPrefs.setReferenceConfig(config);
+        if (chartPrefs.referenceConfig) {
+          // Push saved config to server to override defaults
+          const pushedConfig = await updateReferenceConfig(chartPrefs.referenceConfig);
+          setReferenceConfig(pushedConfig);
+        } else {
+          // No saved preferences, just fetch server defaults
+          const config = await fetchReferenceConfig();
+          setReferenceConfig(config);
         }
       } catch (err) {
-        console.error('Failed to load reference config:', err);
-        // Fall back to localStorage or defaults
+        console.error('Failed to sync reference config:', err);
+        // Fall back to localStorage or defaults (already set in useState initializer)
       }
     };
-    loadReferenceConfig();
+    syncReferenceConfig();
   }, []);
 
   // Compute a "live" aggregated bar from source bars for incremental display
