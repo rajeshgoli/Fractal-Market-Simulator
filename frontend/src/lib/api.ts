@@ -1,4 +1,4 @@
-import { BarData, AggregationScale, CalibrationSwing, DetectionConfig } from '../types';
+import { BarData, AggregationScale, LegResponseType, DetectionConfig } from '../types';
 
 const API_BASE = '/api';
 
@@ -60,7 +60,7 @@ export async function restartSession(request: SessionRestartRequest): Promise<Se
 
 // App configuration (mode, etc.)
 export interface AppConfig {
-  mode: 'calibration' | 'dag';
+  mode: 'dag';
 }
 
 export async function fetchConfig(): Promise<AppConfig> {
@@ -142,10 +142,10 @@ export interface ReplayEvent {
 }
 
 export interface ReplaySwingState {
-  depth_1: CalibrationSwing[];  // Root swings (depth 0)
-  depth_2: CalibrationSwing[];  // Depth 1
-  depth_3: CalibrationSwing[];  // Depth 2
-  deeper: CalibrationSwing[];   // Depth 3+
+  depth_1: LegResponseType[];  // Root legs (depth 0)
+  depth_2: LegResponseType[];  // Depth 1
+  depth_3: LegResponseType[];  // Depth 2
+  deeper: LegResponseType[];   // Depth 3+
 }
 
 // Aggregated bars by scale (for batched playback)

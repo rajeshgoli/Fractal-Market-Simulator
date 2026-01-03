@@ -49,7 +49,7 @@ class SessionResponse(BaseModel):
 class LegResponse(BaseModel):
     """Unified leg response using origin/pivot terminology.
 
-    Replaces CalibrationSwingResponse with consistent terminology:
+    Uses consistent terminology:
     - Origin: where the move started (fixed)
     - Pivot: defended extreme (extends)
 
@@ -72,25 +72,6 @@ class LegResponse(BaseModel):
     fib_levels: Optional[Dict[str, float]] = None
     # Scale for Reference Layer (computed at runtime, not stored)
     scale: Optional[str] = None  # "S", "M", "L", "XL"
-
-
-# Legacy alias for backward compatibility during migration
-CalibrationSwingResponse = LegResponse
-
-
-class CalibrationScaleStats(BaseModel):
-    """Statistics for a single scale during calibration."""
-    total_swings: int
-    active_swings: int
-
-
-class CalibrationResponse(BaseModel):
-    """Response from calibration endpoint."""
-    current_price: float
-    swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
-    active_swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
-    scale_thresholds: Dict[str, float]
-    stats_by_scale: Dict[str, CalibrationScaleStats]
 
 
 # ============================================================================
@@ -137,7 +118,7 @@ class ReplayEventResponse(BaseModel):
     scale: str  # Legacy scale for frontend compatibility
     direction: str
     leg_id: str  # ID of the affected leg
-    swing: Optional[CalibrationSwingResponse] = None
+    swing: Optional[LegResponse] = None
     trigger_explanation: Optional[str] = None
     # Hierarchy info
     depth: int = 0
@@ -146,10 +127,10 @@ class ReplayEventResponse(BaseModel):
 
 class ReplaySwingState(BaseModel):
     """Current state of all swings at a given bar, grouped by depth."""
-    depth_1: List[CalibrationSwingResponse] = []  # Root swings (depth 0)
-    depth_2: List[CalibrationSwingResponse] = []  # Depth 1
-    depth_3: List[CalibrationSwingResponse] = []  # Depth 2
-    deeper: List[CalibrationSwingResponse] = []  # Depth 3+
+    depth_1: List[LegResponse] = []  # Root swings (depth 0)
+    depth_2: List[LegResponse] = []  # Depth 1
+    depth_3: List[LegResponse] = []  # Depth 2
+    deeper: List[LegResponse] = []  # Depth 3+
 
 
 AggregatedBarsResponse = Dict[str, List[BarResponse]]
@@ -350,7 +331,7 @@ class PlaybackFeedbackResponse(BaseModel):
 
 
 class TreeStatistics(BaseModel):
-    """Tree structure statistics for hierarchical calibration UI.
+    """Tree structure statistics for hierarchical UI.
 
     Replaces S/M/L/XL scale-based display with hierarchy-based display.
     """
@@ -376,16 +357,16 @@ class TreeStatistics(BaseModel):
     no_orphaned_nodes: bool  # All non-root swings have parents
 
 
-class SwingsByDepth(BaseModel):
-    """Swings grouped by hierarchy depth for the new UI."""
-    depth_1: List[CalibrationSwingResponse] = []  # Root swings (depth 0)
-    depth_2: List[CalibrationSwingResponse] = []  # Depth 1
-    depth_3: List[CalibrationSwingResponse] = []  # Depth 2
-    deeper: List[CalibrationSwingResponse] = []  # Depth 3+
+class LegsByDepth(BaseModel):
+    """Legs grouped by hierarchy depth for the UI."""
+    depth_1: List[LegResponse] = []  # Root legs (depth 0)
+    depth_2: List[LegResponse] = []  # Depth 1
+    depth_3: List[LegResponse] = []  # Depth 2
+    deeper: List[LegResponse] = []  # Depth 3+
 
 
-class CalibrationResponseHierarchical(BaseModel):
-    """Hierarchical response with tree statistics.
+class DagInitResponse(BaseModel):
+    """Response from DAG init endpoint with tree statistics.
 
     This is the response format for issue #166 that uses
     hierarchy-based display instead of scale-based (S/M/L/XL).
@@ -395,9 +376,9 @@ class CalibrationResponseHierarchical(BaseModel):
     # Tree statistics
     tree_stats: TreeStatistics
 
-    # Swings grouped by depth
-    swings_by_depth: SwingsByDepth
-    active_swings_by_depth: SwingsByDepth
+    # Legs grouped by depth
+    legs_by_depth: LegsByDepth
+    active_legs_by_depth: LegsByDepth
 
 
 # ============================================================================

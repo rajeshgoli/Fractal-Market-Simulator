@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
 
 **Last Review:** 2026-01-02
 
@@ -8,7 +8,7 @@
 
 ## Pending Changes
 
-(none)
+- **#462** — Remove 'Calibration' and 'Swing' naming from schemas (delete dead code, rename SwingsByDepth→LegsByDepth, CalibrationResponseHierarchical→DagInitResponse, remove calibrationPhase from frontend)
 
 ---
 

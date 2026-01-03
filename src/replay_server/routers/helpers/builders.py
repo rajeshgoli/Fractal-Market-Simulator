@@ -18,7 +18,7 @@ from ...schemas import (
     ReplaySwingState,
     AggregatedBarsResponse,
     TreeStatistics,
-    SwingsByDepth,
+    LegsByDepth,
     DagLegResponse,
     DagPendingOrigin,
     DagLegCounts,
@@ -335,18 +335,18 @@ def compute_tree_statistics(
 def group_legs_by_depth(
     legs: List[Leg],
     scale_thresholds: Dict[str, float],
-) -> SwingsByDepth:
+) -> LegsByDepth:
     """
-    Group legs by hierarchy depth for the new UI.
+    Group legs by hierarchy depth for the UI.
 
     Args:
         legs: List of Leg objects.
         scale_thresholds: Size thresholds for scale assignment (backward compat).
 
     Returns:
-        SwingsByDepth with legs grouped by depth level.
+        LegsByDepth with legs grouped by depth level.
     """
-    result = SwingsByDepth()
+    result = LegsByDepth()
 
     # Sort by size descending for ranking
     sorted_legs = sorted(

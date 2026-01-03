@@ -231,12 +231,12 @@ class LegDetector:
     Detects and tracks legs incrementally. Forms swings when legs
     reach the formation threshold (default 38.2% retracement).
 
-    Processes one bar at a time via process_bar(). Calibration is just
+    Processes one bar at a time via process_bar(). Batch processing is just
     a loop calling process_bar() - no special batch logic.
 
     Key design principles:
     1. No lookahead - Algorithm only sees current and past bars
-    2. Single code path - Calibration will just call this in a loop
+    2. Single code path - Batch processing just calls this in a loop
     3. Independent invalidation - Each swing checks its own defended pivot
     4. DAG hierarchy - Swings can have multiple parents for structural context
 

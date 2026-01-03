@@ -76,7 +76,7 @@ export enum PlaybackState {
 }
 
 // ============================================================================
-// Calibration Types (Replay View v2)
+// Leg Response Types (Replay View v2)
 // ============================================================================
 
 /**
@@ -109,17 +109,11 @@ export interface LegResponseType {
   median_multiple?: number;  // Ratio to running median (e.g., 2.5 = 2.5x median)
 }
 
-/**
- * Legacy alias for backward compatibility.
- * CalibrationSwing is now LegResponseType.
- */
-export type CalibrationSwing = LegResponseType;
-
-export interface SwingsByDepth {
-  depth_1: CalibrationSwing[];  // Root swings (depth 0)
-  depth_2: CalibrationSwing[];  // Depth 1
-  depth_3: CalibrationSwing[];  // Depth 2
-  deeper: CalibrationSwing[];   // Depth 3+
+export interface LegsByDepth {
+  depth_1: LegResponseType[];  // Root legs (depth 0)
+  depth_2: LegResponseType[];  // Depth 1
+  depth_3: LegResponseType[];  // Depth 2
+  deeper: LegResponseType[];   // Depth 3+
 }
 
 export interface TreeStatistics {

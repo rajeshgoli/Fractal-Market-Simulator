@@ -522,7 +522,7 @@ def init_app(
     target_bars: int = 200,
     window_offset: int = 0,
     cached_df: Optional[pd.DataFrame] = None,
-    mode: str = "calibration"
+    mode: str = "dag"
 ):
     """
     Initialize the application with data file.
@@ -530,11 +530,11 @@ def init_app(
     Args:
         data_file: Path to OHLC CSV data file
         resolution_minutes: Source data resolution in minutes
-        window_size: Total bars to load for calibration
+        window_size: Total bars to load for initial window
         target_bars: Target number of bars to display
         window_offset: Offset into source data
         cached_df: Optional cached DataFrame
-        mode: Visualization mode ('calibration' or 'dag')
+        mode: Visualization mode ('dag')
     """
     global state
 

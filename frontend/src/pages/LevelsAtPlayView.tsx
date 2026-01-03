@@ -826,7 +826,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             currentPlaybackBar={currentPlaybackPosition}
             feedbackContext={{
               playbackState: isPlaying ? forwardPlayback.playbackState : PlaybackState.STOPPED,
-              calibrationPhase: forwardPlayback.playbackState === PlaybackState.PLAYING ? 'playing' : 'paused',
               csvIndex: currentPlaybackPosition,
               currentBarIndex: currentPlaybackPosition,
               swingsFoundByScale: {

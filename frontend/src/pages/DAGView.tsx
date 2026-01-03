@@ -788,13 +788,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
       return null;
     }
 
-    let stateString: 'playing' | 'paused';
-    if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
-      stateString = 'playing';
-    } else {
-      stateString = 'paused';
-    }
-
     let swingsInvalidated = 0;
     let swingsCompleted = 0;
     for (const event of forwardPlayback.allEvents) {
@@ -804,7 +797,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
 
     return {
       playbackState: forwardPlayback.playbackState,
-      calibrationPhase: stateString,
       csvIndex: forwardPlayback.csvIndex,
       currentBarIndex: currentPlaybackPosition,
       swingsFoundByScale: { XL: 0, L: 0, M: 0, S: 0 },

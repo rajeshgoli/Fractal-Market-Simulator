@@ -30,8 +30,8 @@ from ..schemas import (
     ReplayAdvanceResponse,
     RefStateSnapshot,
     TreeStatistics,
-    SwingsByDepth,
-    CalibrationResponseHierarchical,
+    LegsByDepth,
+    DagInitResponse,
     DagLegResponse,
     DagPendingOrigin,
     DagLegCounts,
@@ -105,7 +105,7 @@ def _ensure_initialized() -> None:
 # ============================================================================
 
 
-@router.post("/api/dag/init", response_model=CalibrationResponseHierarchical)
+@router.post("/api/dag/init", response_model=DagInitResponse)
 async def init_dag():
     """
     Initialize detector for DAG playback.
@@ -150,14 +150,14 @@ async def init_dag():
         smallest_range=0.0,
         roots_have_children=True, siblings_detected=False, no_orphaned_nodes=True,
     )
-    empty_swings_by_depth = SwingsByDepth()
+    empty_legs_by_depth = LegsByDepth()
 
     logger.info("DAG mode: detector initialized, ready for incremental advance")
-    return CalibrationResponseHierarchical(
+    return DagInitResponse(
         current_price=s.source_bars[0].open if s.source_bars else 0.0,
         tree_stats=empty_tree_stats,
-        swings_by_depth=empty_swings_by_depth,
-        active_swings_by_depth=empty_swings_by_depth,
+        legs_by_depth=empty_legs_by_depth,
+        active_legs_by_depth=empty_legs_by_depth,
     )
 
 
@@ -166,7 +166,7 @@ async def init_dag():
 # ============================================================================
 
 
-@router.post("/api/dag/reset", response_model=CalibrationResponseHierarchical)
+@router.post("/api/dag/reset", response_model=DagInitResponse)
 async def reset_dag():
     """
     Reset detector state, starting fresh.
@@ -208,14 +208,14 @@ async def reset_dag():
         smallest_range=0.0,
         roots_have_children=True, siblings_detected=False, no_orphaned_nodes=True,
     )
-    empty_swings_by_depth = SwingsByDepth()
+    empty_legs_by_depth = LegsByDepth()
 
     logger.info("DAG mode: detector reset, ready for incremental advance")
-    return CalibrationResponseHierarchical(
+    return DagInitResponse(
         current_price=s.source_bars[0].open if s.source_bars else 0.0,
         tree_stats=empty_tree_stats,
-        swings_by_depth=empty_swings_by_depth,
-        active_swings_by_depth=empty_swings_by_depth,
+        legs_by_depth=empty_legs_by_depth,
+        active_legs_by_depth=empty_legs_by_depth,
     )
 
 

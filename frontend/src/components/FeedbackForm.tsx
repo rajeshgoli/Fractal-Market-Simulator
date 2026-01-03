@@ -9,7 +9,6 @@ import { LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
 // Feedback context passed from parent
 export interface FeedbackContext {
   playbackState: PlaybackState;
-  calibrationPhase: 'playing' | 'paused';
   csvIndex: number;
   currentBarIndex: number;
   swingsFoundByScale: {
@@ -91,8 +90,10 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
     setSubmitStatus('idle');
 
     try {
+      // Derive 'playing' | 'paused' from playbackState inline
+      const stateString: 'playing' | 'paused' = feedbackContext.playbackState === PlaybackState.PLAYING ? 'playing' : 'paused';
       const snapshot: PlaybackFeedbackSnapshot = {
-        state: feedbackContext.calibrationPhase,
+        state: stateString,
         csv_index: feedbackContext.csvIndex,
         current_bar_index: feedbackContext.currentBarIndex,
         swings_found: feedbackContext.swingsFoundByScale,
