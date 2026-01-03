@@ -19,15 +19,7 @@ from src.swing_analysis.dag import (
 from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.types import Bar
 
-
-def calibrate(bars, config=None):
-    """Process bars through detector and return detector + all events."""
-    detector = HierarchicalDetector(config or DetectionConfig.default())
-    all_events = []
-    for bar in bars:
-        events = detector.process_bar(bar)
-        all_events.extend(events)
-    return detector, all_events
+from tests.helpers import batch_process_bars
 
 
 def make_bar(
@@ -112,7 +104,7 @@ class TestLegBarIndexConsistency:
         ])
 
         config = DetectionConfig.default()
-        detector, events = calibrate(bars, config)
+        detector, events = batch_process_bars(bars, config)
 
         # Check all active legs for price/index consistency
         for leg in detector.state.active_legs:
@@ -181,7 +173,7 @@ class TestLegBarIndexConsistency:
         ]
 
         config = DetectionConfig.default()
-        detector, events = calibrate(bars, config)
+        detector, events = batch_process_bars(bars, config)
 
         # Same checks as above
         for leg in detector.state.active_legs:
@@ -222,7 +214,7 @@ class TestLegBarIndexConsistency:
         ]
 
         config = DetectionConfig.default()
-        detector, events = calibrate(bars, config)
+        detector, events = batch_process_bars(bars, config)
 
         # Check that bull legs have consistent origin price/index
         for leg in detector.state.active_legs:
@@ -251,7 +243,7 @@ class TestLegBarIndexConsistency:
         ]
 
         config = DetectionConfig.default()
-        detector, events = calibrate(bars, config)
+        detector, events = batch_process_bars(bars, config)
 
         # Check that bull legs have consistent pivot price/index
         # Bull leg pivot is at HIGH (not LOW)
@@ -286,7 +278,7 @@ class TestPivotExtension:
         ]
 
         config = DetectionConfig.default()
-        detector, events = calibrate(bars, config)
+        detector, events = batch_process_bars(bars, config)
 
         # Find active, non-breached bull legs and check their pivot matches the lowest point
         # Breached legs (max_origin_breach is not None) don't have extending pivots
@@ -317,7 +309,7 @@ class TestPivotExtension:
         ]
 
         config = DetectionConfig.default()
-        detector, events = calibrate(bars, config)
+        detector, events = batch_process_bars(bars, config)
 
         # Find active, non-breached bear legs and check their pivot matches the highest point
         # Breached legs (max_origin_breach is not None) don't have extending pivots
@@ -348,7 +340,7 @@ class TestPivotExtension:
         ]
 
         config = DetectionConfig.default()
-        detector, events = calibrate(bars, config)
+        detector, events = batch_process_bars(bars, config)
 
         for leg in detector.state.active_legs:
             if leg.direction == 'bull':
