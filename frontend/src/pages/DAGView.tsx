@@ -17,6 +17,7 @@ import { useFollowLeg, LifecycleEventWithLegInfo } from '../hooks/useFollowLeg';
 import { useChartPreferences } from '../hooks/useChartPreferences';
 import { useSessionSettings } from '../hooks/useSessionSettings';
 import { useDAGViewState } from '../hooks/useDAGViewState';
+import { useAuth } from '../hooks/useAuth';
 import {
   fetchBars,
   fetchSession,
@@ -49,6 +50,9 @@ interface DAGViewProps {
 }
 
 export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
+  // Auth state
+  const auth = useAuth();
+
   // Chart and speed preferences (persisted to localStorage)
   const chartPrefs = useChartPreferences();
 
@@ -856,6 +860,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
         onOpenSettings={() => state.setIsSettingsOpen(true)}
         currentView="dag"
         onNavigate={onNavigate}
+        user={auth.user}
+        onLogout={auth.multiTenant ? auth.logout : undefined}
       />
 
       <div className="flex-1 flex min-h-0">

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Monitor, Clock, Settings, ChevronDown, BarChart3, Layers } from 'lucide-react';
+import { Menu, Monitor, Clock, Settings, ChevronDown, BarChart3, Layers, LogOut, User } from 'lucide-react';
 import type { ViewMode } from '../App';
+import type { User as AuthUser } from '../hooks/useAuth';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -11,6 +12,8 @@ interface HeaderProps {
   onOpenSettings?: () => void;
   currentView?: ViewMode;
   onNavigate?: (view: ViewMode) => void;
+  user?: AuthUser | null;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +25,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   currentView = 'dag',
   onNavigate,
+  user,
+  onLogout,
 }) => {
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const viewMenuRef = useRef<HTMLDivElement>(null);
@@ -163,6 +168,28 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
         </div>
+
+        {/* User Info & Logout */}
+        {user && (
+          <div className="flex items-center gap-2 ml-4 pl-4 border-l border-app-border">
+            <div className="flex items-center gap-1.5 text-xs">
+              <User size={14} className="text-app-muted" />
+              <span className="text-app-text max-w-[120px] truncate" title={user.email}>
+                {user.email}
+              </span>
+            </div>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="p-1.5 text-app-muted hover:text-trading-bear hover:bg-app-card rounded transition-colors"
+                aria-label="Logout"
+                title="Logout"
+              >
+                <LogOut size={14} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

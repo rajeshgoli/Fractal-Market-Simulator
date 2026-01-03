@@ -12,6 +12,7 @@ import { useForwardPlayback } from '../hooks/useForwardPlayback';
 import { useChartPreferences } from '../hooks/useChartPreferences';
 import { useSessionSettings } from '../hooks/useSessionSettings';
 import { useReferenceState } from '../hooks/useReferenceState';
+import { useAuth } from '../hooks/useAuth';
 import {
   fetchBars,
   fetchSession,
@@ -43,6 +44,9 @@ interface LevelsAtPlayViewProps {
 }
 
 export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }) => {
+  // Auth state
+  const auth = useAuth();
+
   // Chart and speed preferences (persisted to localStorage)
   const chartPrefs = useChartPreferences();
 
@@ -837,6 +841,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         onOpenSettings={() => setIsSettingsOpen(true)}
         currentView="levels-at-play"
         onNavigate={onNavigate}
+        user={auth.user}
+        onLogout={auth.multiTenant ? auth.logout : undefined}
       />
 
       <div className="flex-1 flex min-h-0">

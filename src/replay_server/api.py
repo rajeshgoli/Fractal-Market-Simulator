@@ -108,6 +108,56 @@ app.add_middleware(
 )
 
 
+# Auth middleware for protected routes
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """
+    Middleware to check authentication for protected API routes.
+
+    Only enforced when MULTI_TENANT=true. Allows:
+    - /auth/* routes (for login flow)
+    - /api/health (for health checks)
+    - /api/mode (for frontend mode detection)
+    - /login (login page)
+    - Static assets
+    """
+    from starlette.responses import JSONResponse
+
+    path = request.url.path
+
+    # Skip auth check for non-multi-tenant mode
+    if not is_multi_tenant():
+        return await call_next(request)
+
+    # Skip auth check for public routes
+    public_paths = [
+        "/auth/",
+        "/login",
+        "/api/health",
+        "/api/mode",
+        "/assets/",
+        "/vite.svg",
+    ]
+
+    for public_path in public_paths:
+        if path.startswith(public_path) or path == public_path.rstrip("/"):
+            return await call_next(request)
+
+    # For API routes, check authentication
+    if path.startswith("/api/"):
+        from .routers.auth import get_current_user
+        user = get_current_user(request)
+        if not user:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authentication required"},
+            )
+        # Store user in request state for downstream use
+        request.state.user_id = user["id"]
+
+    return await call_next(request)
+
+
 def get_state() -> AppState:
     """Get the application state."""
     if state is None:
@@ -141,8 +191,17 @@ def get_static_dir() -> Optional[Path]:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def root():
+async def root(request: Request):
     """Serve the Replay View UI - React frontend."""
+    # In multi-tenant mode, check if user is authenticated
+    if is_multi_tenant():
+        from .routers.auth import get_current_user
+        user = get_current_user(request)
+        if not user:
+            # Redirect to login page
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url="/login", status_code=302)
+
     static_dir = get_static_dir()
 
     if static_dir:
@@ -154,6 +213,168 @@ async def root():
         content="<h1>Replay View</h1><p>React build not found. Run 'npm run build' in frontend/</p>",
         status_code=200
     )
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Serve the login page."""
+    # If already authenticated, redirect to home
+    if is_multi_tenant():
+        from .routers.auth import get_current_user
+        user = get_current_user(request)
+        if user:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url="/", status_code=302)
+
+    # Check which OAuth providers are configured
+    from .routers.auth import get_google_config, get_github_config
+    google_available = get_google_config() is not None
+    github_available = get_github_config() is not None
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Login - Market Structure Analyzer</title>
+        <style>
+            * {{
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }}
+            body {{
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+                color: #c9d1d9;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }}
+            .container {{
+                text-align: center;
+                padding: 3rem;
+                background: #21262d;
+                border-radius: 12px;
+                border: 1px solid #30363d;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+                max-width: 400px;
+                width: 90%;
+            }}
+            .logo {{
+                font-size: 2rem;
+                font-weight: 700;
+                color: #58a6ff;
+                margin-bottom: 0.5rem;
+            }}
+            .tagline {{
+                font-size: 0.875rem;
+                color: #8b949e;
+                margin-bottom: 2rem;
+            }}
+            h1 {{
+                font-size: 1.5rem;
+                font-weight: 600;
+                margin-bottom: 1.5rem;
+                color: #f0f6fc;
+            }}
+            .buttons {{
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }}
+            .btn {{
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.75rem;
+                padding: 0.875rem 1.5rem;
+                border: 1px solid #30363d;
+                border-radius: 8px;
+                font-size: 1rem;
+                font-weight: 500;
+                cursor: pointer;
+                text-decoration: none;
+                transition: all 0.2s ease;
+            }}
+            .btn-google {{
+                background: #fff;
+                color: #1f2328;
+            }}
+            .btn-google:hover {{
+                background: #f6f8fa;
+                border-color: #8b949e;
+            }}
+            .btn-github {{
+                background: #238636;
+                color: #fff;
+                border-color: #238636;
+            }}
+            .btn-github:hover {{
+                background: #2ea043;
+                border-color: #2ea043;
+            }}
+            .btn:disabled {{
+                opacity: 0.5;
+                cursor: not-allowed;
+            }}
+            .divider {{
+                display: flex;
+                align-items: center;
+                margin: 1.5rem 0;
+                color: #8b949e;
+                font-size: 0.875rem;
+            }}
+            .divider::before,
+            .divider::after {{
+                content: '';
+                flex: 1;
+                height: 1px;
+                background: #30363d;
+            }}
+            .divider::before {{ margin-right: 1rem; }}
+            .divider::after {{ margin-left: 1rem; }}
+            .footer {{
+                margin-top: 2rem;
+                font-size: 0.75rem;
+                color: #8b949e;
+            }}
+            svg {{
+                width: 20px;
+                height: 20px;
+            }}
+            .not-configured {{
+                padding: 1rem;
+                background: #161b22;
+                border-radius: 8px;
+                color: #8b949e;
+                font-size: 0.875rem;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="logo">📊 Market Structure</div>
+            <div class="tagline">Fractal Market Analysis Tool</div>
+
+            <h1>Sign in to continue</h1>
+
+            <div class="buttons">
+                {'<a href="/auth/login/google" class="btn btn-google"><svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>Continue with Google</a>' if google_available else '<div class="not-configured">Google OAuth not configured</div>'}
+
+                {'<a href="/auth/login/github" class="btn btn-github"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>Continue with GitHub</a>' if github_available else '<div class="not-configured">GitHub OAuth not configured</div>'}
+            </div>
+
+            <div class="footer">
+                By signing in, you agree to our Terms of Service and Privacy Policy.
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
 
 @app.get("/replay", response_class=HTMLResponse)
@@ -684,11 +905,14 @@ from .routers import (
     dag_router,
     reference_router,
     feedback_router,
+    auth_router,
 )
+from .routers.auth import get_current_user, is_multi_tenant as auth_is_multi_tenant
 
 app.include_router(dag_router)
 app.include_router(reference_router)
 app.include_router(feedback_router)
+app.include_router(auth_router)
 
 
 # ============================================================================
