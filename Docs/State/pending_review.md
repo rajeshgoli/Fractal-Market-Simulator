@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2026-01-02
 
@@ -10,6 +10,7 @@
 
 - **#462** — Remove 'Calibration' and 'Swing' naming from schemas (delete dead code, rename SwingsByDepth→LegsByDepth, CalibrationResponseHierarchical→DagInitResponse, remove calibrationPhase from frontend)
 - **#463** — Remove sourceBars/visibleBars duplication (use forwardPlayback.visibleBars as single source of truth)
+- **#465** — Remove superseded CLI parameters from main.py (--data, --resolution, --window, --offset, --start-date, --target-bars, --reload); keep only --host and --port
 
 ---
 
