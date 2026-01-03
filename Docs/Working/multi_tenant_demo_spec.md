@@ -95,7 +95,7 @@ Core functionality required:
 ```bash
 fly volumes create fractal_data --size 1 --region sjc
 ```
-Mount at `/data`. Store SQLite + CSV there.
+Mount at `/data`. SQLite only (CSV baked into image).
 
 ### 3. OAuth Libraries
 
@@ -180,12 +180,15 @@ jobs:
 │  │  ├─ /api/* → FastAPI               │ │
 │  │  └─ /*     → React static          │ │
 │  │                                    │ │
-│  │  Volume: /data                     │ │
-│  │  ├─ fractal.db (SQLite)           │ │
-│  │  └─ es-30m.csv (12MB)             │ │
+│  │  Image: /app/test_data/es-30m.csv │ │
+│  │  Volume: /data/fractal.db          │ │
 │  └────────────────────────────────────┘ │
 └─────────────────────────────────────────┘
 ```
+
+**Data strategy:**
+- **CSV:** Baked into Docker image at build. Update via git push → redeploy.
+- **SQLite:** Persistent volume. Survives redeploys.
 
 ---
 
@@ -193,10 +196,10 @@ jobs:
 
 | Phase | Scope | Deliverable |
 |-------|-------|-------------|
-| **P1** | Container + Serving | Dockerfile, fly.toml, static serving works |
-| **P2** | Data + Volume | Persistent volume, CSV loads, API works |
+| **P1** | Container + Serving | Dockerfile (CSV baked in), fly.toml, static serving works |
+| **P2** | Volume + SQLite | Persistent volume for SQLite, API works |
 | **P3** | Auth | Google OAuth (+ GitHub), SQLite users table |
-| **P4** | Persistence | Observations to SQLite (per-user) |
+| **P4** | Observations | Observations to SQLite (per-user, LRU cleanup) |
 
 Sequential execution required (each depends on prior).
 
@@ -219,8 +222,7 @@ Sequential execution required (each depends on prior).
 
 1. **Error pages** — OAuth failure, 404, 500
 2. **Session expiry** — 7 days recommended
-3. **Data upload** — Manual via `fly ssh sftp` or baked into image
-4. **DNS** — CNAME `fractal.rajeshgo.li` → Fly.io app hostname
+3. **DNS** — CNAME `fractal.rajeshgo.li` → Fly.io app hostname
 
 ---
 
