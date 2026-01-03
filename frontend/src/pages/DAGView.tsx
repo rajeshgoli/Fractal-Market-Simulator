@@ -381,8 +381,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
 
       if (response.new_bars && response.new_bars.length > 0) {
         const newBars = formatReplayBarsData(response.new_bars);
+        // Use last bar's index from newBars to ensure currentPosition matches array
+        // This mirrors the pattern in useForwardPlayback.ts for normal playback
+        const lastBarIndex = newBars[newBars.length - 1].index;
         forwardPlayback.syncToPosition(
-          response.current_bar_index,
+          lastBarIndex,
           [...forwardPlayback.visibleBars, ...newBars],
           response.csv_index,
           response.events
