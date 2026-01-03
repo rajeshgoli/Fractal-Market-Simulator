@@ -6,6 +6,17 @@ import logging
 from datetime import datetime
 
 
+def _parse_format_a_datetime(datetime_str: str) -> datetime:
+    """Parse datetime string from format_a, handling HH:MM or HH:MM:SS."""
+    # Try with seconds first, then without
+    for fmt in ('%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M'):
+        try:
+            return datetime.strptime(datetime_str, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"Invalid date format: {datetime_str}")
+
+
 class FileMetrics(NamedTuple):
     """Quick metrics about a data file without loading all data."""
     total_bars: int
@@ -68,7 +79,7 @@ def get_file_metrics(filepath: str) -> FileMetrics:
             )
             if len(df_head) > 0:
                 datetime_str = df_head['date'].iloc[0] + ' ' + df_head['time'].iloc[0]
-                first_timestamp = datetime.strptime(datetime_str, '%d/%m/%Y %H:%M:%S')
+                first_timestamp = _parse_format_a_datetime(datetime_str)
         else:  # format_b
             df_head = pd.read_csv(filepath, sep=',', nrows=2)
             df_head.columns = df_head.columns.str.lower()
@@ -84,7 +95,7 @@ def get_file_metrics(filepath: str) -> FileMetrics:
             )
             if len(df_tail) > 0:
                 datetime_str = df_tail['date'].iloc[-1] + ' ' + df_tail['time'].iloc[-1]
-                last_timestamp = datetime.strptime(datetime_str, '%d/%m/%Y %H:%M:%S')
+                last_timestamp = _parse_format_a_datetime(datetime_str)
         else:  # format_b
             df_tail = pd.read_csv(filepath, sep=',', skiprows=skip_rows)
             df_tail.columns = df_tail.columns.str.lower()
@@ -149,9 +160,9 @@ def load_ohlc_window(
                 engine='c'
             )
 
-            # Parse datetime
+            # Parse datetime - handle mixed HH:MM and HH:MM:SS formats
             datetime_str = df['date'] + ' ' + df['time']
-            df['timestamp'] = pd.to_datetime(datetime_str, format='%d/%m/%Y %H:%M:%S', utc=True)
+            df['timestamp'] = pd.to_datetime(datetime_str, format='mixed', dayfirst=True, utc=True)
             df.drop(columns=['date', 'time'], inplace=True)
 
         else:  # format_b
@@ -319,11 +330,11 @@ def load_ohlc(filepath: str) -> Tuple[pd.DataFrame, List[Tuple[pd.Timestamp, pd.
                 engine='c'
             )
             
-            # Parse datetime
+            # Parse datetime - handle mixed HH:MM and HH:MM:SS formats
             # Vectorized string concatenation and parsing is faster than parse_dates for custom format
             datetime_str = df['date'] + ' ' + df['time']
-            df['timestamp'] = pd.to_datetime(datetime_str, format='%d/%m/%Y %H:%M:%S', utc=True)
-            
+            df['timestamp'] = pd.to_datetime(datetime_str, format='mixed', dayfirst=True, utc=True)
+
             # Drop temp columns
             df.drop(columns=['date', 'time'], inplace=True)
             
