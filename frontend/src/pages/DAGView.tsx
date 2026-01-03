@@ -122,6 +122,17 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     state.setDagState(dagState);
   }, [state.setDagState]);
 
+  // Handler for playback reset (jumpToStart)
+  const handleReset = useCallback(() => {
+    // Reset source bars back to calibration bars
+    state.setSourceBars(state.calibrationBars);
+    // Clear aggregated chart bars (will be repopulated on advance)
+    state.setChart1Bars([]);
+    state.setChart2Bars([]);
+    // Clear DAG state
+    state.setDagState(null);
+  }, [state.calibrationBars, state.setSourceBars, state.setChart1Bars, state.setChart2Bars, state.setDagState]);
+
   // Forward playback hook
   const forwardPlayback = useForwardPlayback({
     calibrationBarCount: state.calibrationBarCount,
@@ -141,6 +152,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     }, [state.setSourceBars]),
     onAggregatedBarsChange: handleAggregatedBarsChange,
     onDagStateChange: handleDagStateChange,
+    onReset: handleReset,
   });
 
   // Hierarchy exploration mode

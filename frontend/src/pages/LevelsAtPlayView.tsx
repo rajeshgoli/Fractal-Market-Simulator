@@ -242,6 +242,15 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     if (chart2BarData) setChart2Bars(chart2BarData);
   }, [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation]);
 
+  // Handler for playback reset (jumpToStart)
+  const handleReset = useCallback(() => {
+    // Reset source bars back to calibration bars
+    setSourceBars(calibrationBars);
+    // Clear aggregated chart bars (will be repopulated on advance)
+    setChart1Bars([]);
+    setChart2Bars([]);
+  }, [calibrationBars]);
+
   // Forward playback hook (#412: simplified from CalibrationData)
   const forwardPlayback = useForwardPlayback({
     calibrationBarCount,
@@ -261,6 +270,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     }, []),
     onAggregatedBarsChange: handleAggregatedBarsChange,
     onDagStateChange: () => {},
+    onReset: handleReset,
   });
 
   // Get current playback position (#412: simplified from CalibrationData)

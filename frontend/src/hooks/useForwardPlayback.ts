@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { PlaybackState, BarData, FilterState } from '../types';
-import { advanceReplay, reverseReplay, ReplayEvent, ReplaySwingState, AggregatedBarsResponse, DagStateResponse } from '../lib/api';
+import { advanceReplay, reverseReplay, resetDag, ReplayEvent, ReplaySwingState, AggregatedBarsResponse, DagStateResponse } from '../lib/api';
 import { formatReplayBarsData } from '../utils/barDataUtils';
 import { LINGER_DURATION_MS } from '../constants';
 
@@ -24,6 +24,7 @@ interface UseForwardPlaybackOptions {
   onSwingStateChange?: (state: ReplaySwingState) => void;
   onAggregatedBarsChange?: (bars: AggregatedBarsResponse) => void;  // Called with aggregated bars
   onDagStateChange?: (state: DagStateResponse) => void;  // Called with DAG state
+  onReset?: () => void;  // Called when jumpToStart resets playback state
 }
 
 interface UseForwardPlaybackReturn {
@@ -77,6 +78,7 @@ export function useForwardPlayback({
   onSwingStateChange,
   onAggregatedBarsChange,
   onDagStateChange,
+  onReset,
 }: UseForwardPlaybackOptions): UseForwardPlaybackReturn {
   // Playback state
   const [playbackState, setPlaybackState] = useState<PlaybackState>(PlaybackState.STOPPED);
@@ -739,7 +741,15 @@ export function useForwardPlayback({
     latestDagStateRef.current = null;
     latestAggregatedBarsRef.current = null;
     pendingBatchStatesRef.current = [];  // Clear pending batch queue
-  }, [clearTimers, exitLinger, calibrationBars, calibrationBarCount]);
+
+    // Notify parent of reset so it can clear its own state
+    onReset?.();
+
+    // Reset backend detector state
+    resetDag().catch((error) => {
+      console.error('Failed to reset DAG backend:', error);
+    });
+  }, [clearTimers, exitLinger, calibrationBars, calibrationBarCount, onReset]);
 
   // Navigate to previous event in linger queue
   const navigatePrevEvent = useCallback(() => {
