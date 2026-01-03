@@ -11,6 +11,24 @@ from typing import Optional, Literal
 
 
 @dataclass
+class RefMetadata:
+    """
+    Reference layer metadata stored on Leg.
+
+    This namespace carries data authored by the Reference Layer but stored
+    on the Leg for lifecycle management — when the DAG prunes a leg, this
+    metadata dies with it. No cleanup needed.
+
+    Attributes:
+        max_location: Maximum location ever reached in reference frame.
+            Used to derive completion status. A leg that has ever reached
+            location >= completion_threshold is permanently completed.
+            Stored as float (not Decimal) for consistency with location values.
+    """
+    max_location: Optional[float] = None
+
+
+@dataclass
 class Leg:
     """
     A directional price movement with known temporal ordering.
@@ -100,6 +118,9 @@ class Leg:
     # Range bin index (#434): Index into RollingBinDistribution bins.
     # Updated when pivot extends. Used for O(1) scale classification.
     range_bin_index: Optional[int] = None
+    # Reference layer metadata (#467): Namespace for ref layer-owned data.
+    # Lives on Leg for lifecycle management (prunes with leg, no cleanup).
+    ref: RefMetadata = field(default_factory=RefMetadata)
 
     def __post_init__(self) -> None:
         """Compute deterministic leg_id if not provided."""

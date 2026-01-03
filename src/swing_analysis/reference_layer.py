@@ -633,6 +633,39 @@ class ReferenceLayer:
         )
         return float(frame.ratio(current_price))
 
+    def _update_max_location(self, leg: Leg, location: float) -> None:
+        """
+        Track maximum location ever reached for this leg (#467).
+
+        Used to derive completion status at runtime. Once a leg's max_location
+        reaches the completion_threshold, the leg is permanently completed
+        and cannot re-form as a reference.
+
+        Args:
+            leg: The leg to update.
+            location: Current location in reference frame.
+        """
+        if leg.ref.max_location is None or location > leg.ref.max_location:
+            leg.ref.max_location = location
+
+    def _is_completed(self, leg: Leg) -> bool:
+        """
+        Check if leg is permanently completed based on max_location (#467).
+
+        Completion is terminal — a completed reference should never re-form.
+        This is derived from max_location rather than stored as a boolean,
+        so if completion_threshold changes (e.g., from 2× to 3×), legs between
+        the thresholds automatically become non-completed.
+
+        Args:
+            leg: The leg to check.
+
+        Returns:
+            True if leg has ever reached completion_threshold.
+        """
+        max_loc = leg.ref.max_location or 0
+        return max_loc >= self.reference_config.completion_threshold
+
     def _is_formed_for_reference(
         self,
         leg: Leg,
@@ -658,6 +691,11 @@ class ReferenceLayer:
         This prevents legs from appearing as "formed" when their pivots have
         extended far beyond the original formation point.
 
+        IMPORTANT (Issue #467): Completed references never re-form.
+        If a leg's max_location ever reached completion_threshold, it is
+        permanently completed. Even if price returns below the threshold,
+        the leg should never re-enter _formed_refs.
+
         Args:
             leg: The leg to check
             current_price: Current price
@@ -667,6 +705,18 @@ class ReferenceLayer:
         Returns:
             True if formed at current pivot level
         """
+        location = self._compute_location(leg, current_price)
+
+        # Track max_location for completion detection (#467)
+        self._update_max_location(leg, location)
+
+        # Completed references never re-form (#467)
+        # Check this BEFORE checking _formed_refs to prevent re-entry
+        if self._is_completed(leg):
+            # Ensure it's removed from _formed_refs if still there
+            self._formed_refs.pop(leg.leg_id, None)
+            return False
+
         # Check if previously formed
         if leg.leg_id in self._formed_refs:
             formation_pivot, _formation_bar = self._formed_refs[leg.leg_id]
@@ -683,7 +733,6 @@ class ReferenceLayer:
                 # Pivot unchanged - still formed
                 return True
 
-        location = self._compute_location(leg, current_price)
         threshold = self.reference_config.formation_fib_threshold
 
         # Formation occurs when price retraces TO the threshold
@@ -749,8 +798,10 @@ class ReferenceLayer:
                 self._formed_refs.pop(leg.leg_id, None)
                 return True
 
-        # Past completion
-        if location > completion_threshold:
+        # Past completion (#467): Check both current location AND max_location
+        # - location > threshold: current bar triggered completion (strict >)
+        # - _is_completed: leg was completed on a previous bar (>= via max_location)
+        if location > completion_threshold or self._is_completed(leg):
             self._formed_refs.pop(leg.leg_id, None)
             return True
 
@@ -1488,16 +1539,24 @@ class ReferenceLayer:
 
             bin_index = self._get_bin_index(leg.range)
 
-            # Compute location from bar extremes for breach check
+            # Compute locations from both bar extremes (#467)
+            # Bear leg (bull reference): bar_low for breach, bar_high for completion
+            # Bull leg (bear reference): bar_high for breach, bar_low for completion
             if leg.direction == 'bear':
-                extreme_location = self._compute_location(leg, bar_low)
+                breach_extreme_location = self._compute_location(leg, bar_low)
+                completion_extreme_location = self._compute_location(leg, bar_high)
             else:
-                extreme_location = self._compute_location(leg, bar_high)
+                breach_extreme_location = self._compute_location(leg, bar_high)
+                completion_extreme_location = self._compute_location(leg, bar_low)
+
+            # Track max_location from completion extreme (#467)
+            self._update_max_location(leg, completion_extreme_location)
 
             bar_close_location = self._compute_location(leg, current_price)
 
             # Side effect: removes from _formed_refs if fatally breached
-            self._is_fatally_breached(leg, bin_index, extreme_location, bar_close_location)
+            # Pass breach_extreme_location for breach checks
+            self._is_fatally_breached(leg, bin_index, breach_extreme_location, bar_close_location)
 
         # Time-based eviction - keeps distribution fresh (rolling 90-day window)
         self._bin_distribution.evict_old_legs(timestamp)
@@ -1631,6 +1690,33 @@ class ReferenceLayer:
                 ))
                 continue
 
+            # Compute both bar extremes for breach and completion checks (#467)
+            # Bear leg (bull reference): bar_low for breach, bar_high for completion
+            # Bull leg (bear reference): bar_high for breach, bar_low for completion
+            if leg.direction == 'bear':
+                breach_extreme_location = self._compute_location(leg, bar_low)
+                completion_extreme_location = self._compute_location(leg, bar_high)
+            else:
+                breach_extreme_location = self._compute_location(leg, bar_high)
+                completion_extreme_location = self._compute_location(leg, bar_low)
+            bar_close_location = location
+
+            # Track max_location from completion extreme (#467)
+            self._update_max_location(leg, completion_extreme_location)
+
+            # Check completion FIRST (#467): If leg was ever completed, report COMPLETED
+            # This catches both "completing this bar" and "was completed before"
+            if self._is_completed(leg):
+                self._formed_refs.pop(leg.leg_id, None)
+                results.append(FilteredLeg(
+                    leg=leg,
+                    reason=FilterReason.COMPLETED,
+                    bin=bin_index,
+                    location=min(location, completion_threshold),
+                    threshold=completion_threshold,
+                ))
+                continue
+
             # Not formed: hasn't reached formation threshold
             if leg.leg_id not in self._formed_refs:
                 results.append(FilteredLeg(
@@ -1642,20 +1728,11 @@ class ReferenceLayer:
                 ))
                 continue
 
-            # Compute extreme location for breach checks
-            if leg.direction == 'bear':
-                extreme_location = self._compute_location(leg, bar_low)
-            else:
-                extreme_location = self._compute_location(leg, bar_high)
-            bar_close_location = location
-
-            completion_threshold = self.reference_config.completion_threshold
-
             # Pivot breached — bin-dependent (#436, #454: uses config tolerance)
             if bin_index < self.reference_config.significant_bin_threshold:
                 # Small refs: pivot breach when location < -pivot_breach_tolerance
                 pivot_tolerance = self.reference_config.pivot_breach_tolerance
-                if extreme_location < -pivot_tolerance:
+                if breach_extreme_location < -pivot_tolerance:
                     self._formed_refs.pop(leg.leg_id, None)
                     results.append(FilteredLeg(
                         leg=leg,
@@ -1669,7 +1746,7 @@ class ReferenceLayer:
                 # Significant refs (bin >= 8): two thresholds for pivot breach
                 trade_tolerance = self.reference_config.significant_trade_breach_tolerance
                 close_tolerance = self.reference_config.significant_close_breach_tolerance
-                if extreme_location < -trade_tolerance:
+                if breach_extreme_location < -trade_tolerance:
                     self._formed_refs.pop(leg.leg_id, None)
                     results.append(FilteredLeg(
                         leg=leg,
@@ -1689,18 +1766,6 @@ class ReferenceLayer:
                         threshold=-close_tolerance,
                     ))
                     continue
-
-            # Completed: location > completion_threshold (#454)
-            if extreme_location > completion_threshold:
-                self._formed_refs.pop(leg.leg_id, None)
-                results.append(FilteredLeg(
-                    leg=leg,
-                    reason=FilterReason.COMPLETED,
-                    bin=bin_index,
-                    location=min(location, completion_threshold),
-                    threshold=completion_threshold,
-                ))
-                continue
 
             # Passed all filters - VALID
             # Note: Origin breach removed in #454 - legs stay valid while pivot holds

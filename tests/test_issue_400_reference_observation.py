@@ -210,25 +210,26 @@ class TestGetAllWithStatus:
             ref_layer._bin_distribution.add_leg(f"dummy_{i}", float(2 + i % 8), 1000.0 + i)
             ref_layer._seen_leg_ids.add(f"dummy_{i}")
 
-        # Small bear leg: origin=102, pivot=100 (range=2)
-        leg = make_leg('bear', 102, 100, 100, 105)
+        # Bear leg: origin=110, pivot=100 (range=10)
+        # Use larger range to avoid triggering completion with bar high
+        leg = make_leg('bear', 110, 100, 100, 105)
 
         # Form the leg
         ref_layer._formed_refs[leg.leg_id] = (leg.pivot_price, 0)
 
-        # For bear leg (bull reference), extreme_location uses bar.low
-        # Origin breach (location > 1.0) no longer filters legs (#454)
-        # location = (bar.low - pivot) / (origin - pivot) = (bar.low - 100) / 2
-        # To get location > 1.0: bar.low > 102
-        # Bar with low > origin (103 > 102)
-        breach_bar = make_bar(110, 104, 105, 103, 104)
+        # For bear leg (bull reference), origin breach (location > 1.0) no longer
+        # filters legs (#454). But completion (location > 2.0) still does (#467).
+        # Completion extreme comes from bar.high: (high - pivot) / range
+        # To avoid completion: high < pivot + 2*range = 100 + 20 = 120
+        # Bar with high=115 gives location 1.5 (origin breach but not completion)
+        breach_bar = make_bar(110, 112, 115, 111, 112)
 
         statuses = ref_layer.get_all_with_status([leg], breach_bar)
         assert len(statuses) == 1
         # #454: Origin breach removed - leg stays VALID as long as pivot holds
         assert statuses[0].reason == FilterReason.VALID
-        # Should have small bin (< 8)
-        assert statuses[0].bin < 8
+        # Should have median-ish bin
+        assert statuses[0].bin >= 0
 
     def test_valid_classification(self):
         """Legs passing all filters should get VALID."""

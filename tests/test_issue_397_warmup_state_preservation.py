@@ -11,12 +11,13 @@ The fix adds:
 """
 
 from decimal import Decimal
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 
 from src.swing_analysis.reference_layer import ReferenceLayer
 from src.swing_analysis.reference_config import ReferenceConfig
+from src.swing_analysis.dag.leg import RefMetadata
 
 
 @dataclass
@@ -40,6 +41,7 @@ class MockLeg:
     range: Decimal
     depth: int = 0
     status: str = "active"
+    ref: RefMetadata = field(default_factory=RefMetadata)
 
 
 class TestCopyStateFrom:

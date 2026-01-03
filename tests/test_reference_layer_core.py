@@ -492,20 +492,23 @@ class TestUpdateMethodBreaching:
         ref_layer = ReferenceLayer()
         self._populate_distribution(ref_layer, 100)  # Ensure leg is small bin
 
-        # Small leg (range=5, will be small bin with 100 in distribution)
-        leg = make_leg(direction='bear', origin_price=105, pivot_price=100, origin_index=1)
+        # Larger range to avoid triggering completion with bar high (#467)
+        # Bear leg: origin=110, pivot=100 (range=10)
+        leg = make_leg(direction='bear', origin_price=110, pivot_price=100, origin_index=1)
 
         # First, form it
-        form_bar = make_bar(close=102, high=103, low=101, index=1)
+        form_bar = make_bar(close=104, high=105, low=103, index=1)
         state1 = ref_layer.update([leg], form_bar)
 
         # Check if it formed
         if len(state1.references) == 1:
-            # Price goes past origin (above 105) but leg should stay valid
+            # Price goes past origin (above 110) but leg should stay valid
             # because origin breach was removed in #454
-            past_origin_bar = make_bar(close=108, high=110, low=106, index=2)
+            # Completion threshold at high=120, so high=115 is safe
+            past_origin_bar = make_bar(close=112, high=115, low=111, index=2)
             state2 = ref_layer.update([leg], past_origin_bar)
             # #454: Origin breach removed - leg stays valid as long as pivot holds
+            # #467: But completion at location >= 2 still removes
             assert len(state2.references) == 1
 
 

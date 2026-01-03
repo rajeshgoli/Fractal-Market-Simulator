@@ -19,6 +19,7 @@ from src.swing_analysis.reference_layer import (
     ReferenceState,
 )
 from src.swing_analysis.dag import Leg
+from src.swing_analysis.dag.leg import RefMetadata
 from src.swing_analysis.types import Bar
 
 
@@ -50,6 +51,7 @@ class TestGetActiveLevels:
         leg.impulsiveness = 0.5
         leg.spikiness = 0.3
         leg.retracement_pct = Decimal("0.382")
+        leg.ref = RefMetadata()  # #467: Add RefMetadata for max_location tracking
         return leg
 
     def _create_reference_swing(
@@ -303,6 +305,7 @@ class TestLevelCrossingTracking:
         leg.impulsiveness = 0.5
         leg.spikiness = 0.3
         leg.retracement_pct = Decimal("0.382")
+        leg.ref = RefMetadata()  # #467: Add RefMetadata for max_location tracking
 
         bar = Mock(spec=Bar)
         bar.high = 105.0
