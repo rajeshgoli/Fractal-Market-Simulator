@@ -48,6 +48,7 @@ from .helpers import (
     build_swing_state,
     build_aggregated_bars,
     build_dag_state,
+    build_ref_state_snapshot,
 )
 from .cache import get_replay_cache, is_initialized
 
@@ -344,9 +345,15 @@ async def advance_dag(request: ReplayAdvanceRequest):
         # Process bar with detector (DAG events)
         events = detector.process_bar(bar)
 
-        # Side effects only during bulk advance - skip response building (#437)
+        # Update reference layer - build full response only when per-bar states requested (#456)
+        ref_state = None
         if ref_layer is not None:
-            ref_layer.update(detector.state.active_legs, bar, build_response=False)
+            if request.include_per_bar_ref_states:
+                # Build full response for per-bar snapshots (#456)
+                ref_state = ref_layer.update(detector.state.active_legs, bar, build_response=True)
+            else:
+                # Side effects only during bulk advance - skip response building (#437)
+                ref_layer.update(detector.state.active_legs, bar, build_response=False)
 
         # Add bar to response
         new_bars.append(ReplayBarResponse(
@@ -385,12 +392,13 @@ async def advance_dag(request: ReplayAdvanceRequest):
         if request.include_per_bar_dag_states:
             per_bar_dag_states.append(build_dag_state(detector, s.window_offset))
 
-        # Snapshot Reference state after each bar for buffered playback (#451)
-        if request.include_per_bar_ref_states and ref_layer is not None:
-            formed_ids = list(ref_layer.get_formed_leg_ids_at_bar(bar.index))
-            per_bar_ref_states.append(RefStateSnapshot(
-                bar_index=bar.index,
-                formed_leg_ids=formed_ids,
+        # Snapshot full Reference state after each bar for buffered playback (#456)
+        if request.include_per_bar_ref_states and ref_layer is not None and ref_state is not None:
+            per_bar_ref_states.append(build_ref_state_snapshot(
+                bar.index,
+                ref_layer,
+                ref_state,
+                bar,
             ))
 
     # Update cache state

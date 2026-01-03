@@ -163,14 +163,21 @@ Uses a dictionary to support arbitrary timeframe keys (1m, 5m, 15m, 30m, 1H, 4H,
 
 
 class RefStateSnapshot(BaseModel):
-    """Lightweight per-bar reference state for buffered playback (#451).
+    """Full per-bar reference state for buffered playback (#451, #456).
 
-    Captures which legs are formed at a specific bar index. Used by frontend
-    to filter DAG legs to only show those that were actually formed at the
-    bar being rendered, preventing future formations from appearing early.
+    Contains complete reference layer state for a specific bar index.
+    Used by frontend during high-speed playback to avoid per-bar API calls.
+    Matches the DAG pattern where dag_states[] provides full DagStateResponse per bar.
     """
     bar_index: int  # The bar index this snapshot is for
     formed_leg_ids: List[str]  # Leg IDs that were formed at or before this bar
+    # Full reference state (#456) - enables batched fetching like DAG
+    references: List["ReferenceSwingResponse"] = []  # All valid refs, sorted by salience
+    filtered_legs: List["FilteredLegResponse"] = []  # Filtered legs for observation mode
+    current_price: float = 0.0  # Bar close price for location calculation
+    is_warming_up: bool = True  # Cold start indicator
+    warmup_progress: List[int] = [0, 50]  # [current, target]
+    median: float = 0.0  # Current rolling median for context
 
 
 class ReplayAdvanceResponse(BaseModel):

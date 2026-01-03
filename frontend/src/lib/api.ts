@@ -161,10 +161,18 @@ export interface AggregatedBarsResponse {
   '1W'?: BarData[];
 }
 
-// Per-bar reference state snapshot for buffered playback (#451)
+// Per-bar reference state snapshot for buffered playback (#451, #456)
+// Full reference state per bar for efficient batched fetching
 export interface RefStateSnapshot {
   bar_index: number;
   formed_leg_ids: string[];
+  // Full reference state (#456) - enables batched fetching like DAG
+  references: ReferenceSwing[];  // All valid refs, sorted by salience
+  filtered_legs: FilteredLeg[];  // Filtered legs for observation mode
+  current_price: number;  // Bar close price for location calculation
+  is_warming_up: boolean;  // Cold start indicator
+  warmup_progress: [number, number];  // [current, target]
+  median: number;  // Current rolling median for context
 }
 
 export interface ReplayAdvanceResponse {

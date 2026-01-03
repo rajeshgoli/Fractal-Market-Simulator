@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { PlaybackState, BarData, FilterState } from '../types';
-import { advanceReplay, reverseReplay, resetDag, ReplayEvent, ReplaySwingState, AggregatedBarsResponse, DagStateResponse } from '../lib/api';
+import { advanceReplay, reverseReplay, resetDag, ReplayEvent, ReplaySwingState, AggregatedBarsResponse, DagStateResponse, RefStateSnapshot } from '../lib/api';
 import { formatReplayBarsData } from '../utils/barDataUtils';
 import { LINGER_DURATION_MS } from '../constants';
 
@@ -20,10 +20,12 @@ interface UseForwardPlaybackOptions {
   lingerEnabled?: boolean;  // Whether to pause on events (default: true)
   chartAggregationScales?: string[];  // Scales to include in response (e.g., ["S", "M"])
   includeDagState?: boolean;  // Whether to include DAG state in response
+  includePerBarRefStates?: boolean;  // Whether to include per-bar reference states (#456)
   onNewBars?: (bars: BarData[]) => void;
   onSwingStateChange?: (state: ReplaySwingState) => void;
   onAggregatedBarsChange?: (bars: AggregatedBarsResponse) => void;  // Called with aggregated bars
   onDagStateChange?: (state: DagStateResponse) => void;  // Called with DAG state
+  onRefStateChange?: (state: RefStateSnapshot) => void;  // Called with per-bar reference state (#456)
   onReset?: () => void;  // Called when jumpToStart resets playback state
 }
 
@@ -74,10 +76,12 @@ export function useForwardPlayback({
   lingerEnabled = true,
   chartAggregationScales,
   includeDagState = false,
+  includePerBarRefStates = false,
   onNewBars,
   onSwingStateChange,
   onAggregatedBarsChange,
   onDagStateChange,
+  onRefStateChange,
   onReset,
 }: UseForwardPlaybackOptions): UseForwardPlaybackReturn {
   // Playback state
@@ -122,6 +126,7 @@ export function useForwardPlayback({
     bar: BarData;
     events: ReplayEvent[];
     dagState?: DagStateResponse;  // Per-bar DAG state for DAG mode (#283)
+    refState?: RefStateSnapshot;  // Per-bar reference state (#456)
   }
   const barBufferRef = useRef<BufferedBar[]>([]);
   const lastFetchedPositionRef = useRef(calibrationBarCount - 1);
@@ -282,6 +287,7 @@ export function useForwardPlayback({
     try {
       // Fetch from the last fetched position using fixed batch size
       // In DAG mode, request per-bar DAG states for accurate per-bar visualization (#283)
+      // In Reference mode, request per-bar ref states for efficient batched fetching (#456)
       // Pass fromIndex for BE resync if needed (#310)
       const response = await advanceReplay(
         calibrationBarCount,
@@ -290,7 +296,8 @@ export function useForwardPlayback({
         chartAggregationScales,
         false,  // include_dag_state (final bar only) - we use per-bar instead
         includeDagState,  // include_per_bar_dag_states - reuse the includeDagState prop
-        lastFetchedPositionRef.current  // fromIndex for BE resync
+        lastFetchedPositionRef.current,  // fromIndex for BE resync
+        includePerBarRefStates  // include_per_bar_ref_states (#456)
       );
 
       // Convert bars to buffered format with per-bar events
@@ -303,7 +310,7 @@ export function useForwardPlayback({
           eventsByBar.set(event.bar_index, existing);
         }
 
-        // Add bars to buffer with per-bar DAG states (#283)
+        // Add bars to buffer with per-bar DAG states (#283) and ref states (#456)
         const newBufferedBars: typeof barBufferRef.current = response.new_bars.map((bar, i) => ({
           bar: {
             index: bar.index,
@@ -318,6 +325,8 @@ export function useForwardPlayback({
           events: eventsByBar.get(bar.index) || [],
           // Associate per-bar DAG state if available (#283)
           dagState: response.dag_states?.[i],
+          // Associate per-bar ref state if available (#456)
+          refState: response.ref_states?.[i],
         }));
 
         barBufferRef.current = [...barBufferRef.current, ...newBufferedBars];
@@ -353,7 +362,7 @@ export function useForwardPlayback({
     } finally {
       isFetchingRef.current = false;
     }
-  }, [calibrationBarCount, chartAggregationScales, includeDagState, endOfData, onAggregatedBarsChange]);
+  }, [calibrationBarCount, chartAggregationScales, includeDagState, includePerBarRefStates, endOfData, onAggregatedBarsChange]);
 
   // Render one bar from the buffer (called by animation timer)
   const renderNextBar = useCallback(() => {
@@ -370,7 +379,7 @@ export function useForwardPlayback({
     }
 
     // Pop first bar from buffer
-    const { bar, events, dagState } = buffer.shift()!;
+    const { bar, events, dagState, refState } = buffer.shift()!;
 
     // Render the bar - use functional update to get latest state for snapshot
     let newVisibleBars: BarData[] = [];
@@ -386,6 +395,11 @@ export function useForwardPlayback({
     if (dagState && onDagStateChange) {
       onDagStateChange(dagState);
       latestDagStateRef.current = dagState;
+    }
+
+    // Apply per-bar ref state immediately if available (#456)
+    if (refState && onRefStateChange) {
+      onRefStateChange(refState);
     }
 
     // Apply pending batch states when we reach their target bar index
@@ -441,7 +455,7 @@ export function useForwardPlayback({
     }
 
     return true; // Bar rendered successfully
-  }, [endOfData, clearTimers, filterEvents, lingerEnabled, enterLinger, fetchBatch, onNewBars, onAggregatedBarsChange, onDagStateChange, onSwingStateChange]);
+  }, [endOfData, clearTimers, filterEvents, lingerEnabled, enterLinger, fetchBatch, onNewBars, onAggregatedBarsChange, onDagStateChange, onRefStateChange, onSwingStateChange]);
 
   // Direct API call for manual stepping (stepForward, jumpToNextEvent)
   // Buffer-based renderNextBar is for smooth continuous playback only

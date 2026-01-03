@@ -53,6 +53,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const {
     referenceState,
     fetchReferenceState,
+    setFromSnapshot,  // For buffered playback (#456)
     fadingRefs,
     stickyLegIds,
     toggleStickyLeg,
@@ -252,6 +253,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   }, [calibrationBars]);
 
   // Forward playback hook (#412: simplified from CalibrationData)
+  // #456: Use buffered ref states for efficient high-speed playback
   const forwardPlayback = useForwardPlayback({
     calibrationBarCount,
     calibrationBars,
@@ -261,6 +263,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     lingerEnabled: false,
     chartAggregationScales: [chartPrefs.chart1Aggregation, chartPrefs.chart2Aggregation],
     includeDagState: false,
+    includePerBarRefStates: true,  // #456: Enable buffered ref states
     onNewBars: useCallback((newBars: BarData[]) => {
       setSourceBars(prev => [...prev, ...newBars]);
       if (newBars.length > 0) {
@@ -270,6 +273,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     }, []),
     onAggregatedBarsChange: handleAggregatedBarsChange,
     onDagStateChange: () => {},
+    onRefStateChange: setFromSnapshot,  // #456: Apply buffered ref states during playback
     onReset: handleReset,
   });
 
@@ -284,11 +288,17 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   // Fetch reference state when playback position changes (#412: simplified from CalibrationData)
   // Guard: fetch when we have existing state OR when playback has started
   // (calibrationBarCount > 0 means backend had state on load; isPlaying means we've advanced)
+  // #456: During active playback, ref states come from buffer via onRefStateChange
+  // Only fetch via API when paused/stopped/stepping
   useEffect(() => {
+    // Skip API fetch during active playback - buffered states are applied via onRefStateChange
+    if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
+      return;
+    }
     if (calibrationBarCount > 0 || isPlaying) {
       fetchReferenceState(currentPlaybackPosition);
     }
-  }, [currentPlaybackPosition, calibrationBarCount, isPlaying, fetchReferenceState]);
+  }, [currentPlaybackPosition, calibrationBarCount, isPlaying, fetchReferenceState, forwardPlayback.playbackState]);
 
   // Save playback position to session settings for view switching (#451)
   useEffect(() => {

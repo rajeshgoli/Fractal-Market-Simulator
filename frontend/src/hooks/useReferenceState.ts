@@ -7,6 +7,8 @@ import {
   StructurePanelResponse,
   trackLegForCrossing,
   untrackLegForCrossing,
+  RefStateSnapshot,
+  ReferenceSwing,
 } from '../lib/api';
 
 interface UseReferenceStateReturn {
@@ -14,6 +16,7 @@ interface UseReferenceStateReturn {
   isLoading: boolean;
   error: string | null;
   fetchReferenceState: (barIndex: number) => void;
+  setFromSnapshot: (snapshot: RefStateSnapshot) => void;  // For buffered playback (#456)
   fadingRefs: Set<string>;
   // Sticky leg tracking (Phase 2)
   stickyLegIds: Set<string>;
@@ -103,6 +106,73 @@ export function useReferenceState(): UseReferenceStateReturn {
     }
   }, []);
 
+  // Set reference state from a buffered snapshot (#456)
+  // Used during high-speed playback to avoid per-bar API calls
+  const setFromSnapshot = useCallback((snapshot: RefStateSnapshot) => {
+    // Build derived groupings from references array
+    const by_bin: Record<number, ReferenceSwing[]> = {};
+    const by_depth: Record<number, ReferenceSwing[]> = {};
+    const by_direction: { bull: ReferenceSwing[]; bear: ReferenceSwing[] } = { bull: [], bear: [] };
+
+    for (const ref of snapshot.references) {
+      // Group by bin
+      if (!by_bin[ref.bin]) by_bin[ref.bin] = [];
+      by_bin[ref.bin].push(ref);
+
+      // Group by depth
+      if (!by_depth[ref.depth]) by_depth[ref.depth] = [];
+      by_depth[ref.depth].push(ref);
+
+      // Group by direction
+      by_direction[ref.direction].push(ref);
+    }
+
+    // Compute direction imbalance
+    let direction_imbalance: 'bull' | 'bear' | null = null;
+    if (by_direction.bull.length > by_direction.bear.length * 1.5) {
+      direction_imbalance = 'bull';
+    } else if (by_direction.bear.length > by_direction.bull.length * 1.5) {
+      direction_imbalance = 'bear';
+    }
+
+    // Detect removed references for fade-out animation
+    const currentIds = new Set(snapshot.references.map(r => r.leg_id));
+    const prevIds = prevRefIdsRef.current;
+    const removed = new Set<string>();
+    prevIds.forEach(id => {
+      if (!currentIds.has(id)) {
+        removed.add(id);
+      }
+    });
+
+    if (removed.size > 0) {
+      setFadingRefs(removed);
+      setTimeout(() => {
+        setFadingRefs(new Set());
+      }, FADE_DURATION_MS);
+    }
+
+    prevRefIdsRef.current = currentIds;
+
+    // Build full response format
+    const state: ReferenceStateResponseExtended = {
+      references: snapshot.references,
+      by_bin,
+      by_depth,
+      by_direction,
+      direction_imbalance,
+      is_warming_up: snapshot.is_warming_up,
+      warmup_progress: snapshot.warmup_progress,
+      // Keep existing tracked_leg_ids from current state (not in snapshot)
+      tracked_leg_ids: referenceState?.tracked_leg_ids ?? [],
+      filtered_legs: snapshot.filtered_legs,
+      filter_stats: null,  // Not included in snapshot for performance
+      crossing_events: [],  // Not included in snapshot for performance
+    };
+
+    setReferenceState(state);
+  }, [referenceState?.tracked_leg_ids]);
+
   const toggleStickyLeg = useCallback(async (legId: string): Promise<{ success: boolean; error?: string }> => {
     try {
       if (stickyLegIds.has(legId)) {
@@ -149,6 +219,7 @@ export function useReferenceState(): UseReferenceStateReturn {
     isLoading,
     error,
     fetchReferenceState,
+    setFromSnapshot,  // For buffered playback (#456)
     fadingRefs,
     stickyLegIds,
     toggleStickyLeg,

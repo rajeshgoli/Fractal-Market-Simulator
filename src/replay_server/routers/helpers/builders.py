@@ -23,6 +23,9 @@ from ...schemas import (
     DagPendingOrigin,
     DagLegCounts,
     DagStateResponse,
+    RefStateSnapshot,
+    ReferenceSwingResponse,
+    FilteredLegResponse,
 )
 from .conversions import leg_to_response, size_to_scale
 
@@ -364,3 +367,64 @@ def group_legs_by_depth(
         result.depth_1.append(response)
 
     return result
+
+
+def build_ref_state_snapshot(
+    bar_index: int,
+    ref_layer,
+    ref_state,
+    bar: Bar,
+) -> RefStateSnapshot:
+    """
+    Build full reference state snapshot for buffered playback (#456).
+
+    Args:
+        bar_index: The bar index this snapshot is for.
+        ref_layer: The ReferenceLayer instance.
+        ref_state: The ReferenceState from ref_layer.update().
+        bar: The current bar (for price).
+
+    Returns:
+        RefStateSnapshot with full reference state for this bar.
+    """
+    from ....swing_analysis.reference_layer import FilterReason
+
+    # Get formed leg IDs at this bar
+    formed_ids = list(ref_layer.get_formed_leg_ids_at_bar(bar_index))
+
+    # Convert references to response format
+    references = []
+    for ref_swing in ref_state.references:
+        median_multiple = ref_layer._bin_distribution.get_median_multiple(
+            float(ref_swing.leg.range)
+        )
+        references.append(ReferenceSwingResponse(
+            leg_id=ref_swing.leg.leg_id,
+            bin=ref_swing.bin,
+            median_multiple=median_multiple,
+            depth=ref_swing.leg.depth,
+            location=ref_swing.location,
+            salience_score=ref_swing.salience_score,
+            direction=ref_swing.leg.direction,
+            origin_price=float(ref_swing.leg.origin_price),
+            origin_index=ref_swing.leg.origin_index,
+            pivot_price=float(ref_swing.leg.pivot_price),
+            pivot_index=ref_swing.leg.pivot_index,
+            impulsiveness=ref_swing.leg.impulsiveness,
+        ))
+
+    # Get all legs with filter status for observation mode
+    # Note: We need the active_legs from detector for this
+    # The filtered_legs are computed from ref_state in the caller if needed
+    filtered_legs = []
+
+    return RefStateSnapshot(
+        bar_index=bar_index,
+        formed_leg_ids=formed_ids,
+        references=references,
+        filtered_legs=filtered_legs,
+        current_price=bar.close,
+        is_warming_up=ref_state.is_warming_up,
+        warmup_progress=list(ref_state.warmup_progress),
+        median=ref_layer._bin_distribution.median,
+    )
