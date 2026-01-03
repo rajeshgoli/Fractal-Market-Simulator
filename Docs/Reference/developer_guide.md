@@ -511,14 +511,14 @@ config = ReferenceConfig.default()
 
 # Customize with builder methods (#436: unified weights)
 config = ReferenceConfig.default().with_breach_tolerance(
-    origin_breach_tolerance=0.0,            # Bins < 8: 0% (default per north star)
+    pivot_breach_tolerance=0.0,             # Bins < 8: 0% (default per north star)
     significant_trade_breach_tolerance=0.15, # Bins >= 8: 15% trade breach
     significant_close_breach_tolerance=0.10, # Bins >= 8: 10% close breach
 ).with_salience_weights(
-    range_weight=0.4,                       # Unified across all bins
-    impulse_weight=0.4,
-    recency_weight=0.1,
-    depth_weight=0.1,
+    range_weight=0.8,                       # Unified across all bins (#444)
+    impulse_weight=0.0,
+    recency_weight=0.4,
+    depth_weight=0.0,
 )
 ```
 
@@ -529,13 +529,14 @@ config = ReferenceConfig.default().with_breach_tolerance(
 | `significant_bin_threshold` | 8 | Bins >= this are "significant" (5× median) |
 | `min_swings_for_classification` | 50 | Cold start threshold |
 | `formation_fib_threshold` | 0.236 | Price-based formation level |
-| `origin_breach_tolerance` | 0.0 | Small bins: origin breach tolerance |
+| `pivot_breach_tolerance` | 0.0 | Small bins: pivot breach tolerance (#454) |
 | `significant_trade_breach_tolerance` | 0.15 | Significant bins: trade breach (15%) |
 | `significant_close_breach_tolerance` | 0.10 | Significant bins: close breach (10%) |
-| `range_weight` | 0.4 | Unified salience: range weight |
-| `impulse_weight` | 0.4 | Unified salience: impulse weight |
-| `recency_weight` | 0.1 | Unified salience: recency weight |
-| `depth_weight` | 0.1 | Unified salience: depth weight |
+| `completion_threshold` | 2.0 | Location threshold for COMPLETED status (#454) |
+| `range_weight` | 0.8 | Unified salience: range weight (#444) |
+| `impulse_weight` | 0.0 | Unified salience: impulse weight (#444) |
+| `recency_weight` | 0.4 | Unified salience: recency weight (#444) |
+| `depth_weight` | 0.0 | Unified salience: depth weight (#444) |
 | `recency_decay_bars` | 1000 | Recency half-life: `1/(1 + age/decay)` |
 | `depth_decay_factor` | 0.5 | Depth decay: `1/(1 + depth*factor)` |
 | `range_counter_weight` | 0.0 | Standalone mode: when > 0, uses range × counter |
@@ -616,9 +617,8 @@ for status in statuses:
 | `VALID` | Passed all filters |
 | `COLD_START` | Not enough swings for bin classification |
 | `NOT_FORMED` | Price hasn't reached 23.6% formation |
-| `PIVOT_BREACHED` | Location < 0 (past defended pivot) |
-| `COMPLETED` | Location > 2 (past 2× target) |
-| `ORIGIN_BREACHED` | Bin-dependent tolerance exceeded |
+| `PIVOT_BREACHED` | Location < 0 (past defended pivot with tolerance) |
+| `COMPLETED` | Location > completion_threshold (default 2×) |
 
 **FilteredLeg fields (#436: bin-based):**
 | Field | Type | Description |
@@ -1122,11 +1122,11 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # Returns: {events: LevelCrossEvent[], tracked_count: int}
 # LevelCrossEvent: {leg_id, direction, level_crossed, cross_direction, bar_index, timestamp}
 
-# Get Reference Config: GET /api/reference/config (#423, #436)
+# Get Reference Config: GET /api/reference/config (#423, #436, #454)
 # Returns current salience weights and formation threshold
 # Returns: {range_weight, impulse_weight, recency_weight, depth_weight,
 #           range_counter_weight, top_n, formation_fib_threshold,
-#           origin_breach_tolerance, significant_bin_threshold}
+#           pivot_breach_tolerance, completion_threshold, significant_bin_threshold}
 
 # Update Reference Config: POST /api/reference/config (#423, #436)
 # Accepts partial updates, returns full updated config
