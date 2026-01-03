@@ -130,16 +130,21 @@ CREATE TABLE observations (
     id INTEGER PRIMARY KEY,
     user_id TEXT REFERENCES users(id),
     bar_index INTEGER,
-    event_context TEXT,  -- JSON blob
+    event_context TEXT,  -- JSON
     text TEXT,
+    screenshot BLOB,     -- PNG bytes
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+**Legacy cleanup:** Delete `ground_truth/` directory (playback_feedback.json, screenshots/). File-based feedback replaced by SQLite in multi-tenant mode. Local mode should also use SQLite for consistency.
 
 **Storage split:**
 - **Auth:** JWT in httpOnly cookie (user identity)
 - **Config/position:** localStorage (current behavior, no migration)
 - **Observations:** SQLite (per-user, queryable for demo)
+
+**Observation LRU:** Keep only latest 20 per user. Cleanup on insert (no background job). Prevents screenshot bloat.
 
 Stateless requests — detector state created per-request from localStorage config.
 
