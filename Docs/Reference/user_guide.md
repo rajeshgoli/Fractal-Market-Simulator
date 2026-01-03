@@ -193,7 +193,7 @@ In Market Structure View, all playback controls are functional:
 | Play/Pause | ▶/⏸ | Start/stop incremental bar processing |
 | Step Forward | ▶ | Process one bar (when paused) |
 | Step Back | ◀ | Not functional (forward-only) |
-| Jump to Start | \|◀ | Reset to bar 0 (restart incremental build) |
+| Jump to Start | \|◀ | Reset to bar 0 and clear all detector state (full restart without server restart) |
 | Speed | dropdown | 1x, 2x, 5x, 10x, 20x playback speed |
 | Linger | toggle | Toggle pause-on-event behavior (OFF by default in Market Structure View) |
 
