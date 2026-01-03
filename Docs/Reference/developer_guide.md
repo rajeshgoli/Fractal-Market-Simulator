@@ -1073,6 +1073,31 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # - multi_tenant: boolean (true if MULTI_TENANT env var set)
 # - data_dir: string (configured data directory path)
 # Used by frontend to conditionally show/hide file picker.
+
+# Authentication (#477)
+# Only enforced when MULTI_TENANT=true. Local mode bypasses all auth.
+#
+# Auth Status: GET /auth/status
+# Returns auth state for frontend:
+# - authenticated: boolean
+# - multi_tenant: boolean
+# - user: {id, email} | null
+# - providers: {google: bool, github: bool} (when not authenticated)
+#
+# Login: GET /auth/login/google, GET /auth/login/github
+# Redirects to OAuth provider. Requires environment variables:
+# - GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+# - GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+#
+# Callback: GET /auth/callback/google, GET /auth/callback/github
+# OAuth provider redirects here after user approval.
+# Sets httpOnly cookie and redirects to /.
+#
+# Logout: GET|POST /auth/logout
+# Clears auth cookie and redirects to /login.
+#
+# Protected routes: All /api/* except /api/health, /api/mode
+# Returns 401 if not authenticated in multi-tenant mode.
 ```
 
 **Reference Layer Integration:**
@@ -1103,6 +1128,7 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
   - `dag.py` - Init, advance, reverse, state, lineage, config, followed-legs endpoints
   - `reference.py` - Reference Layer state and levels
   - `feedback.py` - Playback feedback endpoint
+  - `auth.py` - OAuth authentication (Google, GitHub) (#477)
   - `cache.py` - Shared replay cache state
   - `helpers/` - Conversion and builder functions
 - `src/swing_analysis/reference_layer.py` - Filtering logic
