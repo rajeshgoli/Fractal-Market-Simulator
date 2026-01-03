@@ -10,9 +10,6 @@ from .reference_frame import ReferenceFrame
 from .dag import (
     LegDetector,
     HierarchicalDetector,  # Backward compatibility alias
-    calibrate,
-    calibrate_from_dataframe,
-    dataframe_to_bars,
     Leg,
     PendingOrigin,
     DetectorState,

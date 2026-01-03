@@ -78,7 +78,6 @@ export interface SessionInfo {
   window_size: number;
   window_offset: number;
   total_source_bars: number;
-  calibration_bar_count: number | null;
   current_bar_index: number | null;  // Current playback position (-1 = not started, null = no session)
   scale: string;
   created_at: string;
@@ -195,7 +194,6 @@ export interface ReplayAdvanceResponse {
 }
 
 export interface ReplayAdvanceRequest {
-  calibration_bar_count: number;
   current_bar_index: number;
   advance_by?: number;
   include_aggregated_bars?: string[];  // Scales to include (e.g., ["S", "M"])
@@ -206,7 +204,6 @@ export interface ReplayAdvanceRequest {
 }
 
 export async function advanceReplay(
-  calibrationBarCount: number,
   currentBarIndex: number,
   advanceBy: number = 1,
   includeAggregatedBars?: string[],
@@ -216,7 +213,6 @@ export async function advanceReplay(
   includePerBarRefStates?: boolean
 ): Promise<ReplayAdvanceResponse> {
   const requestBody: ReplayAdvanceRequest = {
-    calibration_bar_count: calibrationBarCount,
     current_bar_index: currentBarIndex,
     advance_by: advanceBy,
   };
@@ -327,15 +323,11 @@ export interface FeedbackDetectionConfig {
 // Rich context snapshot for always-on feedback
 export interface PlaybackFeedbackSnapshot {
   // Current state
-  state: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
+  state: 'playing' | 'paused';
   // Authoritative CSV row index for current position (from backend)
   csv_index: number;
-  // Bars elapsed since calibration
-  bars_since_calibration: number;
   // Current bar index
   current_bar_index: number;
-  // Calibration bar count
-  calibration_bar_count: number;
   // Swing counts by scale
   swings_found: {
     XL: number;
@@ -357,7 +349,6 @@ export interface PlaybackFeedbackSnapshot {
       scale: string;
       direction: string;
     };
-    calibration_state: string;
   };
   // DAG-specific context - full data for debugging
   dag_context?: {

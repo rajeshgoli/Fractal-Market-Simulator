@@ -28,12 +28,11 @@ src/
 │   ├── swing_node.py               # SwingNode hierarchical structure
 │   ├── events.py                   # DetectionEvent types
 │   ├── dag/                        # DAG-based leg detection (modularized)
-│   │   ├── __init__.py             # Re-exports: LegDetector, calibrate, etc.
+│   │   ├── __init__.py             # Re-exports: LegDetector, Leg, DetectorState, etc.
 │   │   ├── leg_detector.py         # LegDetector (main class, formerly HierarchicalDetector)
 │   │   ├── leg.py                  # Leg, PendingOrigin dataclasses
 │   │   ├── state.py                # BarType, DetectorState
-│   │   ├── leg_pruner.py           # LegPruner (pruning algorithms)
-│   │   └── calibrate.py            # calibrate, calibrate_from_dataframe, dataframe_to_bars
+│   │   └── leg_pruner.py           # LegPruner (pruning algorithms)
 │   ├── reference_frame.py          # Oriented coordinate system for ratios
 │   └── bar_aggregator.py           # Multi-timeframe OHLC aggregation
 
@@ -77,9 +76,7 @@ scripts/                            # Dev utilities
 │                           SWING ANALYSIS                                     │
 │                                                                              │
 │   dag/leg_detector.py ──────────────────────────────────────────────────┐   │
-│   └── LegDetector.process_bar() ───────────► SwingNode + DetectionEvent     │   │
-│   dag/calibrate.py                                                      │   │
-│   └── calibrate() ─────────────────────────► (detector, events)         │   │
+│   └── LegDetector.process_bar() ───────────► SwingNode + DetectionEvent │   │
 │            │                                                             │   │
 │            │ uses                                                        │   │
 │            ▼                                                             │   │
@@ -109,12 +106,14 @@ scripts/                            # Dev utilities
 1. Load OHLC
    load_ohlc("data.csv") → DataFrame
 
-2. Calibrate (hierarchical DAG detection)
-   calibrate_from_dataframe(df) → (detector, events)
-   detector.get_active_nodes() → List[SwingNode]  # Hierarchical tree
+2. Process bars incrementally (hierarchical DAG detection)
+   detector = LegDetector()
+   for bar in bars:
+       events = detector.process_bar(bar)
+   detector.state.active_legs → List[Leg]  # Active legs
 
 3. Analyze
-   swings = detector.get_active_swings()  # Filter, aggregate, visualize
+   legs = detector.state.active_legs  # Filter, aggregate, visualize
 ```
 
 
@@ -222,7 +221,7 @@ metrics = get_file_metrics("data.csv")
 
 **Directory:** `src/swing_analysis/dag/`
 
-Modular DAG-based leg detection with incremental swing formation. The main entry points are `LegDetector.process_bar()` for incremental detection and `calibrate()` for batch processing.
+Modular DAG-based leg detection with incremental swing formation. The main entry point is `LegDetector.process_bar()` for incremental detection.
 
 **Module structure:**
 | Module | Purpose |
@@ -231,7 +230,6 @@ Modular DAG-based leg detection with incremental swing formation. The main entry
 | `leg.py` | Leg, PendingOrigin dataclasses |
 | `state.py` | BarType enum, DetectorState for persistence |
 | `leg_pruner.py` | LegPruner with pruning algorithms |
-| `calibrate.py` | calibrate, calibrate_from_dataframe, dataframe_to_bars |
 
 **Leg metrics (#241):**
 | Field | Type | Description |
@@ -272,39 +270,13 @@ from src.swing_analysis.dag import (
     LegDetector,
     HierarchicalDetector,  # Backward compatibility alias
     DetectorState,
-    calibrate,
-    calibrate_from_dataframe,
-    dataframe_to_bars,
     Leg,
     PendingOrigin,
     LegPruner,
 )
 from src.swing_analysis.detection_config import DetectionConfig
 
-# Option 1: Calibrate from DataFrame (most common)
-import pandas as pd
-df = pd.read_csv("market_data.csv")
-detector, events = calibrate_from_dataframe(df)
-active_swings = detector.get_active_swings()
-
-# Option 2: Calibrate from Bar list
-bars = [...]  # List[Bar]
-detector, events = calibrate(bars)
-
-# Option 3: Calibrate with progress callback
-def on_progress(current: int, total: int):
-    print(f"Processing bar {current}/{total}")
-
-detector, events = calibrate(bars, progress_callback=on_progress)
-
-# Option 4: Calibrate with Reference layer for tolerance-based invalidation
-from src.swing_analysis.reference_layer import ReferenceLayer
-config = DetectionConfig.default()
-ref_layer = ReferenceLayer(config)
-detector, events = calibrate(bars, config, ref_layer=ref_layer)
-# Events now include Reference layer invalidation/completion events
-
-# Option 5: Process bars incrementally
+# Process bars incrementally
 config = DetectionConfig.default()
 detector = LegDetector(config)
 for bar in bars:
@@ -312,8 +284,15 @@ for bar in bars:
     for event in events:
         print(f"{event.event_type}: {event.swing_id}")
 
-# Convert DataFrame to Bar list manually
-bars = dataframe_to_bars(df)  # Handles various column naming conventions
+# Process with Reference layer for tolerance-based invalidation
+from src.swing_analysis.reference_layer import ReferenceLayer
+config = DetectionConfig.default()
+ref_layer = ReferenceLayer(config)
+detector = LegDetector(config)
+for bar in bars:
+    events = detector.process_bar(bar)
+    ref_result = ref_layer.update(bar, detector.state.active_legs)
+    # ref_result contains Reference layer invalidation/completion events
 
 # Save and restore state
 state = detector.get_state()
@@ -324,19 +303,12 @@ detector2 = LegDetector.from_state(restored_state, config)
 
 # Update config and reset state (Issue #288)
 new_config = DetectionConfig.default().with_bull(formation_fib=0.5)
-detector.update_config(new_config)  # Resets internal state, re-run calibration
+detector.update_config(new_config)  # Resets internal state
 ```
 
-**Calibration functions:**
-| Function | Purpose |
-|----------|---------|
-| `calibrate(bars, config, progress_callback, ref_layer)` | Run detection on Bar list |
-| `calibrate_from_dataframe(df, config, progress_callback, ref_layer)` | Convenience wrapper for DataFrame input |
-| `dataframe_to_bars(df)` | Convert DataFrame with OHLC columns to Bar list |
+**Pipeline integration:**
 
-**Pipeline integration (ref_layer parameter):**
-
-When a `ReferenceLayer` is passed to `calibrate()`, tolerance-based invalidation and completion are applied during calibration, not just at response time. This ensures accurate swing counts throughout the replay.
+When processing bars with a `ReferenceLayer`, tolerance-based invalidation and completion are applied during processing, not just at response time. This ensures accurate swing counts throughout the replay.
 
 The pipeline order per bar:
 1. `detector.process_bar(bar)` — DAG events (formation, structural invalidation, level cross)
@@ -345,7 +317,7 @@ The pipeline order per bar:
 
 **Key design principles:**
 - **No lookahead** — Algorithm only sees current and past bars
-- **Single code path** — Calibration calls `process_bar()` in a loop
+- **Single code path** — All detection uses `process_bar()` in a loop
 - **Independent invalidation** — Each swing checks its own defended pivot (no cascade)
 - **DAG hierarchy** — Swings can have multiple parents for structural context
 - **Multi-TF optimization** — Uses higher-timeframe bars (1h, 4h, 1d) as candidates for O(1) candidate pairs vs O(lookback²)
@@ -663,14 +635,17 @@ from src.swing_analysis.reference_layer import (
     InvalidationResult,
     CompletionResult,
 )
+from src.swing_analysis.dag import LegDetector
 
-# Get swings from DAG
-detector, events = calibrate(bars)
-swings = detector.get_active_swings()
+# Process bars to get legs
+detector = LegDetector(config)
+for bar in bars:
+    detector.process_bar(bar)
+legs = detector.state.active_legs
 
 # Apply reference layer filters
 ref_layer = ReferenceLayer(config)
-reference_swings = ref_layer.get_reference_swings(swings)
+reference_swings = ref_layer.get_reference_swings(legs)
 
 # Check invalidation/completion
 for info in reference_swings:
@@ -974,10 +949,10 @@ canStepBack: boolean;  // true when currentPosition > 0
 python -m pytest tests/ -v
 
 # Specific module
-python -m pytest tests/test_calibration.py -v
+python -m pytest tests/test_detector_state.py -v
 
-# Single test
-python -m pytest tests/test_calibration.py::TestCalibrateFromDataframe -v
+# Single test class
+python -m pytest tests/test_detector_state.py::TestStateRestore -v
 
 # With coverage
 python -m pytest tests/ --cov=src --cov-report=html
@@ -992,7 +967,6 @@ python -m pytest tests/ --cov=src --cov-report=html
 | `test_swing_lifecycle.py` | Formation, invalidation, level crossing, parent assignment |
 | `test_leg_pruning.py` | Turn pruning, domination pruning |
 | `test_leg_extension.py` | Pivot extension, same-bar prevention, state cleanup |
-| `test_calibration.py` | Calibrate functions, DataFrame helpers, performance |
 | `test_discretizer.py` | Event generation, side-channels |
 | `test_reference_frame.py` | ReferenceFrame coordinate system |
 | `test_detection_config.py` | DetectionConfig dataclass |
@@ -1026,16 +1000,16 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 
 # Init: POST /api/dag/init (#410)
 # Explicitly initializes detector with empty state.
-# Returns empty calibration response (no bars processed).
+# Returns empty response (no bars processed).
 # Note: Usually not needed - /advance, /state, /reverse auto-init.
 
 # Reset: POST /api/dag/reset (#412)
 # Clears all state and creates a fresh detector.
 # Use when you want to restart detection from bar 0.
-# Returns empty calibration response.
+# Returns empty response.
 
 # Advance: POST /api/dag/advance
-# {calibration_bar_count, current_bar_index, advance_by}
+# {current_bar_index, advance_by}
 # Processes bars using detector.process_bar() and returns events
 # Auto-initializes detector if not present (#412)
 
@@ -1076,7 +1050,7 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # - engulfed_breach_threshold: Symmetric engulfed threshold (#404)
 
 # Detection Config Update: PUT /api/dag/config (#410)
-# Updates detection config (applies to future bars, no re-calibration):
+# Updates detection config (applies to future bars only):
 # Request body (all fields optional):
 # {
 #   "stale_extension_threshold": 3.0,
@@ -1170,7 +1144,6 @@ The API pipeline applies Reference layer filtering to DAG output before returnin
 - `src/swing_analysis/dag/` - DAG algorithm (modularized)
   - `leg_detector.py` - LegDetector main class
   - `leg_pruner.py` - Pruning algorithms
-  - `calibrate.py` - Batch processing
 
 ### Feedback System
 
@@ -1185,9 +1158,8 @@ The feedback system captures user observations with rich context snapshots:
 **Snapshot fields:**
 ```typescript
 interface PlaybackFeedbackSnapshot {
-  state: 'initializing' | 'initialized' | 'playing' | 'paused';
+  state: 'playing' | 'paused';
   csv_index: number;           // Authoritative CSV row index
-  bars_since_calibration: number;
   current_bar_index: number;
   swings_found: { XL, L, M, S };
   event_context?: {...};       // If during linger event
@@ -1224,6 +1196,5 @@ logging.basicConfig(level=logging.DEBUG)
 | Operation | Target | Notes |
 |-----------|--------|-------|
 | Swing detection | <60s for 6M bars | With `max_pair_distance=2000` |
-| Scale calibration | <100ms | ~7K bars |
 | Bar aggregation | <100ms | 10K bars |
 | File metrics | <100ms | Any file size |

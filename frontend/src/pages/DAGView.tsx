@@ -124,19 +124,17 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
 
   // Handler for playback reset (jumpToStart)
   const handleReset = useCallback(() => {
-    // Reset source bars back to calibration bars
-    state.setSourceBars(state.calibrationBars);
+    // Clear source bars
+    state.setSourceBars([]);
     // Clear aggregated chart bars (will be repopulated on advance)
     state.setChart1Bars([]);
     state.setChart2Bars([]);
     // Clear DAG state
     state.setDagState(null);
-  }, [state.calibrationBars, state.setSourceBars, state.setChart1Bars, state.setChart2Bars, state.setDagState]);
+  }, [state.setSourceBars, state.setChart1Bars, state.setChart2Bars, state.setDagState]);
 
   // Forward playback hook
   const forwardPlayback = useForwardPlayback({
-    calibrationBarCount: state.calibrationBarCount,
-    calibrationBars: state.calibrationBars,
     playbackIntervalMs: effectivePlaybackIntervalMs,
     barsPerAdvance,
     filters: state.lingerEvents,
@@ -170,14 +168,10 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     return colors;
   }, [followLeg.followedLegs]);
 
-  // Get current playback position (#412: simplified from CalibrationData)
+  // Get current playback position
   const currentPlaybackPosition = useMemo(() => {
-    if (state.isPlaying) {
-      return forwardPlayback.currentPosition;
-    }
-    // Before playback starts, use calibrationBarCount
-    return state.calibrationBarCount > 0 ? state.calibrationBarCount - 1 : 0;
-  }, [state.isPlaying, forwardPlayback.currentPosition, state.calibrationBarCount]);
+    return forwardPlayback.currentPosition >= 0 ? forwardPlayback.currentPosition : 0;
+  }, [forwardPlayback.currentPosition]);
 
   // Save playback position to session settings for view switching (#451)
   useEffect(() => {
@@ -524,16 +518,15 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     state.syncChartsToPositionRef.current = syncChartsToPosition;
   }, [syncChartsToPosition, state.syncChartsToPositionRef]);
 
-  // Scroll charts when data is first loaded (before playing)
+  // Scroll charts to current position when data is available
   useEffect(() => {
-    if (!state.isPlaying && state.calibrationBarCount > 0) {
+    if (!state.isPlaying && forwardPlayback.currentPosition >= 0) {
       const timeout = setTimeout(() => {
-        const calibrationEndIndex = state.calibrationBarCount - 1;
-        state.syncChartsToPositionRef.current(calibrationEndIndex);
+        state.syncChartsToPositionRef.current(forwardPlayback.currentPosition);
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [state.isPlaying, state.calibrationBarCount, state.syncChartsToPositionRef]);
+  }, [state.isPlaying, forwardPlayback.currentPosition, state.syncChartsToPositionRef]);
 
   // Compute all leg events from forward playback
   const allLegEvents = useMemo(() => {
@@ -710,8 +703,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
             ? sessionSettings.playbackPosition
             : session.current_bar_index!;
 
-          state.setCalibrationBarCount(targetPosition + 1);
-
           // Fetch lifecycle events from backend to restore stats (#409)
           const lifecycleResponse = await fetchAllLifecycleEvents();
           const restoredEvents: ReplayEvent[] = lifecycleResponse.events.map((e: LifecycleEvent) => {
@@ -736,13 +727,10 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
 
           // Sync forward playback with saved position, not server position
           forwardPlayback.syncToPosition(targetPosition, [], 0, restoredEvents);
-        } else {
-          // No existing state - backend will auto-init on first /dag/state call (#412)
-          state.setCalibrationBarCount(0);
         }
+        // No else needed - backend will auto-init on first /dag/state call (#412)
 
         state.setSourceBars(source);
-        state.setCalibrationBars([]);
 
         const [bars1, bars2] = await Promise.all([
           fetchBars(validChart1),
@@ -795,15 +783,14 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
 
   // Compute feedback context for DAG mode (#412: simplified from CalibrationData)
   const feedbackContext = useMemo(() => {
-    // Only show feedback when we have data loaded (calibrationBarCount > 0)
-    if (state.calibrationBarCount === 0) {
+    // Only show feedback when we have data loaded
+    const hasData = forwardPlayback.currentPosition >= 0 || state.sourceBars.length > 0;
+    if (!hasData) {
       return null;
     }
 
-    let stateString: 'calibrating' | 'calibration_complete' | 'playing' | 'paused';
-    if (!state.isPlaying) {
-      stateString = 'calibration_complete';  // Ready to play
-    } else if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
+    let stateString: 'playing' | 'paused';
+    if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
       stateString = 'playing';
     } else {
       stateString = 'paused';
@@ -820,7 +807,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
       playbackState: forwardPlayback.playbackState,
       calibrationPhase: stateString,
       csvIndex: forwardPlayback.csvIndex,
-      calibrationBarCount: state.calibrationBarCount,
       currentBarIndex: currentPlaybackPosition,
       swingsFoundByScale: { XL: 0, L: 0, M: 0, S: 0 },
       totalEvents: forwardPlayback.allEvents.length,
@@ -829,10 +815,11 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
     };
   }, [
     state.isPlaying,
-    state.calibrationBarCount,
+    state.sourceBars.length,
     forwardPlayback.playbackState,
     forwardPlayback.allEvents,
     forwardPlayback.csvIndex,
+    forwardPlayback.currentPosition,
     currentPlaybackPosition,
   ]);
 
@@ -888,7 +875,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
             onToggleLingerEvent={handleToggleLingerEvent}
             onResetDefaults={handleResetDefaults}
             className="w-64"
-            showFeedback={state.calibrationBarCount > 0}
+            showFeedback={forwardPlayback.currentPosition >= 0 || state.sourceBars.length > 0}
             isLingering={forwardPlayback.isLingering}
             lingerEvent={forwardPlayback.lingerEvent}
             currentPlaybackBar={currentPlaybackPosition}
@@ -905,7 +892,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
             detectionConfig={state.detectionConfig}
             initialDetectionConfig={chartPrefs.detectionConfig ?? undefined}
             onDetectionConfigUpdate={state.setDetectionConfig}
-            isCalibrated={state.calibrationBarCount > 0}
+            isCalibrated={forwardPlayback.currentPosition >= 0 || state.sourceBars.length > 0}
             legEvents={allLegEvents}
             activeLegs={state.dagState?.active_legs}
             onHoverLeg={state.setHighlightedDagItem}
@@ -1063,7 +1050,6 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
               totalEvents={forwardPlayback.allEvents.length}
               currentBar={Math.max(0, currentPlaybackPosition + 1)}
               totalBars={state.sessionInfo?.totalSourceBars || 0}
-              calibrationBarCount={0}
               windowOffset={state.sessionInfo?.windowOffset}
               totalSourceBars={state.sessionInfo?.totalSourceBars}
               speedMultiplier={chartPrefs.speedMultiplier}

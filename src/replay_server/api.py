@@ -44,12 +44,11 @@ class AppState:
     cached_dataframe: Optional[pd.DataFrame] = None
     # Replay state
     playback_index: Optional[int] = None
-    calibration_bar_count: Optional[int] = None
     playback_feedback_storage: Optional[PlaybackFeedbackStorage] = None
     # Leg detector for incremental processing
     hierarchical_detector: Optional[LegDetector] = None
-    # Visualization mode: 'calibration' or 'dag'
-    mode: str = "calibration"
+    # Visualization mode: 'dag'
+    mode: str = "dag"
 
 
 # Global state
@@ -264,7 +263,6 @@ async def get_session():
             "window_size": 0,
             "window_offset": 0,
             "total_source_bars": 0,
-            "calibration_bar_count": None,
             "current_bar_index": None,
             "scale": "S",
             "created_at": "",
@@ -280,7 +278,6 @@ async def get_session():
         "window_size": len(s.source_bars),
         "window_offset": s.window_offset,
         "total_source_bars": s.total_source_bars,
-        "calibration_bar_count": s.calibration_bar_count,
         "current_bar_index": s.playback_index,
         "scale": "S",  # Default scale
         "created_at": "",

@@ -35,7 +35,6 @@ class SessionResponse(BaseModel):
     window_size: int
     window_offset: int
     total_source_bars: int
-    calibration_bar_count: Optional[int]
     scale: str
     created_at: str
     annotation_count: int
@@ -87,7 +86,6 @@ class CalibrationScaleStats(BaseModel):
 
 class CalibrationResponse(BaseModel):
     """Response from calibration endpoint."""
-    calibration_bar_count: int
     current_price: float
     swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
     active_swings_by_scale: Dict[str, List[CalibrationSwingResponse]]
@@ -101,8 +99,7 @@ class CalibrationResponse(BaseModel):
 
 
 class ReplayAdvanceRequest(BaseModel):
-    """Request to advance playback beyond calibration window."""
-    calibration_bar_count: int
+    """Request to advance playback."""
     current_bar_index: int
     advance_by: int = 1
     include_aggregated_bars: Optional[List[str]] = None  # Scales to include (e.g., ["S", "M"])
@@ -310,11 +307,9 @@ class FeedbackDetectionConfig(BaseModel):
 
 class PlaybackFeedbackSnapshot(BaseModel):
     """Rich context snapshot for feedback capture."""
-    state: str  # calibrating, calibration_complete, playing, paused
+    state: str  # playing, paused
     csv_index: int  # Authoritative CSV row index for current position
-    bars_since_calibration: int
     current_bar_index: int
-    calibration_bar_count: int
     swings_found: SwingCountsByScale
     swings_invalidated: int
     swings_completed: int
@@ -390,12 +385,11 @@ class SwingsByDepth(BaseModel):
 
 
 class CalibrationResponseHierarchical(BaseModel):
-    """Calibration response with hierarchical tree statistics.
+    """Hierarchical response with tree statistics.
 
     This is the response format for issue #166 that uses
     hierarchy-based display instead of scale-based (S/M/L/XL).
     """
-    calibration_bar_count: int
     current_price: float
 
     # Tree statistics

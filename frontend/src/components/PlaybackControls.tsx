@@ -27,8 +27,7 @@ interface PlaybackControlsProps {
   // Bar counter
   currentBar: number;
   totalBars: number;
-  // Forward playback metadata (optional - when set, shows different display)
-  calibrationBarCount?: number;
+  // Forward playback metadata (optional)
   windowOffset?: number;
   totalSourceBars?: number;
   // Speed controls
@@ -73,7 +72,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   canStepBack = true,  // Default to true for backward compatibility (#278)
   currentBar,
   totalBars,
-  calibrationBarCount,
   windowOffset,
   totalSourceBars,
   speedMultiplier,
@@ -127,9 +125,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       ? { bars: parseInt(processTillBars, 10) || 0, timestamp: 0 }
       : null;
 
-  // Check if we should show calibration stats (have calibration data)
-  const showCalibrationStats = calibrationBarCount !== undefined && calibrationBarCount > 0;
-
   // Format large numbers with K/M suffix
   const formatCount = (n: number): string => {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -137,8 +132,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     return n.toLocaleString();
   };
 
-  // Calculate remaining bars for forward playback
-  const remainingBars = showCalibrationStats && totalSourceBars !== undefined && windowOffset !== undefined
+  // Calculate remaining bars
+  const remainingBars = totalSourceBars !== undefined && windowOffset !== undefined
     ? Math.max(0, totalSourceBars - windowOffset - currentBar - 1)
     : 0;
 
@@ -533,55 +528,40 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           </div>
         )}
 
-        {/* Bar Counter - calibration stats or simple progress */}
-        {showCalibrationStats ? (
-          // Forward playback: show bar counter, calibrated, offset, remaining
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <span className="text-[10px] text-app-muted uppercase tracking-wider block">Bar</span>
-              <div className="font-mono text-sm tabular-nums text-white font-bold">
-                {formatCount(Math.max(1, currentBar - calibrationBarCount! + 2))}
-              </div>
+        {/* Bar Counter */}
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <span className="text-[10px] text-app-muted uppercase tracking-wider block">Current Bar</span>
+            <div className="font-mono text-sm tabular-nums text-app-text">
+              <span className="text-white font-bold">{(currentBar + 1).toLocaleString()}</span>
+              <span className="text-app-muted mx-1">/</span>
+              {totalBars.toLocaleString()}
             </div>
-            <div className="text-right">
-              <span className="text-[10px] text-app-muted uppercase tracking-wider block">Calibrated</span>
-              <div className="font-mono text-sm tabular-nums text-trading-blue font-bold">
-                {formatCount(calibrationBarCount!)}
-              </div>
-            </div>
+          </div>
+          {windowOffset !== undefined && (
             <div className="text-right">
               <span className="text-[10px] text-app-muted uppercase tracking-wider block">Offset</span>
               <div className="font-mono text-sm tabular-nums text-app-text">
-                {formatCount(windowOffset || 0)}
+                {formatCount(windowOffset)}
               </div>
             </div>
+          )}
+          {totalSourceBars !== undefined && (
             <div className="text-right">
               <span className="text-[10px] text-app-muted uppercase tracking-wider block">Remaining</span>
               <div className="font-mono text-sm tabular-nums text-app-text">
                 {formatCount(remainingBars)}
               </div>
             </div>
+          )}
+          {/* Progress Bar */}
+          <div className="w-32 h-2 bg-app-bg rounded-full overflow-hidden border border-app-border hidden sm:block">
+            <div
+              className="h-full bg-trading-blue transition-all duration-100"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
-        ) : (
-          <>
-            <div className="text-right">
-              <span className="text-[10px] text-app-muted uppercase tracking-wider block">Current Bar</span>
-              <div className="font-mono text-sm tabular-nums text-app-text">
-                <span className="text-white font-bold">{(currentBar + 1).toLocaleString()}</span>
-                <span className="text-app-muted mx-1">/</span>
-                {totalBars.toLocaleString()}
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="w-32 h-2 bg-app-bg rounded-full overflow-hidden border border-app-border hidden sm:block">
-              <div
-                className="h-full bg-trading-blue transition-all duration-100"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-          </>
-        )}
+        </div>
       </div>
     </div>
   );

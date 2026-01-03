@@ -11,8 +11,6 @@ const FETCH_BATCH_SIZE = 100;
 const BUFFER_REFILL_THRESHOLD = 50;
 
 interface UseForwardPlaybackOptions {
-  calibrationBarCount: number;
-  calibrationBars: BarData[];
   playbackIntervalMs: number;
   barsPerAdvance: number;  // How many source bars to advance per tick (aggregation factor)
   barsPerRender?: number;  // How many bars to render per tick (for speed compensation, default 1)
@@ -70,8 +68,6 @@ interface UseForwardPlaybackReturn {
 }
 
 export function useForwardPlayback({
-  calibrationBarCount,
-  calibrationBars,
   playbackIntervalMs,
   barsPerAdvance,
   filters,
@@ -88,9 +84,9 @@ export function useForwardPlayback({
 }: UseForwardPlaybackOptions): UseForwardPlaybackReturn {
   // Playback state
   const [playbackState, setPlaybackState] = useState<PlaybackState>(PlaybackState.STOPPED);
-  const [currentPosition, setCurrentPosition] = useState(calibrationBarCount - 1);
+  const [currentPosition, setCurrentPosition] = useState(-1);
   const [csvIndex, setCsvIndex] = useState(0);  // Authoritative CSV row index from backend (#297)
-  const [visibleBars, setVisibleBars] = useState<BarData[]>(calibrationBars);
+  const [visibleBars, setVisibleBars] = useState<BarData[]>([]);
   const [endOfData, setEndOfData] = useState(false);
 
   // Linger state
@@ -131,7 +127,7 @@ export function useForwardPlayback({
     refState?: RefStateSnapshot;  // Per-bar reference state (#456)
   }
   const barBufferRef = useRef<BufferedBar[]>([]);
-  const lastFetchedPositionRef = useRef(calibrationBarCount - 1);
+  const lastFetchedPositionRef = useRef(-1);
   const isFetchingRef = useRef(false);
 
   // Queue of pending states from batch fetches - each entry is applied when we reach its target bar
@@ -149,12 +145,6 @@ export function useForwardPlayback({
   const showCurrentEventRef = useRef<() => void>(() => {});
   const exitLingerRef = useRef<() => void>(() => {});
   const startPlaybackRef = useRef<() => void>(() => {});
-
-  // Initialize visible bars from calibration
-  useEffect(() => {
-    setVisibleBars(calibrationBars);
-    setCurrentPosition(calibrationBarCount - 1);
-  }, [calibrationBars, calibrationBarCount]);
 
   // Keep playbackIntervalMsRef updated for mid-playback speed changes (#316)
   useEffect(() => {
@@ -292,7 +282,6 @@ export function useForwardPlayback({
       // In Reference mode, request per-bar ref states for efficient batched fetching (#456)
       // Pass fromIndex for BE resync if needed (#310)
       const response = await advanceReplay(
-        calibrationBarCount,
         lastFetchedPositionRef.current,
         FETCH_BATCH_SIZE,
         chartAggregationScales,
@@ -364,7 +353,7 @@ export function useForwardPlayback({
     } finally {
       isFetchingRef.current = false;
     }
-  }, [calibrationBarCount, chartAggregationScales, includeDagState, includePerBarRefStates, endOfData, onAggregatedBarsChange]);
+  }, [chartAggregationScales, includeDagState, includePerBarRefStates, endOfData, onAggregatedBarsChange]);
 
   // Render one bar from the buffer (called by animation timer)
   const renderNextBar = useCallback(() => {
@@ -478,7 +467,6 @@ export function useForwardPlayback({
       // Use barsToAdvance to step by speed aggregation unit (e.g., 12 5m bars for 1H speed)
       // Pass fromIndex (currentPosition) for BE resync if needed (#310)
       const response = await advanceReplay(
-        calibrationBarCount,
         currentPosition,
         barsToAdvance,
         chartAggregationScales,
@@ -570,7 +558,7 @@ export function useForwardPlayback({
     } finally {
       advancePendingRef.current = false;
     }
-  }, [calibrationBarCount, currentPosition, barsPerAdvance, chartAggregationScales, includeDagState, endOfData, clearTimers, enterLinger, filterEvents, lingerEnabled, onNewBars, onSwingStateChange, onAggregatedBarsChange, onDagStateChange]);
+  }, [currentPosition, barsPerAdvance, chartAggregationScales, includeDagState, endOfData, clearTimers, enterLinger, filterEvents, lingerEnabled, onNewBars, onSwingStateChange, onAggregatedBarsChange, onDagStateChange]);
 
   // Ref to hold the latest advanceBar function
   const advanceBarRef = useRef<(opts?: { barsToAdvance?: number; triggerLinger?: boolean }) => Promise<{ events: ReplayEvent[]; endOfData: boolean }>>(async () => ({ events: [], endOfData: false }));
@@ -743,14 +731,15 @@ export function useForwardPlayback({
     }
   }, [playbackState, currentPosition, clearTimers, exitLinger, chartAggregationScales, includeDagState, onSwingStateChange, onAggregatedBarsChange, onDagStateChange]);
 
-  // Jump to start (reset to calibration end)
+  // Jump to start (reset to beginning)
   const jumpToStart = useCallback(() => {
     isPlayingRef.current = false;
     clearTimers();
     exitLinger();
     setPlaybackState(PlaybackState.STOPPED);
-    setVisibleBars(calibrationBars);
-    setCurrentPosition(calibrationBarCount - 1);
+    setVisibleBars([]);
+    setCurrentPosition(-1);
+    lastFetchedPositionRef.current = -1;
     setEndOfData(false);
     setCurrentSwingState(null);
     setAllEvents([]); // Reset events when resetting to start
@@ -765,7 +754,7 @@ export function useForwardPlayback({
     resetDag().catch((error) => {
       console.error('Failed to reset DAG backend:', error);
     });
-  }, [clearTimers, exitLinger, calibrationBars, calibrationBarCount, onReset]);
+  }, [clearTimers, exitLinger, onReset]);
 
   // Navigate to previous event in linger queue
   const navigatePrevEvent = useCallback(() => {
@@ -929,8 +918,7 @@ export function useForwardPlayback({
 
     if (targetBarIndex !== null && targetBarIndex >= 0) {
       // Reset visible bars to show bars up to target
-      // We need to recalculate how many bars from calibration
-      const newVisibleBars = calibrationBars.slice(0, Math.min(targetBarIndex + 1, calibrationBars.length));
+      const newVisibleBars = visibleBars.slice(0, Math.min(targetBarIndex + 1, visibleBars.length));
       setVisibleBars(newVisibleBars);
       setCurrentPosition(targetBarIndex);
 
@@ -942,7 +930,7 @@ export function useForwardPlayback({
         enterLinger(filteredEventsAtBar, false);
       }
     }
-  }, [allEvents, currentEventIndex, currentPosition, playbackState, exitLinger, clearTimers, calibrationBars, enterLinger, filterEvents]);
+  }, [allEvents, currentEventIndex, currentPosition, playbackState, exitLinger, clearTimers, visibleBars, enterLinger, filterEvents]);
 
   // Jump to next event (advance until an event occurs)
   // Reuses advanceBar for API response handling to avoid duplication

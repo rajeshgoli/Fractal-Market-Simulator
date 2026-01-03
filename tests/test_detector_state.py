@@ -10,7 +10,6 @@ from decimal import Decimal
 from src.swing_analysis.dag import (
     HierarchicalDetector,
     DetectorState,
-    calibrate,
 )
 from src.swing_analysis.detection_config import DetectionConfig
 

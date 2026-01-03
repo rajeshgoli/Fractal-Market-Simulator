@@ -385,10 +385,12 @@ class ReferenceLayer:
 
     Example:
         >>> from swing_analysis.reference_layer import ReferenceLayer
-        >>> from swing_analysis.dag import calibrate
+        >>> from swing_analysis.dag import LegDetector
         >>>
         >>> # Get legs from DAG
-        >>> detector, events = calibrate(bars)
+        >>> detector = LegDetector()
+        >>> for bar in bars:
+        ...     events = detector.process_bar(bar)
         >>> legs = detector.state.active_legs
         >>>
         >>> # Apply reference layer filters
@@ -398,7 +400,7 @@ class ReferenceLayer:
         >>> # Update on each bar
         >>> state = ref_layer.update(legs, bar)
         >>> for ref in state.references:
-        ...     print(f"{ref.leg.leg_id}: scale={ref.scale}, salience={ref.salience_score:.2f}")
+        ...     print(f"{ref.leg.leg_id}: bin={ref.bin}, salience={ref.salience_score:.2f}")
     """
 
     # Tolerance constants for big swings (Rule 2.2)

@@ -319,7 +319,7 @@ All 3 pending changes accepted. Summary:
 
 | Document | Status | Notes |
 |----------|--------|-------|
-| `developer_guide.md` | Current | Updated Jan 2 — #404 simplified config |
+| `developer_guide.md` | **Stale** | Line 28 lists `swing_node.py` (deleted #394). Engineering follow-up needed. |
 | `user_guide.md` | Current | Updated Jan 2 — simplified Detection Config |
 | `DAG.md` | Current | Updated Jan 2 — DAG-focused, Reference Layer concepts removed |
 | `README.md` | Current | Updated Jan 2 — phase reflects completion |
@@ -397,6 +397,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 2 | #448, #449, #450, #452 — Formation pivot tracking, playback position filtering, view persistence, chart cleanup (4 issues) | All Accepted |
 | Jan 2 | #413 — DAGView/LevelsAtPlayView duplication audit: ~350 lines duplicated but intentionally separate | Closed (kept separate) |
 | Jan 2 | #445 — Bottom panel consolidation: LEVELS AT PLAY (column-major, paginated), FILTERS to sidebar, hover highlight | Accepted |
 | Jan 2 | #442 — Unified salience formula: 6 additive weights, normalized via median×25, standalone mode removed | Accepted |

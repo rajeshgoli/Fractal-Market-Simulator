@@ -62,12 +62,10 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     clearTrackError,
   } = useReferenceState();
 
-  // Core state (#412: simplified from CalibrationData)
+  // Core state
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [calibrationBarCount, setCalibrationBarCount] = useState(0);
-  const [calibrationBars, setCalibrationBars] = useState<BarData[]>([]);
   const [sourceBars, setSourceBars] = useState<BarData[]>([]);
   const [chart1Bars, setChart1Bars] = useState<BarData[]>([]);
   const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
@@ -245,18 +243,16 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
 
   // Handler for playback reset (jumpToStart)
   const handleReset = useCallback(() => {
-    // Reset source bars back to calibration bars
-    setSourceBars(calibrationBars);
+    // Clear source bars
+    setSourceBars([]);
     // Clear aggregated chart bars (will be repopulated on advance)
     setChart1Bars([]);
     setChart2Bars([]);
-  }, [calibrationBars]);
+  }, []);
 
-  // Forward playback hook (#412: simplified from CalibrationData)
+  // Forward playback hook
   // #456: Use buffered ref states for efficient high-speed playback
   const forwardPlayback = useForwardPlayback({
-    calibrationBarCount,
-    calibrationBars,
     playbackIntervalMs: effectivePlaybackIntervalMs,
     barsPerAdvance,
     filters: [],
@@ -277,17 +273,12 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     onReset: handleReset,
   });
 
-  // Get current playback position (#412: simplified from CalibrationData)
+  // Get current playback position
   const currentPlaybackPosition = useMemo(() => {
-    if (isPlaying) {
-      return forwardPlayback.currentPosition;
-    }
-    return calibrationBarCount > 0 ? calibrationBarCount - 1 : 0;
-  }, [isPlaying, forwardPlayback.currentPosition, calibrationBarCount]);
+    return forwardPlayback.currentPosition >= 0 ? forwardPlayback.currentPosition : 0;
+  }, [forwardPlayback.currentPosition]);
 
-  // Fetch reference state when playback position changes (#412: simplified from CalibrationData)
-  // Guard: fetch when we have existing state OR when playback has started
-  // (calibrationBarCount > 0 means backend had state on load; isPlaying means we've advanced)
+  // Fetch reference state when playback position changes
   // #456: During active playback, ref states come from buffer via onRefStateChange
   // Only fetch via API when paused/stopped/stepping
   useEffect(() => {
@@ -295,10 +286,11 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     if (forwardPlayback.playbackState === PlaybackState.PLAYING) {
       return;
     }
-    if (calibrationBarCount > 0 || isPlaying) {
+    // Fetch when we have data or playback has started
+    if (forwardPlayback.currentPosition >= 0 || isPlaying) {
       fetchReferenceState(currentPlaybackPosition);
     }
-  }, [currentPlaybackPosition, calibrationBarCount, isPlaying, fetchReferenceState, forwardPlayback.playbackState]);
+  }, [currentPlaybackPosition, forwardPlayback.currentPosition, isPlaying, fetchReferenceState, forwardPlayback.playbackState]);
 
   // Save playback position to session settings for view switching (#451)
   useEffect(() => {
@@ -342,13 +334,13 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
       // #458: Invalidate buffer - salience rankings are now stale
       forwardPlayback.clearRefStateBuffer();
       // Refresh reference state to reflect new salience weights
-      if (calibrationBarCount > 0) {
+      if (forwardPlayback.currentPosition >= 0) {
         fetchReferenceState(currentPlaybackPosition);
       }
     } catch (err) {
       console.error('Failed to update reference config:', err);
     }
-  }, [chartPrefs.setReferenceConfig, calibrationBarCount, currentPlaybackPosition, fetchReferenceState, forwardPlayback]);
+  }, [chartPrefs.setReferenceConfig, forwardPlayback, currentPlaybackPosition, fetchReferenceState]);
 
   // Load reference config from backend on mount (Issue #425)
   useEffect(() => {
@@ -596,16 +588,15 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     syncChartsToPositionRef.current = syncChartsToPosition;
   }, [syncChartsToPosition]);
 
-  // Scroll charts when data is first loaded (before playing) (#412: simplified from CalibrationData)
+  // Scroll charts to current position when data is available
   useEffect(() => {
-    if (!isPlaying && calibrationBarCount > 0) {
+    if (!isPlaying && forwardPlayback.currentPosition >= 0) {
       const timeout = setTimeout(() => {
-        const calibrationEndIndex = calibrationBarCount - 1;
-        syncChartsToPositionRef.current(calibrationEndIndex);
+        syncChartsToPositionRef.current(forwardPlayback.currentPosition);
       }, 100);
       return () => clearTimeout(timeout);
     }
-  }, [isPlaying, calibrationBarCount]);
+  }, [isPlaying, forwardPlayback.currentPosition]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -724,16 +715,12 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             ? sessionSettings.playbackPosition
             : session.current_bar_index!;
 
-          setCalibrationBarCount(targetPosition + 1);
           // Sync forward playback with saved position, not server position
           forwardPlayback.syncToPosition(targetPosition, [], 0, []);
-        } else {
-          // No existing state - backend will auto-init on first /dag/state call (#412)
-          setCalibrationBarCount(0);
         }
+        // No else needed - backend will auto-init on first /dag/state call (#412)
 
         setSourceBars(source);
-        setCalibrationBars([]);
 
         const [bars1, bars2] = await Promise.all([
           fetchBars(validChart1),
@@ -840,9 +827,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
             currentPlaybackBar={currentPlaybackPosition}
             feedbackContext={{
               playbackState: isPlaying ? forwardPlayback.playbackState : PlaybackState.STOPPED,
-              calibrationPhase: isPlaying ? 'playing' : 'calibration_complete',
+              calibrationPhase: forwardPlayback.playbackState === PlaybackState.PLAYING ? 'playing' : 'paused',
               csvIndex: currentPlaybackPosition,
-              calibrationBarCount: calibrationBarCount,
               currentBarIndex: currentPlaybackPosition,
               swingsFoundByScale: {
                 // Group bins into legacy scale categories for feedback context
@@ -943,7 +929,6 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
               totalEvents={forwardPlayback.allEvents.length}
               currentBar={Math.max(0, currentPlaybackPosition + 1)}
               totalBars={sessionInfo?.totalSourceBars || 0}
-              calibrationBarCount={0}
               windowOffset={sessionInfo?.windowOffset}
               totalSourceBars={sessionInfo?.totalSourceBars}
               speedMultiplier={chartPrefs.speedMultiplier}

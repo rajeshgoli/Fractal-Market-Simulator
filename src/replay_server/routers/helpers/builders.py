@@ -244,7 +244,6 @@ def check_siblings_exist(legs: List[Leg]) -> bool:
 def compute_tree_statistics(
     all_legs: List[Leg],
     active_legs: List[Leg],
-    calibration_bar_count: int,
     recent_lookback: int = 10,
 ) -> TreeStatistics:
     """
@@ -257,7 +256,6 @@ def compute_tree_statistics(
     Args:
         all_legs: All legs from the DAG.
         active_legs: Currently active legs.
-        calibration_bar_count: Total bars in calibration window.
         recent_lookback: Number of bars to look back for "recently invalidated".
 
     Returns:

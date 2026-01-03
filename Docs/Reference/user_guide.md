@@ -199,17 +199,16 @@ In Market Structure View, all playback controls are functional:
 
 **Linger Toggle:** In Market Structure View, linger is OFF by default for continuous observation. Enable it to pause and examine events as they occur.
 
-### Differences from Calibration Mode
+### Market Structure View Features
 
-| Feature | Calibration Mode | Market Structure View |
-|---------|------------------|----------------------|
-| Initial state | Pre-calibrated (10K bars) | Empty (0 bars) |
-| Build process | Instant (pre-computed) | Incremental (watch it build) |
-| Sidebar | Event filters, feedback | Current structure, linger toggles, feedback |
-| Swing overlay | Fib levels for formed swings | Diagonal leg lines for candidates |
-| Linger default | ON | OFF (continuous observation) |
-| Event navigation | Jump between swing events | Not available |
-| Current Structure Panel | Toggle (Swings/Current Structure tabs) | Always visible |
+| Feature | Description |
+|---------|-------------|
+| Initial state | Empty (0 bars) - starts fresh |
+| Build process | Incremental (watch it build bar-by-bar) |
+| Sidebar | Current structure, linger toggles, feedback |
+| Swing overlay | Diagonal leg lines for candidates |
+| Linger default | OFF (continuous observation) |
+| Current Structure Panel | Always visible |
 
 ### Hierarchy Exploration Mode
 

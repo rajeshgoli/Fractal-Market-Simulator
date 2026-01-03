@@ -14,11 +14,20 @@ from typing import List
 
 from src.swing_analysis.dag import (
     HierarchicalDetector,
-    calibrate,
     Leg,
 )
 from src.swing_analysis.detection_config import DetectionConfig
 from src.swing_analysis.types import Bar
+
+
+def calibrate(bars, config=None):
+    """Process bars through detector and return detector + all events."""
+    detector = HierarchicalDetector(config or DetectionConfig.default())
+    all_events = []
+    for bar in bars:
+        events = detector.process_bar(bar)
+        all_events.extend(events)
+    return detector, all_events
 
 
 def make_bar(

@@ -95,7 +95,6 @@ def _ensure_initialized() -> None:
 
     # Update app state
     s.playback_index = -1
-    s.calibration_bar_count = 0
     s.hierarchical_detector = detector
 
     logger.info("Lazy init complete: detector ready for incremental advance")
@@ -140,10 +139,9 @@ async def init_dag():
 
     # Update app state
     s.playback_index = -1
-    s.calibration_bar_count = 0
     s.hierarchical_detector = detector
 
-    # Return empty calibration response
+    # Return empty response
     empty_tree_stats = TreeStatistics(
         root_swings=0, root_bull=0, root_bear=0, total_nodes=0,
         max_depth=0, avg_children=0.0,
@@ -156,7 +154,6 @@ async def init_dag():
 
     logger.info("DAG mode: detector initialized, ready for incremental advance")
     return CalibrationResponseHierarchical(
-        calibration_bar_count=0,
         current_price=s.source_bars[0].open if s.source_bars else 0.0,
         tree_stats=empty_tree_stats,
         swings_by_depth=empty_swings_by_depth,
@@ -200,10 +197,9 @@ async def reset_dag():
 
     # Update app state
     s.playback_index = -1
-    s.calibration_bar_count = 0
     s.hierarchical_detector = detector
 
-    # Return empty calibration response
+    # Return empty response
     empty_tree_stats = TreeStatistics(
         root_swings=0, root_bull=0, root_bear=0, total_nodes=0,
         max_depth=0, avg_children=0.0,
@@ -216,7 +212,6 @@ async def reset_dag():
 
     logger.info("DAG mode: detector reset, ready for incremental advance")
     return CalibrationResponseHierarchical(
-        calibration_bar_count=0,
         current_price=s.source_bars[0].open if s.source_bars else 0.0,
         tree_stats=empty_tree_stats,
         swings_by_depth=empty_swings_by_depth,

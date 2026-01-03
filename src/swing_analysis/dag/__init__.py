@@ -11,25 +11,20 @@ Key Components:
 - DetectorState: Serializable state for pause/resume
 - BarType: Classification of bar relationships
 - LegPruner: Stateless helper for leg pruning operations
-- calibrate: Batch processing of historical bars
 
 Example:
-    >>> from swing_analysis.dag import LegDetector, calibrate
+    >>> from swing_analysis.dag import LegDetector
     >>>
     >>> # Incremental detection
     >>> detector = LegDetector()
     >>> for bar in bars:
     ...     events = detector.process_bar(bar)
-    >>>
-    >>> # Batch calibration
-    >>> detector, events = calibrate(bars)
 """
 
 from .leg_detector import LegDetector, HierarchicalDetector
 from .leg import Leg, PendingOrigin
 from .state import DetectorState, BarType
 from .leg_pruner import LegPruner
-from .calibrate import calibrate, calibrate_from_dataframe, dataframe_to_bars
 from .range_distribution import RollingBinDistribution, BIN_MULTIPLIERS, NUM_BINS
 
 __all__ = [
@@ -43,10 +38,6 @@ __all__ = [
     "BarType",
     # Pruning
     "LegPruner",
-    # Calibration
-    "calibrate",
-    "calibrate_from_dataframe",
-    "dataframe_to_bars",
     # Range distribution (#434)
     "RollingBinDistribution",
     "BIN_MULTIPLIERS",
