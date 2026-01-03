@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.log
+cache/
+tmp/
+validation_results/
+validation_sessions/
+ground_truth/
+
+# Claude/AI
+.claude/
+.archive/
+.gemini/
+
+# Test data (except es-30m.csv which we need)
+test_data/*.csv
+!test_data/es-30m.csv
+
+# Documentation (not needed in container)
+Docs/
+*.md
+!README.md

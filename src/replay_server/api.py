@@ -8,12 +8,13 @@ Minimal server for:
 """
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,6 +27,30 @@ from ..swing_analysis.types import Bar
 from ..swing_analysis.dag import LegDetector, HierarchicalDetector
 
 logger = logging.getLogger(__name__)
+
+# Data directory (set by main.py)
+_data_dir: Optional[str] = None
+
+
+def set_data_dir(path: str) -> None:
+    """Set the data directory for file discovery."""
+    global _data_dir
+    _data_dir = path
+    logger.info(f"Data directory set to: {path}")
+
+
+def get_data_dir() -> Path:
+    """Get the configured data directory."""
+    if _data_dir is None:
+        # Fallback to test_data in project root (for backwards compatibility)
+        project_root = Path(__file__).parent.parent.parent
+        return project_root / "test_data"
+    return Path(_data_dir)
+
+
+def is_multi_tenant() -> bool:
+    """Check if running in multi-tenant mode."""
+    return os.environ.get("MULTI_TENANT", "").lower() in ("true", "1", "yes")
 
 
 @dataclass
@@ -85,14 +110,31 @@ def get_state() -> AppState:
 # ============================================================================
 
 
+def get_static_dir() -> Optional[Path]:
+    """Get the static files directory (production or development)."""
+    project_root = Path(__file__).parent.parent.parent
+
+    # Production: /app/static (Docker)
+    prod_static = project_root / "static"
+    if prod_static.exists() and (prod_static / "index.html").exists():
+        return prod_static
+
+    # Development: frontend/dist
+    dev_static = project_root / "frontend" / "dist"
+    if dev_static.exists() and (dev_static / "index.html").exists():
+        return dev_static
+
+    return None
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the Replay View UI - React frontend."""
-    project_root = Path(__file__).parent.parent.parent
-    react_index = project_root / "frontend" / "dist" / "index.html"
+    static_dir = get_static_dir()
 
-    if react_index.exists():
-        with open(react_index, 'r') as f:
+    if static_dir:
+        index_path = static_dir / "index.html"
+        with open(index_path, 'r') as f:
             return HTMLResponse(content=f.read())
 
     return HTMLResponse(
@@ -198,7 +240,7 @@ async def list_data_files():
     """
     List available CSV data files for selection.
 
-    Scans the test_data/ directory for CSV files and returns metadata
+    Scans the configured data directory for CSV files and returns metadata
     including bar count and date range. Files that fail to parse are
     silently skipped.
 
@@ -208,15 +250,14 @@ async def list_data_files():
     """
     from ..data.ohlc_loader import get_file_metrics
 
-    project_root = Path(__file__).parent.parent.parent
-    test_data_dir = project_root / "test_data"
+    data_dir = get_data_dir()
 
     files = []
 
-    if not test_data_dir.exists():
+    if not data_dir.exists():
         return files
 
-    for csv_file in sorted(test_data_dir.glob("*.csv")):
+    for csv_file in sorted(data_dir.glob("*.csv")):
         # Skip subdirectories and hidden files
         if not csv_file.is_file() or csv_file.name.startswith('.'):
             continue
@@ -240,6 +281,15 @@ async def list_data_files():
             continue
 
     return files
+
+
+@app.get("/api/mode")
+async def get_mode():
+    """Get the server mode (multi-tenant or local)."""
+    return {
+        "multi_tenant": is_multi_tenant(),
+        "data_dir": str(get_data_dir()),
+    }
 
 
 @app.get("/api/config")
@@ -632,18 +682,72 @@ app.include_router(feedback_router)
 # Static file mounts
 # ============================================================================
 
-# Mount React frontend assets
-project_root = Path(__file__).parent.parent.parent
-react_dist_dir = project_root / "frontend" / "dist"
-react_assets_dir = react_dist_dir / "assets"
-if react_assets_dir.exists():
-    app.mount("/assets", StaticFiles(directory=str(react_assets_dir)), name="react-assets")
+
+def mount_static_files():
+    """Mount static files from either production or development location."""
+    project_root = Path(__file__).parent.parent.parent
+
+    # Try production location first (/app/static in Docker)
+    prod_static = project_root / "static"
+    if prod_static.exists():
+        assets_dir = prod_static / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="react-assets")
+            logger.info(f"Mounted assets from production: {assets_dir}")
+        return prod_static
+
+    # Fall back to development location
+    dev_static = project_root / "frontend" / "dist"
+    if dev_static.exists():
+        assets_dir = dev_static / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="react-assets")
+            logger.info(f"Mounted assets from development: {assets_dir}")
+        return dev_static
+
+    return None
+
+
+# Mount static files at module load
+_static_dir = mount_static_files()
 
 
 @app.get("/vite.svg")
 async def vite_svg():
     """Serve vite.svg for React frontend."""
-    svg_path = react_dist_dir / "vite.svg"
-    if svg_path.exists():
-        return FileResponse(str(svg_path), media_type="image/svg+xml")
+    static_dir = get_static_dir()
+    if static_dir:
+        svg_path = static_dir / "vite.svg"
+        if svg_path.exists():
+            return FileResponse(str(svg_path), media_type="image/svg+xml")
     return HTMLResponse(content="", status_code=404)
+
+
+# SPA fallback: serve index.html for non-API, non-asset routes
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    """
+    SPA fallback handler for client-side routing.
+
+    Serves index.html for any route that:
+    - Is not an API endpoint (/api/*)
+    - Is not a static asset (/assets/*)
+    - Is not a known file (vite.svg, etc.)
+    """
+    # Don't handle API routes
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Don't handle asset routes (they're mounted)
+    if full_path.startswith("assets/"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Serve index.html for SPA routing
+    static_dir = get_static_dir()
+    if static_dir:
+        index_path = static_dir / "index.html"
+        if index_path.exists():
+            with open(index_path, 'r') as f:
+                return HTMLResponse(content=f.read())
+
+    raise HTTPException(status_code=404, detail="Not found")
