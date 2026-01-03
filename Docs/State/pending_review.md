@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2026-01-02
 
@@ -13,6 +13,7 @@
 - **#465** — Remove superseded CLI parameters from main.py (--data, --resolution, --window, --offset, --start-date, --target-bars, --reload); keep only --host and --port
 - **#466** — Display fib levels for auto-selected top reference (pass selectedLegId to ReferenceLegOverlay)
 - **#467** — Prevent completed references from re-forming (add RefMetadata with max_location to Leg, derive completion status at runtime)
+- **#470** — Persist reference config across reloads (push saved localStorage config to server on mount, mirroring DAGView behavior)
 
 ---
 
