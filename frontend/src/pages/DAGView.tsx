@@ -861,7 +861,7 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
         currentView="dag"
         onNavigate={onNavigate}
         user={auth.user}
-        onLogout={auth.multiTenant ? auth.logout : undefined}
+        onLogout={auth.multiTenant ? auth.logout : () => { window.location.href = '/'; }}
       />
 
       <div className="flex-1 flex min-h-0">

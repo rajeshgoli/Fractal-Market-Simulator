@@ -842,7 +842,7 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         currentView="levels-at-play"
         onNavigate={onNavigate}
         user={auth.user}
-        onLogout={auth.multiTenant ? auth.logout : undefined}
+        onLogout={auth.multiTenant ? auth.logout : () => { window.location.href = '/'; }}
       />
 
       <div className="flex-1 flex min-h-0">

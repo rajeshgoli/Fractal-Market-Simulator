@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 4
+**Unreviewed Change Count:** 5
 
 **Last Review:** 2026-01-03
 
@@ -12,6 +12,7 @@
 - **#476** — SQLite setup: db.py module, volume mount, WAL mode, startup init, local dev fallback
 - **#477** — OAuth authentication: Google + GitHub OAuth, JWT cookies, auth middleware, login page, user display in header
 - **#478** — Observations to SQLite: per-user storage, LRU cleanup (20 max), screenshot BLOB, GET /api/feedback/mine, removed storage.py and ground_truth/
+- **#481** — ReferenceLegOverlay timestamp deduplication: Added deduplicateLineData utility to sort/dedupe data before setData() calls, preventing 'data must be asc ordered by time' errors
 
 ---
 

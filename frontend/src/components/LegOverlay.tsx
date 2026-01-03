@@ -213,6 +213,13 @@ export const LegOverlay: React.FC<LegOverlayProps> = ({
       return null;
     }
 
+    // Validate prices to prevent "Value is null" error in lightweight-charts
+    if (typeof leg.origin_price !== 'number' || !isFinite(leg.origin_price) ||
+        typeof leg.pivot_price !== 'number' || !isFinite(leg.pivot_price)) {
+      console.warn('Invalid price data for leg:', leg.leg_id, { origin: leg.origin_price, pivot: leg.pivot_price });
+      return null;
+    }
+
     try {
       // Create line series for this leg using v5 API
       const lineSeries = chart.addSeries(LineSeries, {
