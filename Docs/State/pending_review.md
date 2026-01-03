@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 2
+**Unreviewed Change Count:** 3
 
 **Last Review:** 2026-01-02
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#456** — Buffer per-bar reference states during playback (eliminates per-bar API calls)
 - **#455** — Wire up |< button to reset backend state (detector + reference layer)
 - **#454** — Rename origin breach to pivot breach, remove origin breach check, add completion_threshold config
 
