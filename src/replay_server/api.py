@@ -190,16 +190,7 @@ def get_static_dir() -> Optional[Path]:
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    """Serve the Replay View UI - React frontend."""
-    # In multi-tenant mode, check if user is authenticated
-    if is_multi_tenant():
-        from .routers.auth import get_current_user
-        user = get_current_user(request)
-        if not user:
-            # Redirect to login page
-            from fastapi.responses import RedirectResponse
-            return RedirectResponse(url="/login", status_code=302)
-
+    """Serve the React frontend - let React router handle auth-based routing."""
     static_dir = get_static_dir()
 
     if static_dir:
@@ -951,6 +942,17 @@ async def vite_svg():
         svg_path = static_dir / "vite.svg"
         if svg_path.exists():
             return FileResponse(str(svg_path), media_type="image/svg+xml")
+    return HTMLResponse(content="", status_code=404)
+
+
+@app.get("/app-preview.png")
+async def app_preview():
+    """Serve app preview image for landing page."""
+    static_dir = get_static_dir()
+    if static_dir:
+        img_path = static_dir / "app-preview.png"
+        if img_path.exists():
+            return FileResponse(str(img_path), media_type="image/png")
     return HTMLResponse(content="", status_code=404)
 
 
