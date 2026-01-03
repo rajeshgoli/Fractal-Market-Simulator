@@ -33,6 +33,7 @@ Read in order:
 - **RollingBinDistribution:** O(1) bin operations, periodic O(n) median recomputation every 100 legs (#434)
 - **Unified salience weights:** Single weight set for all bins; Range×Counter standalone mode for experimentation (#429, #436)
 - **Per-bar state snapshots:** Batched advance processes 100 bars at a time; any state layer used during playback must capture per-bar snapshots to avoid temporal inconsistency (server at bar 600 while rendering bar 515). Pattern established in #283 with `per_bar_dag_states`.
+- **Multi-tenant deployment:** Single container on Fly.io, SQLite on persistent volume, OAuth via authlib, data baked into image, stateless requests (detector state from localStorage config).
 
 **Known debt:**
 - Scaling test `test_scaling_is_not_quadratic` marginally fails (64 vs 60 threshold) — flaky boundary, low priority
@@ -62,9 +63,29 @@ Read in order:
 
 ---
 
-## Current Phase: Reference Layer COMPLETE
+## Current Phase: Impulse Rework
 
-**All 4 phases complete as of Jan 2, 2026.**
+**Multi-tenant demo complete** — Live at https://fractal.rajeshgo.li
+
+**Next:** Improve impulse detection in the DAG. Infrastructure exists to visualize and validate changes.
+
+---
+
+## Completed: Multi-tenant Demo (Jan 3, 2026)
+
+Deployed to Fly.io with:
+- Single container (uvicorn, 1 worker)
+- Google + GitHub OAuth via authlib
+- SQLite on persistent volume (WAL mode)
+- ES 30-min data baked into image (222K bars)
+- Auto-deploy via GitHub Actions on push to main
+- Per-user observations with LRU cleanup (20 max)
+
+**Spec:** `Docs/Working/multi_tenant_demo_spec.md`
+
+---
+
+## Completed: Reference Layer (Jan 2, 2026)
 
 ### Phase 1: COMPLETE — Dec 31, 2025
 
@@ -226,10 +247,6 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 - ✅ Reference Config Panel (#423-#429) — COMPLETE
 
 **Reference Layer is COMPLETE.** All 4 phases + bin-based classification + config UI delivered.
-
-**Multi-tenant demo:** Complete (Jan 3, 2026) — Live at https://fractal.rajeshgo.li
-
-**Next phase:** Impulse rework — improve impulse detection in DAG. See `Docs/State/product_direction.md`.
 
 ---
 
@@ -395,6 +412,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 3 | Multi-tenant demo — Fly.io deployment, OAuth, SQLite persistence, CI/CD pipeline | Complete; live at https://fractal.rajeshgo.li |
 | Jan 3 | #462, #463, #465-#467, #469-#472 — Calibration/Swing naming cleanup, sourceBars consolidation, CLI simplification, fib level auto-select fix, completed ref no-reform, pause buffering, config persistence, fromIndex fix, filter_stats in snapshots (9 issues) | All Accepted; commit 0004057 (follow-up to #471) untracked — retroactive documentation needed |
 | Jan 2 | #454-#460, #464 — Breach filtering fix, reset button, batched ref states, per-pivot top N, auto-track buffering, config preservation, calibration deletion, test helper consolidation (8 issues) | All Accepted; calibration removed from core decisions |
 | Jan 2 | #448, #449, #450, #452 — Formation pivot tracking, playback position filtering, view persistence, chart cleanup (4 issues) | All Accepted |
