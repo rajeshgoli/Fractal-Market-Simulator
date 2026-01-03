@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2026-01-02
 
@@ -8,6 +8,7 @@
 
 ## Pending Changes
 
+- **#459** — Preserve ReferenceConfig on playback resync (fixes user display preferences lost on pause/reverse)
 - **#458** — Buffer auto-tracked legs and crossing events during playback (eliminates per-bar track API calls)
 - **#457** — Per-pivot salience filtering with top N display limit (active_filtered field, split panel UI)
 - **#456** — Buffer per-bar reference states during playback (eliminates per-bar API calls)

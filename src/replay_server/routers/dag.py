@@ -79,8 +79,11 @@ def _ensure_initialized() -> None:
 
     logger.info("Lazy-initializing detector for DAG mode")
 
+    # Preserve ReferenceConfig if it exists (#459)
+    old_ref_config = cache.get("reference_layer").reference_config if cache.get("reference_layer") else None
+
     config = DetectionConfig.default()
-    ref_layer = ReferenceLayer(config)
+    ref_layer = ReferenceLayer(config, reference_config=old_ref_config)
     detector = LegDetector(config)
 
     # Initialize cache for incremental advance
@@ -121,8 +124,11 @@ async def init_dag():
 
     logger.info("Initializing detector for DAG mode")
 
+    # Preserve ReferenceConfig if it exists (#459)
+    old_ref_config = cache.get("reference_layer").reference_config if cache.get("reference_layer") else None
+
     config = DetectionConfig.default()
-    ref_layer = ReferenceLayer(config)
+    ref_layer = ReferenceLayer(config, reference_config=old_ref_config)
     detector = LegDetector(config)
 
     # Initialize cache for incremental advance
@@ -178,8 +184,11 @@ async def reset_dag():
 
     logger.info("Resetting detector for DAG mode")
 
+    # Preserve ReferenceConfig if it exists (#459)
+    old_ref_config = cache.get("reference_layer").reference_config if cache.get("reference_layer") else None
+
     config = DetectionConfig.default()
-    ref_layer = ReferenceLayer(config)
+    ref_layer = ReferenceLayer(config, reference_config=old_ref_config)
     detector = LegDetector(config)
 
     # Reset cache to initial state
@@ -248,9 +257,12 @@ async def advance_dag(request: ReplayAdvanceRequest):
         old_detector = cache["detector"]
         config = old_detector.config
 
+        # Preserve ReferenceConfig (#459)
+        old_ref_config = cache.get("reference_layer").reference_config if cache.get("reference_layer") else None
+
         # Create fresh detector with same config
         detector = LegDetector(config)
-        ref_layer = ReferenceLayer(config)
+        ref_layer = ReferenceLayer(config, reference_config=old_ref_config)
 
         # Clear lifecycle events - we'll rebuild them during replay
         cache["lifecycle_events"] = []
@@ -513,9 +525,12 @@ async def reverse_dag(request: ReplayReverseRequest):
     old_detector = cache["detector"]
     config = old_detector.config
 
+    # Preserve ReferenceConfig (#459)
+    old_ref_config = cache.get("reference_layer").reference_config if cache.get("reference_layer") else None
+
     # Create fresh detector with same config
     detector = LegDetector(config)
-    ref_layer = ReferenceLayer(config)
+    ref_layer = ReferenceLayer(config, reference_config=old_ref_config)
 
     # Clear lifecycle events - we'll rebuild them during replay (#299)
     cache["lifecycle_events"] = []
@@ -845,9 +860,10 @@ async def update_detection_config(request: SwingConfigUpdateRequest):
     # Update detector config (keeps current state, applies to future bars)
     detector.update_config(new_config)
 
-    # Update reference layer with new config, preserving accumulated state
+    # Update reference layer with new config, preserving accumulated state and ReferenceConfig (#459)
     old_ref_layer = cache.get("reference_layer")
-    new_ref_layer = ReferenceLayer(new_config)
+    old_ref_config = old_ref_layer.reference_config if old_ref_layer else None
+    new_ref_layer = ReferenceLayer(new_config, reference_config=old_ref_config)
     if old_ref_layer is not None:
         new_ref_layer.copy_state_from(old_ref_layer)
     cache["reference_layer"] = new_ref_layer
