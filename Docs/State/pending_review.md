@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 **Last Review:** 2026-01-03
 
@@ -13,6 +13,7 @@
 - **#477** — OAuth authentication: Google + GitHub OAuth, JWT cookies, auth middleware, login page, user display in header
 - **#478** — Observations to SQLite: per-user storage, LRU cleanup (20 max), screenshot BLOB, GET /api/feedback/mine, removed storage.py and ground_truth/
 - **#481** — ReferenceLegOverlay timestamp deduplication: Added deduplicateLineData utility to sort/dedupe data before setData() calls, preventing 'data must be asc ordered by time' errors
+- **#482** — Landing page interactive chart preview: Replace static PNG with lightweight-charts candlestick chart, 3 leg overlays, Fibonacci levels on hover, info tooltip
 
 ---
 
