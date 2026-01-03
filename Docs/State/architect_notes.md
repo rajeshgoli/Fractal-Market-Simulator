@@ -227,10 +227,9 @@ Four phases from spec, decomposed into implementable issues. Each epic is indepe
 
 **Reference Layer is COMPLETE.** All 4 phases + bin-based classification + config UI delivered.
 
-**Next phase:** To be determined by Product. Potential directions:
-- GAN simulation / training data generation
-- Additional analysis tooling
-- Performance optimization for larger datasets
+**Multi-tenant demo:** Complete (Jan 3, 2026) — Live at https://fractal.rajeshgo.li
+
+**Next phase:** Impulse rework — improve impulse detection in DAG. See `Docs/State/product_direction.md`.
 
 ---
 

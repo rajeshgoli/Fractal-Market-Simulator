@@ -79,7 +79,7 @@ The `test_data/es-*.csv` files use a non-standard format:
 | Header | None |
 | Columns | date;time;open;high;low;close;volume |
 | Date format | `dd/mm/yyyy` |
-| Time format | `HH:MM:SS` (EDT/EST) |
+| Time format | `HH:MM` or `HH:MM:SS` (EDT/EST) |
 
 **Example row:**
 ```

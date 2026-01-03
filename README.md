@@ -2,6 +2,8 @@
 
 A market simulator that models structural market dynamics to generate realistic OHLC price data.
 
+**Live Demo:** https://fractal.rajeshgo.li — Try it now with ES 30-minute data.
+
 ## Vision
 
 Markets are short-term voting machines driven by liquidity and momentum. This project models those dynamics through:

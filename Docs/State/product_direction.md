@@ -7,15 +7,15 @@
 
 ## Current Objective
 
-**Multi-tenant demo deployment.**
+**Impulse rework** — improve impulse detection in the DAG.
 
 ---
 
-## Current Phase: Foundation & Shareability
+## Current Phase: Technical Foundation
 
-Reference Layer (P1-P4) is **complete**. Product is working beautifully — legs and Fibonacci levels render correctly, playback works as envisioned.
+Multi-tenant demo is **live** at https://fractal-market-simulator.fly.dev/
 
-**Next: Build concrete foundations before exploratory work.**
+**Next: Fix impulse detection. Infrastructure exists to visualize and validate.**
 
 ---
 
@@ -23,8 +23,8 @@ Reference Layer (P1-P4) is **complete**. Product is working beautifully — legs
 
 | # | Track | Rationale | Status |
 |---|-------|-----------|--------|
-| 1 | **Multi-tenant demo** | Quick win — working app to keep and share | **Next** |
-| 2 | **Impulse rework** | Technical foundation — infra exists to validate | Queued |
+| 1 | **Multi-tenant demo** | Quick win — working app to keep and share | **Complete** |
+| 2 | **Impulse rework** | Technical foundation — infra exists to validate | **Next** |
 | 3 | **Outcome Layer** | Statistical grounding — ground intuitions with data | Queued |
 | 4 | **Fractal narrative** | Exploratory UX — build on solid foundation | Future |
 
@@ -34,22 +34,22 @@ Reference Layer (P1-P4) is **complete**. Product is working beautifully — legs
 
 ## Track 1: Multi-tenant Demo
 
-**Status:** Interview in progress
+**Status:** Complete (Jan 3, 2026)
 
-Minimal multi-tenant capability to host a shareable demo:
-- Session ID + per-user caching
-- Fixed backtest data (ES 30-minute)
-- Google OAuth (minimal auth)
-- CI/CD: push to main → deployed
-- User's domain
+**Live at:** https://fractal.rajeshgo.li
 
-**Goal:** Portfolio piece — live demo to point to.
+Delivered:
+- Google + GitHub OAuth
+- ES 30-minute data (222K bars)
+- Full playback and visualization
+- Per-user observations in SQLite
+- Auto-deploy on push to main
 
 ---
 
 ## Track 2: Impulse Rework
 
-**Status:** Queued (after multi-tenant)
+**Status:** Next
 
 Current impulse detection in DAG needs improvement. Infrastructure exists to visualize and validate. Enhances downstream features (fractal visualization, outcome layer).
 
@@ -119,7 +119,7 @@ The "stepping stones" visualization — showing how parent targets are reached t
 | Reference Layer filters valid references | Done (#361-#387) |
 | Reference Layer observability | Done (#400-#414) |
 | Structure Panel shows level touches | Done (#420) |
-| Multi-tenant demo deployed | **Next** |
+| Multi-tenant demo deployed | Done (Jan 3) |
 | Impulse detection improved | Queued |
 | Outcome Layer statistics | Queued |
 | Fractal narrative UX | Future |
@@ -129,7 +129,6 @@ The "stepping stones" visualization — showing how parent targets are reached t
 ## Checkpoint Trigger
 
 **Invoke Product when:**
-- Multi-tenant scope needs clarification
 - Impulse rework reveals design questions
 - Outcome Layer definition needs user input
 - Ready to begin fractal narrative exploration

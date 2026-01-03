@@ -17,8 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY src/ src/
 
-# Copy data file (baked into image)
-COPY test_data/es-30m.csv test_data/
+# Copy demo data file (trimmed from 2019 onwards for smaller memory footprint)
+COPY test_data/es-30m-demo.csv test_data/es-30m.csv
 
 # Copy React build from frontend stage
 COPY --from=frontend /app/frontend/dist static/

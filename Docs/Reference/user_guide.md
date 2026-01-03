@@ -1,5 +1,7 @@
 # Fractal Market Simulator - User Guide
 
+**Quick Preview:** https://fractal.rajeshgo.li — Try the live demo with ES 30-minute data.
+
 ## Why Use This Tool?
 
 Markets exhibit fractal structure: large moves are composed of smaller moves following the same rules. This project provides tools to visualize, validate, and eventually generate realistic OHLC price data based on these structural dynamics.
