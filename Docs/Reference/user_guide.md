@@ -31,14 +31,14 @@ Market Structure View provides the primary interface for observing how the hiera
 # Activate environment
 source venv/bin/activate
 
-# Start the server
-python -m src.replay_server.main
+# Start the server (--data-dir is required)
+python -m src.replay_server.main --data-dir ./test_data
 
 # Or use a custom port
-python -m src.replay_server.main --port 8080
+python -m src.replay_server.main --data-dir ./test_data --port 8080
 ```
 
-Then open http://127.0.0.1:8000/replay in your browser.
+Then open http://127.0.0.1:8000/ in your browser.
 
 ### First-Time Setup
 

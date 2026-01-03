@@ -1067,6 +1067,12 @@ The replay view backend (`src/replay_server/`) uses LegDetector for incremental 
 # Accepts partial updates, returns full updated config
 # Request: any subset of config fields (e.g., {range_weight: 0.6})
 # Response: full ReferenceConfig with all values
+
+# Server Mode: GET /api/mode (#475)
+# Returns server configuration for frontend adaptation:
+# - multi_tenant: boolean (true if MULTI_TENANT env var set)
+# - data_dir: string (configured data directory path)
+# Used by frontend to conditionally show/hide file picker.
 ```
 
 **Reference Layer Integration:**
