@@ -117,3 +117,144 @@ def init_db() -> None:
         logger.info("Database schema initialized successfully")
     finally:
         conn.close()
+
+
+# ============================================================================
+# Observation Functions
+# ============================================================================
+
+# Maximum observations to keep per user (LRU cleanup)
+MAX_OBSERVATIONS_PER_USER = 20
+
+
+def add_observation(
+    user_id: Optional[str],
+    bar_index: int,
+    event_context: str,
+    text: str,
+    screenshot: Optional[bytes] = None
+) -> int:
+    """
+    Add an observation to the database with LRU cleanup.
+
+    In local mode (user_id=None), uses 'local' as the user_id for consistency.
+    After inserting, deletes older observations to keep only the latest 20 per user.
+
+    Args:
+        user_id: The user's ID (or None for local mode).
+        bar_index: The bar index when observation was made.
+        event_context: JSON string of event context/snapshot.
+        text: The observation text.
+        screenshot: Optional PNG screenshot bytes.
+
+    Returns:
+        The ID of the inserted observation.
+    """
+    # Use 'local' for local mode (no authentication)
+    effective_user_id = user_id or "local"
+
+    conn = get_db()
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO observations (user_id, bar_index, event_context, text, screenshot)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (effective_user_id, bar_index, event_context, text, screenshot)
+        )
+        observation_id = cursor.lastrowid
+
+        # LRU cleanup - keep only latest MAX_OBSERVATIONS_PER_USER (by id, not timestamp)
+        conn.execute(
+            """
+            DELETE FROM observations
+            WHERE user_id = ? AND id NOT IN (
+                SELECT id FROM observations
+                WHERE user_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+            )
+            """,
+            (effective_user_id, effective_user_id, MAX_OBSERVATIONS_PER_USER)
+        )
+
+        conn.commit()
+        logger.info(f"Added observation {observation_id} for user {effective_user_id}")
+        return observation_id
+    finally:
+        conn.close()
+
+
+def get_user_observations(user_id: Optional[str], limit: int = 20) -> list[dict]:
+    """
+    Get observations for a user, ordered by most recent first.
+
+    In local mode (user_id=None), returns observations for 'local' user.
+
+    Args:
+        user_id: The user's ID (or None for local mode).
+        limit: Maximum number of observations to return.
+
+    Returns:
+        List of observation dicts with id, bar_index, event_context, text,
+        has_screenshot, and created_at.
+    """
+    effective_user_id = user_id or "local"
+
+    conn = get_db()
+    try:
+        cursor = conn.execute(
+            """
+            SELECT id, bar_index, event_context, text,
+                   CASE WHEN screenshot IS NOT NULL THEN 1 ELSE 0 END as has_screenshot,
+                   created_at
+            FROM observations
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (effective_user_id, limit)
+        )
+
+        observations = []
+        for row in cursor.fetchall():
+            observations.append({
+                "id": row["id"],
+                "bar_index": row["bar_index"],
+                "event_context": row["event_context"],
+                "text": row["text"],
+                "has_screenshot": bool(row["has_screenshot"]),
+                "created_at": row["created_at"],
+            })
+
+        return observations
+    finally:
+        conn.close()
+
+
+def get_observation_screenshot(observation_id: int, user_id: Optional[str]) -> Optional[bytes]:
+    """
+    Get the screenshot for an observation.
+
+    Args:
+        observation_id: The observation ID.
+        user_id: The user's ID (for access control, or None for local mode).
+
+    Returns:
+        Screenshot bytes or None if not found/no access.
+    """
+    effective_user_id = user_id or "local"
+
+    conn = get_db()
+    try:
+        cursor = conn.execute(
+            """
+            SELECT screenshot FROM observations
+            WHERE id = ? AND user_id = ?
+            """,
+            (observation_id, effective_user_id)
+        )
+        row = cursor.fetchone()
+        return row["screenshot"] if row else None
+    finally:
+        conn.close()

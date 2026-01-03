@@ -1,6 +1,6 @@
 # Pending Review
 
-**Unreviewed Change Count:** 3
+**Unreviewed Change Count:** 4
 
 **Last Review:** 2026-01-03
 
@@ -11,6 +11,7 @@
 - **#475** — Fly.io deployment infrastructure: Dockerfile, fly.toml, --data-dir, MULTI_TENANT, static serving
 - **#476** — SQLite setup: db.py module, volume mount, WAL mode, startup init, local dev fallback
 - **#477** — OAuth authentication: Google + GitHub OAuth, JWT cookies, auth middleware, login page, user display in header
+- **#478** — Observations to SQLite: per-user storage, LRU cleanup (20 max), screenshot BLOB, GET /api/feedback/mine, removed storage.py and ground_truth/
 
 ---
 

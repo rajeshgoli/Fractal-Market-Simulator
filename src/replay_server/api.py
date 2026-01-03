@@ -20,7 +20,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .storage import PlaybackFeedbackStorage
 from .schemas import BarResponse
 from .db import init_db
 
@@ -80,7 +79,6 @@ class AppState:
     cached_dataframe: Optional[pd.DataFrame] = None
     # Replay state
     playback_index: Optional[int] = None
-    playback_feedback_storage: Optional[PlaybackFeedbackStorage] = None
     # Leg detector for incremental processing
     hierarchical_detector: Optional[LegDetector] = None
     # Visualization mode: 'dag'
@@ -877,9 +875,6 @@ def init_app(
         for i in range(len(source_bars)):
             aggregation_map[i] = (i, i)
 
-    # Initialize playback feedback storage
-    playback_storage = PlaybackFeedbackStorage()
-
     state = AppState(
         source_bars=source_bars,
         aggregated_bars=aggregated_bars,
@@ -890,7 +885,6 @@ def init_app(
         total_source_bars=total_source_bars,
         window_offset=window_offset,
         cached_dataframe=full_df,
-        playback_feedback_storage=playback_storage,
         mode=mode,
     )
 

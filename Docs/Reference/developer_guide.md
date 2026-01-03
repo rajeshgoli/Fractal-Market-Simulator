@@ -1169,17 +1169,20 @@ The `detection_config` field captures the full detection configuration at observ
 - Origin range/time proximity thresholds
 - Pruning algorithm toggles (engulfed)
 
-**Backend storage** (`src/replay_server/storage.py`):
-- `PLAYBACK_FEEDBACK_SCHEMA_VERSION = 2` - Current schema version
-- Observations persist to `ground_truth/playback_feedback.json`
-- Screenshots saved to `ground_truth/screenshots/`
-
-**Multi-tenant storage** (`src/replay_server/db.py`):
+**Observation storage** (`src/replay_server/db.py`):
 - SQLite database with WAL mode for read concurrency
 - Production path: `/data/fractal.db` (Fly.io volume)
 - Local dev fallback: `local_data/fractal.db`
 - Schema: `users` (id, email, created_at), `observations` (user_id, bar_index, event_context, text, screenshot, created_at)
 - Initialized on app startup via lifespan handler
+- LRU cleanup: Keeps only latest 20 observations per user
+- Local mode uses user_id='local' for consistency
+- Screenshots stored as BLOBs directly in SQLite
+
+**API Endpoints** (`src/replay_server/routers/feedback.py`):
+- `POST /api/feedback/submit` - Submit observation with optional screenshot
+- `GET /api/feedback/mine` - Get user's observations (most recent first)
+- `GET /api/feedback/screenshot/{observation_id}` - Get screenshot bytes
 
 ### Debug logging
 ```python
