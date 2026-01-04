@@ -10,7 +10,6 @@ export const Footer: React.FC<FooterProps> = ({ className = '' }) => {
       title: 'Product',
       links: [
         { label: 'Features', href: '/#features' },
-        { label: 'Pricing', href: '#' },
         { label: 'Demo', href: '/login' },
       ],
     },
@@ -19,21 +18,21 @@ export const Footer: React.FC<FooterProps> = ({ className = '' }) => {
       links: [
         { label: "How It's Built", href: '/developers' },
         { label: 'GitHub', href: 'https://github.com/rajeshgoli/Fractal-Market-Simulator', external: true },
-        { label: 'Docs', href: '#' },
+        { label: 'Docs', href: 'https://github.com/rajeshgoli/Fractal-Market-Simulator/blob/main/Docs/Reference/developer_guide.md', external: true },
       ],
     },
     {
       title: 'Company',
       links: [
         { label: 'Story', href: '/story' },
-        { label: 'Contact', href: '#' },
+        { label: 'Contact', href: 'https://x.com/rajeshgoli', external: true },
       ],
     },
     {
       title: 'Legal',
       links: [
-        { label: 'Privacy', href: '#' },
-        { label: 'Terms', href: '#' },
+        { label: 'Privacy', href: '/privacy' },
+        { label: 'Terms', href: '/terms' },
       ],
     },
   ];

@@ -5,6 +5,8 @@ import { LandingPage } from './pages/LandingPage';
 import { DevelopersPage } from './pages/DevelopersPage';
 import { TradersPage } from './pages/TradersPage';
 import { StoryPage } from './pages/StoryPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { TermsPage } from './pages/TermsPage';
 import { useChartPreferences } from './hooks/useChartPreferences';
 import { useAuth } from './hooks/useAuth';
 
@@ -50,6 +52,8 @@ function App() {
         <Route path="/developers" element={<DevelopersPage />} />
         <Route path="/traders" element={<TradersPage />} />
         <Route path="/story" element={<StoryPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
       </Routes>
     </BrowserRouter>
   );
