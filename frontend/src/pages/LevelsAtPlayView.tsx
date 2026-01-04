@@ -108,7 +108,12 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
     status: 'active',
     origin_breached: false,
     bar_count: ref.pivot_index - ref.origin_index,
+    impulse: null, // Not available from ReferenceSwing
+    range: Math.abs(ref.pivot_price - ref.origin_price),
+    depth: ref.depth,
+    bin: ref.bin,
     impulsiveness: ref.impulsiveness,
+    bin_impulsiveness: null, // Not available from ReferenceSwing
     spikiness: null,
     parent_leg_id: null,
     impulse_to_deepest: null,
