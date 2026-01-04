@@ -21,6 +21,7 @@ Design: Option A (post-filter DAG output) per DAG spec.
 See Docs/Reference/valid_swings.md for the canonical rules.
 """
 
+import bisect
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -626,6 +627,59 @@ class ReferenceLayer:
             new_range: New range value after pivot extension.
         """
         self._bin_distribution.update_leg(leg_id, new_range)
+
+    def _update_bin_classifications(self, legs: List[Leg]) -> None:
+        """
+        Set range_bin_index and bin_impulsiveness on formed legs (#491).
+
+        For each formed leg:
+        1. Sets range_bin_index from bin distribution
+        2. Computes bin_impulsiveness: percentile rank of impulse within same bin
+
+        Bin-normalized impulsiveness is more useful than global impulsiveness
+        because it compares apples to apples - a highly impulsive small leg is
+        different from a highly impulsive large leg.
+
+        Args:
+            legs: Active legs from DAG.
+        """
+        # First pass: classify all formed legs into bins and collect impulses per bin
+        bin_impulses: Dict[int, List[float]] = {}
+        legs_with_bins: List[Tuple[Leg, int]] = []
+
+        for leg in legs:
+            # Only process formed legs with valid impulse
+            if leg.leg_id not in self._formed_refs:
+                continue
+            if leg.impulse is None or leg.impulse <= 0:
+                continue
+
+            bin_idx = self._get_bin_index(leg.range)
+            leg.range_bin_index = bin_idx
+            legs_with_bins.append((leg, bin_idx))
+
+            if bin_idx not in bin_impulses:
+                bin_impulses[bin_idx] = []
+            bin_impulses[bin_idx].append(leg.impulse)
+
+        # Sort impulses per bin for percentile lookup
+        for bin_idx in bin_impulses:
+            bin_impulses[bin_idx].sort()
+
+        # Second pass: compute bin_impulsiveness for each leg
+        for leg, bin_idx in legs_with_bins:
+            impulses = bin_impulses.get(bin_idx, [])
+            if not impulses or leg.impulse is None:
+                leg.bin_impulsiveness = None
+                continue
+
+            # Compute percentile rank within the bin using bisect
+            count_below = bisect.bisect_left(impulses, leg.impulse)
+            count_equal = bisect.bisect_right(impulses, leg.impulse) - count_below
+            # Use midpoint of the range where value would be inserted
+            # This gives (count_below + count_equal/2) / total
+            percentile = (count_below + count_equal / 2) / len(impulses) * 100
+            leg.bin_impulsiveness = percentile
 
     def _compute_location(self, leg: Leg, current_price: Decimal) -> float:
         """
@@ -1604,6 +1658,9 @@ class ReferenceLayer:
 
         # Time-based eviction - keeps distribution fresh (rolling 90-day window)
         self._bin_distribution.evict_old_legs(timestamp)
+
+        # Update bin classifications and compute bin_impulsiveness (#491)
+        self._update_bin_classifications(legs)
 
         # Early return for bulk advances - side effects done, skip response building
         if not build_response:

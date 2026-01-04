@@ -1,6 +1,10 @@
 # Pending Review
 
-**Unreviewed Change Count:** 0
+**Unreviewed Change Count:** 1
+
+## Pending Issues
+
+- #491 — Bin-normalized impulsiveness: Add bin_impulsiveness field (percentile within same bin) + expose impulse/range/depth/bin in DAG API
 
 **Last Review:** 2026-01-03
 

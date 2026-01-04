@@ -126,6 +126,8 @@ class DetectorState:
                 "depth": leg.depth,
                 # Range bin index (#434)
                 "range_bin_index": leg.range_bin_index,
+                # Bin-normalized impulsiveness (#491)
+                "bin_impulsiveness": leg.bin_impulsiveness,
             })
 
         # Serialize pending origins
@@ -220,6 +222,8 @@ class DetectorState:
                 depth=leg_data.get("depth", 0),
                 # Range bin index (#434)
                 range_bin_index=leg_data.get("range_bin_index"),
+                # Bin-normalized impulsiveness (#491)
+                bin_impulsiveness=leg_data.get("bin_impulsiveness"),
             )
             active_legs.append(leg)
 

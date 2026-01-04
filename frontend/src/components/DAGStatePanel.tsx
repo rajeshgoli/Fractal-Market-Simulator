@@ -109,26 +109,28 @@ const LegItem: React.FC<LegItemProps> = ({ leg, isHighlighted, isFocused, isAtta
         <span className="font-mono">{formatPrice(leg.origin_price)}</span>
       </div>
       <div>
-        <span className="text-[10px] uppercase">Retr:</span>{' '}
-        <span className="font-mono">{(leg.retracement_pct * 100).toFixed(1)}%</span>
+        <span className="text-[10px] uppercase">Range:</span>{' '}
+        <span className="font-mono">{leg.range !== null ? formatPrice(leg.range) : '-'}</span>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase">Depth:</span>{' '}
+        <span className="font-mono">{leg.depth}</span>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase">Bin:</span>{' '}
+        <span className="font-mono">{leg.bin !== null ? leg.bin : '-'}</span>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase">Impulse:</span>{' '}
+        <span className="font-mono">{leg.impulse !== null ? leg.impulse.toFixed(2) : '-'}</span>
+      </div>
+      <div>
+        <span className="text-[10px] uppercase">BinImp:</span>{' '}
+        <span className="font-mono">{leg.bin_impulsiveness !== null ? `${leg.bin_impulsiveness.toFixed(0)}%` : '-'}</span>
       </div>
       <div>
         <span className="text-[10px] uppercase">Bars:</span>{' '}
         <span className="font-mono">{leg.bar_count}</span>
-      </div>
-      <div>
-        <span className="text-[10px] uppercase">Net Seg:</span>{' '}
-        <span className={`font-mono ${leg.net_segment_impulse !== null ? (leg.net_segment_impulse > 0 ? 'text-trading-bull' : leg.net_segment_impulse < 0 ? 'text-trading-bear' : '') : ''}`}>
-          {leg.net_segment_impulse !== null ? leg.net_segment_impulse.toFixed(2) : '-'}
-        </span>
-      </div>
-      <div>
-        <span className="text-[10px] uppercase">To/Back:</span>{' '}
-        <span className="font-mono">
-          {leg.impulse_to_deepest !== null && leg.impulse_back !== null
-            ? `${leg.impulse_to_deepest.toFixed(1)}/${leg.impulse_back.toFixed(1)}`
-            : '-/-'}
-        </span>
       </div>
     </div>
   </div>

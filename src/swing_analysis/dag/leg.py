@@ -118,6 +118,9 @@ class Leg:
     # Range bin index (#434): Index into RollingBinDistribution bins.
     # Updated when pivot extends. Used for O(1) scale classification.
     range_bin_index: Optional[int] = None
+    # Bin-normalized impulsiveness (#491): Percentile rank of impulse within same bin.
+    # More meaningful than global impulsiveness since it compares apples to apples.
+    bin_impulsiveness: Optional[float] = None
     # Reference layer metadata (#467): Namespace for ref layer-owned data.
     # Lives on Leg for lifecycle management (prunes with leg, no cleanup).
     ref: RefMetadata = field(default_factory=RefMetadata)

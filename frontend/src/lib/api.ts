@@ -423,9 +423,20 @@ export interface DagLeg {
   status: 'active' | 'stale';  // #345: 'invalidated' removed, use origin_breached
   origin_breached: boolean;    // #345: True if origin was breached (structural invalidation)
   bar_count: number;
+  // Raw impulse: price change per bar (range / bar_count) (#491)
+  impulse: number | null;
+  // Range: |origin_price - pivot_price| (#491)
+  range: number | null;
+  // Hierarchy depth: 0 = root, 1+ = nested under parent (#491)
+  depth: number;
+  // Range bin index: 0-10, median-normalized bin classification (#491)
+  bin: number | null;
   // Impulsiveness (0-100): Percentile rank of raw impulse vs all formed legs (#241)
   // More interpretable than raw impulse - 90+ is very impulsive, 10- is gradual
   impulsiveness: number | null;
+  // Bin-normalized impulsiveness (0-100): Percentile rank of impulse within same bin (#491)
+  // More meaningful than global impulsiveness - compares apples to apples
+  bin_impulsiveness: number | null;
   // Spikiness (0-100): Sigmoid-normalized skewness of bar contributions (#241)
   // 50 = neutral, 90+ = spike-driven, 10- = evenly distributed
   spikiness: number | null;

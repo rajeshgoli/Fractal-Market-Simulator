@@ -401,9 +401,20 @@ class DagLegResponse(BaseModel):
     bar_count: int
     # #345: Origin breach tracking - true if origin has been breached (structural invalidation)
     origin_breached: bool = False
+    # Raw impulse: price change per bar (range / bar_count) (#491)
+    impulse: Optional[float] = None
+    # Range: |origin_price - pivot_price| (#491)
+    range: Optional[float] = None
+    # Hierarchy depth: 0 = root, 1+ = nested under parent (#491)
+    depth: int = 0
+    # Range bin index: 0-10, median-normalized bin classification (#491)
+    bin: Optional[int] = None
     # Impulsiveness (0-100): Percentile rank of raw impulse vs all formed legs (#241)
     # More interpretable than raw impulse - 90+ is very impulsive, 10- is gradual
     impulsiveness: Optional[float] = None
+    # Bin-normalized impulsiveness (0-100): Percentile rank of impulse within same bin (#491)
+    # More meaningful than global impulsiveness - compares apples to apples
+    bin_impulsiveness: Optional[float] = None
     # Spikiness (0-100): Sigmoid-normalized skewness of bar contributions (#241)
     # 50 = neutral, 90+ = spike-driven, 10- = evenly distributed
     spikiness: Optional[float] = None
