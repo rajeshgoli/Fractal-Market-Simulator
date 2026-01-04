@@ -1,10 +1,14 @@
 # Pending Review
 
-**Unreviewed Change Count:** 1
+**Unreviewed Change Count:** 5
 
 ## Pending Issues
 
 - #491 — Bin-normalized impulsiveness: Add bin_impulsiveness field (percentile within same bin) + expose impulse/range/depth/bin in DAG API
+- #487 — /developers page: workflow, stats, deletion discipline, architecture highlights
+- #488 — /traders page: trading thesis, Fibonacci levels, multi-timeframe visual
+- #489 — /story page: personal narrative, philosophy quotes, Fractal Stack
+- #490 — Shared landing components: StatsBanner, Footer, Navbar updates, routes
 
 **Last Review:** 2026-01-03
 
