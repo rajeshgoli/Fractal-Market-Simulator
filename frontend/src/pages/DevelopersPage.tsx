@@ -95,10 +95,11 @@ export const DevelopersPage: React.FC = () => {
   ];
 
   const deletedFeatures = [
-    { feature: 'S/M/L/XL discrete scales', lines: '~400', reason: 'Replaced with continuous DAG' },
-    { feature: 'Inner Structure Pruning', lines: '~200', reason: 'Unnecessary complexity' },
-    { feature: 'SwingNode class', lines: '~150', reason: 'Merged into simpler model' },
-    { feature: 'Replay View', lines: '~300', reason: 'Redundant with new architecture' },
+    { feature: 'S/M/L/XL classification system', lines: '1,300', reason: 'Replaced with continuous bins' },
+    { feature: 'Duplicate cache layers', lines: '1,692', reason: 'API namespace restructure' },
+    { feature: 'Calibration concept', lines: '681', reason: 'Created bugs, removed entirely' },
+    { feature: 'Confluence zones UI', lines: '213', reason: 'Too cluttered, users ignored it' },
+    { feature: 'CLI legacy parameters', lines: '260', reason: 'Superseded, no tombstones' },
   ];
 
   const archCards = [
@@ -299,9 +300,12 @@ export const DevelopersPage: React.FC = () => {
       {/* The Deletion Discipline Section */}
       <section className="py-20 px-6">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-4">What We Removed</h2>
-          <p className="text-slate-400 text-center mb-12 max-w-2xl mx-auto">
-            The codebase stays clean because we delete aggressively. No tombstones, no "# removed in #XXX" comments. Git has history.
+          <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-4">The Deletion Discipline</h2>
+          <p className="text-slate-400 text-center mb-6 max-w-2xl mx-auto">
+            4,000+ lines deleted across major refactors. The codebase stays clean because we delete aggressively.
+          </p>
+          <p className="text-cyan-400 text-center mb-12 font-mono text-sm">
+            "Delete means delete. No legacy, no tombstones, don't retain it with another name. Delete and fix what breaks."
           </p>
 
           <div className="overflow-x-auto mb-12">
@@ -329,7 +333,7 @@ export const DevelopersPage: React.FC = () => {
             <div className="flex items-start gap-4">
               <div className="text-4xl text-cyan-400">"</div>
               <p className="text-lg md:text-xl text-white italic leading-relaxed">
-                When we removed a feature, we deleted 142 lines in one commit. No tombstones. Git has history—the codebase stays clean.
+                Calibration was creating bugs. I didn't deprecate it, didn't add a flag, didn't leave a comment. I deleted the concept. 681 lines gone. Fix what breaks.
               </p>
             </div>
           </div>
