@@ -1,9 +1,10 @@
 # Pending Review
 
-**Unreviewed Change Count:** 5
+**Unreviewed Change Count:** 6
 
 ## Pending Issues
 
+- #429 follow-up — Info tooltips for Reference Config panel (Formation, Pivot Breach, Salience Weights, Display)
 - #491 — Bin-normalized impulsiveness: Add bin_impulsiveness field (percentile within same bin) + expose impulse/range/depth/bin in DAG API
 - #487 — /developers page: workflow, stats, deletion discipline, architecture highlights
 - #488 — /traders page: trading thesis, Fibonacci levels, multi-timeframe visual
