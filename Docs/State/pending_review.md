@@ -1,20 +1,8 @@
 # Pending Review
 
-**Unreviewed Change Count:** 7
+**Unreviewed Change Count:** 0
 
 **Last Review:** 2026-01-03
-
----
-
-## Pending Changes
-
-- **#484** — OHLC loader mixed time format fix: Support both HH:MM and HH:MM:SS in format_a CSV files using pandas format='mixed'
-- **#475** — Fly.io deployment infrastructure: Dockerfile, fly.toml, --data-dir, MULTI_TENANT, static serving
-- **#476** — SQLite setup: db.py module, volume mount, WAL mode, startup init, local dev fallback
-- **#477** — OAuth authentication: Google + GitHub OAuth, JWT cookies, auth middleware, login page, user display in header
-- **#478** — Observations to SQLite: per-user storage, LRU cleanup (20 max), screenshot BLOB, GET /api/feedback/mine, removed storage.py and ground_truth/
-- **#481** — ReferenceLegOverlay timestamp deduplication: Added deduplicateLineData utility to sort/dedupe data before setData() calls, preventing 'data must be asc ordered by time' errors
-- **#482** — Landing page interactive chart preview: Replace static PNG with lightweight-charts candlestick chart, 3 leg overlays, Fibonacci levels on hover, info tooltip
 
 ---
 
@@ -22,6 +10,7 @@
 
 | Date | Issue/Changes | Outcome |
 |------|---------------|---------|
+| Jan 3 | #475-#478, #481-#482, #484 — Fly.io deployment, SQLite setup, OAuth auth, SQLite observations, timestamp dedup, landing page chart, OHLC mixed format (7 issues) | All Accepted; multi-tenant infrastructure complete |
 | Jan 3 | #462, #463, #465-#467, #469-#472 — Calibration/Swing naming cleanup, sourceBars consolidation, CLI simplification, fib level fix, completed ref no-reform, pause buffering, config persistence, fromIndex fix, filter_stats in snapshots (9 issues) | All Accepted; commit 0004057 (follow-up to #471) untracked |
 | Jan 2 | #454-#460, #464 — Breach filtering fix, reset button, batched ref states, per-pivot top N, auto-track buffering, config preservation, calibration deletion, test helper consolidation (8 issues) | All Accepted; calibration removed from core decisions |
 | Jan 2 | #448, #449, #450, #452 — Formation pivot tracking, playback position filtering, view persistence, chart cleanup race fix (4 issues) | All Accepted; developer_guide.md discrepancy noted |

@@ -412,6 +412,7 @@ All 3 pending changes accepted. Summary:
 
 | Date | Changes | Outcome |
 |------|---------|---------|
+| Jan 3 | #475-#478, #481-#482, #484 — Fly.io deployment, SQLite setup, OAuth auth, SQLite observations, timestamp dedup, landing page chart, OHLC mixed format (7 issues) | All Accepted; multi-tenant infrastructure complete |
 | Jan 3 | Multi-tenant demo — Fly.io deployment, OAuth, SQLite persistence, CI/CD pipeline | Complete; live at https://fractal.rajeshgo.li |
 | Jan 3 | #462, #463, #465-#467, #469-#472 — Calibration/Swing naming cleanup, sourceBars consolidation, CLI simplification, fib level auto-select fix, completed ref no-reform, pause buffering, config persistence, fromIndex fix, filter_stats in snapshots (9 issues) | All Accepted; commit 0004057 (follow-up to #471) untracked — retroactive documentation needed |
 | Jan 2 | #454-#460, #464 — Breach filtering fix, reset button, batched ref states, per-pivot top N, auto-track buffering, config preservation, calibration deletion, test helper consolidation (8 issues) | All Accepted; calibration removed from core decisions |
