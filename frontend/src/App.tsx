@@ -2,6 +2,9 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { DAGView } from './pages/DAGView';
 import { LevelsAtPlayView } from './pages/LevelsAtPlayView';
 import { LandingPage } from './pages/LandingPage';
+import { DevelopersPage } from './pages/DevelopersPage';
+import { TradersPage } from './pages/TradersPage';
+import { StoryPage } from './pages/StoryPage';
 import { useChartPreferences } from './hooks/useChartPreferences';
 import { useAuth } from './hooks/useAuth';
 
@@ -44,6 +47,9 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/app" element={<AppViews />} />
+        <Route path="/developers" element={<DevelopersPage />} />
+        <Route path="/traders" element={<TradersPage />} />
+        <Route path="/story" element={<StoryPage />} />
       </Routes>
     </BrowserRouter>
   );

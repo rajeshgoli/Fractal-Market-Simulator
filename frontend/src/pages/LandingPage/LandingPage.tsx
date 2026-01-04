@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { MarketChartPreview } from './components/MarketChartPreview';
+import { Footer } from '../../components/Footer';
 
 export const LandingPage: React.FC = () => {
   const [scrollY, setScrollY] = useState(0);
@@ -171,24 +172,7 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-20 px-6 border-t border-white/5">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center text-slate-500 text-sm">
-          <div className="flex items-center space-x-4 mb-8 md:mb-0">
-            <span className="font-bold text-slate-300">FRACTAL MARKET</span>
-            <span className="text-slate-700">|</span>
-            <span>Structure over noise</span>
-          </div>
-
-          <div className="flex space-x-8">
-            <a href="https://x.com/rajeshgoli" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Twitter</a>
-            <a href="https://github.com/rajeshgoli/Fractal-Market-Simulator" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub</a>
-          </div>
-        </div>
-        <div className="max-w-7xl mx-auto mt-12 text-center text-[10px] text-slate-700 uppercase tracking-widest font-bold">
-          &copy; 2026 All rights reserved.
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 };

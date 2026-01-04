@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 interface NavbarProps {
   onLogin: () => void;
 }
@@ -6,16 +8,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogin }) => {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-white/10 px-6 py-4">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div className="flex items-center space-x-2">
+        <Link to="/" className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-cyan-500 rounded flex items-center justify-center font-bold text-slate-900">F</div>
           <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
             FRACTAL MARKET
           </span>
-        </div>
+        </Link>
 
         <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-400">
+          <Link to="/developers" className="hover:text-white transition-colors">Developers</Link>
+          <Link to="/traders" className="hover:text-white transition-colors">Traders</Link>
+          <Link to="/story" className="hover:text-white transition-colors">Story</Link>
           <a href="https://github.com/rajeshgoli/Fractal-Market-Simulator" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub</a>
-          <a href="#features" className="hover:text-white transition-colors">Features</a>
         </div>
 
         <div className="flex items-center space-x-4">
