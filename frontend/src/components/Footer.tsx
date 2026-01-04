@@ -9,7 +9,8 @@ export const Footer: React.FC<FooterProps> = ({ className = '' }) => {
     {
       title: 'Product',
       links: [
-        { label: 'Features', href: '/#features' },
+        { label: 'Home', href: '/' },
+        { label: 'Traders', href: '/traders' },
         { label: 'Demo', href: '/login' },
       ],
     },
