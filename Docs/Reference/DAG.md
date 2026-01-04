@@ -2,7 +2,7 @@
 
 **A Trader's Guide to the Algorithm**
 
-*Last Updated: January 2, 2026*
+*Last Updated: January 3, 2026*
 
 ---
 
@@ -711,6 +711,26 @@ Range: 0-100
   0-30: Slow, grinding moves
   30-70: Normal intensity
   70-100: Sharp, aggressive moves
+```
+
+### Bin Impulsiveness (Percentile Within Same Bin)
+
+**Formula:** `Bin Impulsiveness = Percentile Rank vs Legs in Same Bin`
+
+```
+If a bin-8 leg's impulse is higher than 80% of other bin-8 legs:
+  Bin Impulsiveness = 80
+
+Range: 0-100
+  More meaningful than global impulsiveness because it compares
+  apples to apples — how impulsive is this leg compared to
+  other legs of similar size?
+
+Example:
+  Bin 2 leg with 90% bin_impulsiveness = very fast for a small move
+  Bin 8 leg with 90% bin_impulsiveness = very fast for a large move
+
+  These are different trading signals even though both are "impulsive"
 ```
 
 ### Spikiness (Move Distribution)
