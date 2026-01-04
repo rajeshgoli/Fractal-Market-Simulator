@@ -542,8 +542,17 @@ async def get_session():
             "annotation_count": 0,
             "completed_scales": [],
             "initialized": False,
+            "data_start_date": None,
+            "data_end_date": None,
         }
     s = state
+    # Compute data start/end dates from source bars
+    data_start_date = None
+    data_end_date = None
+    if s.source_bars:
+        from datetime import datetime
+        data_start_date = datetime.fromtimestamp(s.source_bars[0].timestamp).isoformat()
+        data_end_date = datetime.fromtimestamp(s.source_bars[-1].timestamp).isoformat()
     return {
         "session_id": "replay-session",
         "data_file": s.data_file or "",
@@ -557,6 +566,8 @@ async def get_session():
         "annotation_count": 0,
         "completed_scales": [],
         "initialized": True,
+        "data_start_date": data_start_date,
+        "data_end_date": data_end_date,
     }
 
 

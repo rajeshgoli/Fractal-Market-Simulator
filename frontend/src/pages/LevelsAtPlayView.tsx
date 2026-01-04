@@ -74,7 +74,12 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
   const [chart2Bars, setChart2Bars] = useState<BarData[]>([]);
   const [sourceResolutionMinutes, setSourceResolutionMinutes] = useState(1);
   const [dataFileName, setDataFileName] = useState<string>('');
-  const [sessionInfo, setSessionInfo] = useState<{ windowOffset: number; totalSourceBars: number } | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<{
+    windowOffset: number;
+    totalSourceBars: number;
+    dataStartDate?: string | null;
+    dataEndDate?: string | null;
+  } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProcessingTill, setIsProcessingTill] = useState(false);
   const [showFiltered, setShowFiltered] = useState(false);  // Reference Observation mode
@@ -737,6 +742,8 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         setSessionInfo({
           windowOffset: session.window_offset,
           totalSourceBars: session.total_source_bars,
+          dataStartDate: session.data_start_date,
+          dataEndDate: session.data_end_date,
         });
 
         const fileName = session.data_file.split('/').pop() || session.data_file;
@@ -787,7 +794,12 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
         setSessionInfo(prev => prev ? {
           ...prev,
           totalSourceBars: source.length,
-        } : { windowOffset: session.window_offset, totalSourceBars: source.length });
+        } : {
+          windowOffset: session.window_offset,
+          totalSourceBars: source.length,
+          dataStartDate: session.data_start_date,
+          dataEndDate: session.data_end_date,
+        });
       } finally {
         setIsLoading(false);
       }
@@ -1038,6 +1050,9 @@ export const LevelsAtPlayView: React.FC<LevelsAtPlayViewProps> = ({ onNavigate }
           currentDataFile={sessionSettings.dataFile || ''}
           onSessionRestart={() => window.location.reload()}
           onSaveSession={sessionSettings.saveSession}
+          multiTenant={auth.multiTenant}
+          sessionStartDate={sessionInfo?.dataStartDate}
+          sessionEndDate={sessionInfo?.dataEndDate}
         />
       </div>
     </div>

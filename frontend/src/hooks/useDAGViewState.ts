@@ -45,6 +45,8 @@ export function dagLegToActiveLeg(leg: DagLeg, windowOffset: number = 0): Active
 interface SessionInfo {
   windowOffset: number;
   totalSourceBars: number;
+  dataStartDate?: string | null;  // ISO date of first bar in data
+  dataEndDate?: string | null;    // ISO date of last bar in data
 }
 
 interface EventPopupState {

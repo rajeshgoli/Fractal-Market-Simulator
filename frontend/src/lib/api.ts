@@ -84,6 +84,8 @@ export interface SessionInfo {
   annotation_count: number;
   completed_scales: string[];
   initialized?: boolean;  // Whether backend has an active session
+  data_start_date?: string | null;  // ISO date of first bar in data
+  data_end_date?: string | null;    // ISO date of last bar in data
 }
 
 export async function fetchSession(): Promise<SessionInfo> {

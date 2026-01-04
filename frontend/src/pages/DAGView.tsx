@@ -678,6 +678,8 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
         state.setSessionInfo({
           windowOffset: session.window_offset,
           totalSourceBars: session.total_source_bars,
+          dataStartDate: session.data_start_date,
+          dataEndDate: session.data_end_date,
         });
 
         const fileName = session.data_file.split('/').pop() || session.data_file;
@@ -774,7 +776,12 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
         state.setSessionInfo(prev => prev ? {
           ...prev,
           totalSourceBars: source.length,
-        } : { windowOffset: session.window_offset, totalSourceBars: source.length });
+        } : {
+          windowOffset: session.window_offset,
+          totalSourceBars: source.length,
+          dataStartDate: session.data_start_date,
+          dataEndDate: session.data_end_date,
+        });
       } finally {
         state.setIsLoading(false);
       }
@@ -1128,6 +1135,9 @@ export const DAGView: React.FC<DAGViewProps> = ({ onNavigate }) => {
           currentDataFile={sessionSettings.dataFile || ''}
           onSessionRestart={() => window.location.reload()}
           onSaveSession={sessionSettings.saveSession}
+          multiTenant={auth.multiTenant}
+          sessionStartDate={state.sessionInfo?.dataStartDate}
+          sessionEndDate={state.sessionInfo?.dataEndDate}
         />
       </div>
     </div>
