@@ -206,20 +206,12 @@ export const TradersPage: React.FC = () => {
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">See Your Markets</h2>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              onClick={handleLogin}
-              className="px-8 py-4 bg-white text-slate-900 font-bold rounded-xl hover:bg-cyan-500 hover:text-white transition-all transform hover:scale-105 active:scale-95 shadow-2xl shadow-cyan-500/20"
-            >
-              Start Free Trial
-            </button>
-            <button
-              onClick={handleLogin}
-              className="px-8 py-4 glass text-white font-bold rounded-xl hover:bg-white/10 transition-all border border-white/20"
-            >
-              Watch Demo
-            </button>
-          </div>
+          <button
+            onClick={handleLogin}
+            className="px-8 py-4 bg-white text-slate-900 font-bold rounded-xl hover:bg-cyan-500 hover:text-white transition-all transform hover:scale-105 active:scale-95 shadow-2xl shadow-cyan-500/20"
+          >
+            Try the Demo
+          </button>
         </div>
       </section>
 
