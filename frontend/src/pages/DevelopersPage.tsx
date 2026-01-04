@@ -218,11 +218,11 @@ export const DevelopersPage: React.FC = () => {
             {/* The Point */}
             <div className="glass p-8 rounded-2xl border-white/10 mt-8">
               <p className="text-lg text-white leading-relaxed text-center">
-                The AI didn't know O(N²) would break at scale. It didn't know lookahead would corrupt the algorithm. It didn't know to rewrite instead of patch.
+                AI doesn't come with opinions about O(N²) complexity or lookahead corruption. It needs direction.
                 <br /><br />
-                <span className="text-cyan-400 font-bold">I did.</span>
+                <span className="text-slate-400">The prompts above aren't clever tricks—they're just what I'd tell any engineer on my team.</span>
                 <br /><br />
-                <span className="text-slate-400">That's the difference.</span>
+                <span className="text-cyan-400 font-medium">AI amplifies expertise. Bring yours.</span>
               </p>
             </div>
           </div>
