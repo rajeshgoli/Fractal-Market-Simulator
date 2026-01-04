@@ -66,8 +66,8 @@ export function useAuth() {
         method: 'POST',
         credentials: 'include',
       });
-      // Redirect to login page
-      window.location.href = '/login';
+      // Redirect to landing page
+      window.location.href = '/';
     } catch (error) {
       console.error('Logout failed:', error);
     }
