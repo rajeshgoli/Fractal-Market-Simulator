@@ -79,6 +79,7 @@ class TestNormalizationBehavior:
         leg.origin_counter_trend_range = Decimal(str(counter_range)) if counter_range else None
         leg.depth = depth
         leg.impulsiveness = impulsiveness
+        leg.bin_impulsiveness = impulsiveness  # Salience uses bin-normalized (#491)
         return leg
 
     def _populate_distribution(self, layer: ReferenceLayer, median: float = 10.0):
@@ -179,6 +180,7 @@ class TestNoClamping:
         leg.origin_counter_trend_range = Decimal(str(counter_range)) if counter_range else None
         leg.depth = depth
         leg.impulsiveness = impulsiveness
+        leg.bin_impulsiveness = impulsiveness  # Salience uses bin-normalized (#491)
         return leg
 
     def _populate_distribution(self, layer: ReferenceLayer, median: float = 10.0):
@@ -245,6 +247,7 @@ class TestAdditiveWeights:
         leg.origin_counter_trend_range = Decimal(str(counter_range)) if counter_range else None
         leg.depth = depth
         leg.impulsiveness = impulsiveness
+        leg.bin_impulsiveness = impulsiveness  # Salience uses bin-normalized (#491)
         return leg
 
     def _populate_distribution(self, layer: ReferenceLayer, median: float = 10.0):
@@ -367,6 +370,7 @@ class TestNoStandaloneMode:
         leg.origin_counter_trend_range = Decimal(str(counter_range)) if counter_range else None
         leg.depth = depth
         leg.impulsiveness = impulsiveness
+        leg.bin_impulsiveness = impulsiveness  # Salience uses bin-normalized (#491)
         return leg
 
     def _populate_distribution(self, layer: ReferenceLayer, median: float = 10.0):
@@ -420,6 +424,7 @@ class TestImpulseRedistribution:
         leg.origin_counter_trend_range = Decimal(str(counter_range)) if counter_range else None
         leg.depth = depth
         leg.impulsiveness = impulsiveness
+        leg.bin_impulsiveness = impulsiveness  # Salience uses bin-normalized (#491)
         return leg
 
     def _populate_distribution(self, layer: ReferenceLayer, median: float = 10.0):

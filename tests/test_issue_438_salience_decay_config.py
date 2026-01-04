@@ -117,6 +117,7 @@ class TestSalienceCalculationWithConfig:
         leg.range = Decimal(str(range_val))
         leg.depth = depth
         leg.impulsiveness = impulsiveness
+        leg.bin_impulsiveness = impulsiveness  # Salience uses bin-normalized (#491)
         return leg
 
     def _populate_distribution(self, layer: ReferenceLayer):

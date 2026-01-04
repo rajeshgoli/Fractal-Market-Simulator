@@ -937,9 +937,10 @@ class ReferenceLayer:
         # Range×Counter: normalized via (median × 25)²
         range_counter_score = (float(leg.range) * counter_range) / (max_val * max_val)
 
-        # Impulse score: percentile from DAG (already 0-100, scale to 0-1)
-        use_impulse = leg.impulsiveness is not None
-        impulse_score = leg.impulsiveness / 100 if use_impulse else 0
+        # Impulse score: use bin-normalized impulsiveness (#491)
+        # Bin-local percentile is more meaningful than global percentile
+        use_impulse = leg.bin_impulsiveness is not None
+        impulse_score = leg.bin_impulsiveness / 100 if use_impulse else 0
 
         # Recency score: configurable decay (#438)
         age = current_bar_index - leg.origin_index
