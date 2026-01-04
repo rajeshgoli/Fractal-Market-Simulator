@@ -212,6 +212,11 @@ export const DevelopersPage: React.FC = () => {
                     "The direction of bugs indicate a fundamental misunderstanding. We may want to <span className="text-cyan-400">rewrite as an incremental algo</span>. Then call the same algo in a loop for calibration. This prevents all the lookahead type bugs."
                   </p>
                 </div>
+                <div className="bg-slate-900 p-4 rounded-lg border border-slate-700">
+                  <p className="font-mono text-sm text-slate-300 leading-relaxed">
+                    "I am convinced there's a <span className="text-cyan-400">O(N log K) approach if we use a DAG</span>. Let me demonstrate... at all points we have two extremas and one defended pivot. The rules naturally apply because you're enforcing strict temporal ordering."
+                  </p>
+                </div>
               </div>
             </div>
 
