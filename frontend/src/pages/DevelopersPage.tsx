@@ -166,8 +166,43 @@ export const DevelopersPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Not Vibe Coding Section */}
+      {/* The Numbers Section */}
       <section className="py-20 px-6 bg-slate-950/50">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-12">The Numbers</h2>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+            {[
+              { value: '747', label: 'commits' },
+              { value: '37,000', label: 'lines' },
+              { value: '600+', label: 'tests' },
+              { value: '23', label: 'days' },
+            ].map((stat) => (
+              <div key={stat.label} className="text-center">
+                <p className="text-4xl md:text-5xl font-mono font-bold text-white mb-2">{stat.value}</p>
+                <p className="text-xs text-slate-500 uppercase tracking-widest">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {[
+              { value: '3,546', label: 'prompts' },
+              { value: '456', label: 'skill uses' },
+              { value: '87', label: 'handoffs' },
+              { value: '10', label: 'max pending' },
+            ].map((stat) => (
+              <div key={stat.label} className="text-center">
+                <p className="text-4xl md:text-5xl font-mono font-bold text-white mb-2">{stat.value}</p>
+                <p className="text-xs text-slate-500 uppercase tracking-widest">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Not Vibe Coding Section */}
+      <section className="py-20 px-6">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-4">Not Vibe Coding</h2>
           <p className="text-slate-400 text-center mb-12 max-w-2xl mx-auto">
@@ -256,41 +291,6 @@ export const DevelopersPage: React.FC = () => {
                 <code className="text-xs font-mono text-cyan-400 bg-slate-800 px-2 py-1 rounded">
                   {persona.artifact}
                 </code>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* The Numbers Section */}
-      <section className="py-20 px-6 bg-slate-950/50">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-12">The Numbers</h2>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
-            {[
-              { value: '747', label: 'commits' },
-              { value: '37,000', label: 'lines' },
-              { value: '600+', label: 'tests' },
-              { value: '23', label: 'days' },
-            ].map((stat) => (
-              <div key={stat.label} className="text-center">
-                <p className="text-4xl md:text-5xl font-mono font-bold text-white mb-2">{stat.value}</p>
-                <p className="text-xs text-slate-500 uppercase tracking-widest">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {[
-              { value: '3,546', label: 'prompts' },
-              { value: '456', label: 'personas' },
-              { value: '87', label: 'handoffs' },
-              { value: '10', label: 'max pending' },
-            ].map((stat) => (
-              <div key={stat.label} className="text-center">
-                <p className="text-4xl md:text-5xl font-mono font-bold text-white mb-2">{stat.value}</p>
-                <p className="text-xs text-slate-500 uppercase tracking-widest">{stat.label}</p>
               </div>
             ))}
           </div>
